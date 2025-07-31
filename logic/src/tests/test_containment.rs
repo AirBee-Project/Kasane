@@ -9,9 +9,9 @@ mod tests {
     fn create_test_id(z: u16, x: u64, y: u64, f: i64, i: u32, t: u32) -> SpaceTimeId {
         SpaceTimeId::new(
             z,
+            DimensionRange::Single(f),
             DimensionRange::Single(x),
             DimensionRange::Single(y),
-            DimensionRange::Single(f),
             i,
             DimensionRange::Single(t),
         ).unwrap()
@@ -20,9 +20,9 @@ mod tests {
     fn create_test_id_with_any_t(z: u16, x: u64, y: u64, f: i64) -> SpaceTimeId {
         SpaceTimeId::new(
             z,
+            DimensionRange::Single(f),
             DimensionRange::Single(x),
             DimensionRange::Single(y),
-            DimensionRange::Single(f),
             0,
             DimensionRange::Any,
         ).unwrap()
@@ -84,9 +84,9 @@ mod tests {
     fn test_containment_relation_point_in_range() {
         let range_id = SpaceTimeId::new(
             3,
-            DimensionRange::LimitRange(0, 5),
-            DimensionRange::LimitRange(0, 5),
             DimensionRange::LimitRange(-5, 5),
+            DimensionRange::LimitRange(0, 5),
+            DimensionRange::LimitRange(0, 5),
             0,
             DimensionRange::Any,
         ).unwrap();
@@ -101,18 +101,18 @@ mod tests {
     fn test_containment_relation_range_in_larger_range() {
         let large_range = SpaceTimeId::new(
             3,
-            DimensionRange::LimitRange(0, 7),
-            DimensionRange::LimitRange(0, 7),
             DimensionRange::LimitRange(-7, 7),
+            DimensionRange::LimitRange(0, 7),
+            DimensionRange::LimitRange(0, 7),
             0,
             DimensionRange::Any,
         ).unwrap();
         
         let small_range = SpaceTimeId::new(
             3,
+            DimensionRange::LimitRange(-2, 2),
             DimensionRange::LimitRange(2, 5),
             DimensionRange::LimitRange(1, 4),
-            DimensionRange::LimitRange(-2, 2),
             0,
             DimensionRange::Any,
         ).unwrap();
@@ -257,9 +257,9 @@ mod tests {
         let result = range1.containment_relation(&range2);
         match result {
             Containment::Partial(intersection) => {
-                assert_eq!(intersection.x(), DimensionRange::LimitRange(2, 4));
-                assert_eq!(intersection.y(), DimensionRange::Single(1));
-                assert_eq!(intersection.f(), DimensionRange::Single(0));
+                assert_eq!(intersection.f(), DimensionRange::LimitRange(2, 4));
+                assert_eq!(intersection.x(), DimensionRange::Single(1));
+                assert_eq!(intersection.y(), DimensionRange::Single(0));
             }
             _ => panic!("Expected Partial containment"),
         }
@@ -367,18 +367,18 @@ mod tests {
     fn test_containment_relation_negative_f_values() {
         let range1 = SpaceTimeId::new(
             3,
-            DimensionRange::Single(1),
-            DimensionRange::Single(1),
             DimensionRange::LimitRange(-5, -2),
+            DimensionRange::Single(1),
+            DimensionRange::Single(1),
             0,
             DimensionRange::Any,
         ).unwrap();
         
         let range2 = SpaceTimeId::new(
             3,
-            DimensionRange::Single(1),
-            DimensionRange::Single(1),
             DimensionRange::LimitRange(-7, -1),
+            DimensionRange::Single(1),
+            DimensionRange::Single(1),
             0,
             DimensionRange::Any,
         ).unwrap();
@@ -421,18 +421,18 @@ mod tests {
     fn test_containment_relation_multi_dimensional_partial() {
         let range1 = SpaceTimeId::new(
             3,
-            DimensionRange::LimitRange(0, 4),
-            DimensionRange::LimitRange(0, 4),
             DimensionRange::LimitRange(-4, 4),
+            DimensionRange::LimitRange(0, 4),
+            DimensionRange::LimitRange(0, 4),
             60,
             DimensionRange::LimitRange(10, 20),
         ).unwrap();
         
         let range2 = SpaceTimeId::new(
             3,
-            DimensionRange::LimitRange(2, 6),
-            DimensionRange::LimitRange(2, 6),
             DimensionRange::LimitRange(-2, 6),
+            DimensionRange::LimitRange(2, 6),
+            DimensionRange::LimitRange(2, 6),
             60,
             DimensionRange::LimitRange(15, 25),
         ).unwrap();

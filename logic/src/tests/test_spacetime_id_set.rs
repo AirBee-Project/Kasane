@@ -9,9 +9,9 @@ mod tests {
     fn create_test_id(z: u16, x: u64, y: u64, f: i64, i: u32, t: u32) -> SpaceTimeId {
         SpaceTimeId::new(
             z,
+            DimensionRange::Single(f),
             DimensionRange::Single(x),
             DimensionRange::Single(y),
-            DimensionRange::Single(f),
             i,
             DimensionRange::Single(t),
         )
@@ -21,9 +21,9 @@ mod tests {
     fn create_test_id_with_any_t(z: u16, x: u64, y: u64, f: i64) -> SpaceTimeId {
         SpaceTimeId::new(
             z,
+            DimensionRange::Single(f),
             DimensionRange::Single(x),
             DimensionRange::Single(y),
-            DimensionRange::Single(f),
             0,
             DimensionRange::Any,
         )
@@ -120,7 +120,7 @@ mod tests {
     fn test_spacetime_idset_display_single_element() {
         let id = create_test_id_with_any_t(2, 1, 1, 0);
         let set = SpaceTimeIdSet::from(id);
-        assert_eq!(set.to_string(), "2/1/1/0_0/-");
+        assert_eq!(set.to_string(), "2/0/1/1_0/-");
     }
 
     #[test]
@@ -133,8 +133,8 @@ mod tests {
         set.insert(id2);
 
         let display_str = set.to_string();
-        assert!(display_str.contains("2/1/1/0_0/-"));
-        assert!(display_str.contains("2/2/2/1_0/-"));
+        assert!(display_str.contains("2/0/1/1_0/-"));
+        assert!(display_str.contains("2/1/2/2_0/-"));
         assert!(display_str.contains(", "));
     }
 
@@ -239,9 +239,9 @@ mod tests {
     fn test_spacetime_idset_with_ranges() {
         let id = SpaceTimeId::new(
             3,
+            DimensionRange::AfterUnLimitRange(-1),
             DimensionRange::LimitRange(0, 2),
             DimensionRange::Any,
-            DimensionRange::AfterUnLimitRange(-1),
             60,
             DimensionRange::BeforeUnLimitRange(10),
         )
@@ -288,9 +288,9 @@ mod tests {
         // Insert a range
         let id1 = SpaceTimeId::new(
             2,
+            DimensionRange::Single(0),
             DimensionRange::LimitRange(0, 2),
             DimensionRange::Single(1),
-            DimensionRange::Single(0),
             0,
             DimensionRange::Any,
         )
@@ -299,9 +299,9 @@ mod tests {
         // Insert an overlapping range
         let id2 = SpaceTimeId::new(
             2,
+            DimensionRange::Single(0),
             DimensionRange::LimitRange(1, 3),
             DimensionRange::Single(1),
-            DimensionRange::Single(0),
             0,
             DimensionRange::Any,
         )
@@ -321,9 +321,9 @@ mod tests {
         // Insert a larger range
         let id1 = SpaceTimeId::new(
             3,
+            DimensionRange::Single(0),
             DimensionRange::LimitRange(0, 7),
             DimensionRange::Single(1),
-            DimensionRange::Single(0),
             0,
             DimensionRange::Any,
         )
@@ -332,9 +332,9 @@ mod tests {
         // Insert a smaller contained range
         let id2 = SpaceTimeId::new(
             3,
+            DimensionRange::Single(0),
             DimensionRange::LimitRange(2, 4),
             DimensionRange::Single(1),
-            DimensionRange::Single(0),
             0,
             DimensionRange::Any,
         )

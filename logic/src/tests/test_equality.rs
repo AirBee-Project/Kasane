@@ -9,9 +9,9 @@ mod tests {
     fn create_test_id(z: u16, x: u64, y: u64, f: i64, i: u32, t: u32) -> SpaceTimeId {
         SpaceTimeId::new(
             z,
+            DimensionRange::Single(f),
             DimensionRange::Single(x),
             DimensionRange::Single(y),
-            DimensionRange::Single(f),
             i,
             DimensionRange::Single(t),
         )
@@ -21,9 +21,9 @@ mod tests {
     fn create_test_id_with_any_t(z: u16, x: u64, y: u64, f: i64) -> SpaceTimeId {
         SpaceTimeId::new(
             z,
+            DimensionRange::Single(f),
             DimensionRange::Single(x),
             DimensionRange::Single(y),
-            DimensionRange::Single(f),
             0,
             DimensionRange::Any,
         )

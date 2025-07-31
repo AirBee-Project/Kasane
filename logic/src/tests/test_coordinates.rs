@@ -9,9 +9,9 @@ mod tests {
     fn create_test_id(z: u16, x: u64, y: u64, f: i64) -> SpaceTimeId {
         SpaceTimeId::new(
             z,
+            DimensionRange::Single(f),
             DimensionRange::Single(x),
             DimensionRange::Single(y),
-            DimensionRange::Single(f),
             0,
             DimensionRange::Any,
         ).unwrap()
@@ -117,9 +117,9 @@ mod tests {
     fn test_coordinates_limit_range() {
         let id = SpaceTimeId::new(
             3,
+            DimensionRange::LimitRange(-2, 2),
             DimensionRange::LimitRange(1, 3),
             DimensionRange::LimitRange(2, 4),
-            DimensionRange::LimitRange(-2, 2),
             0,
             DimensionRange::Any,
         ).unwrap();
@@ -328,9 +328,9 @@ mod tests {
     fn test_coordinates_range_order() {
         let id = SpaceTimeId::new(
             3,
+            DimensionRange::LimitRange(-3, 3),
             DimensionRange::LimitRange(1, 5),
             DimensionRange::LimitRange(2, 6),
-            DimensionRange::LimitRange(-3, 3),
             0,
             DimensionRange::Any,
         ).unwrap();

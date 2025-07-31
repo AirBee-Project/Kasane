@@ -9,9 +9,9 @@ mod tests {
     fn create_test_id(z: u16, x: u64, y: u64, f: i64) -> SpaceTimeId {
         SpaceTimeId::new(
             z,
+            DimensionRange::Single(f),
             DimensionRange::Single(x),
             DimensionRange::Single(y),
-            DimensionRange::Single(f),
             0,
             DimensionRange::Any,
         ).unwrap()
@@ -60,9 +60,9 @@ mod tests {
     fn test_center_with_ranges() {
         let id = SpaceTimeId::new(
             3,
+            DimensionRange::LimitRange(-2, 2),
             DimensionRange::LimitRange(1, 3),
             DimensionRange::LimitRange(2, 4),
-            DimensionRange::LimitRange(-2, 2),
             0,
             DimensionRange::Any,
         ).unwrap();
@@ -232,9 +232,9 @@ mod tests {
     fn test_vertex_with_ranges() {
         let id = SpaceTimeId::new(
             3,
+            DimensionRange::LimitRange(-1, 1),
             DimensionRange::LimitRange(1, 2),
             DimensionRange::LimitRange(2, 3),
-            DimensionRange::LimitRange(-1, 1),
             0,
             DimensionRange::Any,
         ).unwrap();

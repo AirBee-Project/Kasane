@@ -9,9 +9,9 @@ mod tests {
     fn create_test_id(z: u16, x: u64, y: u64, f: i64, i: u32, t: u32) -> SpaceTimeId {
         SpaceTimeId::new(
             z,
+            DimensionRange::Single(f),
             DimensionRange::Single(x),
             DimensionRange::Single(y),
-            DimensionRange::Single(f),
             i,
             DimensionRange::Single(t),
         )
@@ -21,9 +21,9 @@ mod tests {
     fn create_test_id_with_any_t(z: u16, x: u64, y: u64, f: i64) -> SpaceTimeId {
         SpaceTimeId::new(
             z,
+            DimensionRange::Single(f),
             DimensionRange::Single(x),
             DimensionRange::Single(y),
-            DimensionRange::Single(f),
             0,
             DimensionRange::Any,
         )
@@ -151,9 +151,9 @@ mod tests {
     fn test_complement_range_dimensions() {
         let id = SpaceTimeId::new(
             3,
+            DimensionRange::LimitRange(-2, 2),
             DimensionRange::LimitRange(1, 3),
             DimensionRange::LimitRange(2, 4),
-            DimensionRange::LimitRange(-2, 2),
             0,
             DimensionRange::Any,
         )
@@ -256,9 +256,9 @@ mod tests {
     fn test_complement_negative_f_values() {
         let id = SpaceTimeId::new(
             2,
-            DimensionRange::Single(1),
-            DimensionRange::Single(1),
             DimensionRange::Single(-2), // Negative f
+            DimensionRange::Single(1),
+            DimensionRange::Single(1),
             0,
             DimensionRange::Any,
         )
@@ -443,9 +443,9 @@ mod tests {
         // Test at coordinate boundaries
         let id = SpaceTimeId::new(
             2,
+            DimensionRange::Single(-4), // Min f for z=2
             DimensionRange::Single(0),  // Min x
             DimensionRange::Single(0),  // Min y
-            DimensionRange::Single(-4), // Min f for z=2
             0,
             DimensionRange::Any,
         )
