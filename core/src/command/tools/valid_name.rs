@@ -3,5 +3,5 @@ pub fn valid_name(s: &str) -> bool {
         return false;
     }
     s.chars()
-        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '@' | '+' | '='))
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }

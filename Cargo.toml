@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "logic",
     "core"
 ]
 resolver = "3"

@@ -24,3 +24,8 @@ Thumbs.db
 *.bak
 *.old
 /core/pkg
+
+/logs
+
+data.mdb
+lock.mdb

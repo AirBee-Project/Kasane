@@ -57,6 +57,11 @@ cargo test
 cargo bench
 ```
 
+## API Documentation
+
+- [📖 API Reference](./API_REFERENCE.md) - Comprehensive command documentation
+- [📋 Command Summary](./COMMAND_SUMMARY.md) - Quick reference table
+
 ## [logic](/logic/README.md)
 
 Library defining logical operations for space-time IDs

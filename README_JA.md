@@ -57,6 +57,11 @@ cargo test
 cargo bench
 ```
 
+## API ドキュメント
+
+- [📖 API リファレンス](./API_REFERENCE_JA.md) - 包括的なコマンドドキュメント
+- [📋 コマンド一覧](./COMMAND_SUMMARY.md) - クイックリファレンステーブル
+
 ## [logic](/logic/README_JA.md)
 
 時空間 ID の論理演算を定義しているライブラリ

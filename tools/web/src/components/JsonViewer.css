@@ -1,0 +1,64 @@
+.json-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.json-viewer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid #ddd;
+}
+
+.json-viewer-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 1.125rem;
+}
+
+.copy-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 0.375rem 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.copy-btn:hover {
+  background: #5a6268;
+}
+
+.json-content {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem;
+}
+
+.json-text {
+  margin: 0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #333;
+}
+
+.json-placeholder {
+  color: #666;
+  font-style: italic;
+  text-align: center;
+  padding: 2rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  border: 2px dashed #ddd;
+}
