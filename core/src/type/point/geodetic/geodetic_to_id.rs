@@ -1,11 +1,10 @@
 use crate::r#type::{
-    ecef::ECEF,
-    point::Point,
+    point::geodetic::Geodetic,
     spacetimeid::{DimensionRange, SpaceTimeId},
 };
 
 /// Point (lat, lon, alt) を SpaceTimeId に変換
-pub fn point_to_id(z: u8, point: Point) -> SpaceTimeId {
+pub fn geodetic_to_id(z: u8, point: Geodetic) -> SpaceTimeId {
     let lat = point.latitude;
     let lon = point.longitude;
     let alt = point.altitude;

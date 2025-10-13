@@ -1,6 +1,6 @@
-use crate::r#type::{ecef::ECEF, point::Point};
+use crate::r#type::point::{ecef::ECEF, geodetic::Geodetic};
 
-pub fn point_to_ecef(point: Point) -> ECEF {
+pub fn geodetic_to_ecef(point: Geodetic) -> ECEF {
     // WGS-84 定数
     let a: f64 = 6_378_137.0;
     let inv_f: f64 = 298.257_223_563;

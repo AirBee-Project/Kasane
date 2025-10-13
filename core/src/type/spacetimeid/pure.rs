@@ -21,11 +21,6 @@ impl SpaceTimeId {
     /// # Note
     ///
     /// The T dimension is preserved as-is and not expanded, maintaining the original temporal range.
-    ///
-    /// # Japanese Note
-    ///
-    /// 拡張記法 (Range, Before, After, Any) をすべて展開して
-    /// 各次元が Single だけの純粋な ID 群を返す
     pub fn to_single(&self) -> HashSet<SpaceTimeId> {
         let z = self.z();
         let i = self.i();

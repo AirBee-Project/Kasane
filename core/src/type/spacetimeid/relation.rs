@@ -4,7 +4,6 @@ use crate::r#type::spacetimeid::fmt::Debug;
 use crate::r#type::spacetimeid::{DimensionRange, SpaceTimeId};
 use DimensionRange::{AfterUnLimitRange, Any, BeforeUnLimitRange, LimitRange, Single};
 
-/// 2つの `SpaceTimeId` の関係を表す
 #[derive(Debug, Clone, Copy)]
 pub enum Relation {
     /// 完全一致 A == B

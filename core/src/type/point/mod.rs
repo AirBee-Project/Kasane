@@ -1,9 +1,16 @@
-pub mod point_to_ecef;
-pub mod point_to_id;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
-pub struct Point {
-    pub latitude: f64,
-    pub longitude: f64,
-    pub altitude: f64,
+use crate::r#type::point::{ecef::ECEF, geodetic::Geodetic};
+
+pub mod ecef;
+pub mod geodetic;
+
+pub enum PointKind {
+    ECEF,
+    Geodetic,
+}
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum Point {
+    ECEF(ECEF),
+    Geodetic(Geodetic),
 }

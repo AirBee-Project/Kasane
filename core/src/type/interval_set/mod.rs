@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-use std::ops::Bound::{Excluded, Included};
+use std::ops::Bound::Included;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Interval<T> {

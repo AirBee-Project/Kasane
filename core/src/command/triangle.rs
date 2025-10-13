@@ -1,11 +1,9 @@
 use std::collections::HashSet;
 
-use kasane_logic::{
-    function::triangle::triangle as other_triangle, id::SpaceTimeId, set::SpaceTimeIdSet,
-};
-
+use crate::function::triangle::triangle as function_triangle;
 use crate::json::input::Triangle;
+use crate::r#type::spacetimeid::SpaceTimeId;
 
 pub fn triangle(v: Triangle) -> HashSet<SpaceTimeId> {
-    other_triangle(v.zoom, v.point1, v.point2, v.point3)
+    function_triangle(v.zoom, v.point1, v.point2, v.point3)
 }

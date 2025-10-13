@@ -1,6 +1,6 @@
-use crate::r#type::{ecef::ECEF, point::Point};
+use crate::r#type::point::{ecef::ECEF, geodetic::Geodetic};
 
-pub fn ecef_to_point(ecef: ECEF) -> Point {
+pub fn ecef_to_geodetic(ecef: ECEF) -> Geodetic {
     // WGS84 定数
     let a = 6378137.0_f64; // 長半径
     let inv_f = 298.257223563_f64;
@@ -34,7 +34,7 @@ pub fn ecef_to_point(ecef: ECEF) -> Point {
         lat = new_lat;
     }
 
-    Point {
+    Geodetic {
         latitude: lat.to_degrees(),
         longitude: lon.to_degrees(),
         altitude: h,
