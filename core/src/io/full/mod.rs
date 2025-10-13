@@ -1,5 +1,6 @@
 pub mod create_key;
 pub mod create_space;
+pub mod tools;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -8,10 +9,7 @@ use std::{
 };
 
 use crate::{
-    io::{
-        StorageTrait, ValueEntry,
-        tools::keytype_id::{id_keytype, keytype_id},
-    },
+    io::{StorageTrait, ValueEntry},
     json::{
         input::{KeyMode, KeyType},
         output::{InfoKey, InfoSpace, InfoUser, Output, ShowUsers, Showkeys},
@@ -34,56 +32,6 @@ pub struct Storage {
     pub env: Environment,
 }
 
-impl From<lmdb::Error> for UserError {
-    fn from(e: lmdb::Error) -> Self {
-        match e {
-            lmdb::Error::MapFull => UserError::LmdbMapFull {
-                attempted_size: 0, // 必要に応じて Environment から取得して渡す
-                location: "unknown",
-            },
-            lmdb::Error::NotFound => UserError::LmdbDbNotFound {
-                db_name: "unknown",
-                location: "unknown",
-            },
-            _ => UserError::LmdbError {
-                message: e.to_string(),
-                location: "unknown",
-            },
-        }
-    }
-}
-
-impl From<std::str::Utf8Error> for UserError {
-    fn from(e: std::str::Utf8Error) -> Self {
-        UserError::ParseError {
-            message: format!("Invalid UTF-8: {}", e),
-            location: "unknown",
-        }
-    }
-}
-
-impl From<std::string::FromUtf8Error> for UserError {
-    fn from(e: std::string::FromUtf8Error) -> Self {
-        UserError::ParseError {
-            message: format!("Invalid UTF-8 (from Vec<u8>): {}", e),
-            location: "unknown",
-        }
-    }
-}
-use std::convert::TryFrom;
-
-impl TryFrom<u8> for KeyMode {
-    type Error = ();
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(KeyMode::UniqueKey),
-            1 => Ok(KeyMode::MultiKey),
-            _ => Err(()),
-        }
-    }
-}
-
 impl Storage {
     pub fn new(path: Option<PathBuf>) -> Result<Self, UserError> {
         // LMDB 環境を作成
@@ -93,10 +41,10 @@ impl Storage {
             .open(&path.unwrap_or(env::current_dir().unwrap()))?;
 
         // データベースを開く（なければ作成）
-        let space = env.create_db(Some("space"), DatabaseFlags::empty())?;
-        let key = env.create_db(Some("key"), DatabaseFlags::empty())?;
-        let value = env.create_db(Some("value"), DatabaseFlags::empty())?;
-        let user = env.create_db(Some("user"), DatabaseFlags::empty())?;
+        let space = env.create_db(Some("space"), DatabaseFlags::empty());
+        let key = env.create_db(Some("key"), DatabaseFlags::empty());
+        let value = env.create_db(Some("value"), DatabaseFlags::empty());
+        let user = env.create_db(Some("user"), DatabaseFlags::empty());
 
         let storage = Self {
             space,
@@ -108,7 +56,7 @@ impl Storage {
 
         // === 初回起動時の admin ユーザー作成 ===
         {
-            let txn = storage.env.begin_ro_txn()?;
+            let txn = storage.env.begin_ro_txn();
             let admin_exists = txn.get(storage.user, b"admin").is_ok();
             drop(txn);
 

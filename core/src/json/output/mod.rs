@@ -1,7 +1,7 @@
 use serde::Serialize;
 
 use crate::{
-    io::value_entry::ValueEntry,
+    io::full::tools::value_entry::ValueEntry,
     json::input::{CommandDatabase, CommandKey, CommandSpace},
     r#type::{point::Point, spacetimeid::SpaceTimeId},
 };

@@ -1,4 +1,3 @@
-// src/macros.rs
 #[macro_export]
 macro_rules! location {
     () => {

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    io::value_entry::ValueEntry,
+    io::full::tools::value_entry::ValueEntry,
     r#type::{point::Point, spacetimeid::DimensionRange},
 };
 
@@ -48,10 +48,10 @@ pub enum KeyMode {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub enum KeyType {
-    INT,
     BOOLEAN,
     TEXT,
     FLOAT,
+    INT,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

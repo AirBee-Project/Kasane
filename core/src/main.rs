@@ -24,7 +24,6 @@ use crate::{
 #[macro_use]
 mod macros;
 pub mod command;
-pub mod function;
 pub mod io;
 pub mod json;
 pub mod r#type;

@@ -1,16 +1,13 @@
-use std::collections::HashMap;
-
 use crate::{
-    io::value_entry::ValueEntry,
+    io::full::tools::value_entry::ValueEntry,
     json::{
         input::{KeyMode, KeyType},
         output::Output,
     },
     user_error::UserError,
 };
+use std::collections::HashMap;
 pub mod full;
-pub mod tools;
-pub mod value_entry;
 
 // ストレージに対する共通操作
 // WasmやLMDBなど、多様なストレージ形態にはここで対応する
