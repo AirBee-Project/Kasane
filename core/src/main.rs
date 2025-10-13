@@ -22,8 +22,10 @@ use crate::{
 };
 pub mod command;
 pub mod error;
+pub mod function;
 pub mod io;
 pub mod json;
+pub mod r#type;
 
 // ==========================
 // 設定

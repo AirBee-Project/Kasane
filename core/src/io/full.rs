@@ -16,7 +16,6 @@ use crate::{
 };
 use argon2::password_hash::PasswordHasher;
 use argon2::{Argon2, PasswordHash, PasswordVerifier, password_hash::SaltString};
-use kasane_logic::id::SpaceTimeId;
 use lmdb::{Cursor, DatabaseFlags, Error as LmdbError, WriteFlags};
 use rand::rngs::OsRng;
 

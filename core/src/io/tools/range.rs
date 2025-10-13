@@ -1,15 +1,10 @@
 use std::{collections::HashSet, result};
 
-use kasane_logic::{
-    function::{
-        line::line,
-        point::{self, point},
-        triangle::triangle,
-    },
-    id::{SpaceTimeId, pure::PureSpaceTimeId},
+use crate::{
+    function::triangle::triangle,
+    json::input::Range,
+    r#type::{point, spacetimeid::SpaceTimeId},
 };
-
-use crate::json::input::Range;
 
 pub fn range(rng: Range) -> Result<Vec<Vec<u8>>, String> {
     let mut result: Vec<Vec<u8>> = Vec::new();

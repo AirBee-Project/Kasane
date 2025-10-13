@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use kasane_logic::id::{SpaceTimeId, coordinates::Point};
 use serde::Serialize;
 
 use crate::{
     io::ValueEntry,
     json::input::{CommandDatabase, CommandKey, CommandSpace},
+    r#type::{point::Point, spacetimeid::SpaceTimeId},
 };
 
 #[derive(Serialize)]

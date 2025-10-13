@@ -1,8 +1,10 @@
-use kasane_logic::id::{DimensionRange, coordinates::Point};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::io::ValueEntry;
+use crate::{
+    io::ValueEntry,
+    r#type::{point::Point, spacetimeid::DimensionRange},
+};
 
 //共通型
 
