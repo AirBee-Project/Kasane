@@ -2,26 +2,31 @@ use serde::Serialize;
 
 use crate::{
     io::value_entry::ValueEntry,
+    json::input::{CommandDatabase, CommandKey, CommandSpace},
     r#type::{point::Point, spacetimeid::SpaceTimeId},
 };
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShowSpaces {
     pub spacenames: Vec<String>,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Version {
     pub version: String,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InfoSpace {
     pub spacename: String,
     pub keynames: Vec<InfoKey>,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InfoKey {
     pub keyname: String,
     pub keytype: String,
@@ -29,11 +34,13 @@ pub struct InfoKey {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Showkeys {
     pub keynames: Vec<String>,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Value {
     pub id: SpaceTimeId,
     pub center: Point,
@@ -42,29 +49,33 @@ pub struct Value {
     pub value: Vec<(std::string::String, ValueEntry)>,
 }
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShowUsers {
     pub users: Vec<String>,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InfoUser {
     pub user_name: String,
-    // database_command: Vec<CommandDatabase>,
-    // space_command: Vec<InfoUserSpace>,
-    // key_commnad: Vec<InfoUserKey>,
+    database_command: Vec<CommandDatabase>,
+    space_command: Vec<InfoUserSpace>,
+    key_commnad: Vec<InfoUserKey>,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InfoUserSpace {
     space_name: String,
-    //space_commnad: Vec<CommandSpace>,
+    space_commnad: Vec<CommandSpace>,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InfoUserKey {
     space_name: String,
     key_name: String,
-    //space_commnad: Vec<CommandKey>,
+    space_commnad: Vec<CommandKey>,
 }
 
 #[derive(Serialize)]
