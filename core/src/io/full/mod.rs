@@ -2,6 +2,11 @@ pub mod create_key;
 pub mod create_space;
 pub mod create_user;
 pub mod grant_database;
+pub mod info_key;
+pub mod info_space;
+pub mod show_keys;
+pub mod show_spaces;
+pub mod show_users;
 pub mod tools;
 
 use std::{env, path::PathBuf};
@@ -34,12 +39,14 @@ impl Storage {
         let key = env.create_db(Some("key"), DatabaseFlags::empty())?;
         let value = env.create_db(Some("value"), DatabaseFlags::empty())?;
         let user = env.create_db(Some("user"), DatabaseFlags::empty())?;
+        let grant = env.create_db(Some("grant"), DatabaseFlags::empty())?;
 
         let storage = Self {
             space,
             key,
             value,
             user,
+            grant,
             env,
         };
 

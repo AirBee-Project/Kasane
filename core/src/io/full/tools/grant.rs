@@ -34,9 +34,9 @@ impl DatabaseCommand {
                 2 => CommandDatabase::DropSpace,
                 3 => CommandDatabase::ShowSpaces,
                 4 => CommandDatabase::Version,
-                _ => {
+                other => {
                     return Err(UserError::UnKnown {
-                        message: "Failed to decode DatabaseCommand type".to_owned(),
+                        message: format!("Invalid KeyMode byte: {}", other),
                         location: location!(),
                     });
                 }

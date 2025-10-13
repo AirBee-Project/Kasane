@@ -310,10 +310,10 @@ pub type DatabaseCommand = AllOrChoose<Vec<CommandDatabase>>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct GrantSpacePrivilege {
+pub struct GrantSpace {
     pub user_name: String,
     pub target_space: AllOrChoose<Vec<String>>,
-    pub command: AllOrChoose<Vec<CommandSpace>>,
+    pub command: SpaceCommand,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
@@ -324,6 +324,8 @@ pub enum CommandSpace {
     InfoSpace,
     ShowKeys,
 }
+
+pub type SpaceCommand = AllOrChoose<Vec<CommandSpace>>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -408,7 +410,7 @@ pub enum Command {
 
     //権限付与系
     GrantDatabase(GrantDatabase),
-    GrantSpacePrivilege(GrantSpacePrivilege),
+    GrantSpace(GrantSpace),
     GrantKeyPrivilege(GrantKeyPrivilege),
 
     //権限取り上げ系

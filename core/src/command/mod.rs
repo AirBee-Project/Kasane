@@ -34,6 +34,7 @@ pub mod drop_key;
 pub mod drop_space;
 pub mod drop_user;
 pub mod grant_database;
+pub mod grant_space;
 pub mod info_key;
 pub mod info_space;
 pub mod info_user;
@@ -84,7 +85,7 @@ pub fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError> {
 
         //権限付与系
         Command::GrantDatabase(v) => grant_database(v, s),
-        Command::GrantSpacePrivilege(v) => todo!(),
+        Command::GrantSpace(v) => todo!(),
         Command::GrantKeyPrivilege(v) => todo!(),
 
         //権限取り上げる系

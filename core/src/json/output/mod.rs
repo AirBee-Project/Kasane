@@ -9,7 +9,7 @@ use crate::{
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShowSpaces {
-    pub spacenames: Vec<String>,
+    pub space_names: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -21,22 +21,22 @@ pub struct Version {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InfoSpace {
-    pub spacename: String,
-    pub keynames: Vec<InfoKey>,
+    pub space_name: String,
+    pub key_names: Vec<InfoKey>,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InfoKey {
-    pub keyname: String,
-    pub keytype: String,
-    pub keymode: String,
+    pub key_name: String,
+    pub key_type: String,
+    pub key_mode: String,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Showkeys {
-    pub keynames: Vec<String>,
+    pub key_names: Vec<String>,
 }
 
 #[derive(Serialize)]
