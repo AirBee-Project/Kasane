@@ -2,7 +2,7 @@ use crate::{io::full::Storage, user_error::UserError};
 use lmdb::{Cursor, Error as LmdbError, Transaction as _};
 
 impl Storage {
-    pub fn get_key_id(&self, space_id: Vec<u8>, key_name: &str) -> Result<Vec<u8>, UserError> {
+    pub fn get_key_id(&self, space_id: &Vec<u8>, key_name: &str) -> Result<Vec<u8>, UserError> {
         let location = location!();
         let txn = self.env.begin_ro_txn()?; // 読み取り専用
 

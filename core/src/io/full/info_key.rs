@@ -11,7 +11,7 @@ use lmdb::{Cursor, Transaction as _};
 impl StorageTrait for Storage {
     fn info_key(&self, space_name: &str, key_name: &str) -> Result<Output, UserError> {
         let space_id = Self::get_space_id(&self, space_name)?;
-        let _key_id = Self::get_key_id(&self, space_id.clone(), key_name)?;
+        let _key_id = Self::get_key_id(&self, &space_id, key_name)?;
 
         // 読み取り専用トランザクション
         let txn = self.env.begin_ro_txn()?;

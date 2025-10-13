@@ -4,6 +4,7 @@ pub mod create_user;
 pub mod grant_database;
 pub mod info_key;
 pub mod info_space;
+pub mod insert_value;
 pub mod show_keys;
 pub mod show_spaces;
 pub mod show_users;
@@ -20,6 +21,7 @@ use lmdb::{Database, Environment, Transaction};
 pub struct Storage {
     pub space: Database,
     pub key: Database,
+    pub interval_set: Database,
     pub value: Database,
     pub user: Database,
     pub grant: Database,
@@ -37,6 +39,7 @@ impl Storage {
         // データベースを開く（なければ作成）
         let space = env.create_db(Some("space"), DatabaseFlags::empty())?;
         let key = env.create_db(Some("key"), DatabaseFlags::empty())?;
+        let interval_set = env.create_db(Some("interval_set"), DatabaseFlags::empty())?;
         let value = env.create_db(Some("value"), DatabaseFlags::empty())?;
         let user = env.create_db(Some("user"), DatabaseFlags::empty())?;
         let grant = env.create_db(Some("grant"), DatabaseFlags::empty())?;
@@ -44,6 +47,7 @@ impl Storage {
         let storage = Self {
             space,
             key,
+            interval_set,
             value,
             user,
             grant,

@@ -4,6 +4,7 @@ use crate::{
         input::{AllOrChoose, CommandDatabase, KeyMode, KeyType},
         output::Output,
     },
+    r#type::spacetimeid::SpaceTimeId,
     user_error::UserError,
 };
 use std::collections::HashMap;
@@ -36,7 +37,7 @@ pub trait StorageTrait {
         &self,
         space_name: &str,
         key_name: &str,
-        ids: Vec<Vec<u8>>,
+        ids: Vec<SpaceTimeId>,
         value: ValueEntry,
     ) -> Result<Output, UserError>;
     fn patch_value(
