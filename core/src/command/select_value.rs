@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use crate::{
-    error::Error,
+    user_error::UserError,
     io::full::Storage,
     json::{input::SelectValue, output::Output},
 };
 
-pub fn select_value(v: SelectValue, s: Arc<Storage>) -> Result<Output, Error> {
+pub fn select_value(v: SelectValue, s: Arc<Storage>) -> Result<Output, UserError> {
     todo!()
 }

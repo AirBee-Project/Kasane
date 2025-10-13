@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use crate::{
-    error::Error,
-    io::{StorageTrait, full::Storage, tools::range::range},
+    io::full::Storage,
     json::{input::InsertValue, output::Output},
+    user_error::UserError,
 };
 
-pub fn insert_value(v: InsertValue, s: Arc<Storage>) -> Result<Output, Error> {
+pub fn insert_value(v: InsertValue, s: Arc<Storage>) -> Result<Output, UserError> {
     todo!()
 }

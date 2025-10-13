@@ -19,7 +19,7 @@ use argon2::{Argon2, PasswordHash, PasswordVerifier, password_hash::SaltString};
 use lmdb::{Cursor, DatabaseFlags, Error as LmdbError, WriteFlags};
 use rand::rngs::OsRng;
 
-use super::Error;
+use super::UserError;
 use lmdb::{Database, Environment, Transaction};
 use uuid::Uuid;
 
@@ -31,18 +31,18 @@ pub struct Storage {
     pub env: Environment,
 }
 
-impl From<lmdb::Error> for Error {
+impl From<lmdb::Error> for UserError {
     fn from(e: lmdb::Error) -> Self {
         match e {
-            lmdb::Error::MapFull => Error::LmdbMapFull {
+            lmdb::Error::MapFull => UserError::LmdbMapFull {
                 attempted_size: 0, // 必要に応じて Environment から取得して渡す
                 location: "unknown",
             },
-            lmdb::Error::NotFound => Error::LmdbDbNotFound {
+            lmdb::Error::NotFound => UserError::LmdbDbNotFound {
                 db_name: "unknown",
                 location: "unknown",
             },
-            _ => Error::LmdbError {
+            _ => UserError::LmdbError {
                 message: e.to_string(),
                 location: "unknown",
             },
@@ -50,18 +50,18 @@ impl From<lmdb::Error> for Error {
     }
 }
 
-impl From<std::str::Utf8Error> for Error {
+impl From<std::str::Utf8Error> for UserError {
     fn from(e: std::str::Utf8Error) -> Self {
-        Error::ParseError {
+        UserError::ParseError {
             message: format!("Invalid UTF-8: {}", e),
             location: "unknown",
         }
     }
 }
 
-impl From<std::string::FromUtf8Error> for Error {
+impl From<std::string::FromUtf8Error> for UserError {
     fn from(e: std::string::FromUtf8Error) -> Self {
-        Error::ParseError {
+        UserError::ParseError {
             message: format!("Invalid UTF-8 (from Vec<u8>): {}", e),
             location: "unknown",
         }
@@ -82,7 +82,7 @@ impl TryFrom<u8> for KeyMode {
 }
 
 impl Storage {
-    pub fn new(path: Option<PathBuf>) -> Result<Self, Error> {
+    pub fn new(path: Option<PathBuf>) -> Result<Self, UserError> {
         // LMDB 環境を作成
         let env = Environment::new()
             .set_max_dbs(10) // 名前付きDBの上限
@@ -124,7 +124,7 @@ impl Storage {
 }
 
 impl StorageTrait for Storage {
-    fn create_space(&self, spacename: &str) -> Result<Output, Error> {
+    fn create_space(&self, spacename: &str) -> Result<Output, UserError> {
         let space_id: [u8; 16] = *Uuid::new_v4().as_bytes();
         let space_bytes = spacename.as_bytes();
         let mut txn = self.env.begin_rw_txn()?;
@@ -136,16 +136,16 @@ impl StorageTrait for Storage {
         )
         //既に同じ名前のSpaceが存在する場合にはエラーを返す
         .map_err(|e| match e {
-            LmdbError::KeyExist => Error::SpaceAlreadyExists {
+            LmdbError::KeyExist => UserError::SpaceAlreadyExists {
                 space_name: spacename.to_owned(),
             },
-            _ => Error::from(e),
+            _ => UserError::from(e),
         })?;
         txn.commit()?;
         Ok(Output::Success)
     }
 
-    fn drop_space(&self, spacename: &str) -> Result<crate::json::output::Output, Error> {
+    fn drop_space(&self, spacename: &str) -> Result<crate::json::output::Output, UserError> {
         let space_bytes = spacename.as_bytes();
         let mut txn = self.env.begin_rw_txn()?;
 

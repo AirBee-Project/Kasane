@@ -1,65 +1,25 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::{
-    error::Error,
+    io::value_entry::ValueEntry,
     json::{
         input::{KeyMode, KeyType},
         output::Output,
     },
+    user_error::UserError,
 };
-use serde::{Deserialize, Serialize};
 pub mod full;
 pub mod tools;
+pub mod value_entry;
 
-#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
-pub enum ValueEntry {
-    TEXT(String),
-    BOOLEAN(bool),
-    INT(i32),
-    FLOAT(f32),
-}
-
-impl ValueEntry {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        match self {
-            ValueEntry::TEXT(s) => s.as_bytes().to_vec(),
-            ValueEntry::BOOLEAN(b) => vec![*b as u8], // true=1, false=0
-            ValueEntry::INT(i) => i.to_le_bytes().to_vec(), // i32 → 4バイト
-            ValueEntry::FLOAT(f) => f.to_le_bytes().to_vec(), // f32 → 4バイト
-        }
-    }
-
-    // 逆変換もあると便利
-    pub fn from_bytes(keytype: KeyType, data: &[u8]) -> Option<Self> {
-        match keytype {
-            KeyType::TEXT => Some(ValueEntry::TEXT(String::from_utf8_lossy(data).to_string())),
-            KeyType::BOOLEAN => Some(ValueEntry::BOOLEAN(data.get(0)? != &0)),
-            KeyType::INT => {
-                if data.len() != 4 {
-                    return None;
-                }
-                let mut arr = [0u8; 4];
-                arr.copy_from_slice(data);
-                Some(ValueEntry::INT(i32::from_le_bytes(arr)))
-            }
-            KeyType::FLOAT => {
-                if data.len() != 4 {
-                    return None;
-                }
-                let mut arr = [0u8; 4];
-                arr.copy_from_slice(data);
-                Some(ValueEntry::FLOAT(f32::from_le_bytes(arr)))
-            }
-        }
-    }
-}
-// StorageTrait は共通
+// ストレージに対する共通操作
+// WasmやLMDBなど、多様なストレージ形態にはここで対応する
 pub trait StorageTrait {
     //データベース操作系
-    fn create_space(&self, spacename: &str) -> Result<Output, Error>;
-    fn drop_space(&self, spacename: &str) -> Result<Output, Error>;
-    fn info_space(&self, spacename: &str) -> Result<Output, Error>;
-    fn show_spaces(&self) -> Result<Output, Error>;
+    fn create_space(&self, spacename: &str) -> Result<Output, UserError>;
+    fn drop_space(&self, spacename: &str) -> Result<Output, UserError>;
+    fn info_space(&self, spacename: &str) -> Result<Output, UserError>;
+    fn show_spaces(&self) -> Result<Output, UserError>;
 
     //key操作系
     fn create_key(
@@ -68,10 +28,10 @@ pub trait StorageTrait {
         keyname: &str,
         keytype: KeyType,
         keymode: KeyMode,
-    ) -> Result<Output, Error>;
-    fn drop_key(&self, spacename: &str, keyname: &str) -> Result<Output, Error>;
-    fn show_keys(&self, spacename: &str) -> Result<Output, Error>;
-    fn info_key(&self, spacename: &str, keyname: &str) -> Result<Output, Error>;
+    ) -> Result<Output, UserError>;
+    fn drop_key(&self, spacename: &str, keyname: &str) -> Result<Output, UserError>;
+    fn show_keys(&self, spacename: &str) -> Result<Output, UserError>;
+    fn info_key(&self, spacename: &str, keyname: &str) -> Result<Output, UserError>;
 
     //Value操作系
 
@@ -81,43 +41,43 @@ pub trait StorageTrait {
         keyname: &str,
         ids: Vec<Vec<u8>>,
         value: ValueEntry,
-    ) -> Result<Output, Error>;
+    ) -> Result<Output, UserError>;
     fn patch_value(
         &self,
         spacename: &str,
         keyname: &str,
         ids: Vec<Vec<u8>>,
         value: ValueEntry,
-    ) -> Result<Output, Error>;
-    // fn update_value(
-    //     &self,
-    //     spacename: &str,
-    //     keyname: &str,
-    //     ids: Vec<Vec<u8>>,
-    //     value: ValueEntry,
-    // ) -> Result<Output, Error>;
+    ) -> Result<Output, UserError>;
+    fn update_value(
+        &self,
+        spacename: &str,
+        keyname: &str,
+        ids: Vec<Vec<u8>>,
+        value: ValueEntry,
+    ) -> Result<Output, UserError>;
     fn delete_value(
         &self,
         spacename: &str,
         keyname: &str,
         ids: Vec<Vec<u8>>,
-    ) -> Result<Output, Error>;
+    ) -> Result<Output, UserError>;
     fn select_value(
         &self,
         spacename: &str,
         keyname: Vec<String>,
         id: Vec<Vec<u8>>,
-    ) -> Result<HashMap<Vec<u8>, Vec<(String, ValueEntry)>>, Error>;
+    ) -> Result<HashMap<Vec<u8>, Vec<(String, ValueEntry)>>, UserError>;
     fn show_values(
         &self,
         spacename: &str,
         keyname: &str,
-    ) -> Result<HashMap<Vec<u8>, Vec<(String, ValueEntry)>>, Error>;
+    ) -> Result<HashMap<Vec<u8>, Vec<(String, ValueEntry)>>, UserError>;
 
     //ユーザー操作系
-    fn create_user(&self, username: &str, password: &str) -> Result<Output, Error>;
-    fn drop_user(&self, username: &str) -> Result<Output, Error>;
-    fn info_user(&self, username: &str) -> Result<Output, Error>;
-    fn show_users(&self) -> Result<Output, Error>;
-    fn verify_user(&self, username: &str, password: &str) -> Result<bool, Error>;
+    fn create_user(&self, username: &str, password: &str) -> Result<Output, UserError>;
+    fn drop_user(&self, username: &str) -> Result<Output, UserError>;
+    fn info_user(&self, username: &str) -> Result<Output, UserError>;
+    fn show_users(&self) -> Result<Output, UserError>;
+    fn verify_user(&self, username: &str, password: &str) -> Result<bool, UserError>;
 }

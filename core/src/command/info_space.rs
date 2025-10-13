@@ -1,21 +1,29 @@
 use std::sync::Arc;
 
 use crate::{
-    command::tools::valid_len::valid_len,
-    error::Error,
+    command::tools::valid_name::valid_name,
+    user_error::UserError,
     io::{StorageTrait, full::Storage},
-    json::{
-        input::{InfoSpace, InfoUser},
-        output::Output,
-    },
+    json::{input::InfoSpace, output::Output},
 };
 
-pub fn info_space(v: InfoSpace, s: Arc<Storage>) -> Result<Output, Error> {
-    if valid_len(&v.space_name) {
-        s.info_space(&v.space_name)
-    } else {
-        return Err(Error::SpaceNotFound {
-            space_name: v.space_name,
-        });
+pub fn info_space(v: InfoSpace, s: Arc<Storage>) -> Result<Output, UserError> {
+    //危険な入力がデータベースに侵入するのを防ぐ
+
+    //エラーの位置
+    let location = location!();
+
+    //Spaceの名前のチェック
+    match valid_name(&v.space_name) {
+        Ok(_) => {}
+        Err(e) => {
+            return Err(UserError::SpaceNameValidationError {
+                name: v.space_name,
+                reason: e,
+                location: location,
+            });
+        }
     }
+
+    s.info_space(&v.space_name)
 }

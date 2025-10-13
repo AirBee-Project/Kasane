@@ -2,13 +2,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    io::ValueEntry,
+    io::value_entry::ValueEntry,
     r#type::{point::Point, spacetimeid::DimensionRange},
 };
 
 //共通型
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum AllOrChoose<T> {
     Choose(T),
     All,
@@ -17,16 +18,19 @@ pub enum AllOrChoose<T> {
 // ---------------------- Space管理 ----------------------
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateSpace {
     pub space_name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct DropSpace {
     pub space_name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateKey {
     pub space_name: String,
     pub key_name: String,
@@ -35,12 +39,14 @@ pub struct CreateKey {
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
 pub enum KeyMode {
     UniqueKey,
     MultiKey,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
 pub enum KeyType {
     INT,
     BOOLEAN,
@@ -49,6 +55,7 @@ pub enum KeyType {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct DropKey {
     pub space_name: String,
     pub key_name: String,
@@ -57,6 +64,7 @@ pub struct DropKey {
 // ---------------------- Value管理 ----------------------
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct InsertValue {
     pub space_name: String,
     pub key_name: String,
@@ -65,6 +73,7 @@ pub struct InsertValue {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct PatchValue {
     pub space_name: String,
     pub key_name: String,
@@ -72,15 +81,17 @@ pub struct PatchValue {
     pub value: ValueEntry,
 }
 
-// #[derive(Debug, Serialize, Deserialize, Clone)]
-// pub struct UpdateValue {
-//     pub space_name: String,
-//     pub key_name: String,
-//     pub range: Range,
-//     pub value: ValueEntry,
-// }
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateValue {
+    pub space_name: String,
+    pub key_name: String,
+    pub range: Range,
+    pub value: ValueEntry,
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct DeleteValue {
     pub space_name: String,
     pub key_name: String,
@@ -88,6 +99,7 @@ pub struct DeleteValue {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct SelectValue {
     pub space_name: String,
     pub key_names: Vec<String>,
@@ -101,6 +113,7 @@ pub struct SelectValue {
 // ---------------------- Range & Function ----------------------
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum Range {
     Function(Function),
     Prefix(Prefix),
@@ -108,6 +121,7 @@ pub enum Range {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct IdInput {
     pub z: u8,
     pub f: DimensionRange<i32>,
@@ -118,12 +132,14 @@ pub struct IdInput {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Spot {
     pub point1: Point,
     pub zoom: u8,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Line {
     pub point1: Point,
     pub point2: Point,
@@ -131,6 +147,7 @@ pub struct Line {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Triangle {
     pub point1: Point,
     pub point2: Point,
@@ -139,6 +156,7 @@ pub struct Triangle {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct FilterValue {
     pub space_name: String,
     pub key_name: String,
@@ -146,6 +164,7 @@ pub struct FilterValue {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum FilterType {
     HasValue,
     FilterBOOLEAN(FilterBOOLEAN),
@@ -154,6 +173,7 @@ pub enum FilterType {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum FilterBOOLEAN {
     IsTrue,
     IsFalse,
@@ -162,6 +182,7 @@ pub enum FilterBOOLEAN {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum FilterFOLAT {
     Equal(f32),
     NotEqual(f32),
@@ -175,6 +196,7 @@ pub enum FilterFOLAT {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum FilterINT {
     Equal(i32),
     NotEqual(i32),
@@ -188,6 +210,7 @@ pub enum FilterINT {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum FilterTEXT {
     Equal(String),
     NotEqual(String),
@@ -199,6 +222,7 @@ pub enum FilterTEXT {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum Function {
     Spot(Spot),
     Line(Line),
@@ -207,32 +231,37 @@ pub enum Function {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum Prefix {
     AND(Vec<Range>),
     OR(Vec<Range>),
     // XOR(Vec<Range>),
-    // NOT(Vec<Range>),
+    NOT(Vec<Range>),
 }
 
 // ---------------------- Key / Space情報 ----------------------
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ShowKeys {
     pub space_name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct InfoKey {
     pub space_name: String,
     pub key_name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct InfoSpace {
     pub space_name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ShowValues {
     pub space_name: String,
     pub key_name: String,
@@ -241,17 +270,20 @@ pub struct ShowValues {
 // ---------------------- User管理 ----------------------
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateUser {
     pub user_name: String,
     pub password: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct DropUser {
     pub user_name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct InfoUser {
     pub user_name: String,
 }
@@ -259,12 +291,14 @@ pub struct InfoUser {
 // ---------------------- 権限管理 ----------------------
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct GrantDatabase {
     pub user_name: String,
     pub command: AllOrChoose<Vec<CommandDatabase>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[serde(rename_all = "camelCase")]
 pub enum CommandDatabase {
     CreateSpace,
     DropSpace,
@@ -273,6 +307,7 @@ pub enum CommandDatabase {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct GrantSpacePrivilege {
     pub user_name: String,
     pub target_space: AllOrChoose<Vec<String>>,
@@ -280,6 +315,7 @@ pub struct GrantSpacePrivilege {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[serde(rename_all = "camelCase")]
 pub enum CommandSpace {
     CreateKey,
     DropKey,
@@ -288,6 +324,7 @@ pub enum CommandSpace {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct GrantKeyPrivilege {
     pub user_name: String,
     pub target_space: String,
@@ -296,6 +333,7 @@ pub struct GrantKeyPrivilege {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum CommandKey {
     InsertValue,
     PatchValue,
@@ -308,12 +346,14 @@ pub enum CommandKey {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct RevokeDatabase {
     pub user_name: String,
     pub command: AllOrChoose<Vec<CommandDatabase>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct RevokeSpacePrivilege {
     pub user_name: String,
     pub target_space: AllOrChoose<Vec<String>>,
@@ -321,6 +361,7 @@ pub struct RevokeSpacePrivilege {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct RevokeKeyPrivilege {
     pub user_name: String,
     pub target_space: String,
@@ -349,7 +390,7 @@ pub enum Command {
     //Value操作系
     InsertValue(InsertValue),
     PatchValue(PatchValue),
-    //UpdateValue(UpdateValue),
+    UpdateValue(UpdateValue),
     DeleteValue(DeleteValue),
     SelectValue(SelectValue),
     ShowValues(ShowValues),
@@ -362,18 +403,20 @@ pub enum Command {
     DropUser(DropUser),
     InfoUser(InfoUser),
     ShowUsers,
-    // //権限付与系
-    // GrantDatabase(GrantDatabase),
-    // GrantSpacePrivilege(GrantSpacePrivilege),
-    // GrantKeyPrivilege(GrantKeyPrivilege),
 
-    // //権限取り上げ系
-    // RevokeDatabase(RevokeDatabase),
-    // RevokeSpacePrivilege(RevokeSpacePrivilege),
-    // RevokeKeyPrivilege(RevokeKeyPrivilege),
+    //権限付与系
+    GrantDatabase(GrantDatabase),
+    GrantSpacePrivilege(GrantSpacePrivilege),
+    GrantKeyPrivilege(GrantKeyPrivilege),
+
+    //権限取り上げ系
+    RevokeDatabase(RevokeDatabase),
+    RevokeSpacePrivilege(RevokeSpacePrivilege),
+    RevokeKeyPrivilege(RevokeKeyPrivilege),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Packet {
     pub session: String,
     pub command: Vec<Command>,

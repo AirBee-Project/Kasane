@@ -1,10 +1,4 @@
 use std::sync::Arc;
-#[cfg(feature = "wasm")]
-use std::sync::Arc;
-#[cfg(feature = "full")]
-use std::sync::{Arc, Mutex};
-
-use rand::prelude;
 
 use crate::command::create_key::create_key;
 use crate::command::create_space::create_space;
@@ -28,8 +22,8 @@ use crate::command::show_values::show_values;
 use crate::io::full::Storage;
 use crate::{
     command::version::version,
-    error::Error,
     json::{input::Command, output::Output},
+    user_error::UserError,
 };
 pub mod create_key;
 pub mod create_space;
@@ -49,13 +43,12 @@ pub mod show_spaces;
 pub mod show_user;
 pub mod show_values;
 pub mod tools;
-pub mod triangle;
 //pub mod update_value;
 pub mod version;
 
 //関数のディスパッチ関数
 //関数の命令内容とストレージの参照権を関数に入力し、操作を行わせる
-pub fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, Error> {
+pub fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError> {
     match cmd {
         //データベース操作系
         Command::CreateSpace(v) => create_space(v, s),
@@ -73,7 +66,7 @@ pub fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, Error> {
         //Value操作系
         Command::InsertValue(v) => insert_value(v, s),
         Command::PatchValue(v) => patch_value(v, s),
-        //Command::UpdateValue(v) => update_value(v, s),
+        Command::UpdateValue(v) => todo!(),
         Command::DeleteValue(v) => delete_value(v, s),
         Command::SelectValue(v) => select_value(v, s),
         Command::ShowValues(v) => show_values(v, s),
@@ -86,14 +79,15 @@ pub fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, Error> {
         Command::DropUser(v) => drop_user(v, s),
         Command::InfoUser(v) => info_user(v, s),
         Command::ShowUsers => show_users(s),
+
         //権限付与系
-        // Command::GrantDatabase(v) => todo!(),
-        // Command::GrantSpacePrivilege(v) => todo!(),
-        // Command::GrantKeyPrivilege(v) => todo!(),
+        Command::GrantDatabase(v) => todo!(),
+        Command::GrantSpacePrivilege(v) => todo!(),
+        Command::GrantKeyPrivilege(v) => todo!(),
 
         // //権限取り上げる系
-        // Command::RevokeDatabase(v) => todo!(),
-        // Command::RevokeSpacePrivilege(v) => todo!(),
-        // Command::RevokeKeyPrivilege(v) => todo!(),
+        Command::RevokeDatabase(v) => todo!(),
+        Command::RevokeSpacePrivilege(v) => todo!(),
+        Command::RevokeKeyPrivilege(v) => todo!(),
     }
 }

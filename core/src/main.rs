@@ -13,19 +13,22 @@ use uuid::Uuid;
 
 use crate::{
     command::process,
-    error::Error,
     io::{StorageTrait, full::Storage},
     json::{
         input::{Packet, parser},
         output::Output,
     },
+    user_error::UserError,
 };
+
+#[macro_use]
+mod macros;
 pub mod command;
-pub mod error;
 pub mod function;
 pub mod io;
 pub mod json;
 pub mod r#type;
+pub mod user_error;
 
 // ==========================
 // 設定
@@ -66,7 +69,7 @@ struct JobSender {
 struct Job {
     cmd: crate::json::input::Command,
     storage: Arc<Storage>,
-    resp: oneshot::Sender<Result<Output, Error>>,
+    resp: oneshot::Sender<Result<Output, UserError>>,
 }
 
 #[actix_web::main]
@@ -110,8 +113,8 @@ async fn main() -> std::io::Result<()> {
 
                     let _ = match resp {
                         Ok(r) => job.resp.send(r),
-                        Err(_) => job.resp.send(Err(Error::QueueReceiveError {
-                            location: "spawn_blocking",
+                        Err(_) => job.resp.send(Err(UserError::QueueReceiveError {
+                            location: "spawn_blocking".to_string(),
                         })),
                     };
                 } else {
@@ -191,8 +194,8 @@ async fn execute_json(
 
         if let Err(_) = job_sender.tx.send(job).await {
             error!("Failed to send job to queue");
-            results.push(Err(Error::QueueSendError {
-                location: "execute_json",
+            results.push(Err(UserError::QueueSendError {
+                location: "execute_json".to_string(),
             }));
             continue;
         }
@@ -201,8 +204,8 @@ async fn execute_json(
             Ok(res) => results.push(res),
             Err(_) => {
                 error!("Failed to receive job result");
-                results.push(Err(Error::QueueReceiveError {
-                    location: "execute_json",
+                results.push(Err(UserError::QueueReceiveError {
+                    location: "execute_json".to_string(),
                 }))
             }
         }
