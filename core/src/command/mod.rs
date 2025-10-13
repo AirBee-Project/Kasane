@@ -7,6 +7,7 @@ use crate::command::delete_value::delete_value;
 use crate::command::drop_key::drop_key;
 use crate::command::drop_space::drop_space;
 use crate::command::drop_user::drop_user;
+use crate::command::grant_database::grant_database;
 use crate::command::info_key::info_key;
 use crate::command::info_space::info_space;
 use crate::command::info_user::info_user;
@@ -32,6 +33,7 @@ pub mod delete_value;
 pub mod drop_key;
 pub mod drop_space;
 pub mod drop_user;
+pub mod grant_database;
 pub mod info_key;
 pub mod info_space;
 pub mod info_user;
@@ -43,7 +45,7 @@ pub mod show_spaces;
 pub mod show_user;
 pub mod show_values;
 pub mod tools;
-//pub mod update_value;
+pub mod update_value;
 pub mod version;
 
 //関数のディスパッチ関数
@@ -81,11 +83,11 @@ pub fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError> {
         Command::ShowUsers => show_users(s),
 
         //権限付与系
-        Command::GrantDatabase(v) => todo!(),
+        Command::GrantDatabase(v) => grant_database(v, s),
         Command::GrantSpacePrivilege(v) => todo!(),
         Command::GrantKeyPrivilege(v) => todo!(),
 
-        // //権限取り上げる系
+        //権限取り上げる系
         Command::RevokeDatabase(v) => todo!(),
         Command::RevokeSpacePrivilege(v) => todo!(),
         Command::RevokeKeyPrivilege(v) => todo!(),

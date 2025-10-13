@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use crate::{
-    user_error::UserError,
-    io::{StorageTrait, full::Storage, tools::range::range},
+    io::full::Storage,
     json::{input::PatchValue, output::Output},
+    user_error::UserError,
 };
 
 pub fn patch_value(v: PatchValue, s: Arc<Storage>) -> Result<Output, UserError> {

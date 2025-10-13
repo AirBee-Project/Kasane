@@ -1,3 +1,6 @@
+pub mod get_space_id;
+pub mod get_user_id;
+pub mod grant;
 pub mod key_mode;
 pub mod key_type;
 pub mod lmdb_error;

@@ -27,8 +27,8 @@ pub enum UserError {
         location: String,
     },
 
-    #[error("User '{user_name}' already exists")]
-    UserAlreadyExists { user_name: String },
+    #[error("User '{user_name}' already exists (at {location})")]
+    UserAlreadyExists { user_name: String, location: String },
 
     #[error("User '{user_name}' not found")]
     UserNotFound { user_name: String },
@@ -125,6 +125,6 @@ pub enum UserError {
         key_name: String,
     },
 
-    #[error("Unknown error")]
-    NnKnown,
+    #[error("Unknown error {message} (at {location})")]
+    UnKnown { message: String, location: String },
 }

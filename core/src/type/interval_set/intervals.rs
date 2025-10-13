@@ -1,5 +1,4 @@
 use crate::r#type::interval_set::{Interval, IntervalSet};
-use std::ops::Bound::Included;
 
 impl<T> IntervalSet<T>
 where

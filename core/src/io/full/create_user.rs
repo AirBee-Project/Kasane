@@ -9,20 +9,20 @@ use crate::{
 };
 
 impl StorageTrait for Storage {
-    fn create_space(&self, space_name: &str) -> Result<Output, UserError> {
+    fn create_user(&self, user_name: &str, password: &str) -> Result<Output, UserError> {
         let location = location!();
-        let space_bytes = space_name.as_bytes();
-        let space_id: [u8; 16] = *Uuid::new_v4().as_bytes();
+        let user_bytes = user_name.as_bytes();
+        let user_id: [u8; 16] = *Uuid::new_v4().as_bytes();
 
         // トランザクション作成
         let mut txn = self.env.begin_rw_txn()?;
 
         // SpaceTable に put
-        txn.put(self.space, &space_bytes, &space_id, WriteFlags::empty())
+        txn.put(self.user, &user_bytes, &user_id, WriteFlags::empty())
             .map_err(|e| match e {
-                lmdb::Error::KeyExist => UserError::SpaceAlreadyExists {
-                    space_name: space_name.to_owned(),
-                    location,
+                lmdb::Error::KeyExist => UserError::UserAlreadyExists {
+                    user_name: user_name.to_owned(),
+                    location: location,
                 },
                 other => other.into(),
             })?;

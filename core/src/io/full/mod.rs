@@ -1,34 +1,23 @@
 pub mod create_key;
 pub mod create_space;
+pub mod create_user;
+pub mod grant_database;
 pub mod tools;
 
-use std::{
-    collections::{HashMap, HashSet},
-    env,
-    path::PathBuf,
-};
+use std::{env, path::PathBuf};
 
-use crate::{
-    io::{StorageTrait, ValueEntry},
-    json::{
-        input::{KeyMode, KeyType},
-        output::{InfoKey, InfoSpace, InfoUser, Output, ShowUsers, Showkeys},
-    },
-};
-use argon2::password_hash::PasswordHasher;
-use argon2::{Argon2, PasswordHash, PasswordVerifier, password_hash::SaltString};
-use lmdb::{Cursor, DatabaseFlags, Error as LmdbError, WriteFlags};
-use rand::rngs::OsRng;
+use crate::io::StorageTrait;
+use lmdb::{Cursor, DatabaseFlags};
 
 use super::UserError;
 use lmdb::{Database, Environment, Transaction};
-use uuid::Uuid;
 
 pub struct Storage {
     pub space: Database,
     pub key: Database,
     pub value: Database,
     pub user: Database,
+    pub grant: Database,
     pub env: Environment,
 }
 
@@ -41,10 +30,10 @@ impl Storage {
             .open(&path.unwrap_or(env::current_dir().unwrap()))?;
 
         // データベースを開く（なければ作成）
-        let space = env.create_db(Some("space"), DatabaseFlags::empty());
-        let key = env.create_db(Some("key"), DatabaseFlags::empty());
-        let value = env.create_db(Some("value"), DatabaseFlags::empty());
-        let user = env.create_db(Some("user"), DatabaseFlags::empty());
+        let space = env.create_db(Some("space"), DatabaseFlags::empty())?;
+        let key = env.create_db(Some("key"), DatabaseFlags::empty())?;
+        let value = env.create_db(Some("value"), DatabaseFlags::empty())?;
+        let user = env.create_db(Some("user"), DatabaseFlags::empty())?;
 
         let storage = Self {
             space,
@@ -56,7 +45,7 @@ impl Storage {
 
         // === 初回起動時の admin ユーザー作成 ===
         {
-            let txn = storage.env.begin_ro_txn();
+            let txn = storage.env.begin_ro_txn()?;
             let admin_exists = txn.get(storage.user, b"admin").is_ok();
             drop(txn);
 

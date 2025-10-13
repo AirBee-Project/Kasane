@@ -294,7 +294,7 @@ pub struct InfoUser {
 #[serde(rename_all = "camelCase")]
 pub struct GrantDatabase {
     pub user_name: String,
-    pub command: AllOrChoose<Vec<CommandDatabase>>,
+    pub command: DatabaseCommand,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
@@ -305,6 +305,8 @@ pub enum CommandDatabase {
     ShowSpaces,
     Version,
 }
+
+pub type DatabaseCommand = AllOrChoose<Vec<CommandDatabase>>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]

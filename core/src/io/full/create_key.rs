@@ -2,10 +2,7 @@ use lmdb::{Cursor, DatabaseFlags, Error as LmdbError, Transaction as _, WriteFla
 use uuid::Uuid;
 
 use crate::{
-    io::{
-        StorageTrait,
-        full::{Storage, lmdb_error::LmdbResultExt},
-    },
+    io::{StorageTrait, full::Storage},
     json::{
         input::{KeyMode, KeyType},
         output::Output,
@@ -20,26 +17,13 @@ impl StorageTrait for Storage {
         key_name: &str,
         key_type: KeyType,
         key_mode: KeyMode,
-    ) -> Result<crate::json::output::Output, UserError> {
+    ) -> Result<Output, UserError> {
         let location = location!();
-        let space_bytes = space_name.as_bytes();
-
-        //トランザクションを作成
-        let mut txn = self.env.begin_rw_txn().with_user_error()?;
-
-        //space_idの取得を試みる
-        let space_id = match txn.get(self.space, &space_bytes).with_user_error() {
-            Ok(v) => v,
-            Err(LmdbError::NotFound) => {
-                return Err(UserError::SpaceNotFound {
-                    space_name: space_name.to_owned(),
-                    location,
-                });
-            }
-            Err(e) => (e),
-        };
-
+        let space_id = Self::get_space_id(&self, space_name)?;
         let key_id: [u8; 16] = *Uuid::new_v4().as_bytes();
+
+        // トランザクション作成
+        let mut txn = self.env.begin_rw_txn()?;
 
         let key_bytes = [
             &space_id[..],
@@ -49,17 +33,18 @@ impl StorageTrait for Storage {
         ]
         .concat();
 
-        txn.put(self.key, &key_bytes, &key_id, lmdb::WriteFlags::empty())
+        txn.put(self.key, &key_bytes, &key_id, WriteFlags::empty())
             .map_err(|e| match e {
-                LmdbError::KeyExist => UserError::KeyAlreadyExists {
-                    space_name: space_name.to_string(),
-                    key_name: key_name.to_string(),
-                    location,
+                lmdb::Error::KeyExist => UserError::KeyAlreadyExists {
+                    space_name: space_name.to_owned(),
+                    key_name: key_name.to_owned(),
+                    location: location,
                 },
-                _ => UserError::from(e),
+                other => other.into(),
             })?;
 
-        txn.commit().with_user_error()?;
+        txn.commit()?;
+
         Ok(Output::Success)
     }
 }
