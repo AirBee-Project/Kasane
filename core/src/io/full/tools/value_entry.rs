@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::json::input::KeyType;
+use crate::{json::input::KeyType, user_error::UserError};
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -41,6 +41,18 @@ impl ValueEntry {
                 arr.copy_from_slice(data);
                 Some(ValueEntry::FLOAT(f32::from_le_bytes(arr)))
             }
+        }
+    }
+}
+
+impl ValueEntry {
+    pub fn matches_keytype(&self, key_type: &KeyType) -> bool {
+        match (self, key_type) {
+            (ValueEntry::INT(_), KeyType::INT) => true,
+            (ValueEntry::BOOLEAN(_), KeyType::BOOLEAN) => true,
+            (ValueEntry::TEXT(_), KeyType::TEXT) => true,
+            (ValueEntry::FLOAT(_), KeyType::FLOAT) => true,
+            _ => false,
         }
     }
 }

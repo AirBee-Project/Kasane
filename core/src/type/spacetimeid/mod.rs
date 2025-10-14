@@ -1,5 +1,6 @@
 pub mod center;
 pub mod coordinates;
+pub mod edge;
 pub mod pure;
 pub mod relation;
 pub mod scale;

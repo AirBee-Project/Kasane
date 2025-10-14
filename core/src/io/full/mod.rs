@@ -13,7 +13,7 @@ pub mod tools;
 use std::{env, path::PathBuf};
 
 use crate::io::StorageTrait;
-use lmdb::{Cursor, DatabaseFlags};
+use lmdb::DatabaseFlags;
 
 use super::UserError;
 use lmdb::{Database, Environment, Transaction};
@@ -39,7 +39,7 @@ impl Storage {
         // データベースを開く（なければ作成）
         let space = env.create_db(Some("space"), DatabaseFlags::empty())?;
         let key = env.create_db(Some("key"), DatabaseFlags::empty())?;
-        let interval_set = env.create_db(Some("interval_set"), DatabaseFlags::empty())?;
+        let interval_set = env.create_db(Some("interval_set"), DatabaseFlags::DUP_SORT)?;
         let value = env.create_db(Some("value"), DatabaseFlags::empty())?;
         let user = env.create_db(Some("user"), DatabaseFlags::empty())?;
         let grant = env.create_db(Some("grant"), DatabaseFlags::empty())?;
