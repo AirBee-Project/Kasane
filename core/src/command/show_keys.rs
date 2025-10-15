@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use crate::{
     command::tools::valid_name::valid_name,
-    user_error::UserError,
-    io::{StorageTrait, full::Storage},
+    io::full::Storage,
     json::{input::ShowKeys, output::Output},
+    user_error::UserError,
 };
 
 pub fn show_keys(v: ShowKeys, s: Arc<Storage>) -> Result<Output, UserError> {

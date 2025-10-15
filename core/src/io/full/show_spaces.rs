@@ -1,5 +1,3 @@
-use sled::IVec;
-
 use crate::{
     io::full::{Storage, tools::data_prefix::Data},
     json::{self, output::Output},

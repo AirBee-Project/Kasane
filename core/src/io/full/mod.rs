@@ -4,10 +4,10 @@ use std::{env, path::PathBuf};
 pub mod create_key;
 pub mod create_space;
 pub mod create_user;
+pub mod show_keys;
 pub mod show_spaces;
 pub mod tools;
 pub mod verify_user;
-
 pub struct Storage {
     pub db: Db,
 }
