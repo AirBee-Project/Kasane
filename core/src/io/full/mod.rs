@@ -8,6 +8,7 @@ pub mod show_keys;
 pub mod show_spaces;
 pub mod tools;
 pub mod verify_user;
+pub mod version;
 pub struct Storage {
     pub db: Db,
 }

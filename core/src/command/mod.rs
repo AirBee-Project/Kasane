@@ -4,6 +4,7 @@ use crate::command::create_key::create_key;
 use crate::command::create_space::create_space;
 use crate::command::show_keys::show_keys;
 use crate::command::show_spaces::show_spaces;
+use crate::command::version::version;
 use crate::io::full::Storage;
 use crate::{
     json::{input::Command, output::Output},
@@ -26,7 +27,7 @@ pub mod show_spaces;
 // pub mod show_values;
 pub mod tools;
 // pub mod update_value;
-// pub mod version;
+pub mod version;
 
 //関数のディスパッチ関数
 //関数の命令内容とストレージの参照権を関数に入力し、操作を行わせる
@@ -37,7 +38,7 @@ pub fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError> {
         Command::DropSpace(v) => todo!(),
         Command::ShowSpaces => show_spaces(s),
         Command::InfoSpace(v) => todo!(),
-        Command::Version => todo!(),
+        Command::Version => version(s),
 
         //Key操作系
         Command::CreateKey(v) => create_key(v, s),
