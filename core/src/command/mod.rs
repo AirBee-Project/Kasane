@@ -4,6 +4,7 @@ use crate::command::create_key::create_key;
 use crate::command::create_space::create_space;
 use crate::command::info_key::info_key;
 use crate::command::info_space::info_space;
+use crate::command::insert_value::insert_value;
 use crate::command::show_keys::show_keys;
 use crate::command::show_spaces::show_spaces;
 use crate::command::version::version;
@@ -20,7 +21,7 @@ pub mod create_space;
 // pub mod drop_user;
 pub mod info_space;
 // pub mod info_user;
-// pub mod insert_value;
+pub mod insert_value;
 // pub mod patch_value;
 // pub mod select_value;
 pub mod show_keys;
@@ -49,7 +50,7 @@ pub async fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError>
         Command::InfoKey(v) => info_key(v, s),
 
         //Value操作系
-        Command::InsertValue(v) => todo!(),
+        Command::InsertValue(v) => insert_value(v, s),
         Command::PatchValue(v) => todo!(),
         Command::UpdateValue(v) => todo!(),
         Command::DeleteValue(v) => todo!(),

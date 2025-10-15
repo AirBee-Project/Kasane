@@ -95,7 +95,7 @@ async fn main() -> std::io::Result<()> {
                     let _ = match resp {
                         Ok(r) => job.resp.send(r.await),
                         Err(_) => job.resp.send(Err(UserError::QueueReceiveError {
-                            location: "spawn_blocking".to_string(),
+                            location: location!(),
                         })),
                     };
                 } else {
