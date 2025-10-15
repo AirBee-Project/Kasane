@@ -389,25 +389,24 @@ pub enum Command {
     DeleteValue(DeleteValue),
     SelectValue(SelectValue),
     ShowValues(ShowValues),
-
     //ツール系
     //Transaction(Vec<Command>),
 
-    //ユーザー操作系
-    CreateUser(CreateUser),
-    DropUser(DropUser),
-    InfoUser(InfoUser),
-    ShowUsers,
+    // //ユーザー操作系
+    // CreateUser(CreateUser),
+    // DropUser(DropUser),
+    // InfoUser(InfoUser),
+    // ShowUsers,
 
-    //権限付与系
-    GrantDatabase(GrantDatabase),
-    GrantSpace(GrantSpace),
-    GrantKeyPrivilege(GrantKey),
+    // //権限付与系
+    // GrantDatabase(GrantDatabase),
+    // GrantSpace(GrantSpace),
+    // GrantKeyPrivilege(GrantKey),
 
-    //権限取り上げ系
-    RevokeDatabase(RevokeDatabase),
-    RevokeSpacePrivilege(RevokeSpace),
-    RevokeKeyPrivilege(RevokeKey),
+    // //権限取り上げ系
+    // RevokeDatabase(RevokeDatabase),
+    // RevokeSpacePrivilege(RevokeSpace),
+    // RevokeKeyPrivilege(RevokeKey),
 }
 
 #[derive(Debug, Serialize, Deserialize)]

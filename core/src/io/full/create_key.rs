@@ -2,10 +2,7 @@ use sled::transaction::{ConflictableTransactionError, TransactionError, Transact
 use uuid::Uuid;
 
 use crate::{
-    io::{
-        StorageTrait,
-        full::{Storage, tools::data_prefix::Data},
-    },
+    io::full::{Storage, tools::data_prefix::Data},
     json::{
         input::{KeyMode, KeyType},
         output::Output,
@@ -17,8 +14,8 @@ enum CreateKeyTxError {
     KeyAlreadyExists,
 }
 
-impl StorageTrait for Storage {
-    fn create_key(
+impl Storage {
+    pub fn create_key(
         &self,
         space_name: &str,
         key_name: &str,

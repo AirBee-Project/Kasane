@@ -6,7 +6,6 @@ pub enum Data {
     Password = 3,
     DatabaseGrant = 4,
     SpaceGrant = 5,
-    SpaceGrantTarget = 6,
     KeyGrant = 6,
     UserGrant = 7,
     Interval = 8,

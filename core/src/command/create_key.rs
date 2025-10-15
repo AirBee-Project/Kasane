@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::io::{StorageTrait, full::Storage};
+use crate::io::full::Storage;
 use crate::json::input::CreateKey;
 use crate::json::output::Output;
 use crate::{command::tools::valid_name::valid_name, user_error::UserError};

@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use crate::{
     command::tools::valid_name::valid_name,
-    user_error::UserError,
-    io::{StorageTrait, full::Storage},
+    io::full::Storage,
     json::{input::CreateSpace, output::Output},
+    user_error::UserError,
 };
 
 pub fn create_space(v: CreateSpace, s: Arc<Storage>) -> Result<Output, UserError> {

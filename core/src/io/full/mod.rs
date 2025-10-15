@@ -1,18 +1,13 @@
 use crate::UserError;
-use sled::{
-    Db, Tree,
-    transaction::{
-        ConflictableTransactionResult, TransactionError, TransactionalTree, TransactionalTrees,
-    },
-};
+use sled::Db;
 use std::{env, path::PathBuf};
 pub mod create_key;
 pub mod create_space;
 pub mod create_user;
-pub mod grant_database;
+pub mod show_spaces;
 pub mod tools;
+pub mod verify_user;
 
-use sled::Transactional;
 pub struct Storage {
     pub db: Db,
 }

@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     command::process,
-    io::{StorageTrait, full::Storage},
+    io::full::Storage,
     json::{
         input::{Packet, parser},
         output::Output,
@@ -139,23 +139,23 @@ async fn execute_json(
         }
     };
 
-    // セッションチェック
-    let mut sessions = state.sessions.lock().await;
-    let valid_session = if let Some(session) = sessions.get_mut(&packet.session) {
-        if session.last_access.elapsed() < SESSION_TIMEOUT {
-            session.last_access = Instant::now();
-            true
-        } else {
-            sessions.remove(&packet.session);
-            false
-        }
-    } else {
-        false
-    };
+    // // セッションチェック
+    // let mut sessions = state.sessions.lock().await;
+    // let valid_session = if let Some(session) = sessions.get_mut(&packet.session) {
+    //     if session.last_access.elapsed() < SESSION_TIMEOUT {
+    //         session.last_access = Instant::now();
+    //         true
+    //     } else {
+    //         sessions.remove(&packet.session);
+    //         false
+    //     }
+    // } else {
+    //     false
+    // };
 
-    if !valid_session {
-        return HttpResponse::Unauthorized().body("Invalid or expired session");
-    }
+    // if !valid_session {
+    //     return HttpResponse::Unauthorized().body("Invalid or expired session");
+    // }
 
     // コマンド処理
     let mut results = Vec::new();
@@ -192,13 +192,11 @@ async fn login(
     req: web::Json<LoginRequest>,
     storage: web::Data<Arc<Storage>>,
 ) -> impl Responder {
-    if !storage
-        .get_ref()
-        .clone()
-        .verify_user(&req.username, &req.password)
-        .unwrap_or(false)
-    {
-        return HttpResponse::Unauthorized().body("Invalid credentials");
+    match storage.verify_user(&req.username, &req.password) {
+        Ok(_) => {}
+        Err(_) => {
+            return HttpResponse::TooManyRequests().body("username or password missing");
+        }
     }
 
     let mut sessions = data.sessions.lock().await;

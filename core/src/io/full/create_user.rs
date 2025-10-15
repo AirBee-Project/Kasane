@@ -1,26 +1,15 @@
-use actix_web::http::Error;
-use uuid::Uuid;
-
 use crate::{
-    io::{
-        StorageTrait,
-        full::{
-            Storage,
-            tools::{data_prefix::Data, password_hash::hash_password},
-        },
-    },
+    io::full::{Storage, tools::data_prefix::Data},
     json::output::Output,
     user_error::UserError,
 };
-use argon2::password_hash::{self, SaltString};
-use argon2::{self, Algorithm, Argon2, Params, Version};
 
 enum CreateUserTxError {
     UserAlreadyExists,
 }
 
-impl StorageTrait for Storage {
-    fn create_user(&self, user_name: &str, hash: String) -> Result<Output, UserError> {
+impl Storage {
+    pub fn create_user(&self, user_name: &str, hash: String) -> Result<Output, UserError> {
         let location = location!();
         let mut user_bytes = vec![Data::User as u8];
         user_bytes.extend_from_slice(user_name.as_bytes());

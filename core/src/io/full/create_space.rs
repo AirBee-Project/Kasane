@@ -2,16 +2,13 @@ use sled::transaction::{ConflictableTransactionResult, TransactionError};
 use uuid::Uuid;
 
 use crate::{
-    io::{
-        StorageTrait,
-        full::{Storage, tools::data_prefix::Data},
-    },
+    io::full::{Storage, tools::data_prefix::Data},
     json::output::Output,
     user_error::UserError,
 };
 
-impl StorageTrait for Storage {
-    fn create_space(&self, space_name: &str) -> Result<Output, UserError> {
+impl Storage {
+    pub fn create_space(&self, space_name: &str) -> Result<Output, UserError> {
         let location = location!();
         let mut space_bytes = vec![Data::Space as u8];
         space_bytes.extend_from_slice(space_name.as_bytes());
