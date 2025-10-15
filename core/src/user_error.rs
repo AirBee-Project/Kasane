@@ -127,4 +127,10 @@ pub enum UserError {
 
     #[error("Unknown error {message} (at {location})")]
     UnKnown { message: String, location: String },
+
+    #[error("sled error: {message} (at {location})")]
+    SledError { message: String, location: String },
+
+    #[error("sled transaction error: {message} (at {location})")]
+    SledTransactionError { message: String, location: String },
 }

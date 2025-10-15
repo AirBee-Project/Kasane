@@ -10,8 +10,8 @@ uuid = { version="1.18.0", features = ["v4"]}
 tokio = { version = "1.47.1"}
 actix-web = { version = "4" }
 num_cpus = { version = "1.17.0"}
-lmdb = {version="0.8.0" }
 schemars = { version = "1.0.4"}
 argon2 = "0.5"
 rand = "0.8"
 thiserror = "2.0.17"
+sled = "0.34.7"

@@ -1,9 +1,11 @@
-use actix_web::http::Error;
-use lmdb::{Cursor, DatabaseFlags, Transaction as _, WriteFlags};
+use sled::transaction::{ConflictableTransactionResult, TransactionError};
 use uuid::Uuid;
 
 use crate::{
-    io::{StorageTrait, full::Storage},
+    io::{
+        StorageTrait,
+        full::{Storage, tools::data_prefix::Data},
+    },
     json::output::Output,
     user_error::UserError,
 };
@@ -11,25 +13,37 @@ use crate::{
 impl StorageTrait for Storage {
     fn create_space(&self, space_name: &str) -> Result<Output, UserError> {
         let location = location!();
-        let space_bytes = space_name.as_bytes();
-        let space_id: [u8; 16] = *Uuid::new_v4().as_bytes();
+        let mut space_bytes = vec![Data::Space as u8];
+        space_bytes.extend_from_slice(space_name.as_bytes());
 
-        // トランザクション作成
-        let mut txn = self.env.begin_rw_txn()?;
+        let result = (&self.db).transaction(|tx| {
+            // すでに存在していないかチェック
+            if tx.get(&space_bytes)?.is_some() {
+                return Err(sled::transaction::ConflictableTransactionError::Abort(()));
+            }
 
-        // SpaceTable に put
-        txn.put(self.space, &space_bytes, &space_id, WriteFlags::empty())
-            .map_err(|e| match e {
-                lmdb::Error::KeyExist => UserError::SpaceAlreadyExists {
-                    space_name: space_name.to_owned(),
+            // generate_id で一意IDを作成
+            let id: u64 = tx.generate_id()?; // u64
+            let id_bytes = id.to_be_bytes(); // バイト列に変換
+
+            // insert
+            tx.insert(space_bytes.clone(), &id_bytes)?;
+
+            Ok(())
+        });
+
+        match result {
+            Ok(()) => Ok(Output::Success),
+            Err(sled::transaction::TransactionError::Abort(_)) => {
+                Err(UserError::SpaceAlreadyExists {
+                    space_name: space_name.to_string(),
                     location,
-                },
-                other => other.into(),
-            })?;
-
-        // コミット
-        txn.commit()?;
-
-        Ok(Output::Success)
+                })
+            }
+            Err(sled::transaction::TransactionError::Storage(e)) => Err(UserError::UnKnown {
+                message: e.to_string(),
+                location,
+            }),
+        }
     }
 }

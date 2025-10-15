@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use crate::{
     io::full::tools::value_entry::ValueEntry,
-    json::input::{CommandDatabase, CommandKey, CommandSpace},
+    json::input::{DatabaseCommand, KeyCommand, SpaceCommand},
     r#type::{point::Point, spacetimeid::SpaceTimeId},
 };
 
@@ -58,7 +58,7 @@ pub struct ShowUsers {
 #[serde(rename_all = "camelCase")]
 pub struct InfoUser {
     pub user_name: String,
-    database_command: Vec<CommandDatabase>,
+    database_command: Vec<DatabaseCommand>,
     space_command: Vec<InfoUserSpace>,
     key_commnad: Vec<InfoUserKey>,
 }
@@ -67,7 +67,7 @@ pub struct InfoUser {
 #[serde(rename_all = "camelCase")]
 pub struct InfoUserSpace {
     space_name: String,
-    space_commnad: Vec<CommandSpace>,
+    space_commnad: Vec<SpaceCommand>,
 }
 
 #[derive(Serialize)]
@@ -75,7 +75,7 @@ pub struct InfoUserSpace {
 pub struct InfoUserKey {
     space_name: String,
     key_name: String,
-    space_commnad: Vec<CommandKey>,
+    key_commnad: Vec<KeyCommand>,
 }
 
 #[derive(Serialize)]

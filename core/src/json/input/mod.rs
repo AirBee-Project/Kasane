@@ -6,15 +6,6 @@ use crate::{
     r#type::{point::Point, spacetimeid::DimensionRange},
 };
 
-//共通型
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub enum AllOrChoose<T> {
-    Choose(T),
-    All,
-}
-
 // ---------------------- Space管理 ----------------------
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -124,11 +115,11 @@ pub enum Range {
 #[serde(rename_all = "camelCase")]
 pub struct IdInput {
     pub z: u8,
-    pub f: DimensionRange<i32>,
-    pub x: DimensionRange<u32>,
-    pub y: DimensionRange<u32>,
+    pub f: [Option<u64>; 2],
+    pub x: [Option<u64>; 2],
+    pub y: [Option<u64>; 2],
     pub i: u32,
-    pub t: DimensionRange<u32>,
+    pub t: [Option<u64>; 2],
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -294,51 +285,50 @@ pub struct InfoUser {
 #[serde(rename_all = "camelCase")]
 pub struct GrantDatabase {
     pub user_name: String,
-    pub command: DatabaseCommand,
+    pub command: Vec<DatabaseCommand>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
-pub enum CommandDatabase {
+pub enum DatabaseCommand {
+    ALL,
     CreateSpace,
     DropSpace,
     ShowSpaces,
     Version,
 }
 
-pub type DatabaseCommand = AllOrChoose<Vec<CommandDatabase>>;
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GrantSpace {
     pub user_name: String,
-    pub target_space: AllOrChoose<Vec<String>>,
-    pub command: SpaceCommand,
+    pub target_space: Vec<String>,
+    pub command: Vec<SpaceCommand>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
-pub enum CommandSpace {
+pub enum SpaceCommand {
+    ALL,
     CreateKey,
     DropKey,
     InfoSpace,
     ShowKeys,
 }
 
-pub type SpaceCommand = AllOrChoose<Vec<CommandSpace>>;
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct GrantKeyPrivilege {
+pub struct GrantKey {
     pub user_name: String,
     pub target_space: String,
-    pub target_key: AllOrChoose<Vec<String>>,
-    pub command: AllOrChoose<Vec<CommandKey>>,
+    pub target_key: Vec<String>,
+    pub command: Vec<KeyCommand>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub enum CommandKey {
+pub enum KeyCommand {
+    ALL,
     InsertValue,
     PatchValue,
     UpdateValue,
@@ -353,24 +343,24 @@ pub enum CommandKey {
 #[serde(rename_all = "camelCase")]
 pub struct RevokeDatabase {
     pub user_name: String,
-    pub command: AllOrChoose<Vec<CommandDatabase>>,
+    pub command: Vec<DatabaseCommand>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct RevokeSpacePrivilege {
+pub struct RevokeSpace {
     pub user_name: String,
-    pub target_space: AllOrChoose<Vec<String>>,
-    pub command: AllOrChoose<Vec<CommandSpace>>,
+    pub target_space: Vec<String>,
+    pub command: Vec<SpaceCommand>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct RevokeKeyPrivilege {
+pub struct RevokeKey {
     pub user_name: String,
     pub target_space: String,
-    pub target_key: AllOrChoose<Vec<String>>,
-    pub command: AllOrChoose<Vec<CommandKey>>,
+    pub target_key: Vec<String>,
+    pub command: Vec<KeyCommand>,
 }
 
 // ---------------------- Packet & Command ----------------------
@@ -411,12 +401,12 @@ pub enum Command {
     //権限付与系
     GrantDatabase(GrantDatabase),
     GrantSpace(GrantSpace),
-    GrantKeyPrivilege(GrantKeyPrivilege),
+    GrantKeyPrivilege(GrantKey),
 
     //権限取り上げ系
     RevokeDatabase(RevokeDatabase),
-    RevokeSpacePrivilege(RevokeSpacePrivilege),
-    RevokeKeyPrivilege(RevokeKeyPrivilege),
+    RevokeSpacePrivilege(RevokeSpace),
+    RevokeKeyPrivilege(RevokeKey),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
