@@ -9,6 +9,7 @@ use std::{env, path::PathBuf};
 pub mod create_key;
 pub mod create_space;
 pub mod create_user;
+pub mod grant_database;
 pub mod tools;
 
 use sled::Transactional;

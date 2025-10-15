@@ -290,12 +290,13 @@ pub struct GrantDatabase {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
+#[repr(u8)]
 pub enum DatabaseCommand {
-    ALL,
-    CreateSpace,
-    DropSpace,
-    ShowSpaces,
-    Version,
+    ALL = 0,
+    CreateSpace = 1,
+    DropSpace = 2,
+    ShowSpaces = 3,
+    Version = 4,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

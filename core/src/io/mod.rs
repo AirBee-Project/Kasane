@@ -73,7 +73,7 @@ pub trait StorageTrait {
     ) -> Result<HashMap<Vec<u8>, Vec<(String, ValueEntry)>>, UserError>;
 
     //ユーザー操作系
-    fn create_user(&self, user_name: &str, password: &str) -> Result<Output, UserError>;
+    fn create_user(&self, user_name: &str, hash: String) -> Result<Output, UserError>;
     fn drop_user(&self, user_name: &str) -> Result<Output, UserError>;
     fn info_user(&self, user_name: &str) -> Result<Output, UserError>;
     fn show_users(&self) -> Result<Output, UserError>;

@@ -2,9 +2,12 @@ use std::sync::Arc;
 
 use crate::{
     command::tools::valid_name::valid_name,
-    user_error::UserError,
-    io::{StorageTrait, full::Storage},
+    io::{
+        StorageTrait,
+        full::{Storage, tools::password_hash::hash_password},
+    },
     json::{input::CreateUser, output::Output},
+    user_error::UserError,
 };
 
 pub fn create_user(v: CreateUser, s: Arc<Storage>) -> Result<Output, UserError> {
@@ -25,6 +28,12 @@ pub fn create_user(v: CreateUser, s: Arc<Storage>) -> Result<Output, UserError> 
         }
     }
 
+    //パスワードをHash化する
+    let hashed = hash_password(&v.password).map_err(|err| UserError::UnKnown {
+        message: err,
+        location: location,
+    })?;
+
     //ストレージに対して操作を実行する
-    s.create_user(&v.user_name, &v.password)
+    s.create_user(&v.user_name, hashed)
 }
