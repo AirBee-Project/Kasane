@@ -5,7 +5,7 @@ use crate::json::input::CreateKey;
 use crate::json::output::Output;
 use crate::{command::tools::valid_name::valid_name, user_error::UserError};
 
-pub fn create_key(v: CreateKey, s: Arc<Storage>) -> Result<Output, UserError> {
+pub async fn create_key(v: CreateKey, s: Arc<Storage>) -> Result<Output, UserError> {
     //危険な入力がデータベースに侵入するのを防ぐ
 
     //Spaceの名前のチェック
@@ -34,4 +34,5 @@ pub fn create_key(v: CreateKey, s: Arc<Storage>) -> Result<Output, UserError> {
 
     //ストレージに対して操作を実行する
     s.create_key(&v.space_name, &v.key_name, v.key_type, v.key_mode)
+        .await
 }

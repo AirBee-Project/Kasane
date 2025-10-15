@@ -1,14 +1,14 @@
 use crate::{
     io::full::{Storage, tools::data_prefix::Data},
-    json::output::{Output, Showkeys},
+    json::input::{KeyMode, KeyType},
+    json::output::{InfoKey, InfoSpace, Output},
     user_error::UserError,
 };
 use tokio::sync::MutexGuard;
 
 impl Storage {
-    /// space 内の全キー一覧を取得
-    pub async fn show_keys(&self, space_name: &str) -> Result<Output, UserError> {
-        // space_id 取得と prefix 取得を最小範囲でロック
+    pub async fn info_space(&self, space_name: &str) -> Result<Output, UserError> {
+        // 1. space_id と prefix を最小ロックで取得
         let (space_id, prefix) = {
             let _lock: MutexGuard<'_, ()> = self.lock.lock().await;
 
@@ -33,8 +33,8 @@ impl Storage {
             (space_id, prefix)
         };
 
-        // scan_prefix の結果を収集（ロック外で安全）
-        let mut keys = Vec::new();
+        // 2. scan_prefix でキー情報を取得（ロック外でOK）
+        let mut key_infos = Vec::new();
 
         for item in self.db.scan_prefix(&prefix) {
             let (key_bytes, value_bytes) = item.map_err(|e| UserError::UnKnown {
@@ -42,25 +42,36 @@ impl Storage {
                 location: location!(),
             })?;
 
-            // key_bytes: [Data::Key (1)] + [space_id (8)] + [key_name (UTF-8)]
+            // key_name を安全に UTF-8 変換
             if key_bytes.len() <= 1 + space_id.len() {
                 continue;
             }
             let key_name_bytes = &key_bytes[1 + space_id.len()..];
-
-            // value_bytes: [id(8)] + [type(1)] + [mode(1)] の最後2バイトを除外
-            if key_name_bytes.len() < 1 {
-                continue;
-            }
-
             let key_name = match std::str::from_utf8(key_name_bytes) {
                 Ok(s) => s.to_string(),
-                Err(_) => continue, // 不正な UTF-8 はスキップ
+                Err(_) => continue,
             };
 
-            keys.push(key_name);
+            // value_bytes: [id(8)] + [type(1)] + [mode(1)]
+            if value_bytes.len() < 10 {
+                continue;
+            }
+            let key_type_byte = value_bytes[8];
+            let key_mode_byte = value_bytes[9];
+
+            let key_type = KeyType::from_byte(key_type_byte)?.as_str().to_string();
+            let key_mode = KeyMode::from_byte(key_mode_byte)?.as_str().to_string();
+
+            key_infos.push(InfoKey {
+                key_name,
+                key_type,
+                key_mode,
+            });
         }
 
-        Ok(Output::Showkeys(Showkeys { key_names: keys }))
+        Ok(Output::InfoSpace(InfoSpace {
+            space_name: space_name.to_string(),
+            key_names: key_infos,
+        }))
     }
 }

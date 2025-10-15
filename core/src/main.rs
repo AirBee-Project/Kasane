@@ -93,7 +93,7 @@ async fn main() -> std::io::Result<()> {
                     let resp = tokio::task::spawn_blocking(move || process(cmd, storage)).await;
 
                     let _ = match resp {
-                        Ok(r) => job.resp.send(r),
+                        Ok(r) => job.resp.send(r.await),
                         Err(_) => job.resp.send(Err(UserError::QueueReceiveError {
                             location: "spawn_blocking".to_string(),
                         })),
@@ -139,7 +139,7 @@ async fn execute_json(
         }
     };
 
-    // // セッションチェック
+    // セッションチェック
     // let mut sessions = state.sessions.lock().await;
     // let valid_session = if let Some(session) = sessions.get_mut(&packet.session) {
     //     if session.last_access.elapsed() < SESSION_TIMEOUT {

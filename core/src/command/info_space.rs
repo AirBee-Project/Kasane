@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use crate::{
     command::tools::valid_name::valid_name,
-    user_error::UserError,
-    io::{StorageTrait, full::Storage},
+    io::full::Storage,
     json::{input::InfoSpace, output::Output},
+    user_error::UserError,
 };
 
-pub fn info_space(v: InfoSpace, s: Arc<Storage>) -> Result<Output, UserError> {
+pub async fn info_space(v: InfoSpace, s: Arc<Storage>) -> Result<Output, UserError> {
     //危険な入力がデータベースに侵入するのを防ぐ
 
     //エラーの位置
@@ -25,5 +25,5 @@ pub fn info_space(v: InfoSpace, s: Arc<Storage>) -> Result<Output, UserError> {
         }
     }
 
-    s.info_space(&v.space_name)
+    s.info_space(&v.space_name).await
 }

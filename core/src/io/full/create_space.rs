@@ -1,45 +1,51 @@
-use sled::transaction::{ConflictableTransactionResult, TransactionError};
-use uuid::Uuid;
-
 use crate::{
     io::full::{Storage, tools::data_prefix::Data},
     json::output::Output,
     user_error::UserError,
 };
+use sled::Db;
+use tokio::sync::MutexGuard;
+use uuid::Uuid;
 
 impl Storage {
-    pub fn create_space(&self, space_name: &str) -> Result<Output, UserError> {
+    pub async fn create_space(&self, space_name: &str) -> Result<Output, UserError> {
         let mut space_bytes = vec![Data::Space as u8];
         space_bytes.extend_from_slice(space_name.as_bytes());
 
-        let result = (&self.db).transaction(|tx| {
-            // すでに存在していないかチェック
-            if tx.get(&space_bytes)?.is_some() {
-                return Err(sled::transaction::ConflictableTransactionError::Abort(()));
-            }
+        // 最小範囲での排他制御
+        let _lock: MutexGuard<'_, ()> = self.lock.lock().await;
 
-            // generate_id で一意IDを作成
-            let id: u64 = tx.generate_id()?; // u64
-            let id_bytes = id.to_be_bytes(); // バイト列に変換
-
-            // insert
-            tx.insert(space_bytes.clone(), &id_bytes)?;
-
-            Ok(())
-        });
-
-        match result {
-            Ok(()) => Ok(Output::Success),
-            Err(sled::transaction::TransactionError::Abort(_)) => {
-                Err(UserError::SpaceAlreadyExists {
-                    space_name: space_name.to_string(),
-                    location: location!(),
-                })
-            }
-            Err(sled::transaction::TransactionError::Storage(e)) => Err(UserError::UnKnown {
+        // 存在チェック
+        if self
+            .db
+            .get(&space_bytes)
+            .map_err(|e| UserError::UnKnown {
                 message: e.to_string(),
                 location: location!(),
-            }),
+            })?
+            .is_some()
+        {
+            return Err(UserError::SpaceAlreadyExists {
+                space_name: space_name.to_string(),
+                location: location!(),
+            });
         }
+
+        // 一意ID生成
+        let id: u64 = self.db.generate_id().map_err(|e| UserError::UnKnown {
+            message: e.to_string(),
+            location: location!(),
+        })?;
+        let id_bytes = id.to_be_bytes();
+
+        // insert
+        self.db
+            .insert(space_bytes, &id_bytes)
+            .map_err(|e| UserError::UnKnown {
+                message: e.to_string(),
+                location: location!(),
+            })?;
+
+        Ok(Output::Success)
     }
 }

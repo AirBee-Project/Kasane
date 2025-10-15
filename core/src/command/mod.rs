@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::command::create_key::create_key;
 use crate::command::create_space::create_space;
 use crate::command::info_key::info_key;
+use crate::command::info_space::info_space;
 use crate::command::show_keys::show_keys;
 use crate::command::show_spaces::show_spaces;
 use crate::command::version::version;
@@ -17,7 +18,7 @@ pub mod create_space;
 // pub mod drop_key;
 // pub mod drop_space;
 // pub mod drop_user;
-// pub mod info_space;
+pub mod info_space;
 // pub mod info_user;
 // pub mod insert_value;
 // pub mod patch_value;
@@ -32,19 +33,19 @@ pub mod version;
 
 //関数のディスパッチ関数
 //関数の命令内容とストレージの参照権を関数に入力し、操作を行わせる
-pub fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError> {
+pub async fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError> {
     match cmd {
         //データベース操作系
-        Command::CreateSpace(v) => create_space(v, s),
+        Command::CreateSpace(v) => create_space(v, s).await,
         Command::DropSpace(v) => todo!(),
         Command::ShowSpaces => show_spaces(s),
-        Command::InfoSpace(v) => todo!(),
+        Command::InfoSpace(v) => info_space(v, s).await,
         Command::Version => version(s),
 
         //Key操作系
-        Command::CreateKey(v) => create_key(v, s),
+        Command::CreateKey(v) => create_key(v, s).await,
         Command::DropKey(v) => todo!(),
-        Command::ShowKeys(v) => show_keys(v, s),
+        Command::ShowKeys(v) => show_keys(v, s).await,
         Command::InfoKey(v) => info_key(v, s),
 
         //Value操作系
