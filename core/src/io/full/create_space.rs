@@ -9,7 +9,6 @@ use crate::{
 
 impl Storage {
     pub fn create_space(&self, space_name: &str) -> Result<Output, UserError> {
-        let location = location!();
         let mut space_bytes = vec![Data::Space as u8];
         space_bytes.extend_from_slice(space_name.as_bytes());
 
@@ -34,12 +33,12 @@ impl Storage {
             Err(sled::transaction::TransactionError::Abort(_)) => {
                 Err(UserError::SpaceAlreadyExists {
                     space_name: space_name.to_string(),
-                    location,
+                    location: location!(),
                 })
             }
             Err(sled::transaction::TransactionError::Storage(e)) => Err(UserError::UnKnown {
                 message: e.to_string(),
-                location,
+                location: location!(),
             }),
         }
     }

@@ -10,9 +10,6 @@ use crate::{
 pub fn show_keys(v: ShowKeys, s: Arc<Storage>) -> Result<Output, UserError> {
     //危険な入力がデータベースに侵入するのを防ぐ
 
-    //エラーの位置
-    let location = location!();
-
     //Spaceの名前のチェック
     match valid_name(&v.space_name) {
         Ok(_) => {}
@@ -20,7 +17,7 @@ pub fn show_keys(v: ShowKeys, s: Arc<Storage>) -> Result<Output, UserError> {
             return Err(UserError::SpaceNameValidationError {
                 name: v.space_name,
                 reason: e,
-                location: location,
+                location: location!(),
             });
         }
     }

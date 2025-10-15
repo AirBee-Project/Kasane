@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::command::create_key::create_key;
 use crate::command::create_space::create_space;
+use crate::command::info_key::info_key;
 use crate::command::show_keys::show_keys;
 use crate::command::show_spaces::show_spaces;
 use crate::command::version::version;
@@ -16,7 +17,6 @@ pub mod create_space;
 // pub mod drop_key;
 // pub mod drop_space;
 // pub mod drop_user;
-// pub mod info_key;
 // pub mod info_space;
 // pub mod info_user;
 // pub mod insert_value;
@@ -25,6 +25,7 @@ pub mod create_space;
 pub mod show_keys;
 pub mod show_spaces;
 // pub mod show_values;
+pub mod info_key;
 pub mod tools;
 // pub mod update_value;
 pub mod version;
@@ -44,7 +45,7 @@ pub fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError> {
         Command::CreateKey(v) => create_key(v, s),
         Command::DropKey(v) => todo!(),
         Command::ShowKeys(v) => show_keys(v, s),
-        Command::InfoKey(v) => todo!(),
+        Command::InfoKey(v) => info_key(v, s),
 
         //Value操作系
         Command::InsertValue(v) => todo!(),

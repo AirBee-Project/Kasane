@@ -10,7 +10,6 @@ enum CreateUserTxError {
 
 impl Storage {
     pub fn create_user(&self, user_name: &str, hash: String) -> Result<Output, UserError> {
-        let location = location!();
         let mut user_bytes = vec![Data::User as u8];
         user_bytes.extend_from_slice(user_name.as_bytes());
 
@@ -44,12 +43,12 @@ impl Storage {
             Err(sled::transaction::TransactionError::Abort(e)) => match e {
                 CreateUserTxError::UserAlreadyExists => Err(UserError::UserAlreadyExists {
                     user_name: user_name.to_string(),
-                    location,
+                    location: location!(),
                 }),
             },
             Err(sled::transaction::TransactionError::Storage(e)) => Err(UserError::UnKnown {
                 message: e.to_string(),
-                location,
+                location: location!(),
             }),
         }
     }

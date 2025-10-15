@@ -4,6 +4,7 @@ use std::{env, path::PathBuf};
 pub mod create_key;
 pub mod create_space;
 pub mod create_user;
+pub mod info_key;
 pub mod show_keys;
 pub mod show_spaces;
 pub mod tools;

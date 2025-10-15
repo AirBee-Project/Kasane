@@ -6,8 +6,6 @@ use crate::{
 
 impl Storage {
     pub fn show_spaces(&self) -> Result<Output, UserError> {
-        let location = location!();
-
         let mut spaces = Vec::new();
 
         // プレフィックススキャン: Data::Space (スペース情報のみ取得)
@@ -28,7 +26,7 @@ impl Storage {
                 Err(e) => {
                     return Err(UserError::UnKnown {
                         message: e.to_string(),
-                        location,
+                        location: location!(),
                     });
                 }
             }
