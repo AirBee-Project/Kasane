@@ -6,6 +6,7 @@ pub mod create_key;
 pub mod create_space;
 pub mod info_key;
 pub mod info_space;
+pub mod insert_value;
 pub mod show_keys;
 pub mod show_spaces;
 pub mod tools;

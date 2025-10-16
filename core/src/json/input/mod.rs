@@ -105,18 +105,18 @@ pub struct SelectValue {
 pub enum Range {
     Function(Function),
     Prefix(Prefix),
-    IdSet(Vec<IdInput>),
+    Ids(Vec<Id>),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct IdInput {
+pub struct Id {
     pub z: u8,
-    pub f: [Option<u64>; 2],
+    pub f: [Option<i64>; 2],
     pub x: [Option<u64>; 2],
     pub y: [Option<u64>; 2],
     pub i: u32,
-    pub t: [Option<u64>; 2],
+    pub t: [Option<u32>; 2],
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

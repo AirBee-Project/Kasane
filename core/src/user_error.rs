@@ -133,4 +133,16 @@ pub enum UserError {
 
     #[error("sled transaction error: {message} (at {location})")]
     SledTransactionError { message: String, location: String },
+
+    #[error("ZoomLevel '{zoom_level}' is out of range (valid: 0..=60) (at {location})")]
+    ZoomLevelOutOfRange { zoom_level: u8, location: String },
+
+    #[error("F coordinate '{f}' is out of range for ZoomLevel '{z}' (at {location})")]
+    FOutOfRange { f: i64, z: u8, location: String },
+
+    #[error("X coordinate '{x}' is out of range for ZoomLevel '{z}' (at {location})")]
+    XOutOfRange { x: u64, z: u8, location: String },
+
+    #[error("Y coordinate '{y}' is out of range for ZoomLevel '{z}' (at {location})")]
+    YOutOfRange { y: u64, z: u8, location: String },
 }

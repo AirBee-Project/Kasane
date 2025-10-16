@@ -1,27 +1,56 @@
 [
   {
-    "Success": {
-      "Version": "0.0.2"
+    "Ok": "success"
+  },
+  {
+    "Ok": {
+      "showSpaces": {
+        "spaceNames": [
+          "users_space"
+        ]
+      }
     }
   },
   {
-    "Success": {
-      "SpaceNames": []
+    "Ok": "success"
+  },
+  {
+    "Ok": {
+      "showkeys": {
+        "keyNames": [
+          "neko"
+        ]
+      }
     }
   },
   {
-    "Success": "Success"
-  },
-  {
-    "Success": {
-      "SpaceNames": [
-        "tomoro"
-      ]
+    "Ok": {
+      "version": {
+        "version": "0.0.2"
+      }
     }
   },
   {
-    "Success": {
-      "KeysInfo": []
+    "Ok": {
+      "infoKey": {
+        "keyName": "neko",
+        "keyType": "Int",
+        "keyMode": "UniqueKey"
+      }
+    }
+  },
+  {
+    "Ok": {
+      "infoSpace": {
+        "spaceName": "users_space",
+        "keyNames": [
+          {
+            "keyName": "neko",
+            "keyType": "Int",
+            "keyMode": "UniqueKey"
+          }
+        ]
+      }
     }
   }
 ]

@@ -1,16 +1,35 @@
 {
+  "session": "550e8400-e29b-41d4-a716-446655440000",
   "command": [
-    "Version",
-    "Spaces",
     {
-      "AddSpace": {
-        "spacename": "tomoro"
+      "createSpace": {
+        "spaceName": "users_space"
       }
     },
-    "Spaces",
+    "showSpaces",
     {
-      "KeysInfo": {
-        "spacename": "tomoro"
+      "createKey": {
+        "spaceName": "users_space",
+        "keyName": "neko",
+        "keyType": "int",
+        "keyMode": "uniqueKey"
+      }
+    },
+    {
+      "showKeys": {
+        "spaceName": "users_space"
+      }
+    },
+    "version",
+    {
+      "infoKey": {
+        "spaceName": "users_space",
+        "keyName": "neko"
+      }
+    },
+    {
+      "infoSpace": {
+        "spaceName": "users_space"
       }
     }
   ]
