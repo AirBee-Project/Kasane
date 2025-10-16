@@ -3,7 +3,7 @@ use serde::Serialize;
 use crate::{
     io::full::tools::value_entry::ValueEntry,
     json::input::{DatabaseCommand, KeyCommand, SpaceCommand},
-    r#type::{point::Point, spacetimeid::SpaceTimeId},
+    r#type::{point::Point, space_time_id::SpaceTimeId},
 };
 
 #[derive(Serialize)]

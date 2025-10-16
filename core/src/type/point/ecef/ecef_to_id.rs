@@ -3,7 +3,7 @@ use crate::r#type::{
         ecef::{ECEF, ecef_to_geodetic::ecef_to_geodetic},
         geodetic::geodetic_to_id::geodetic_to_id,
     },
-    spacetimeid::SpaceTimeId,
+    space_time_id::SpaceTimeId,
 };
 
 pub fn ecef_to_id(z: u8, ecef: ECEF) -> SpaceTimeId {

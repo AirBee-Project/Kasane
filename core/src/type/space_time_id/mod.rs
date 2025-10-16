@@ -5,10 +5,9 @@ use std::{
 };
 
 use crate::{
-    r#type::spacetimeid::z_range::{F_MAX, F_MIN, XY_MAX},
+    r#type::space_time_id::z_range::{F_MAX, F_MIN, XY_MAX},
     user_error::UserError,
 };
-use std::fmt::Debug;
 
 pub struct Dimension<T> {
     start: T,
@@ -28,8 +27,8 @@ where
     }
 }
 
-struct SpaceTimeId {
-    z: u8,
+///Z=60のIntervalSetに変換
+pub struct SpaceTimeId {
     f: Dimension<i64>,
     x: Dimension<u64>,
     y: Dimension<u64>,
@@ -37,7 +36,7 @@ struct SpaceTimeId {
 }
 
 impl SpaceTimeId {
-    fn new(
+    pub fn new(
         z: u8,
         f: (Option<i64>, Option<i64>),
         x: (Option<u64>, Option<u64>),
@@ -58,7 +57,7 @@ impl SpaceTimeId {
         let x_dim = normalize_and_scale60_xy::<u64>(z, x, "X")?;
         let y_dim = normalize_and_scale60_xy::<u64>(z, y, "Y")?;
 
-        let mut t_dim;
+        let t_dim;
 
         if i == 0 {
             t_dim = Dimension {
@@ -97,7 +96,6 @@ impl SpaceTimeId {
         }
 
         Ok(SpaceTimeId {
-            z,
             f: f_dim,
             x: x_dim,
             y: y_dim,

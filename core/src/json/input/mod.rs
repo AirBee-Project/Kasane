@@ -112,11 +112,11 @@ pub enum Range {
 #[serde(rename_all = "camelCase")]
 pub struct Id {
     pub z: u8,
-    pub f: [Option<i64>; 2],
-    pub x: [Option<u64>; 2],
-    pub y: [Option<u64>; 2],
+    pub f: (Option<i64>, Option<i64>),
+    pub x: (Option<u64>, Option<u64>),
+    pub y: (Option<u64>, Option<u64>),
     pub i: u32,
-    pub t: [Option<u32>; 2],
+    pub t: (Option<u32>, Option<u32>),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

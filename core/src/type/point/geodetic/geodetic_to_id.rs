@@ -1,6 +1,6 @@
 use crate::r#type::{
     point::geodetic::Geodetic,
-    spacetimeid::{DimensionRange, SpaceTimeId},
+    space_time_id::{DimensionRange, SpaceTimeId},
 };
 
 /// Point (lat, lon, alt) を SpaceTimeId に変換

@@ -1,8 +1,4 @@
-use crate::{
-    json::input::{Id, Range},
-    r#type::spacetimeid::z_range::{F_MAX, F_MIN, XY_MAX},
-    user_error::UserError,
-};
+use crate::{json::input::Range, r#type::space_time_id::SpaceTimeId, user_error::UserError};
 
 pub fn range(range: Range) -> Result<Range, UserError> {
     match range {
@@ -18,16 +14,10 @@ pub fn range(range: Range) -> Result<Range, UserError> {
         },
         Range::Ids(ids) => {
             for id in ids {
-                //ZoomLeveLは規定値内か？
-                if id.z > 60 {
-                    return Err(UserError::ZoomLevelOutOfRange {
-                        zoom_level: id.z,
-                        id: (),
-                        location: location!(),
-                    });
-                }
+                //時空間IDをエンコード
+                let encode_id = SpaceTimeId::new(id.z, id.f, id.x, id.y, id.i, id.t)?;
 
-                //各次元について検証
+                //重複している範囲をmerge？
 
                 //
             }
