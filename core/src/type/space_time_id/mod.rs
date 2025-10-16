@@ -10,8 +10,8 @@ use crate::{
 };
 
 pub struct Dimension<T> {
-    start: T,
-    end: T,
+    pub start: T,
+    pub end: T,
 }
 pub mod z_range;
 
@@ -29,10 +29,11 @@ where
 
 ///Z=60のIntervalSetに変換
 pub struct SpaceTimeId {
-    f: Dimension<i64>,
-    x: Dimension<u64>,
-    y: Dimension<u64>,
-    t: Dimension<u64>,
+    //fは便器上u64にするが、ビットとしての意味はi64が正解
+    pub f: Dimension<u64>,
+    pub x: Dimension<u64>,
+    pub y: Dimension<u64>,
+    pub t: Dimension<u64>,
 }
 
 impl SpaceTimeId {
@@ -53,7 +54,7 @@ impl SpaceTimeId {
         }
 
         // F/X/Y のチェック + Z=60 正規化
-        let f_dim = normalize_and_scale60_f::<i64>(z, f)?;
+        let f_dim = normalize_and_scale60_f(z, f)?;
         let x_dim = normalize_and_scale60_xy::<u64>(z, x, "X")?;
         let y_dim = normalize_and_scale60_xy::<u64>(z, y, "Y")?;
 
@@ -105,13 +106,10 @@ impl SpaceTimeId {
 }
 
 /// Fの範囲チェック + Z=60 に変換
-pub fn normalize_and_scale60_f<T>(
+pub fn normalize_and_scale60_f(
     z: u8,
     f: (Option<i64>, Option<i64>),
-) -> Result<Dimension<T>, UserError>
-where
-    T: Copy + Add<Output = T> + Sub<Output = T> + Mul<Output = T> + From<i64>,
-{
+) -> Result<Dimension<u64>, UserError> {
     // 元のZでの範囲チェック
     let min = F_MIN[z as usize];
     let max = F_MAX[z as usize];
@@ -152,12 +150,10 @@ where
 
     // Z=60 にスケール変換
     let coef: i64 = 2_i64.pow(60 - z as u32);
-    let one: T = T::from(1);
-    let k: T = T::from(coef);
 
     Ok(Dimension {
-        start: T::from(dim_i64.start as i64) * k,
-        end: (T::from(dim_i64.end as i64) + one) * k - one,
+        start: (dim_i64.start * coef) as u64,
+        end: ((dim_i64.end * coef) + (coef - 1)) as u64, // inclusive end
     })
 }
 

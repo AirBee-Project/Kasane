@@ -8,6 +8,8 @@ pub struct IntervalValue {
 }
 
 pub struct IntervalSet {
+    // キー: (prefix, start)のタプル
+    // 値: IntervalValue (end と value)
     map: BTreeMap<(Vec<u8>, u64), IntervalValue>,
 }
 
