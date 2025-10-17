@@ -1,27 +1,33 @@
-use crate::{json::input::Range, r#type::space_time_id::SpaceTimeId, user_error::UserError};
+use crate::{
+    json::input::Range,
+    r#type::{space_time_id::SpaceTimeId, space_time_id_set::SpaceTimeIdSet},
+    user_error::UserError,
+};
 
-pub fn range(range: Range) -> Result<Range, UserError> {
-    match range {
-        Range::Function(function) => match function {
-            crate::json::input::Function::Spot(spot) => todo!(),
-            crate::json::input::Function::Line(line) => todo!(),
-            crate::json::input::Function::Triangle(triangle) => todo!(),
-        },
-        Range::Prefix(prefix) => match prefix {
-            crate::json::input::Prefix::AND(ranges) => todo!(),
-            crate::json::input::Prefix::OR(ranges) => todo!(),
-            crate::json::input::Prefix::NOT(ranges) => todo!(),
-        },
-        Range::Ids(ids) => {
-            for id in ids {
-                //時空間IDをエンコード
-                let encode_id = SpaceTimeId::new(id.z, id.f, id.x, id.y, id.i, id.t)?;
+enum DatabaseRangePrefix {
+    AND(Vec<DatabaseRange>),
+    OR(Vec<DatabaseRange>),
+    NOT(Vec<DatabaseRange>),
+}
 
-                //重複している範囲をmerge？
+enum DatabaseRange {
+    SpaceTimeIdSet(SpaceTimeIdSet),
+    ReadDatabase(),
+    DatabaseRangePrefix(DatabaseRangePrefix),
+}
 
-                //
-            }
-        }
-    }
+pub fn range(range: Range) -> Result<DatabaseRange, UserError> {
     todo!()
+}
+
+pub fn database_range(database_range: DatabaseRange) -> Result<DatabaseRange, UserError> {
+    match database_range {
+        DatabaseRange::SpaceTimeIdSet(space_time_id_set) => todo!(),
+        DatabaseRange::ReadDatabase() => todo!(),
+        DatabaseRange::DatabaseRangePrefix(prefix) => match prefix {
+            DatabaseRangePrefix::AND(and) => for ele in and {},
+            DatabaseRangePrefix::OR(or) => todo!(),
+            DatabaseRangePrefix::NOT(not) => todo!(),
+        },
+    }
 }

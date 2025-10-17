@@ -1,8 +1,7 @@
 use core::fmt;
-use std::{
-    ops::{Add, Mul, Sub},
-    u64,
-};
+use std::u64;
+pub mod z_range;
+use serde::Serialize;
 
 use crate::{
     r#type::space_time_id::z_range::{F_MAX, F_MIN, XY_MAX},
@@ -13,7 +12,6 @@ pub struct Dimension<T> {
     pub start: T,
     pub end: T,
 }
-pub mod z_range;
 
 impl<T> fmt::Display for Dimension<T>
 where
@@ -27,13 +25,14 @@ where
     }
 }
 
-///Z=60のIntervalSetに変換
+/// Z=60 の IntervalSet に変換
+#[derive(Serialize)]
 pub struct SpaceTimeId {
-    //fは便器上u64にするが、ビットとしての意味はi64が正解
-    pub f: Dimension<u64>,
-    pub x: Dimension<u64>,
-    pub y: Dimension<u64>,
-    pub t: Dimension<u64>,
+    pub z: u8,
+    pub f: (i64, i64),
+    pub x: (u64, u64),
+    pub y: (u64, u64),
+    pub t: (u64, u64),
 }
 
 impl SpaceTimeId {
@@ -53,170 +52,158 @@ impl SpaceTimeId {
             });
         }
 
-        // F/X/Y のチェック + Z=60 正規化
-        let f_dim = normalize_and_scale60_f(z, f)?;
-        let x_dim = normalize_and_scale60_xy::<u64>(z, x, "X")?;
-        let y_dim = normalize_and_scale60_xy::<u64>(z, y, "Y")?;
+        // 値の範囲を定義
+        let xy_max = XY_MAX[z as usize];
+        let f_max = F_MAX[z as usize];
+        let f_min = F_MIN[z as usize];
 
-        let t_dim;
+        // X, Y, F の範囲を正規化・検証
+        let new_x = normalize_x_range(x, xy_max, z)?;
+        let new_y = normalize_y_range(y, xy_max, z)?;
+        let new_f = normalize_f_range(f, f_min, f_max, z)?;
 
-        if i == 0 {
-            t_dim = Dimension {
-                start: 0,
-                end: u64::MAX,
-            };
+        // I と T の計算
+        let new_t = if i == 0 {
+            (0, u64::MAX)
         } else {
-            // t はオプションで逆転補正
-            t_dim = match t {
-                (None, None) => Dimension {
-                    start: 0,
-                    end: u64::MAX,
-                },
-                (Some(s), None) => Dimension {
-                    start: u64::from(s) * u64::from(i),
-                    end: u64::MAX,
-                },
-                (None, Some(e)) => Dimension {
-                    start: 0,
-                    end: u64::from(e + 1) * u64::from(i),
-                },
+            match t {
+                (None, None) => (0, u64::MAX),
+                (Some(s), None) => ((s as u64) * (i as u64), u64::MAX),
+                (None, Some(e)) => (0, (e * (i + 1)) as u64),
                 (Some(s), Some(e)) => {
-                    if s <= e {
-                        Dimension {
-                            start: u64::from(s) * u64::from(i),
-                            end: u64::from(e + 1) * u64::from(i),
-                        }
+                    if s < e {
+                        ((s as u64) * (i as u64), (e * (i + 1)) as u64)
                     } else {
-                        Dimension {
-                            start: u64::from(e) * u64::from(i),
-                            end: u64::from(s + 1) * u64::from(i),
-                        }
+                        ((e as u64) * (i as u64), (s * (i + 1)) as u64)
                     }
                 }
-            };
-        }
+            }
+        };
 
-        Ok(SpaceTimeId {
-            f: f_dim,
-            x: x_dim,
-            y: y_dim,
-            t: t_dim,
+        Ok(Self {
+            z,
+            f: new_f,
+            x: new_x,
+            y: new_y,
+            t: new_t,
         })
     }
 }
 
-/// Fの範囲チェック + Z=60 に変換
-pub fn normalize_and_scale60_f(
+//
+// ──────────────────────────────────────────────
+// 各範囲検証関数
+// ──────────────────────────────────────────────
+//
+
+fn normalize_x_range(
+    x: (Option<u64>, Option<u64>),
+    xy_max: u64,
     z: u8,
-    f: (Option<i64>, Option<i64>),
-) -> Result<Dimension<u64>, UserError> {
-    // 元のZでの範囲チェック
-    let min = F_MIN[z as usize];
-    let max = F_MAX[z as usize];
-
-    let clamp_or_error = |value: i64| -> Result<i64, UserError> {
-        if value < min || value > max {
-            Err(UserError::FOutOfRange {
-                f: value,
-                z,
-                location: location!(),
-            })
-        } else {
-            Ok(value)
-        }
-    };
-
-    // 範囲チェック後に Dimension<i64> を作る
-    let dim_i64 = match f {
-        (None, None) => Dimension {
-            start: min,
-            end: max,
-        },
-        (Some(s), None) => Dimension {
-            start: clamp_or_error(s)?,
-            end: max,
-        },
-        (None, Some(e)) => Dimension {
-            start: min,
-            end: clamp_or_error(e)?,
-        },
+) -> Result<(u64, u64), UserError> {
+    let (s, e) = match x {
+        (None, None) => (0, xy_max),
+        (Some(s), None) => (s, xy_max),
+        (None, Some(e)) => (0, e),
         (Some(s), Some(e)) => {
-            let (mut start, mut end) = if s <= e { (s, e) } else { (e, s) };
-            start = clamp_or_error(start)?;
-            end = clamp_or_error(end)?;
-            Dimension { start, end }
+            if s <= e {
+                (s, e)
+            } else {
+                (e, s)
+            }
         }
     };
 
-    // Z=60 にスケール変換
-    let coef: i64 = 2_i64.pow(60 - z as u32);
-
-    Ok(Dimension {
-        start: (dim_i64.start * coef) as u64,
-        end: ((dim_i64.end * coef) + (coef - 1)) as u64, // inclusive end
-    })
+    valid_range_x(s, 0, xy_max, z)?;
+    valid_range_x(e, 0, xy_max, z)?;
+    Ok((s, e))
 }
 
-/// X/Y の範囲チェック + Z=60 に変換
-pub fn normalize_and_scale60_xy<T>(
+fn normalize_y_range(
+    y: (Option<u64>, Option<u64>),
+    xy_max: u64,
     z: u8,
-    xy: (Option<u64>, Option<u64>),
-    axis: &str,
-) -> Result<Dimension<T>, UserError>
-where
-    T: Copy + Add<Output = T> + Sub<Output = T> + Mul<Output = T> + From<u64>,
-{
-    let max_val = XY_MAX[z as usize];
-
-    let clamp_or_error = |value: u64| -> Result<u64, UserError> {
-        if value > max_val {
-            match axis {
-                "X" => Err(UserError::XOutOfRange {
-                    x: value,
-                    z,
-                    location: location!(),
-                }),
-                "Y" => Err(UserError::YOutOfRange {
-                    y: value,
-                    z,
-                    location: location!(),
-                }),
-                _ => unreachable!(),
-            }
-        } else {
-            Ok(value)
-        }
-    };
-
-    // 範囲チェック後に Dimension<u64> を作る
-    let dim_u64 = match xy {
-        (None, None) => Dimension {
-            start: 0,
-            end: max_val,
-        },
-        (Some(s), None) => Dimension {
-            start: clamp_or_error(s)?,
-            end: max_val,
-        },
-        (None, Some(e)) => Dimension {
-            start: 0,
-            end: clamp_or_error(e)?,
-        },
+) -> Result<(u64, u64), UserError> {
+    let (s, e) = match y {
+        (None, None) => (0, xy_max),
+        (Some(s), None) => (s, xy_max),
+        (None, Some(e)) => (0, e),
         (Some(s), Some(e)) => {
-            let (mut start, mut end) = if s <= e { (s, e) } else { (e, s) };
-            start = clamp_or_error(start)?;
-            end = clamp_or_error(end)?;
-            Dimension { start, end }
+            if s <= e {
+                (s, e)
+            } else {
+                (e, s)
+            }
         }
     };
 
-    // Z=60 にスケール変換
-    let coef: u64 = 2_u64.pow(60 - z as u32);
-    let one: T = T::from(1);
-    let k: T = T::from(coef);
+    valid_range_y(s, 0, xy_max, z)?;
+    valid_range_y(e, 0, xy_max, z)?;
+    Ok((s, e))
+}
 
-    Ok(Dimension {
-        start: T::from(dim_u64.start) * k,
-        end: (T::from(dim_u64.end) + one) * k - one,
-    })
+fn normalize_f_range(
+    f: (Option<i64>, Option<i64>),
+    f_min: i64,
+    f_max: i64,
+    z: u8,
+) -> Result<(i64, i64), UserError> {
+    let (s, e) = match f {
+        (None, None) => (f_min, f_max),
+        (Some(s), None) => (s, f_max),
+        (None, Some(e)) => (f_min, e),
+        (Some(s), Some(e)) => {
+            if s <= e {
+                (s, e)
+            } else {
+                (e, s)
+            }
+        }
+    };
+
+    valid_range_f(s, f_min, f_max, z)?;
+    valid_range_f(e, f_min, f_max, z)?;
+    Ok((s, e))
+}
+
+//
+// ──────────────────────────────────────────────
+// 実際のエラーチェック関数
+// ──────────────────────────────────────────────
+//
+
+fn valid_range_x(num: u64, min: u64, max: u64, z: u8) -> Result<(), UserError> {
+    if (min..=max).contains(&num) {
+        Ok(())
+    } else {
+        Err(UserError::XOutOfRange {
+            x: num,
+            z,
+            location: location!(),
+        })
+    }
+}
+
+fn valid_range_y(num: u64, min: u64, max: u64, z: u8) -> Result<(), UserError> {
+    if (min..=max).contains(&num) {
+        Ok(())
+    } else {
+        Err(UserError::YOutOfRange {
+            y: num,
+            z,
+            location: location!(),
+        })
+    }
+}
+
+fn valid_range_f(num: i64, min: i64, max: i64, z: u8) -> Result<(), UserError> {
+    if (min..=max).contains(&num) {
+        Ok(())
+    } else {
+        Err(UserError::FOutOfRange {
+            f: num,
+            z,
+            location: location!(),
+        })
+    }
 }

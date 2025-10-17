@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::ops::Bound;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IntervalValue {

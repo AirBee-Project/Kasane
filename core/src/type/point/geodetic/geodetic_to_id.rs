@@ -1,7 +1,4 @@
-use crate::r#type::{
-    point::geodetic::Geodetic,
-    space_time_id::{DimensionRange, SpaceTimeId},
-};
+use crate::r#type::{point::geodetic::Geodetic, space_time_id::SpaceTimeId};
 
 /// Point (lat, lon, alt) を SpaceTimeId に変換
 pub fn geodetic_to_id(z: u8, point: Geodetic) -> SpaceTimeId {
@@ -22,13 +19,5 @@ pub fn geodetic_to_id(z: u8, point: Geodetic) -> SpaceTimeId {
     let y_id = ((1.0 - (lat_rad.tan() + 1.0 / lat_rad.cos()).ln() / std::f64::consts::PI) / 2.0 * n)
         .floor() as u32;
 
-    SpaceTimeId::new(
-        z,
-        DimensionRange::Single(f_id),
-        DimensionRange::Single(x_id),
-        DimensionRange::Single(y_id),
-        0,                   // i = 0（時間なし）
-        DimensionRange::Any, // t = Any
-    )
-    .unwrap()
+    todo!()
 }

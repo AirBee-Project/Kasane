@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{io::full::tools::value_entry::ValueEntry, r#type::point::Point};
+use crate::{
+    io::full::tools::value_entry::ValueEntry,
+    r#type::{point::Point, space_time_id_set::SpaceTimeIdSet},
+};
 
 // ---------------------- Space管理 ----------------------
 

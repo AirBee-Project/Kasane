@@ -1,22 +1,26 @@
-use crate::r#type::{interval_set::IntervalSet, space_time_id::SpaceTimeId};
-pub mod insert;
+use crate::r#type::interval_set::IntervalSet;
+
 pub struct SpaceTimeIdSet {
-    x: IntervalSet,
-    y: IntervalSet,
+    xy: Vec<u8>,
     f: IntervalSet,
     t: IntervalSet,
-    ///内部にある時空間IDの一意なKey
-    index: Vec<u64>,
 }
 
 impl SpaceTimeIdSet {
     pub fn new() -> Self {
         Self {
-            x: IntervalSet::new(),
-            y: IntervalSet::new(),
+            xy: vec![],
             f: IntervalSet::new(),
             t: IntervalSet::new(),
-            index: vec![],
         }
+    }
+
+    ///時空間IDを集合に入れる
+    pub fn insert() {
+        //入ってきたIDを複数の上位IDに置換できないかを試す
+
+        //順番に挿入していく
+
+        todo!()
     }
 }
