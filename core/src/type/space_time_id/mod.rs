@@ -26,7 +26,7 @@ where
 }
 
 /// Z=60 の IntervalSet に変換
-#[derive(Serialize)]
+#[derive(Serialize, Clone, Copy)]
 pub struct SpaceTimeId {
     pub z: u8,
     pub f: (i64, i64),
@@ -45,7 +45,8 @@ impl SpaceTimeId {
         t: (Option<u32>, Option<u32>),
     ) -> Result<Self, UserError> {
         // ZoomLevel のチェック
-        if z > 60 {
+        // 最大63まで対応できるはず
+        if z > 30 {
             return Err(UserError::ZoomLevelOutOfRange {
                 zoom_level: z,
                 location: location!(),
@@ -89,12 +90,6 @@ impl SpaceTimeId {
         })
     }
 }
-
-//
-// ──────────────────────────────────────────────
-// 各範囲検証関数
-// ──────────────────────────────────────────────
-//
 
 fn normalize_x_range(
     x: (Option<u64>, Option<u64>),
@@ -165,12 +160,6 @@ fn normalize_f_range(
     valid_range_f(e, f_min, f_max, z)?;
     Ok((s, e))
 }
-
-//
-// ──────────────────────────────────────────────
-// 実際のエラーチェック関数
-// ──────────────────────────────────────────────
-//
 
 fn valid_range_x(num: u64, min: u64, max: u64, z: u8) -> Result<(), UserError> {
     if (min..=max).contains(&num) {
