@@ -25,7 +25,7 @@ pub fn database_range(database_range: DatabaseRange) -> Result<DatabaseRange, Us
         DatabaseRange::SpaceTimeIdSet(space_time_id_set) => todo!(),
         DatabaseRange::ReadDatabase() => todo!(),
         DatabaseRange::DatabaseRangePrefix(prefix) => match prefix {
-            DatabaseRangePrefix::AND(and) => for ele in and {},
+            DatabaseRangePrefix::AND(and) => todo!(),
             DatabaseRangePrefix::OR(or) => todo!(),
             DatabaseRangePrefix::NOT(not) => todo!(),
         },
