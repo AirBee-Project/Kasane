@@ -7,7 +7,7 @@ use crate::{
     user_error::UserError,
 };
 
-pub async fn create_space(v: CreateSpace, s: Arc<Storage>) -> Result<Output, UserError> {
+pub fn create_space(v: CreateSpace, s: Arc<Storage>) -> Result<Output, UserError> {
     //危険な入力がデータベースに侵入するのを防ぐ
 
     //Spaceの名前のチェック
@@ -23,5 +23,5 @@ pub async fn create_space(v: CreateSpace, s: Arc<Storage>) -> Result<Output, Use
     }
 
     //ストレージに対して操作を実行する
-    s.create_space(&v.space_name).await
+    s.create_space(&v.space_name)
 }

@@ -7,7 +7,7 @@ use crate::{
     user_error::UserError,
 };
 
-pub async fn info_space(v: InfoSpace, s: Arc<Storage>) -> Result<Output, UserError> {
+pub fn info_space(v: InfoSpace, s: Arc<Storage>) -> Result<Output, UserError> {
     //危険な入力がデータベースに侵入するのを防ぐ
 
     //エラーの位置
@@ -25,5 +25,5 @@ pub async fn info_space(v: InfoSpace, s: Arc<Storage>) -> Result<Output, UserErr
         }
     }
 
-    s.info_space(&v.space_name).await
+    s.info_space(&v.space_name)
 }

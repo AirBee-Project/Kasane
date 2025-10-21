@@ -9,7 +9,7 @@ use crate::{
 use sled::transaction::{Transactional, abort};
 
 impl Storage {
-    pub async fn create_key(
+    pub fn create_key(
         &self,
         space_name: &str,
         key_name: &str,

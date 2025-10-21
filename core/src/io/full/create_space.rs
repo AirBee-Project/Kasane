@@ -2,7 +2,7 @@ use crate::{io::full::Storage, json::output::Output, user_error::UserError};
 use sled::transaction::abort;
 
 impl Storage {
-    pub async fn create_space(&self, space_name: &str) -> Result<Output, UserError> {
+    pub fn create_space(&self, space_name: &str) -> Result<Output, UserError> {
         let space_bytes = space_name.as_bytes().to_vec();
 
         let result = self.space.transaction(|tx| {

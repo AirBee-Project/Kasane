@@ -5,7 +5,5 @@ use crate::{io::full::Storage, json::output::Output, user_error::UserError};
 pub fn show_spaces(s: Arc<Storage>) -> Result<Output, UserError> {
     //ストレージに対して操作を実行する
 
-    println!("ShowSpaces");
-
     s.show_spaces()
 }

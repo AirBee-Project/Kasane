@@ -37,14 +37,14 @@ pub mod version;
 pub async fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError> {
     match cmd {
         //データベース操作系
-        Command::CreateSpace(v) => create_space(v, s).await,
+        Command::CreateSpace(v) => create_space(v, s),
         Command::DropSpace(v) => todo!(),
         Command::ShowSpaces => show_spaces(s),
-        Command::InfoSpace(v) => info_space(v, s).await,
+        Command::InfoSpace(v) => info_space(v, s),
         Command::Version => version(s),
 
         //Key操作系
-        Command::CreateKey(v) => create_key(v, s).await,
+        Command::CreateKey(v) => create_key(v, s),
         Command::DropKey(v) => todo!(),
         Command::ShowKeys(v) => show_keys(v, s),
         Command::InfoKey(v) => info_key(v, s),

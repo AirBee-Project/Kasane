@@ -1,7 +1,5 @@
-use sled::transaction::{TransactionError, Transactional, abort};
-
 use crate::{
-    io::full::{Storage, tools::data_prefix::Data},
+    io::full::Storage,
     json::{
         input::{KeyMode, KeyType},
         output::{InfoKey, Output},
@@ -12,85 +10,50 @@ use crate::{
 impl Storage {
     /// space 内のキー情報を取得
     pub fn info_key(&self, space_name: &str, key_name: &str) -> Result<Output, UserError> {
-        let location = location!();
+        let space_bytes = space_name.as_bytes();
 
-        // sled transaction を使って atomic read
-        let result: Result<Output, TransactionError<UserError>> = (&self.db).transaction(|tx| {
-            // 1️⃣ space_id を取得
-            let mut space_bytes = vec![Data::Space as u8];
-            space_bytes.extend_from_slice(space_name.as_bytes());
+        // space_id を取得
+        let space_id = self
+            .space
+            .get(space_bytes)?
+            .ok_or(UserError::SpaceNotFound {
+                space_name: space_name.to_string(),
+                location: location!(),
+            })?;
 
-            let space_id = match tx.get(&space_bytes)? {
-                Some(id) => id,
-                None => {
-                    return abort(UserError::SpaceNotFound {
-                        space_name: space_name.to_string(),
-                        location: location.clone(),
-                    });
-                }
-            };
+        // key の完全なバイト列を作成
+        let mut key_bytes = Vec::new();
+        key_bytes.extend_from_slice(&space_id);
+        key_bytes.extend_from_slice(key_name.as_bytes());
 
-            // 2️⃣ key_bytes 作成
-            let mut key_bytes = vec![Data::Key as u8];
-            key_bytes.extend_from_slice(&space_id);
-            key_bytes.extend_from_slice(key_name.as_bytes());
+        // key の値を取得
+        let value_bytes = self.key.get(&key_bytes)?.ok_or(UserError::KeyNotFound {
+            space_name: space_name.to_string(),
+            key_name: key_name.to_string(),
+            location: location!(),
+        })?;
 
-            // 3️⃣ key の取得
-            let value_bytes = match tx.get(&key_bytes)? {
-                Some(v) => v,
-                None => {
-                    return abort(UserError::KeyNotFound {
-                        space_name: space_name.to_string(),
-                        key_name: key_name.to_string(),
-                        location: location.clone(),
-                    });
-                }
-            };
+        // 値は [key_id(8バイト) + key_type + key_mode]
+        if value_bytes.len() < 8 {
+            return Err(UserError::UnKnown {
+                message: "Invalid key value length".to_string(),
+                location: location!(),
+            });
+        }
 
-            // 4️⃣ バリデーション
-            if value_bytes.len() < 10 {
-                return abort(UserError::UnKnown {
-                    message: "invalid key value length".into(),
-                    location: location.clone(),
-                });
-            }
+        let key_type_start = 8;
+        let key_type_end = value_bytes.len() - 1; // key_mode は最後の1バイト想定
+        let key_type_bytes = &value_bytes[key_type_start..key_type_end];
+        let key_mode_bytes = &value_bytes[key_type_end..];
 
-            // 5️⃣ type/mode を末尾 2 バイトから復元
-            let key_type = match KeyType::from_byte(value_bytes[value_bytes.len() - 2]) {
-                Ok(t) => t,
-                Err(_) => {
-                    return abort(UserError::UnKnown {
-                        message: "invalid key type byte".into(),
-                        location: location.clone(),
-                    });
-                }
-            };
+        let key_type = KeyType::from_byte(key_type_bytes[0])?.as_str().to_string();
 
-            let key_mode = match KeyMode::from_byte(value_bytes[value_bytes.len() - 1]) {
-                Ok(m) => m,
-                Err(_) => {
-                    return abort(UserError::UnKnown {
-                        message: "invalid key mode byte".into(),
-                        location: location.clone(),
-                    });
-                }
-            };
+        let key_mode = KeyMode::from_byte(key_mode_bytes[0])?.as_str().to_string();
 
-            // 6️⃣ 出力
-            Ok(Output::InfoKey(InfoKey {
-                key_name: key_name.to_string(),
-                key_type: key_type.as_str().to_string(),
-                key_mode: key_mode.as_str().to_string(),
-            }))
-        });
-
-        // transaction 結果を UserError に変換
-        result.map_err(|e| match e {
-            TransactionError::Abort(user_err) => user_err,
-            TransactionError::Storage(e) => UserError::SledError {
-                message: e.to_string(),
-                location,
-            },
-        })
+        Ok(Output::InfoKey(InfoKey {
+            key_name: key_name.to_string(),
+            key_type,
+            key_mode,
+        }))
     }
 }
