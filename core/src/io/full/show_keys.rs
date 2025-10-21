@@ -1,66 +1,41 @@
 use crate::{
-    io::full::{Storage, tools::data_prefix::Data},
+    io::full::Storage,
     json::output::{Output, Showkeys},
     user_error::UserError,
 };
-use tokio::sync::MutexGuard;
 
 impl Storage {
     /// space 内の全キー一覧を取得
-    pub async fn show_keys(&self, space_name: &str) -> Result<Output, UserError> {
-        // space_id 取得と prefix 取得を最小範囲でロック
-        let (space_id, prefix) = {
-            let _lock: MutexGuard<'_, ()> = self.lock.lock().await;
+    pub fn show_keys(&self, space_name: &str) -> Result<Output, UserError> {
+        let space_bytes = space_name.as_bytes();
 
-            let mut space_bytes = vec![Data::Space as u8];
-            space_bytes.extend_from_slice(space_name.as_bytes());
+        // space_id を取得
+        let space_id = self
+            .space
+            .get(space_bytes)?
+            .ok_or(UserError::SpaceNotFound {
+                space_name: space_name.to_string(),
+                location: location!(),
+            })?;
 
-            let space_id = self
-                .db
-                .get(&space_bytes)
-                .map_err(|e| UserError::UnKnown {
-                    message: e.to_string(),
-                    location: location!(),
-                })?
-                .ok_or(UserError::SpaceNotFound {
-                    space_name: space_name.to_string(),
-                    location: location!(),
-                })?;
+        let mut key_names = Vec::new();
 
-            let mut prefix = vec![Data::Key as u8];
-            prefix.extend_from_slice(&space_id);
-
-            (space_id, prefix)
-        };
-
-        // scan_prefix の結果を収集（ロック外で安全）
-        let mut keys = Vec::new();
-
-        for item in self.db.scan_prefix(&prefix) {
-            let (key_bytes, value_bytes) = item.map_err(|e| UserError::UnKnown {
+        // key データベースをイテレーションして、space_id で始まるキーを抽出
+        for item in self.key.iter() {
+            let (key_bytes, _value) = item.map_err(|e| UserError::UnKnown {
                 message: e.to_string(),
                 location: location!(),
             })?;
 
-            // key_bytes: [Data::Key (1)] + [space_id (8)] + [key_name (UTF-8)]
-            if key_bytes.len() <= 1 + space_id.len() {
-                continue;
+            if key_bytes.starts_with(&space_id) {
+                // space_id の後ろが実際の key_name
+                let key_name_bytes = &key_bytes[space_id.len()..];
+                if let Ok(key_name) = std::str::from_utf8(key_name_bytes) {
+                    key_names.push(key_name.to_string());
+                }
             }
-            let key_name_bytes = &key_bytes[1 + space_id.len()..];
-
-            // value_bytes: [id(8)] + [type(1)] + [mode(1)] の最後2バイトを除外
-            if key_name_bytes.len() < 1 {
-                continue;
-            }
-
-            let key_name = match std::str::from_utf8(key_name_bytes) {
-                Ok(s) => s.to_string(),
-                Err(_) => continue, // 不正な UTF-8 はスキップ
-            };
-
-            keys.push(key_name);
         }
 
-        Ok(Output::Showkeys(Showkeys { key_names: keys }))
+        Ok(Output::Showkeys(Showkeys { key_names }))
     }
 }

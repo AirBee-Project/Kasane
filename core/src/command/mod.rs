@@ -46,7 +46,7 @@ pub async fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError>
         //Key操作系
         Command::CreateKey(v) => create_key(v, s).await,
         Command::DropKey(v) => todo!(),
-        Command::ShowKeys(v) => show_keys(v, s).await,
+        Command::ShowKeys(v) => show_keys(v, s),
         Command::InfoKey(v) => info_key(v, s),
 
         //Value操作系

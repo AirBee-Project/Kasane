@@ -1,12 +1,12 @@
 use crate::{
-    io::full::{Storage, tools::data_prefix::Data},
+    io::full::Storage,
     json::{
         input::{KeyMode, KeyType},
         output::Output,
     },
     user_error::UserError,
 };
-use tokio::sync::MutexGuard;
+use sled::transaction::{Transactional, abort};
 
 impl Storage {
     pub async fn create_key(
@@ -17,64 +17,43 @@ impl Storage {
         key_mode: KeyMode,
     ) -> Result<Output, UserError> {
         // space key を作成
-        let mut space_bytes = vec![Data::Space as u8];
-        space_bytes.extend_from_slice(space_name.as_bytes());
+        let space_bytes = space_name.as_bytes().to_vec();
 
-        // 最小範囲での排他制御
-        let _lock: MutexGuard<'_, ()> = self.lock.lock().await;
+        let result = (&self.space, &self.key).transaction(|(tx_space, tx_key)| {
+            let space_id = tx_space
+                .get(&space_bytes)?
+                .ok_or(UserError::SpaceNotFound {
+                    space_name: space_name.to_owned(),
+                    location: location!(),
+                })?;
 
-        // space が存在するかチェック
-        let space_id = self
-            .db
-            .get(&space_bytes)
-            .map_err(|e| UserError::UnKnown {
-                message: e.to_string(),
-                location: location!(),
-            })?
-            .ok_or(UserError::SpaceNotFound {
-                space_name: space_name.to_owned(),
-                location: location!(),
-            })?;
+            let mut key_bytes = vec![];
+            key_bytes.extend_from_slice(&space_id);
+            key_bytes.extend_from_slice(key_name.as_bytes());
 
-        // key 用のバイト列を作成
-        let mut key_bytes = vec![Data::Key as u8];
-        key_bytes.extend_from_slice(&space_id);
-        key_bytes.extend_from_slice(key_name.as_bytes());
+            if tx_key.get(&key_bytes)?.is_some() {
+                abort(UserError::KeyAlreadyExists {
+                    space_name: space_name.to_owned(),
+                    key_name: key_name.to_owned(),
+                    location: location!(),
+                })?;
+            }
 
-        // key がすでに存在するかチェック
-        if self
-            .db
-            .get(&key_bytes)
-            .map_err(|e| UserError::UnKnown {
-                message: e.to_string(),
-                location: location!(),
-            })?
-            .is_some()
-        {
-            return Err(UserError::KeyAlreadyExists {
-                space_name: space_name.to_owned(),
-                key_name: key_name.to_owned(),
-                location: location!(),
-            });
+            let key_id: u64 = tx_key.generate_id()?;
+
+            // 値を構築（key_id + key_type + key_mode）
+            let mut value_bytes = key_id.to_be_bytes().to_vec();
+            value_bytes.extend_from_slice(key_type.as_bytes());
+            value_bytes.extend_from_slice(key_mode.as_bytes());
+
+            tx_key.insert(key_bytes, value_bytes)?;
+
+            Ok(())
+        });
+
+        match result {
+            Ok(_) => Ok(Output::Success),
+            Err(e) => Err(e.into()),
         }
-
-        // ID + type + mode を value に格納
-        let id: u64 = self.db.generate_id().map_err(|e| UserError::UnKnown {
-            message: e.to_string(),
-            location: location!(),
-        })?;
-        let mut value_bytes = id.to_be_bytes().to_vec();
-        value_bytes.extend_from_slice(key_type.as_bytes());
-        value_bytes.extend_from_slice(key_mode.as_bytes());
-
-        // key を insert
-        self.db
-            .insert(key_bytes, value_bytes)
-            .map_err(|e| UserError::UnKnown {
-                message: e.to_string(),
-                location: location!(),
-            })?;
-
-        Ok(Output::Success)
     }
 }

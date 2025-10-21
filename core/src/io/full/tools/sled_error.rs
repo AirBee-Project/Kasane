@@ -57,3 +57,9 @@ impl From<ConflictableTransactionError<UnabortableTransactionError>> for UserErr
         }
     }
 }
+
+impl From<UserError> for ConflictableTransactionError<UserError> {
+    fn from(err: UserError) -> Self {
+        ConflictableTransactionError::Abort(err)
+    }
+}

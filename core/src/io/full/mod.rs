@@ -15,7 +15,7 @@ pub mod version;
 pub struct Storage {
     pub db: Db,
     pub space: Tree,
-    pub lock: Arc<Mutex<()>>,
+    pub key: Tree,
 }
 
 impl Storage {
@@ -26,17 +26,12 @@ impl Storage {
             .path(db_path)
             .cache_capacity(10_000_000_000)
             .flush_every_ms(Some(1000))
-            .mode(sled::Mode::HighThroughput)
-            .use_compression(true)
-            .compression_factor(10);
+            .mode(sled::Mode::HighThroughput);
 
         let db = config.open()?;
         let space = db.open_tree("space")?;
+        let key = db.open_tree("key")?;
 
-        Ok(Self {
-            db,
-            space,
-            lock: Arc::new(Mutex::new(())),
-        })
+        Ok(Self { db, key, space })
     }
 }

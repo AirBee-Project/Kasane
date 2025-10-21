@@ -1,4 +1,3 @@
-pub mod data_prefix;
 pub mod key_mode;
 pub mod key_type;
 pub mod password_hash;

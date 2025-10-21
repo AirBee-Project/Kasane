@@ -10,8 +10,6 @@ impl Storage {
     pub async fn info_space(&self, space_name: &str) -> Result<Output, UserError> {
         // 1. space_id と prefix を最小ロックで取得
         let (space_id, prefix) = {
-            let _lock: MutexGuard<'_, ()> = self.lock.lock().await;
-
             let mut space_bytes = vec![Data::Space as u8];
             space_bytes.extend_from_slice(space_name.as_bytes());
 

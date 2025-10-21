@@ -7,7 +7,7 @@ use crate::{
     user_error::UserError,
 };
 
-pub async fn show_keys(v: ShowKeys, s: Arc<Storage>) -> Result<Output, UserError> {
+pub fn show_keys(v: ShowKeys, s: Arc<Storage>) -> Result<Output, UserError> {
     //危険な入力がデータベースに侵入するのを防ぐ
 
     //Spaceの名前のチェック
@@ -23,5 +23,5 @@ pub async fn show_keys(v: ShowKeys, s: Arc<Storage>) -> Result<Output, UserError
     }
 
     //ストレージに対して操作を実行する
-    s.show_keys(&v.space_name).await
+    s.show_keys(&v.space_name)
 }
