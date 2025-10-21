@@ -1,5 +1,5 @@
 use crate::UserError;
-use sled::Db;
+use sled::{Db, Tree};
 use std::{env, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 pub mod create_key;
@@ -14,15 +14,28 @@ pub mod verify_user;
 pub mod version;
 pub struct Storage {
     pub db: Db,
+    pub space: Tree,
     pub lock: Arc<Mutex<()>>,
 }
 
 impl Storage {
     pub fn new(path: Option<PathBuf>) -> Result<Self, UserError> {
         let db_path = path.unwrap_or(env::current_dir().unwrap().join("sled_db"));
-        let db = sled::open(&db_path)?;
+
+        let config = sled::Config::default()
+            .path(db_path)
+            .cache_capacity(10_000_000_000)
+            .flush_every_ms(Some(1000))
+            .mode(sled::Mode::HighThroughput)
+            .use_compression(true)
+            .compression_factor(10);
+
+        let db = config.open()?;
+        let space = db.open_tree("space")?;
+
         Ok(Self {
             db,
+            space,
             lock: Arc::new(Mutex::new(())),
         })
     }

@@ -16,6 +16,7 @@ use crate::{
         input::{Packet, parser},
         output::Output,
     },
+    r#type::{point::geodetic::Geodetic, space_time_id::function::triangle::triangle},
     user_error::UserError,
 };
 
@@ -71,6 +72,32 @@ struct Job {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    let a = Geodetic {
+        // Tokyo, Japan
+        latitude: 35.68114,
+        longitude: 139.767061,
+        altitude: 100.0,
+    };
+    let b = Geodetic {
+        // Near Akita/Iwate, Japan
+        latitude: 39.90556,
+        longitude: 139.3,
+        altitude: 100.0,
+    };
+    let c = Geodetic {
+        // Near Yokohama/Kawasaki, Japan
+        latitude: 35.4,
+        longitude: 139.5,
+        altitude: 100.0,
+    };
+
+    let set = triangle(
+        3,
+        r#type::point::Point::Geodetic(a),
+        r#type::point::Point::Geodetic(b),
+        r#type::point::Point::Geodetic(c),
+    );
+
     let storage = Arc::new(Storage::new(None).unwrap());
     let (tx, rx) = mpsc::channel::<Job>(1000);
     let job_sender = JobSender { tx };

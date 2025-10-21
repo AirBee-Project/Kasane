@@ -6,14 +6,14 @@ use crate::r#type::{
         ecef::{ECEF, ecef_to_id::ecef_to_id},
         geodetic::geodetic_to_ecef::geodetic_to_ecef,
     },
-    spacetimeid::SpaceTimeId,
+    space_time_id_set::SpaceTimeIdSet,
 };
 
 /// a と b の間の voxel 線分を返す
-pub fn line(z: u8, a: Point, b: Point) -> HashSet<SpaceTimeId> {
+pub fn line(z: u8, a: Point, b: Point) -> SpaceTimeIdSet {
     let steps = 50_000;
 
-    let mut result = HashSet::new();
+    let mut result = SpaceTimeIdSet::new();
 
     // Point → ECEF
     let ea = match a {

@@ -95,27 +95,6 @@ pub enum UserError {
     #[error("Queue is full, cannot enqueue job (at {location})")]
     QueueFull { location: String },
 
-    #[error("LMDB error: {message} (at {location})")]
-    LmdbError { message: String, location: String },
-
-    #[error("LMDB map full: attempted size {attempted_size} bytes (at {location})")]
-    LmdbMapFull {
-        attempted_size: usize,
-        location: String,
-    },
-
-    #[error("LMDB transaction error: {message} (at {location})")]
-    LmdbTxnError {
-        message: &'static str,
-        location: String,
-    },
-
-    #[error("LMDB database '{db_name}' not found (at {location})")]
-    LmdbDbNotFound {
-        db_name: &'static str,
-        location: String,
-    },
-
     #[error("Range error: {message}")]
     RangeError { message: String },
 
@@ -130,9 +109,6 @@ pub enum UserError {
 
     #[error("sled error: {message} (at {location})")]
     SledError { message: String, location: String },
-
-    #[error("sled transaction error: {message} (at {location})")]
-    SledTransactionError { message: String, location: String },
 
     #[error("ZoomLevel '{zoom_level}' is out of range (valid: 0..=60) (at {location})")]
     ZoomLevelOutOfRange { zoom_level: u8, location: String },

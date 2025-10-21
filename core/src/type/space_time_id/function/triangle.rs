@@ -6,12 +6,12 @@ use crate::r#type::{
         ecef::{ECEF, ecef_to_geodetic::ecef_to_geodetic, ecef_to_id::ecef_to_id},
         geodetic::{geodetic_to_ecef::geodetic_to_ecef, geodetic_to_id::geodetic_to_id},
     },
-    spacetimeid::SpaceTimeId,
+    space_time_id_set::SpaceTimeIdSet,
 };
 
-pub fn triangle(z: u8, a: Point, b: Point, c: Point) -> HashSet<SpaceTimeId> {
+pub fn triangle(z: u8, a: Point, b: Point, c: Point) -> SpaceTimeIdSet {
     let steps = 1000;
-    let mut voxels_set = HashSet::new();
+    let mut voxels_set = SpaceTimeIdSet::new();
 
     // Point → ECEF
     let ea = match a {
@@ -48,6 +48,8 @@ pub fn triangle(z: u8, a: Point, b: Point, c: Point) -> HashSet<SpaceTimeId> {
             };
 
             for j in 0..=i {
+                println!("{}", i);
+
                 let s = j as f64 / i as f64;
 
                 // line1 と line2 を補間して内部点を得る
