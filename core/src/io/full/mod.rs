@@ -1,7 +1,6 @@
 use crate::UserError;
 use sled::{Db, Tree};
-use std::{env, path::PathBuf, sync::Arc};
-use tokio::sync::Mutex;
+use std::{env, path::PathBuf};
 pub mod create_key;
 pub mod create_space;
 pub mod info_key;

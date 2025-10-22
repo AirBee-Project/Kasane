@@ -1,9 +1,5 @@
 use crate::{io::full::Storage, json::output::Output, user_error::UserError};
 
-enum CreateUserTxError {
-    UserAlreadyExists,
-}
-
 impl Storage {
     pub fn verify_user(&self, user_name: &str, password: &str) -> Result<Output, UserError> {
         let location = location!();

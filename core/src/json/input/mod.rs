@@ -1,10 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{
-    io::full::tools::value_entry::ValueEntry,
-    r#type::{point::Point, space_time_id_set::SpaceTimeIdSet},
-};
+use crate::{io::full::tools::value_entry::ValueEntry, r#type::point::Point};
 
 // ---------------------- Space管理 ----------------------
 
@@ -95,6 +92,7 @@ pub struct SelectValue {
     pub space_name: String,
     pub key_names: Vec<String>,
     pub range: Range,
+    //ここには出力物を加工できるような概念が必要
     pub vertex: bool,
     pub center: bool,
     pub id_string: bool,
@@ -109,6 +107,7 @@ pub enum Range {
     Function(Function),
     Prefix(Prefix),
     Ids(Vec<Id>),
+    //FilterValue(FilterValue),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -151,21 +150,22 @@ pub struct Triangle {
 pub struct FilterValue {
     pub space_name: String,
     pub key_name: String,
-    pub filter: FilterType,
+    pub filter: Filter,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub enum FilterType {
+pub enum Filter {
+    FilterBoolean(FilterBoolean),
+    FilterInt(FilterInt),
+    FilterFloat(FilterFloat),
+    FilterText(FilterText),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub enum FilterBoolean {
     HasValue,
-    FilterBOOLEAN(FilterBOOLEAN),
-    FilterINT(FilterINT),
-    FilterTEXT(FilterTEXT),
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub enum FilterBOOLEAN {
     IsTrue,
     IsFalse,
     Equals(bool),
@@ -174,7 +174,8 @@ pub enum FilterBOOLEAN {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub enum FilterFOLAT {
+pub enum FilterFloat {
+    HasValue,
     Equal(f32),
     NotEqual(f32),
     GreaterThan(f32),
@@ -188,7 +189,8 @@ pub enum FilterFOLAT {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub enum FilterINT {
+pub enum FilterInt {
+    HasValue,
     Equal(i32),
     NotEqual(i32),
     GreaterThan(i32),
@@ -202,7 +204,8 @@ pub enum FilterINT {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub enum FilterTEXT {
+pub enum FilterText {
+    HasValue,
     Equal(String),
     NotEqual(String),
     Contains(String),
@@ -218,7 +221,6 @@ pub enum Function {
     Spot(Spot),
     Line(Line),
     Triangle(Triangle),
-    //FilterValue(FilterValue),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -226,8 +228,7 @@ pub enum Function {
 pub enum Prefix {
     AND(Vec<Range>),
     OR(Vec<Range>),
-    // XOR(Vec<Range>),
-    NOT(Vec<Range>),
+    NOT(Box<Range>),
 }
 
 // ---------------------- Key / Space情報 ----------------------

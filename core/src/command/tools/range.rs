@@ -1,33 +1,22 @@
+use std::collections::HashMap;
+
 use crate::{
     json::input::Range,
     r#type::{space_time_id::SpaceTimeId, space_time_id_set::SpaceTimeIdSet},
     user_error::UserError,
 };
 
-enum DatabaseRangePrefix {
-    AND(Vec<DatabaseRange>),
-    OR(Vec<DatabaseRange>),
-    NOT(Vec<DatabaseRange>),
-}
-
-enum DatabaseRange {
-    SpaceTimeIdSet(SpaceTimeIdSet),
-    ReadDatabase(),
-    DatabaseRangePrefix(DatabaseRangePrefix),
-}
-
-pub fn range(range: Range) -> Result<DatabaseRange, UserError> {
-    todo!()
-}
-
-pub fn database_range(database_range: DatabaseRange) -> Result<DatabaseRange, UserError> {
-    match database_range {
-        DatabaseRange::SpaceTimeIdSet(space_time_id_set) => todo!(),
-        DatabaseRange::ReadDatabase() => todo!(),
-        DatabaseRange::DatabaseRangePrefix(prefix) => match prefix {
-            DatabaseRangePrefix::AND(and) => todo!(),
-            DatabaseRangePrefix::OR(or) => todo!(),
-            DatabaseRangePrefix::NOT(not) => todo!(),
-        },
+//ここで値の検証などを行う
+fn range(range: Range) -> Result<SpaceTimeIdSet, UserError> {
+    match range {
+        Range::Function(function) => todo!(),
+        Range::Prefix(prefix) => todo!(),
+        Range::Ids(ids) => {
+            let mut set = SpaceTimeIdSet::new();
+            for id in ids {
+                set.insert(SpaceTimeId::new(id.z, id.f, id.x, id.y, id.i, id.t)?);
+            }
+            return Ok(set);
+        }
     }
 }

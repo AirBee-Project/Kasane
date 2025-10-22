@@ -1,4 +1,4 @@
-pub mod interval_set;
+pub mod interval_manager;
 pub mod point;
 pub mod space_time_id;
 pub mod space_time_id_set;

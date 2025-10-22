@@ -34,7 +34,5 @@ pub fn insert_value(v: InsertValue, s: Arc<Storage>) -> Result<Output, UserError
         }
     }
 
-    //Filterなしで処理できるものを処理したい
-
     todo!()
 }
