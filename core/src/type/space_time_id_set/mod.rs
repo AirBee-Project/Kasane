@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::r#type::{
+    bit_vec::BitVec,
     interval_manager::IntervalManager,
     space_time_id::SpaceTimeId,
     space_time_id_set::{
@@ -12,18 +13,18 @@ pub mod convert_f;
 pub mod convert_xy;
 
 struct Reverse {
-    f: Vec<u8>,
-    x: Vec<u8>,
-    y: Vec<u8>,
+    f: BitVec,
+    x: BitVec,
+    y: BitVec,
     t_start: u64,
     t_end: u64,
 }
 
 type Index = u64;
 pub struct SpaceTimeIdSet {
-    f: BTreeMap<Vec<u8>, Index>,
-    x: BTreeMap<Vec<u8>, Index>,
-    y: BTreeMap<Vec<u8>, Index>,
+    f: BTreeMap<BitVec, HashSet<Index>>,
+    x: BTreeMap<BitVec, HashSet<Index>>,
+    y: BTreeMap<BitVec, HashSet<Index>>,
     t: IntervalManager,
     reverse: HashMap<Index, Reverse>,
     next_index: Index,
@@ -71,19 +72,20 @@ impl SpaceTimeIdSet {
 
                     // 最小の軸を起点に探索を行う
                     if *f_val == min_val {
+                        //まず上位IDの検索を行う
                         //FのPrefixを伸ばしながら検索していく
-                        for f_depth in f.1..=0 {
-                            let prefix = take_n_bits_min(&f.0, (f_depth + 1).into());
-
-                            let hit = match self.f.get(&prefix) {
-                                Some(index) => self.reverse.get(index).unwrap(),
+                        for f_prefix in f.0.generate_top_prefix() {
+                            match self.f.get(&f_prefix) {
+                                Some(v) => {
+                                    comparison_relation_from_f(f.0, x.0, y.0, v, &self.reverse);
+                                }
                                 None => {
                                     continue;
                                 }
-                            };
-
-                            //hitしたものと他の次元を見比べる
+                            }
                         }
+
+                        //次に下位IDの検索を行う
                     } else if *x_val == min_val {
                         "x"
                     } else {
@@ -98,25 +100,37 @@ impl SpaceTimeIdSet {
     pub fn search_top_from_f(value: Vec<u8>) {}
 }
 
-pub fn take_n_bits_min(input: &Vec<u8>, n: usize) -> Vec<u8> {
-    if n == 0 || input.is_empty() {
-        return vec![];
+///Fにおいて、上位だったIDのHashSetと逆引きのSetを用いてIDを比較する
+/// - どのIDも関連がなかった
+/// - あるIDに包含されていた
+/// - 部分的に包含されていた⇒リターン後に自身を分割
+
+enum Relation {
+    Nothing,
+    Include,
+    PartiallyOverlap(HashMap<Index, Reverse>),
+}
+
+fn comparison_relation_from_f(
+    f: BitVec,
+    x: BitVec,
+    y: BitVec,
+    hit_index: &HashSet<Index>,
+    reverse: &HashMap<Index, Reverse>,
+) -> Relation {
+    for index in hit_index {
+        //まずX軸について検証を行う
+        let hit_reverse = reverse.get(&index).unwrap();
+
+        //Xの上位IDの検証
+        for x_prefix in x.generate_top_prefix() {
+            if hit_reverse.x == x_prefix {
+                //X軸において上位のIDが存在する
+            }
+        }
+
+        //Xの下位IDの検証を行う
     }
 
-    // 必要なバイト数 = ceil(n / 8)
-    let num_bytes = (n + 7) / 8;
-    let mut result = vec![0u8; num_bytes];
-
-    for i in 0..n {
-        let src_byte = i / 8;
-        let src_bit = 7 - (i % 8);
-
-        let dst_byte = i / 8;
-        let dst_bit = 7 - (i % 8);
-
-        let bit = (input[src_byte] >> src_bit) & 1;
-        result[dst_byte] |= bit << dst_bit;
-    }
-
-    result
+    todo!()
 }

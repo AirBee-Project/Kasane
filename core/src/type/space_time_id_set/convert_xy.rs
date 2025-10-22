@@ -1,3 +1,5 @@
+use crate::r#type::bit_vec::BitVec;
+
 pub fn convert_xy(z: u8, dim: (u64, u64)) -> Vec<(u8, u64)> {
     let mut current_range = Some(dim);
     let mut now_z = z;
@@ -37,18 +39,20 @@ pub fn convert_xy(z: u8, dim: (u64, u64)) -> Vec<(u8, u64)> {
 
     result
 }
-pub fn convert_bitmask_xy(z: u8, mut xy: u64) -> (Vec<u8>, u8) {
+pub fn convert_bitmask_xy(z: u8, mut xy: u64) -> (BitVec, u8) {
     if z == 0 {
         // 階層がない場合でも最初の層は無条件で10
-        return (vec![0b10_000000], 0);
+
+        return (BitVec::from_vec(vec![0b10_000000]), 0);
     }
 
     // 必要バイト数: 1層2ビット × z, 切り上げ
-    let mut result: Vec<u8> = vec![0; ((z as usize) * 2 + 7) / 8];
+
+    let mut result = BitVec::from_vec(vec![0; ((z as usize) * 2 + 7) / 8]);
 
     // 最初の層は無条件で10
     result[0] |= 1 << 7; // flag_bit = 1
-    // value_bit = 0 はすでに0なので不要
+                         // value_bit = 0 はすでに0なので不要
 
     // 残りの階層（i=1からスタート）
     for i in 1..z {
@@ -67,7 +71,7 @@ pub fn convert_bitmask_xy(z: u8, mut xy: u64) -> (Vec<u8>, u8) {
     (result, z)
 }
 
-pub fn invert_bitmask_xy(bitmask: &Vec<u8>) -> (u8, u64) {
+pub fn invert_bitmask_xy(bitmask: &BitVec) -> (u8, u64) {
     if bitmask.is_empty() {
         return (0, 0);
     }
@@ -100,7 +104,7 @@ pub fn invert_bitmask_xy(bitmask: &Vec<u8>) -> (u8, u64) {
     (z, xy)
 }
 
-pub fn convert_bitmask_xy_multiple(inputs: &Vec<(u8, u64)>) -> Vec<(Vec<u8>, u8)> {
+pub fn convert_bitmask_xy_multiple(inputs: &Vec<(u8, u64)>) -> Vec<(BitVec, u8)> {
     inputs
         .iter()
         .map(|(z, x)| convert_bitmask_xy(*z, *x))
