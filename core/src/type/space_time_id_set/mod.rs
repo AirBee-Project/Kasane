@@ -6,12 +6,12 @@ pub mod convert_f;
 pub mod convert_xy;
 pub mod insert;
 
-struct Reverse {
-    f: BitVec,
-    x: BitVec,
-    y: BitVec,
-    t_start: u64,
-    t_end: u64,
+pub struct Reverse {
+    pub f: BitVec,
+    pub x: BitVec,
+    pub y: BitVec,
+    pub t_start: u64,
+    pub t_end: u64,
 }
 
 type Index = u64;

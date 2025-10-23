@@ -3,10 +3,26 @@ use crate::r#type::space_time_id_set::convert_f::convert_bitmask_f;
 use crate::r#type::space_time_id_set::convert_xy::convert_bitmask_xy;
 use crate::r#type::{
     space_time_id::SpaceTimeId,
-    space_time_id_set::{convert_f::convert_f, convert_xy::convert_xy, Index, SpaceTimeIdSet},
+    space_time_id_set::{
+        convert_f::convert_f, convert_xy::convert_xy, Index, Reverse, SpaceTimeIdSet,
+    },
 };
 use itertools::{iproduct, Iterate};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
+
+enum Relation {
+    ///自分が上位である
+    Top = 1,
+
+    ///相手が下位である
+    Bottom = 2,
+
+    ///同位である
+    Equal = 3,
+
+    ///無関係である
+    Disjoint = 4,
+}
 
 impl SpaceTimeIdSet {
     pub fn insert(&mut self, id: SpaceTimeId) {
@@ -32,30 +48,63 @@ impl SpaceTimeIdSet {
         for (f, x, y) in iproduct!(&f_encoded, &x_encoded, &y_encoded) {
             let min = f.min(x.min(y));
 
-            let mut min_dimension_ids;
+            let mut min_dimension_ids: HashSet<u64> = HashSet::new();
 
+            ///挿入するIDから見た各次元の状態
             //一番小さい次元を求める
             if f == min {
-                min_dimension_ids = Self::search_f(&self, f.0)
+                min_dimension_ids = Self::search(&self, &f.0, &self.f)
             } else if x == min {
+                min_dimension_ids = Self::search(&self, &x.0, &self.x)
             } else if y == min {
+                min_dimension_ids = Self::search(&self, &y.0, &self.y)
+            }
+
+            for index in min_dimension_ids {
+                //Indexを順番に検証していく
+                match self.reverse.get_mut(&index) {
+                    Some(reverse) => {
+                        //FのRelationを選ぶ
+                        if reverse.f {}
+
+                        //まず状態を見極める
+                        // - 無関係（どこかの次元が上位でも下位でもない）
+                        // - 自身が他のIDに完全に含まれる（相手の全ての次元が上位）
+                        // - 自身が他のIDを完全に含む（相手の全ての次元が下位）
+                        // - 自身を一部削る必要がある（多数決で自分が下位）
+                        // - 相手を一部削る必要がある（多数決で自分が上位）
+
+                        //各次元の状態を示す
+                    }
+                    None => {}
+                }
             }
         }
     }
 
-    fn search_f(&self, f: BitVec) -> HashSet<Index> {
+    fn relation(me: BitVec, target: BitVec) -> Relation {
+        if me == target {
+            return Relation::Equal;
+        };
+
+        if me < target {
+            return Relation::Top;
+        };
+    }
+
+    fn search(&self, target: &BitVec, btree: &BTreeMap<BitVec, HashSet<Index>>) -> HashSet<Index> {
         let mut result = HashSet::new();
 
         // 上位IDの検索
-        for f_top in f.generate_top_prefix() {
+        for f_top in target.generate_top_prefix() {
             if let Some(v) = self.f.get(&f_top) {
                 result.extend(v.iter().cloned());
             }
         }
 
         // 下位IDの検索
-        let start: BitVec = f.clone();
-        let end: BitVec = f.generate_bottom_prefix_end();
+        let start: BitVec = target.clone();
+        let end: BitVec = target.generate_bottom_prefix_end();
 
         for f_bottom in self.f.range(start..end) {
             result.extend(f_bottom.1.iter().cloned());
