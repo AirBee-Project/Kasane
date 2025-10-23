@@ -11,11 +11,12 @@ use itertools::{iproduct, Iterate};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 #[derive(PartialEq)]
+///自分の状況
 enum Relation {
     ///自分が上位である
     Top = 1,
 
-    ///相手が下位である
+    ///自分が下位である
     Bottom = 2,
 
     ///同位である
@@ -60,8 +61,12 @@ impl SpaceTimeIdSet {
                 min_dimension_ids = Self::search(&self, &y.0, &self.y)
             }
 
+            //削除する必要がある下位IDを記録する
+            let mut need_delete: HashSet<Index> = HashSet::new();
+
             for index in min_dimension_ids {
                 //Indexを順番に検証していく
+
                 match self.reverse.get_mut(&index) {
                     Some(reverse) => {
                         //どこかの次元が関係なかった時点で次の候補に行く
@@ -94,23 +99,32 @@ impl SpaceTimeIdSet {
                             v => v,
                         };
 
-                        //まずは空間について考える
-
-                        //全てが上位か同位の場合は自身が他のIDに完全に含まれる
+                        //空間において全てが上位か同位の場合は自身が他のIDに完全に含まれる
                         if (f_relation == Relation::Top || f_relation == Relation::Equal)
-                            && (f_relation == Relation::Top || f_relation == Relation::Equal)
-                            && (f_relation == Relation::Top || f_relation == Relation::Equal)
-                            && (t_relation == Relation::Top || t_relation == Relation::Equal)
+                            && (x_relation == Relation::Top || x_relation == Relation::Equal)
+                            && (y_relation == Relation::Top || y_relation == Relation::Equal)
                         {
-                            continue;
+                            match t_relation {
+                                Relation::Bottom => todo!(),
+                                _ => continue,
+                            }
                         }
 
                         //全てが下位の場合は相手を削除する必要がある
+                        if (f_relation == Relation::Bottom)
+                            && (x_relation == Relation::Bottom)
+                            && (y_relation == Relation::Bottom)
+                        {
+                            need_delete.insert(index);
+                            continue;
+                        }
+
+                        //空間において多数決で上位と下位を決める
 
                         //まず状態を見極める
-                        // - 無関係（どこかの次元が上位でも下位でもない）
-                        // - 自身が他のIDに完全に含まれる（相手の全ての次元が上位）
-                        // - 自身が他のIDを完全に含む（相手の全ての次元が下位）
+                        // - 無関係（どこかの次元が上位でも下位でもない）OK
+                        // - 自身が他のIDに完全に含まれる（相手の全ての次元が上位）OK
+                        // - 自身が他のIDを完全に含む（相手の全ての次元が下位）OK
                         // - 自身を一部削る必要がある（多数決で自分が下位）
                         // - 相手を一部削る必要がある（多数決で自分が上位）
 
@@ -129,11 +143,11 @@ impl SpaceTimeIdSet {
         };
 
         if target.starts_with(&me) {
-            return Relation::Bottom;
+            return Relation::Top;
         }
 
         if me.starts_with(&target) {
-            return Relation::Top;
+            return Relation::Bottom;
         }
 
         return Relation::Disjoint;
