@@ -54,11 +54,11 @@ impl SpaceTimeIdSet {
 
             //一番小さい次元を求める
             if f == min {
-                min_dimension_ids = Self::search(&self, &f.0, &self.f)
+                min_dimension_ids = Self::search(&f.0, &self.f)
             } else if x == min {
-                min_dimension_ids = Self::search(&self, &x.0, &self.x)
+                min_dimension_ids = Self::search(&x.0, &self.x)
             } else if y == min {
-                min_dimension_ids = Self::search(&self, &y.0, &self.y)
+                min_dimension_ids = Self::search(&y.0, &self.y)
             }
 
             //削除する必要がある下位IDを記録する
@@ -105,7 +105,12 @@ impl SpaceTimeIdSet {
                             && (y_relation == Relation::Top || y_relation == Relation::Equal)
                         {
                             match t_relation {
-                                Relation::Bottom => todo!(),
+                                Relation::Bottom => {
+                                    //空間的には自分は相手を含んでいる
+                                    //時間的には含まれている
+                                    //この場合は相手を2つ以下に分割する
+                                    for splited_t in Self::split_t(id.t, reverse.t) {}
+                                }
                                 _ => continue,
                             }
                         }
@@ -116,6 +121,8 @@ impl SpaceTimeIdSet {
                             && (y_relation == Relation::Bottom)
                         {
                             need_delete.insert(index);
+
+                            //自分を2つ以下に分割する
                             continue;
                         }
 
@@ -136,6 +143,50 @@ impl SpaceTimeIdSet {
         }
     }
 
+    ///チェックを行わずにIDを挿入する
+    /// 内部API専用
+    fn uncheck_insert(&mut self, f: BitVec, x: BitVec, y: BitVec, t: (u64, u64)) {
+        let index = self.generate_index();
+
+        //Fについて挿入
+        match self.f.get_mut(&f) {
+            Some(v) => {
+                v.insert(index);
+            }
+            None => {
+                let mut new_set = HashSet::new();
+                new_set.insert(index);
+                self.f.insert(f, new_set);
+            }
+        };
+
+        //Xについて挿入
+        match self.x.get_mut(&x) {
+            Some(v) => {
+                v.insert(index);
+            }
+            None => {
+                let mut new_set = HashSet::new();
+                new_set.insert(index);
+                self.x.insert(x, new_set);
+            }
+        };
+
+        //Yについて挿入
+        match self.y.get_mut(&y) {
+            Some(v) => {
+                v.insert(index);
+            }
+            None => {
+                let mut new_set = HashSet::new();
+                new_set.insert(index);
+                self.y.insert(y, new_set);
+            }
+        };
+
+        //Tについて挿入
+    }
+
     ///空間において、次元ごとの関係を判定する
     fn relation_fxy(me: &BitVec, target: &BitVec) -> Relation {
         if me == target {
@@ -153,6 +204,45 @@ impl SpaceTimeIdSet {
         return Relation::Disjoint;
     }
 
+    fn split_t(me: (u64, u64), target: (u64, u64)) -> Vec<(u64, u64)> {
+        let (me_start, me_end) = me;
+        let (target_start, target_end) = target;
+
+        // 結果を格納
+        let mut result = Vec::new();
+
+        // Equal
+        if me_start == target_start && me_end == target_end {
+            result.push(me);
+            return result;
+        }
+
+        // me が target を含む → me を分割
+        if me_start <= target_start && me_end >= target_end {
+            if me_start < target_start {
+                result.push((me_start, target_start));
+            }
+            if target_end < me_end {
+                result.push((target_end, me_end));
+            }
+            return result;
+        }
+
+        // target が me を含む → target を分割（targetの中でmeを挟む）
+        if target_start <= me_start && target_end >= me_end {
+            if target_start < me_start {
+                result.push((target_start, me_start));
+            }
+            if me_end < target_end {
+                result.push((me_end, target_end));
+            }
+            return result;
+        }
+
+        result
+    }
+
+    ///時間において、関係を判定する
     fn relation_t(me: (u64, u64), target: (u64, u64)) -> Relation {
         let (me_start, me_end) = me;
         let (target_start, target_end) = target;
@@ -168,12 +258,12 @@ impl SpaceTimeIdSet {
         }
     }
 
-    fn search(&self, target: &BitVec, btree: &BTreeMap<BitVec, HashSet<Index>>) -> HashSet<Index> {
+    fn search(target: &BitVec, btree: &BTreeMap<BitVec, HashSet<Index>>) -> HashSet<Index> {
         let mut result = HashSet::new();
 
         // 上位IDの検索
         for f_top in target.generate_top_prefix() {
-            if let Some(v) = self.f.get(&f_top) {
+            if let Some(v) = btree.get(&f_top) {
                 result.extend(v.iter().cloned());
             }
         }
@@ -182,7 +272,7 @@ impl SpaceTimeIdSet {
         let start: BitVec = target.clone();
         let end: BitVec = target.generate_bottom_prefix_end();
 
-        for f_bottom in self.f.range(start..end) {
+        for f_bottom in btree.range(start..end) {
             result.extend(f_bottom.1.iter().cloned());
         }
 

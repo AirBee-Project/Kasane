@@ -3,7 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct BitVec(Vec<u8>);
 
 impl PartialOrd for BitVec {
