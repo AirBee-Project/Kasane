@@ -61,11 +61,12 @@ impl SpaceTimeIdSet {
                 min_dimension_ids = Self::search(&y.0, &self.y)
             }
 
-            //削除する必要がある下位IDを記録する
-            let mut need_delete: HashSet<Index> = HashSet::new();
-
             for index in min_dimension_ids {
                 //Indexを順番に検証していく
+                //削除する必要がある下位IDを記録する
+                let mut need_delete: Option<Index> = None;
+                //処理後に追加が必要なIDを記録する
+                let mut need_add: Vec<Reverse> = vec![];
 
                 match self.reverse.get_mut(&index) {
                     Some(reverse) => {
@@ -107,10 +108,17 @@ impl SpaceTimeIdSet {
                         {
                             match t_relation {
                                 Relation::Bottom => {
-                                    //空間的には自分は相手を含んでいる
-                                    //時間的には含まれている
                                     //この場合は相手を2つ以下に分割する
-                                    for splited_t in Self::split_t(id.t, reverse.t) {}
+                                    need_delete = Some(index);
+                                    for splited_t in Self::split_t(id.t, reverse.t) {
+                                        need_add.push(Reverse {
+                                            f: reverse.f.clone(),
+                                            x: reverse.x.clone(),
+                                            y: reverse.y.clone(),
+                                            i: reverse.i,
+                                            t: splited_t,
+                                        });
+                                    }
                                 }
                                 _ => continue,
                             }
@@ -121,10 +129,21 @@ impl SpaceTimeIdSet {
                             && (x_relation == Relation::Bottom)
                             && (y_relation == Relation::Bottom)
                         {
-                            need_delete.insert(index);
-
-                            //自分を2つ以下に分割する
-                            continue;
+                            match t_relation {
+                                Relation::Top => {
+                                    //この場合は自分を2つ以下に分割する
+                                    for splited_t in Self::split_t(id.t, reverse.t) {
+                                        need_add.push(Reverse {
+                                            f: f.0.clone(),
+                                            x: x.0.clone(),
+                                            y: y.0.clone(),
+                                            i: reverse.i,
+                                            t: splited_t,
+                                        });
+                                    }
+                                }
+                                _ => need_delete = Some(index),
+                            }
                         }
 
                         //空間において多数決で上位と下位を決める
@@ -140,60 +159,78 @@ impl SpaceTimeIdSet {
                     }
                     None => {}
                 }
+
+                //やることリストを消費する
+
+                //削除すべきものを削除
+                if let Some(v) = need_delete {
+                    self.uncheck_delete(v);
+                }
+
+                //ついかすべきものを追加
+                for add in need_add {
+                    self.uncheck_insert(add);
+                }
             }
         }
     }
 
     ///チェックを行わずにIDを削除する
     /// 内部専用API
-    fn uncheck_delete() {}
+    fn uncheck_delete(&mut self, index: Index) {
+        let reverse = self.reverse.remove(&index).unwrap();
+        self.f.remove(&reverse.f);
+        self.x.remove(&reverse.f);
+        self.y.remove(&reverse.f);
+        self.t.delete(&(index, reverse.i));
+    }
 
     ///チェックを行わずにIDを挿入する
     /// 内部API専用
-    fn uncheck_insert(&mut self, f: BitVec, x: BitVec, y: BitVec, t: (u64, u64), i: u32) {
+    fn uncheck_insert(&mut self, reverse: Reverse) {
         let index = self.generate_index();
 
         //Fについて挿入
-        match self.f.get_mut(&f) {
+        match self.f.get_mut(&reverse.f) {
             Some(v) => {
                 v.insert(index);
             }
             None => {
                 let mut new_set = HashSet::new();
                 new_set.insert(index);
-                self.f.insert(f.clone(), new_set);
+                self.f.insert(reverse.f.clone(), new_set);
             }
         };
 
         //Xについて挿入
-        match self.x.get_mut(&x) {
+        match self.x.get_mut(&reverse.x) {
             Some(v) => {
                 v.insert(index);
             }
             None => {
                 let mut new_set = HashSet::new();
                 new_set.insert(index);
-                self.x.insert(x.clone(), new_set);
+                self.x.insert(reverse.x.clone(), new_set);
             }
         };
 
         //Yについて挿入
-        match self.y.get_mut(&y) {
+        match self.y.get_mut(&reverse.y) {
             Some(v) => {
                 v.insert(index);
             }
             None => {
                 let mut new_set = HashSet::new();
                 new_set.insert(index);
-                self.y.insert(y.clone(), new_set);
+                self.y.insert(reverse.y.clone(), new_set);
             }
         };
 
         //Tについて挿入
-        self.t.insert(t.0, t.1, (index, i));
+        self.t.insert(reverse.t.0, reverse.t.1, (index, reverse.i));
 
         //逆引きに挿入
-        self.reverse.insert(index, Reverse { f, x, y, i, t });
+        self.reverse.insert(index, reverse);
     }
 
     ///空間において、次元ごとの関係を判定する
