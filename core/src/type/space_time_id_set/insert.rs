@@ -10,6 +10,7 @@ use crate::r#type::{
 use itertools::{iproduct, Iterate};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+#[derive(PartialEq)]
 enum Relation {
     ///自分が上位である
     Top = 1,
@@ -50,7 +51,6 @@ impl SpaceTimeIdSet {
 
             let mut min_dimension_ids: HashSet<u64> = HashSet::new();
 
-            ///挿入するIDから見た各次元の状態
             //一番小さい次元を求める
             if f == min {
                 min_dimension_ids = Self::search(&self, &f.0, &self.f)
@@ -64,8 +64,48 @@ impl SpaceTimeIdSet {
                 //Indexを順番に検証していく
                 match self.reverse.get_mut(&index) {
                     Some(reverse) => {
-                        //FのRelationを選ぶ
-                        if reverse.f {}
+                        //どこかの次元が関係なかった時点で次の候補に行く
+
+                        //時間のRelationを選ぶ
+                        let t_relation = match Self::relation_t(id.t, reverse.t) {
+                            Relation::Disjoint => {
+                                continue;
+                            }
+                            v => v,
+                        };
+
+                        //空間のRelationを選ぶ
+                        let y_relation = match Self::relation_fxy(&y.0, &reverse.y) {
+                            Relation::Disjoint => {
+                                continue;
+                            }
+                            v => v,
+                        };
+                        let x_relation = match Self::relation_fxy(&x.0, &reverse.x) {
+                            Relation::Disjoint => {
+                                continue;
+                            }
+                            v => v,
+                        };
+                        let f_relation = match Self::relation_fxy(&f.0, &reverse.f) {
+                            Relation::Disjoint => {
+                                continue;
+                            }
+                            v => v,
+                        };
+
+                        //まずは空間について考える
+
+                        //全てが上位か同位の場合は自身が他のIDに完全に含まれる
+                        if (f_relation == Relation::Top || f_relation == Relation::Equal)
+                            && (f_relation == Relation::Top || f_relation == Relation::Equal)
+                            && (f_relation == Relation::Top || f_relation == Relation::Equal)
+                            && (t_relation == Relation::Top || t_relation == Relation::Equal)
+                        {
+                            continue;
+                        }
+
+                        //全てが下位の場合は相手を削除する必要がある
 
                         //まず状態を見極める
                         // - 無関係（どこかの次元が上位でも下位でもない）
@@ -82,14 +122,36 @@ impl SpaceTimeIdSet {
         }
     }
 
-    fn relation(me: BitVec, target: BitVec) -> Relation {
+    ///空間において、次元ごとの関係を判定する
+    fn relation_fxy(me: &BitVec, target: &BitVec) -> Relation {
         if me == target {
             return Relation::Equal;
         };
 
-        if me < target {
+        if target.starts_with(&me) {
+            return Relation::Bottom;
+        }
+
+        if me.starts_with(&target) {
             return Relation::Top;
-        };
+        }
+
+        return Relation::Disjoint;
+    }
+
+    fn relation_t(me: (u64, u64), target: (u64, u64)) -> Relation {
+        let (me_start, me_end) = me;
+        let (target_start, target_end) = target;
+
+        if me_start == target_start && me_end == target_end {
+            Relation::Equal
+        } else if me_start <= target_start && me_end >= target_end {
+            Relation::Top
+        } else if me_start >= target_start && me_end <= target_end {
+            Relation::Bottom
+        } else {
+            Relation::Disjoint
+        }
     }
 
     fn search(&self, target: &BitVec, btree: &BTreeMap<BitVec, HashSet<Index>>) -> HashSet<Index> {

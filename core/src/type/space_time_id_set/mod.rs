@@ -10,8 +10,7 @@ pub struct Reverse {
     pub f: BitVec,
     pub x: BitVec,
     pub y: BitVec,
-    pub t_start: u64,
-    pub t_end: u64,
+    pub t: (u64, u64),
 }
 
 type Index = u64;

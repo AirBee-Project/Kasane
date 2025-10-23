@@ -151,6 +151,26 @@ impl BitVec {
             Some(BitVec(chunk))
         })
     }
+
+    /// self の先頭が prefix と一致するか判定
+    pub fn starts_with(&self, prefix: &BitVec) -> bool {
+        let self_bits = self.total_bits();
+        let prefix_bits = prefix.total_bits();
+
+        if prefix_bits > self_bits {
+            return false; // prefix が長すぎる
+        }
+
+        for i in 0..prefix_bits {
+            let self_bit = self.get_bit(i);
+            let prefix_bit = prefix.get_bit(i);
+            if self_bit != prefix_bit {
+                return false;
+            }
+        }
+
+        true
+    }
 }
 
 impl Deref for BitVec {
