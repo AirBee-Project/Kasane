@@ -24,6 +24,7 @@ pub fn geodetic_to_id(z: u8, point: Geodetic) -> SpaceTimeId {
         f: (f_id as i64, f_id as i64),
         x: (x_id as u64, x_id as u64),
         y: (y_id as u64, y_id as u64),
+        i: 0,
         t: (0, u64::MAX),
     }
 }
