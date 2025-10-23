@@ -80,6 +80,36 @@ impl BitVec {
         }
     }
 
+    /// 下位を検索するときに使用する範囲の終わりを示す
+    pub fn generate_bottom_prefix_end(&self) -> BitVec {
+        let mut bv = self.clone();
+        let total_bits = self.total_bits();
+        if total_bits < 2 {
+            return bv; // ビットが足りなければそのまま
+        }
+
+        let last_bit_pos = total_bits - 1;
+        let second_last_bit_pos = total_bits - 2;
+
+        if self.get_bit(second_last_bit_pos) == 0 {
+            // 0なら1にする
+            let byte_index = second_last_bit_pos / 8;
+            let bit_index = 7 - (second_last_bit_pos % 8);
+            bv[byte_index] |= 1 << bit_index;
+        } else {
+            // 1なら上の階層ビットを反転、最後のビットを0
+            let byte_index = last_bit_pos / 8;
+            let bit_index = 7 - (last_bit_pos % 8);
+            bv[byte_index] &= !(1 << bit_index); // 最後を0に
+            let upper_bit_pos = second_last_bit_pos - 1;
+            let byte_index = upper_bit_pos / 8;
+            let bit_index = 7 - (upper_bit_pos % 8);
+            bv[byte_index] ^= 1 << bit_index; // 反転
+        }
+
+        bv
+    }
+
     /// 2ビット単位で prefix を生成するイテレータ
     /// 有効ビットが切れた時点で終了
     pub fn generate_top_prefix(&self) -> impl Iterator<Item = BitVec> + '_ {
