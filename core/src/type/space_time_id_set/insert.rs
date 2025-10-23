@@ -9,21 +9,19 @@ use crate::r#type::{
 };
 use itertools::{iproduct, Iterate};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::process::id;
 
 #[derive(PartialEq)]
 ///自分の状況
 enum Relation {
-    ///自分が上位である
-    Top = 1,
+    ///自分が上位(ここでは同位も含む)である
+    Top,
 
     ///自分が下位である
-    Bottom = 2,
-
-    ///同位である
-    Equal = 3,
+    Bottom,
 
     ///無関係である
-    Disjoint = 4,
+    Disjoint,
 }
 
 impl SpaceTimeIdSet {
@@ -102,9 +100,9 @@ impl SpaceTimeIdSet {
                         };
 
                         //空間において全てが上位か同位の場合は自身が他のIDに完全に含まれる
-                        if (f_relation == Relation::Top || f_relation == Relation::Equal)
-                            && (x_relation == Relation::Top || x_relation == Relation::Equal)
-                            && (y_relation == Relation::Top || y_relation == Relation::Equal)
+                        if f_relation == Relation::Top
+                            && x_relation == Relation::Top
+                            && y_relation == Relation::Top
                         {
                             match t_relation {
                                 Relation::Bottom => {
@@ -133,13 +131,7 @@ impl SpaceTimeIdSet {
                                 Relation::Top => {
                                     //この場合は自分を2つ以下に分割する
                                     for splited_t in Self::split_t(id.t, reverse.t) {
-                                        need_add.push(Reverse {
-                                            f: f.0.clone(),
-                                            x: x.0.clone(),
-                                            y: y.0.clone(),
-                                            i: reverse.i,
-                                            t: splited_t,
-                                        });
+                                        //自分を割るパターンをどのように表現する？
                                     }
                                 }
                                 _ => need_delete = Some(index),
@@ -147,6 +139,33 @@ impl SpaceTimeIdSet {
                         }
 
                         //空間において多数決で上位と下位を決める
+
+                        //Fのみが独立のパターンを刈り取る
+                        if x_relation == y_relation {
+                            match f_relation {
+                                Relation::Top => {
+                                    //自身が多数決で負けた場合
+                                    //つまり自身を削る
+                                    for splited_f in Self::split_fxy(&f.0, &reverse.f) {
+                                        //自分を割るパターンをどのように表現する？
+                                    }
+                                }
+                                Relation::Bottom => {
+                                    //自身が多数決で勝った場合
+                                    //つまり相手を削る
+                                    for splited_f in Self::split_fxy(&f.0, &reverse.f) {
+                                        need_add.push(Reverse {
+                                            f: splited_f,
+                                            x: x.0.clone(),
+                                            y: y.0.clone(),
+                                            i: id.i,
+                                            t: id.t,
+                                        });
+                                    }
+                                }
+                                Relation::Disjoint => continue,
+                            };
+                        };
 
                         //まず状態を見極める
                         // - 無関係（どこかの次元が上位でも下位でもない）OK
@@ -233,10 +252,21 @@ impl SpaceTimeIdSet {
         self.reverse.insert(index, reverse);
     }
 
+    ///
+    fn split_fxy(me: &BitVec, target: &BitVec) -> Vec<BitVec> {
+        //ここで除算の操作が登場する
+
+        //右側と左側に分けて考える
+
+        //
+
+        todo!()
+    }
+
     ///空間において、次元ごとの関係を判定する
     fn relation_fxy(me: &BitVec, target: &BitVec) -> Relation {
         if me == target {
-            return Relation::Equal;
+            return Relation::Top;
         };
 
         if target.starts_with(&me) {
@@ -294,7 +324,7 @@ impl SpaceTimeIdSet {
         let (target_start, target_end) = target;
 
         if me_start == target_start && me_end == target_end {
-            Relation::Equal
+            Relation::Top
         } else if me_start <= target_start && me_end >= target_end {
             Relation::Top
         } else if me_start >= target_start && me_end <= target_end {
