@@ -33,6 +33,7 @@ pub struct SpaceTimeId {
     pub f: (i64, i64),
     pub x: (u64, u64),
     pub y: (u64, u64),
+    pub i: u32,
     pub t: (u64, u64),
 }
 
@@ -97,6 +98,7 @@ impl SpaceTimeId {
             f: new_f,
             x: new_x,
             y: new_y,
+            i,
             t: new_t,
         })
     }
