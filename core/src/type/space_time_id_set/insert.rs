@@ -46,150 +46,158 @@ impl SpaceTimeIdSet {
 
         // 3つのベクタの直積を取る
         for (f, x, y) in iproduct!(&f_encoded, &x_encoded, &y_encoded) {
-            let min = f.min(x.min(y));
+            self.insert_encoded(Reverse {
+                f: f.0.clone(),
+                x: x.0.clone(),
+                y: y.0.clone(),
+                i: id.i,
+                t: id.t,
+            });
+        }
+    }
 
-            let mut min_dimension_ids: HashSet<u64> = HashSet::new();
+    fn insert_encoded(&mut self, id: Reverse) {
+        let min = id.f.clone().min(id.x.clone().min(id.y.clone()));
 
-            //一番小さい次元を求める
-            if f == min {
-                min_dimension_ids = Self::search(&f.0, &self.f)
-            } else if x == min {
-                min_dimension_ids = Self::search(&x.0, &self.x)
-            } else if y == min {
-                min_dimension_ids = Self::search(&y.0, &self.y)
+        let mut min_dimension_ids: HashSet<u64> = HashSet::new();
+
+        //一番小さい次元を求める
+        if id.f == min {
+            min_dimension_ids = Self::search(&id.f.clone(), &self.f)
+        } else if id.x == min {
+            min_dimension_ids = Self::search(&id.x.clone(), &self.x)
+        } else if id.y == min {
+            min_dimension_ids = Self::search(&id.y.clone(), &self.y)
+        }
+
+        for index in min_dimension_ids {
+            //Indexを順番に検証していく
+            //削除する必要がある下位IDを記録する
+            let mut need_delete: Option<Index> = None;
+            //処理後に追加が必要なIDを記録する
+            let mut need_add: Vec<Reverse> = vec![];
+
+            match self.reverse.get_mut(&index) {
+                Some(reverse) => {
+                    //どこかの次元が関係なかった時点で次の候補に行く
+                    //Disjointを引きそうな順番で探していく（順番は主観的）
+
+                    //時間のRelationを選ぶ
+                    let t_relation = match Self::relation_t(id.t, reverse.t) {
+                        Relation::Disjoint => {
+                            continue;
+                        }
+                        v => v,
+                    };
+
+                    //空間のRelationを選ぶ
+                    let y_relation = match Self::relation_fxy(id.y, reverse.y.clone()) {
+                        Relation::Disjoint => {
+                            continue;
+                        }
+                        v => v,
+                    };
+                    let x_relation = match Self::relation_fxy(id.x, reverse.x.clone()) {
+                        Relation::Disjoint => {
+                            continue;
+                        }
+                        v => v,
+                    };
+                    let f_relation = match Self::relation_fxy(id.f, reverse.f.clone()) {
+                        Relation::Disjoint => continue,
+                        v => v,
+                    };
+
+                    //空間において全てが上位か同位の場合は自身が他のIDに完全に含まれる
+                    if f_relation == Relation::Top
+                        && x_relation == Relation::Top
+                        && y_relation == Relation::Top
+                    {
+                        match t_relation {
+                            Relation::Bottom => {
+                                //この場合は相手を2つ以下に分割する
+                                need_delete = Some(index);
+                                for splited_t in Self::split_t(id.t, reverse.t) {
+                                    need_add.push(Reverse {
+                                        f: reverse.f.clone(),
+                                        x: reverse.x.clone(),
+                                        y: reverse.y.clone(),
+                                        i: reverse.i,
+                                        t: splited_t,
+                                    });
+                                }
+                            }
+                            _ => continue,
+                        }
+                    }
+
+                    //全てが下位の場合は相手を削除する必要がある
+                    if (f_relation == Relation::Bottom)
+                        && (x_relation == Relation::Bottom)
+                        && (y_relation == Relation::Bottom)
+                    {
+                        match t_relation {
+                            Relation::Top => {
+                                //この場合は自分を2つ以下に分割する
+                                for splited_t in Self::split_t(id.t, reverse.t) {
+                                    //再帰的に代入して、挿入する
+                                }
+                            }
+                            _ => need_delete = Some(index),
+                        }
+                    }
+
+                    //空間において多数決で上位と下位を決める
+
+                    //Fのみが独立のパターンを刈り取る
+                    if x_relation == y_relation {
+                        match f_relation {
+                            Relation::Top => {
+                                //自身が多数決で負けた場合
+                                //つまり自身を削る
+                                for splited_f in Self::split_fxy(&id.f, &reverse.f) {
+                                    //再帰的に代入して、挿入する
+                                }
+                            }
+                            Relation::Bottom => {
+                                //自身が多数決で勝った場合
+                                //つまり相手を削る
+                                for splited_f in Self::split_fxy(&id.f, &reverse.f) {
+                                    need_add.push(Reverse {
+                                        f: splited_f,
+                                        x: id.x,
+                                        y: id.y,
+                                        i: id.i,
+                                        t: id.t,
+                                    });
+                                }
+                            }
+                            Relation::Disjoint => continue,
+                        };
+                    };
+
+                    //まず状態を見極める
+                    // - 無関係（どこかの次元が上位でも下位でもない）OK
+                    // - 自身が他のIDに完全に含まれる（相手の全ての次元が上位）OK
+                    // - 自身が他のIDを完全に含む（相手の全ての次元が下位）OK
+                    // - 自身を一部削る必要がある（多数決で自分が下位）
+                    // - 相手を一部削る必要がある（多数決で自分が上位）
+
+                    //各次元の状態を示す
+                }
+                None => {}
             }
 
-            for index in min_dimension_ids {
-                //Indexを順番に検証していく
-                //削除する必要がある下位IDを記録する
-                let mut need_delete: Option<Index> = None;
-                //処理後に追加が必要なIDを記録する
-                let mut need_add: Vec<Reverse> = vec![];
+            //やることリストを消費する
 
-                match self.reverse.get_mut(&index) {
-                    Some(reverse) => {
-                        //どこかの次元が関係なかった時点で次の候補に行く
-                        //Disjointを引きそうな順番で探していく（順番は主観的）
+            //削除すべきものを削除
+            if let Some(v) = need_delete {
+                self.uncheck_delete(v);
+            }
 
-                        //時間のRelationを選ぶ
-                        let t_relation = match Self::relation_t(id.t, reverse.t) {
-                            Relation::Disjoint => {
-                                continue;
-                            }
-                            v => v,
-                        };
-
-                        //空間のRelationを選ぶ
-                        let y_relation = match Self::relation_fxy(&y.0, &reverse.y) {
-                            Relation::Disjoint => {
-                                continue;
-                            }
-                            v => v,
-                        };
-                        let x_relation = match Self::relation_fxy(&x.0, &reverse.x) {
-                            Relation::Disjoint => {
-                                continue;
-                            }
-                            v => v,
-                        };
-                        let f_relation = match Self::relation_fxy(&f.0, &reverse.f) {
-                            Relation::Disjoint => {
-                                continue;
-                            }
-                            v => v,
-                        };
-
-                        //空間において全てが上位か同位の場合は自身が他のIDに完全に含まれる
-                        if f_relation == Relation::Top
-                            && x_relation == Relation::Top
-                            && y_relation == Relation::Top
-                        {
-                            match t_relation {
-                                Relation::Bottom => {
-                                    //この場合は相手を2つ以下に分割する
-                                    need_delete = Some(index);
-                                    for splited_t in Self::split_t(id.t, reverse.t) {
-                                        need_add.push(Reverse {
-                                            f: reverse.f.clone(),
-                                            x: reverse.x.clone(),
-                                            y: reverse.y.clone(),
-                                            i: reverse.i,
-                                            t: splited_t,
-                                        });
-                                    }
-                                }
-                                _ => continue,
-                            }
-                        }
-
-                        //全てが下位の場合は相手を削除する必要がある
-                        if (f_relation == Relation::Bottom)
-                            && (x_relation == Relation::Bottom)
-                            && (y_relation == Relation::Bottom)
-                        {
-                            match t_relation {
-                                Relation::Top => {
-                                    //この場合は自分を2つ以下に分割する
-                                    for splited_t in Self::split_t(id.t, reverse.t) {
-                                        //自分を割るパターンをどのように表現する？
-                                    }
-                                }
-                                _ => need_delete = Some(index),
-                            }
-                        }
-
-                        //空間において多数決で上位と下位を決める
-
-                        //Fのみが独立のパターンを刈り取る
-                        if x_relation == y_relation {
-                            match f_relation {
-                                Relation::Top => {
-                                    //自身が多数決で負けた場合
-                                    //つまり自身を削る
-                                    for splited_f in Self::split_fxy(&f.0, &reverse.f) {
-                                        //自分を割るパターンをどのように表現する？
-                                    }
-                                }
-                                Relation::Bottom => {
-                                    //自身が多数決で勝った場合
-                                    //つまり相手を削る
-                                    for splited_f in Self::split_fxy(&f.0, &reverse.f) {
-                                        need_add.push(Reverse {
-                                            f: splited_f,
-                                            x: x.0.clone(),
-                                            y: y.0.clone(),
-                                            i: id.i,
-                                            t: id.t,
-                                        });
-                                    }
-                                }
-                                Relation::Disjoint => continue,
-                            };
-                        };
-
-                        //まず状態を見極める
-                        // - 無関係（どこかの次元が上位でも下位でもない）OK
-                        // - 自身が他のIDに完全に含まれる（相手の全ての次元が上位）OK
-                        // - 自身が他のIDを完全に含む（相手の全ての次元が下位）OK
-                        // - 自身を一部削る必要がある（多数決で自分が下位）
-                        // - 相手を一部削る必要がある（多数決で自分が上位）
-
-                        //各次元の状態を示す
-                    }
-                    None => {}
-                }
-
-                //やることリストを消費する
-
-                //削除すべきものを削除
-                if let Some(v) = need_delete {
-                    self.uncheck_delete(v);
-                }
-
-                //ついかすべきものを追加
-                for add in need_add {
-                    self.uncheck_insert(add);
-                }
+            //ついかすべきものを追加
+            for add in need_add {
+                self.uncheck_insert(add);
             }
         }
     }
@@ -264,7 +272,7 @@ impl SpaceTimeIdSet {
     }
 
     ///空間において、次元ごとの関係を判定する
-    fn relation_fxy(me: &BitVec, target: &BitVec) -> Relation {
+    fn relation_fxy(me: BitVec, target: BitVec) -> Relation {
         if me == target {
             return Relation::Top;
         };
