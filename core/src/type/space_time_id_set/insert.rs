@@ -70,6 +70,7 @@ impl SpaceTimeIdSet {
                 match self.reverse.get_mut(&index) {
                     Some(reverse) => {
                         //どこかの次元が関係なかった時点で次の候補に行く
+                        //Disjointを引きそうな順番で探していく（順番は主観的）
 
                         //時間のRelationを選ぶ
                         let t_relation = match Self::relation_t(id.t, reverse.t) {
@@ -143,9 +144,13 @@ impl SpaceTimeIdSet {
         }
     }
 
+    ///チェックを行わずにIDを削除する
+    /// 内部専用API
+    fn uncheck_delete() {}
+
     ///チェックを行わずにIDを挿入する
     /// 内部API専用
-    fn uncheck_insert(&mut self, f: BitVec, x: BitVec, y: BitVec, t: (u64, u64)) {
+    fn uncheck_insert(&mut self, f: BitVec, x: BitVec, y: BitVec, t: (u64, u64), i: u32) {
         let index = self.generate_index();
 
         //Fについて挿入
@@ -156,7 +161,7 @@ impl SpaceTimeIdSet {
             None => {
                 let mut new_set = HashSet::new();
                 new_set.insert(index);
-                self.f.insert(f, new_set);
+                self.f.insert(f.clone(), new_set);
             }
         };
 
@@ -168,7 +173,7 @@ impl SpaceTimeIdSet {
             None => {
                 let mut new_set = HashSet::new();
                 new_set.insert(index);
-                self.x.insert(x, new_set);
+                self.x.insert(x.clone(), new_set);
             }
         };
 
@@ -180,11 +185,15 @@ impl SpaceTimeIdSet {
             None => {
                 let mut new_set = HashSet::new();
                 new_set.insert(index);
-                self.y.insert(y, new_set);
+                self.y.insert(y.clone(), new_set);
             }
         };
 
         //Tについて挿入
+        self.t.insert(t.0, t.1, (index, i));
+
+        //逆引きに挿入
+        self.reverse.insert(index, Reverse { f, x, y, i, t });
     }
 
     ///空間において、次元ごとの関係を判定する

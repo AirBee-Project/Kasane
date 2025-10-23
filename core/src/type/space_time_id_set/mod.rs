@@ -10,6 +10,7 @@ pub struct Reverse {
     pub f: BitVec,
     pub x: BitVec,
     pub y: BitVec,
+    pub i: u32,
     pub t: (u64, u64),
 }
 
@@ -18,7 +19,7 @@ pub struct SpaceTimeIdSet {
     f: BTreeMap<BitVec, HashSet<Index>>,
     x: BTreeMap<BitVec, HashSet<Index>>,
     y: BTreeMap<BitVec, HashSet<Index>>,
-    t: IntervalManager,
+    t: IntervalManager<(Index, u32)>,
     reverse: HashMap<Index, Reverse>,
     next_index: Index,
 }
