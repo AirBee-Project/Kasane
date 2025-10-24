@@ -11,7 +11,14 @@ use itertools::{iproduct, Iterate};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::process::id;
 
-#[derive(PartialEq)]
+#[derive(Clone, Copy)]
+enum RelationTarget {
+    F,
+    X,
+    Y,
+}
+
+#[derive(PartialEq, Clone, Copy)]
 ///自分の状況
 enum Relation {
     ///自分が上位(ここでは同位も含む)である
@@ -78,7 +85,8 @@ impl SpaceTimeIdSet {
             let mut need_add: Vec<Reverse> = vec![];
 
             match self.reverse.get_mut(&index) {
-                Some(reverse) => {
+                Some(reverse_ref) => {
+                    let reverse = reverse_ref.clone();
                     //どこかの次元が関係なかった時点で次の候補に行く
                     //Disjointを引きそうな順番で探していく（順番は主観的）
 
@@ -91,19 +99,19 @@ impl SpaceTimeIdSet {
                     };
 
                     //空間のRelationを選ぶ
-                    let y_relation = match Self::relation_fxy(id.y, reverse.y.clone()) {
+                    let y_relation = match Self::relation_fxy(id.y.clone(), reverse.y.clone()) {
                         Relation::Disjoint => {
                             continue;
                         }
                         v => v,
                     };
-                    let x_relation = match Self::relation_fxy(id.x, reverse.x.clone()) {
+                    let x_relation = match Self::relation_fxy(id.x.clone(), reverse.x.clone()) {
                         Relation::Disjoint => {
                             continue;
                         }
                         v => v,
                     };
-                    let f_relation = match Self::relation_fxy(id.f, reverse.f.clone()) {
+                    let f_relation = match Self::relation_fxy(id.f.clone(), reverse.f.clone()) {
                         Relation::Disjoint => continue,
                         v => v,
                     };
@@ -140,7 +148,13 @@ impl SpaceTimeIdSet {
                             Relation::Top => {
                                 //この場合は自分を2つ以下に分割する
                                 for splited_t in Self::split_t(id.t, reverse.t) {
-                                    //再帰的に代入して、挿入する
+                                    self.insert_encoded(Reverse {
+                                        f: reverse.f.clone(),
+                                        x: reverse.x.clone(),
+                                        y: reverse.y.clone(),
+                                        i: reverse.i,
+                                        t: splited_t,
+                                    });
                                 }
                             }
                             _ => need_delete = Some(index),
@@ -151,39 +165,45 @@ impl SpaceTimeIdSet {
 
                     //Fのみが独立のパターンを刈り取る
                     if x_relation == y_relation {
-                        match f_relation {
-                            Relation::Top => {
-                                //自身が多数決で負けた場合
-                                //つまり自身を削る
-                                for splited_f in Self::split_fxy(&id.f, &reverse.f) {
-                                    //再帰的に代入して、挿入する
-                                }
-                            }
-                            Relation::Bottom => {
-                                //自身が多数決で勝った場合
-                                //つまり相手を削る
-                                for splited_f in Self::split_fxy(&id.f, &reverse.f) {
-                                    need_add.push(Reverse {
-                                        f: splited_f,
-                                        x: id.x,
-                                        y: id.y,
-                                        i: id.i,
-                                        t: id.t,
-                                    });
-                                }
-                            }
-                            Relation::Disjoint => continue,
-                        };
+                        Self::handle_relation(
+                            RelationTarget::X,
+                            f_relation,
+                            &id,
+                            &reverse,
+                            index,
+                            &mut need_delete,
+                            &mut need_add,
+                            self,
+                        );
                     };
 
-                    //まず状態を見極める
-                    // - 無関係（どこかの次元が上位でも下位でもない）OK
-                    // - 自身が他のIDに完全に含まれる（相手の全ての次元が上位）OK
-                    // - 自身が他のIDを完全に含む（相手の全ての次元が下位）OK
-                    // - 自身を一部削る必要がある（多数決で自分が下位）
-                    // - 相手を一部削る必要がある（多数決で自分が上位）
+                    //Xのみが独立のパターンを刈り取る
+                    if f_relation == y_relation {
+                        Self::handle_relation(
+                            RelationTarget::X,
+                            x_relation,
+                            &id,
+                            &reverse,
+                            index,
+                            &mut need_delete,
+                            &mut need_add,
+                            self,
+                        );
+                    };
 
-                    //各次元の状態を示す
+                    //Yのみが独立のパターンを刈り取る
+                    if f_relation == x_relation {
+                        Self::handle_relation(
+                            RelationTarget::X,
+                            y_relation,
+                            &id,
+                            &reverse,
+                            index,
+                            &mut need_delete,
+                            &mut need_add,
+                            self,
+                        );
+                    };
                 }
                 None => {}
             }
@@ -199,6 +219,82 @@ impl SpaceTimeIdSet {
             for add in need_add {
                 self.uncheck_insert(add);
             }
+        }
+    }
+
+    fn handle_relation(
+        target: RelationTarget,
+        relation: Relation,
+        id: &Reverse,
+        reverse: &Reverse,
+        index: Index,
+        need_delete: &mut Option<Index>,
+        need_add: &mut Vec<Reverse>,
+        this: &mut Self,
+    ) {
+        match relation {
+            Relation::Top => {
+                // 自身が負け（自身を削る）
+                for splited_t in Self::split_t(id.t, reverse.t) {
+                    for splited in match target {
+                        RelationTarget::F => Self::split_fxy(&id.f, &reverse.f),
+                        RelationTarget::X => Self::split_fxy(&id.x, &reverse.x),
+                        RelationTarget::Y => Self::split_fxy(&id.y, &reverse.y),
+                    } {
+                        this.insert_encoded(Reverse {
+                            f: if let RelationTarget::F = target {
+                                splited.clone()
+                            } else {
+                                id.f.clone()
+                            },
+                            x: if let RelationTarget::X = target {
+                                splited.clone()
+                            } else {
+                                id.x.clone()
+                            },
+                            y: if let RelationTarget::Y = target {
+                                splited.clone()
+                            } else {
+                                id.y.clone()
+                            },
+                            i: id.i,
+                            t: splited_t,
+                        });
+                    }
+                }
+            }
+            Relation::Bottom => {
+                // 自身が勝ち（相手を削る）
+                *need_delete = Some(index);
+                for splited_t in Self::split_t(id.t, reverse.t) {
+                    for splited in match target {
+                        RelationTarget::F => Self::split_fxy(&id.f, &reverse.f),
+                        RelationTarget::X => Self::split_fxy(&id.x, &reverse.x),
+                        RelationTarget::Y => Self::split_fxy(&id.y, &reverse.y),
+                    } {
+                        need_add.push(Reverse {
+                            f: if let RelationTarget::F = target {
+                                splited.clone()
+                            } else {
+                                reverse.f.clone()
+                            },
+                            x: if let RelationTarget::X = target {
+                                splited.clone()
+                            } else {
+                                reverse.x.clone()
+                            },
+                            y: if let RelationTarget::Y = target {
+                                splited.clone()
+                            } else {
+                                reverse.y.clone()
+                            },
+                            i: reverse.i,
+                            t: splited_t,
+                        });
+                    }
+                }
+            }
+            Relation::Disjoint => {}
         }
     }
 
@@ -260,7 +356,7 @@ impl SpaceTimeIdSet {
         self.reverse.insert(index, reverse);
     }
 
-    ///
+    ///空間の単一次元を分割する
     fn split_fxy(me: &BitVec, target: &BitVec) -> Vec<BitVec> {
         //ここで除算の操作が登場する
 
@@ -274,6 +370,7 @@ impl SpaceTimeIdSet {
     ///空間において、次元ごとの関係を判定する
     fn relation_fxy(me: BitVec, target: BitVec) -> Relation {
         if me == target {
+            //同位も上位として分類して処理する
             return Relation::Top;
         };
 

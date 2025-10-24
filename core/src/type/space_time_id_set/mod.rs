@@ -6,7 +6,7 @@ pub mod convert_f;
 pub mod convert_xy;
 pub mod insert;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Reverse {
     pub f: BitVec,
     pub x: BitVec,
