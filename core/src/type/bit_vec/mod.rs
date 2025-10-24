@@ -1,10 +1,21 @@
 use std::{
     cmp::Ordering,
+    fmt,
     ops::{Deref, DerefMut},
 };
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct BitVec(Vec<u8>);
+
+impl fmt::Display for BitVec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let total_bits = self.0.len() * 8;
+        for i in 0..total_bits {
+            write!(f, "{}", self.get_bit(i))?;
+        }
+        Ok(())
+    }
+}
 
 impl PartialOrd for BitVec {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {

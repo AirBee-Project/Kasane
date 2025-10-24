@@ -16,6 +16,8 @@ pub struct Reverse {
 }
 
 type Index = u64;
+
+#[derive(Debug)]
 pub struct SpaceTimeIdSet {
     f: BTreeMap<BitVec, HashSet<Index>>,
     x: BTreeMap<BitVec, HashSet<Index>>,

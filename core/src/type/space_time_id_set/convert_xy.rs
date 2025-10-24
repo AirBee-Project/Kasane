@@ -68,6 +68,8 @@ pub fn convert_bitmask_xy(z: u8, mut xy: u64) -> (BitVec, u8) {
         result[byte_index] |= value_bit << (bit_index - 1);
     }
 
+    println!("Convert BitMask XY Z:{} XY:{} Result : {}", z, xy, result);
+
     (result, z)
 }
 

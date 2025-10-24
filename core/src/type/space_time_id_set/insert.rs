@@ -7,9 +7,8 @@ use crate::r#type::{
         convert_f::convert_f, convert_xy::convert_xy, Index, Reverse, SpaceTimeIdSet,
     },
 };
-use itertools::{iproduct, Iterate};
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::process::id;
+use itertools::iproduct;
+use std::collections::{BTreeMap, HashSet};
 
 #[derive(Clone, Copy)]
 enum RelationTarget {
@@ -36,6 +35,24 @@ impl SpaceTimeIdSet {
         let f_converted: Vec<(u8, i64)> = convert_f(id.z, id.f);
         let x_converted: Vec<(u8, u64)> = convert_xy(id.z, id.x);
         let y_converted: Vec<(u8, u64)> = convert_xy(id.z, id.y);
+
+        //分解がうまくいっているのかを検証する
+        println!("----INPUT----");
+        println!("{}", id);
+
+        println!("----SPLIT----");
+        println!("----F----");
+        for f_debug in &f_converted {
+            println!("{}/{}/-/-,", f_debug.0, f_debug.1);
+        }
+        println!("----X----");
+        for x_debug in &x_converted {
+            println!("{}/-/{}/-,", x_debug.0, x_debug.1);
+        }
+        println!("----Y----");
+        for y_debug in &y_converted {
+            println!("{}/-/-/{},", y_debug.0, y_debug.1);
+        }
 
         // 各要素を BitVec に変換してベクタにする
         let f_encoded: Vec<_> = f_converted
@@ -66,7 +83,7 @@ impl SpaceTimeIdSet {
     fn insert_encoded(&mut self, id: Reverse) {
         let min = id.f.clone().min(id.x.clone().min(id.y.clone()));
 
-        let mut min_dimension_ids: HashSet<u64> = HashSet::new();
+        let mut min_dimension_ids: HashSet<Index> = HashSet::new();
 
         //一番小さい次元を求める
         if id.f == min {
@@ -99,19 +116,19 @@ impl SpaceTimeIdSet {
                     };
 
                     //空間のRelationを選ぶ
-                    let y_relation = match Self::relation_fxy(id.y.clone(), reverse.y.clone()) {
+                    let y_relation = match Self::relation_fxy(&id.y, &reverse.y) {
                         Relation::Disjoint => {
                             continue;
                         }
                         v => v,
                     };
-                    let x_relation = match Self::relation_fxy(id.x.clone(), reverse.x.clone()) {
+                    let x_relation = match Self::relation_fxy(&id.x, &reverse.x) {
                         Relation::Disjoint => {
                             continue;
                         }
                         v => v,
                     };
-                    let f_relation = match Self::relation_fxy(id.f.clone(), reverse.f.clone()) {
+                    let f_relation = match Self::relation_fxy(&id.f, &reverse.f) {
                         Relation::Disjoint => continue,
                         v => v,
                     };
@@ -166,7 +183,7 @@ impl SpaceTimeIdSet {
                     //Fのみが独立のパターンを刈り取る
                     if x_relation == y_relation {
                         Self::handle_relation(
-                            RelationTarget::X,
+                            RelationTarget::F,
                             f_relation,
                             &id,
                             &reverse,
@@ -194,7 +211,7 @@ impl SpaceTimeIdSet {
                     //Yのみが独立のパターンを刈り取る
                     if f_relation == x_relation {
                         Self::handle_relation(
-                            RelationTarget::X,
+                            RelationTarget::Y,
                             y_relation,
                             &id,
                             &reverse,
@@ -303,8 +320,8 @@ impl SpaceTimeIdSet {
     fn uncheck_delete(&mut self, index: Index) {
         let reverse = self.reverse.remove(&index).unwrap();
         self.f.remove(&reverse.f);
-        self.x.remove(&reverse.f);
-        self.y.remove(&reverse.f);
+        self.x.remove(&reverse.x);
+        self.y.remove(&reverse.y);
         self.t.delete(&(index, reverse.i));
     }
 
@@ -368,7 +385,7 @@ impl SpaceTimeIdSet {
     }
 
     ///空間において、次元ごとの関係を判定する
-    fn relation_fxy(me: BitVec, target: BitVec) -> Relation {
+    fn relation_fxy(me: &BitVec, target: &BitVec) -> Relation {
         if me == target {
             //同位も上位として分類して処理する
             return Relation::Top;

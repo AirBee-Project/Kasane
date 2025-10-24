@@ -53,22 +53,43 @@ pub fn convert_f(z: u8, dim: (i64, i64)) -> Vec<(u8, i64)> {
 }
 
 pub fn convert_bitmask_f(z: u8, f: i64) -> (BitVec, u8) {
-    assert!(z <= 64, "z must be between 0 and 64");
-    let mut result = BitVec::from_vec(vec![0; ((z as usize + 7) / 8)]);
-    let sign_bit = if f < 0 { 1 } else { 0 };
-    let mut abs_f = f.abs() as u64;
-    if sign_bit != 0 {
-        result[0] |= 1 << 7;
-    }
-    for k in 0..(z - 1) {
-        if abs_f & 1 != 0 {
-            let bit_pos = k + 1;
-            let byte_index = bit_pos / 8;
-            let bit_index = 7 - (bit_pos % 8);
-            result[byte_index as usize] |= 1 << bit_index;
+    //配列を初期化する
+    let length = (((z + 1) * 2 / 8) + 1).max(1) as usize;
+    println!("配列の長さ:{}", length);
+
+    let mut result = vec![0u8; length];
+
+    //処理用のf
+    let mut f = f;
+
+    //各階層を順番に処理していく
+    for now_z in 0..=z {
+        //処理すべきIndexを決定する
+        let index = ((now_z + 1) * 2 / 8) as usize;
+
+        //そのIndexの何番目の階層なのかを見る（0から数える）
+        let in_index = 3 - now_z % 4;
+
+        //ORを取るための入れるべきBitを作る
+
+        //有効Bitを挿入する
+        let mut or_byte: u8 = 1 << (in_index * 2);
+
+        //分岐Bitを挿入する
+        if f % 2 != 0 {
+            or_byte |= 1 << (in_index * 2 + 1);
         }
-        abs_f >>= 1;
+
+        //fを割る
+        f = f / 2;
+
+        //当該のIndexのBitを変更する
+        result[index] |= or_byte;
     }
+
+    //結果をBitVecに変換して出力
+    let result = BitVec::from_vec(result);
+    println!("Convert BitMask F Z:{} F:{} Result : {}", z, f, result);
     (result, z)
 }
 

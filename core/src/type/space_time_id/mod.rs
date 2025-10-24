@@ -27,7 +27,7 @@ where
 }
 
 /// Z=60 の IntervalSet に変換
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Serialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct SpaceTimeId {
     pub z: u8,
     pub f: (i64, i64),
@@ -41,8 +41,17 @@ impl fmt::Display for SpaceTimeId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{}/{}:{}/{}:{}/{}:{}_1/{}:{}",
-            self.z, self.f.0, self.f.1, self.x.0, self.x.1, self.y.0, self.y.1, self.t.0, self.t.1
+            "{}/{}:{}/{}:{}/{}:{}_{}/{}:{}",
+            self.z,
+            self.f.0,
+            self.f.1,
+            self.x.0,
+            self.x.1,
+            self.y.0,
+            self.y.1,
+            self.i,
+            self.t.0,
+            self.t.1
         )
     }
 }
