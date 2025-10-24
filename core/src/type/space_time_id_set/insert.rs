@@ -9,6 +9,7 @@ use crate::r#type::{
 };
 use itertools::iproduct;
 use std::collections::{BTreeMap, HashSet};
+use std::ops::Bound::{Excluded, Included};
 
 #[derive(Clone, Copy)]
 enum RelationTarget {
@@ -172,6 +173,7 @@ impl SpaceTimeIdSet {
                                         i: reverse.i,
                                         t: splited_t,
                                     });
+                                    return;
                                 }
                             }
                             _ => need_delete = Some(index),
@@ -192,6 +194,7 @@ impl SpaceTimeIdSet {
                             &mut need_add,
                             self,
                         );
+                        return;
                     };
 
                     //Xのみが独立のパターンを刈り取る
@@ -206,6 +209,7 @@ impl SpaceTimeIdSet {
                             &mut need_add,
                             self,
                         );
+                        return;
                     };
 
                     //Yのみが独立のパターンを刈り取る
@@ -220,6 +224,7 @@ impl SpaceTimeIdSet {
                             &mut need_add,
                             self,
                         );
+                        return;
                     };
                 }
                 None => {}
@@ -237,6 +242,8 @@ impl SpaceTimeIdSet {
                 self.uncheck_insert(add);
             }
         }
+
+        self.uncheck_insert(id);
     }
 
     fn handle_relation(
@@ -470,7 +477,7 @@ impl SpaceTimeIdSet {
         let start: BitVec = target.clone();
         let end: BitVec = target.generate_bottom_prefix_end();
 
-        for f_bottom in btree.range(start..end) {
+        for f_bottom in btree.range((Included(&start), Excluded(&end))) {
             result.extend(f_bottom.1.iter().cloned());
         }
 

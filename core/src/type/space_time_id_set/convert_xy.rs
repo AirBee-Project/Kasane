@@ -39,31 +39,33 @@ pub fn convert_xy(z: u8, dim: (u64, u64)) -> Vec<(u8, u64)> {
 
     result
 }
+
+///xyの次元の情報をBitVecに変換する
 pub fn convert_bitmask_xy(z: u8, xy: u64) -> (BitVec, u8) {
-    let length = (((z + 1) * 2 / 8) + 1).max(1) as usize;
+    let length = ((z * 2 / 8) + 1).max(1) as usize;
     let mut result = vec![0u8; length];
 
-    let mut temp_xy = xy;
+    let bit_count = (z + 1) as u32;
+    let mask = if bit_count >= 64 {
+        u64::MAX
+    } else {
+        (1u64 << bit_count) - 1
+    };
+    let uxy = xy & mask;
 
-    // 階層 z から 1 まで処理（階層0は後で）
-    for now_z in (1..=z).rev() {
+    for now_z in (0..=z).rev() {
         let index = ((now_z) * 2 / 8) as usize;
         let in_index = now_z % 4;
 
         // 有効ビット
         result[index] |= 1 << (7 - in_index * 2);
 
-        // 分岐ビット
-        if temp_xy & 1 != 0 {
+        // MSB側から取得するように変更
+        let bit_position = z - now_z; // now_z が大きいときに上位ビットを取る
+        if (uxy >> bit_position) & 1 != 0 {
             result[index] |= 1 << (6 - in_index * 2);
         }
-
-        temp_xy >>= 1;
     }
-
-    // 階層0: 無条件で valid=1, value=0
-    result[0] |= 1 << 7; // valid bit
-                         // value bit は 0 なので何もしない
 
     let result = BitVec::from_vec(result);
     println!("-----");
@@ -71,45 +73,42 @@ pub fn convert_bitmask_xy(z: u8, xy: u64) -> (BitVec, u8) {
     println!("Result : {}", result);
     println!(
         "Invert BitMask XY Z:{} XY:{}",
-        invert_bitmask_xy(&result).0,
-        invert_bitmask_xy(&result).1
+        invert_bitmask_xy(&result).1,
+        invert_bitmask_xy(&result).0
     );
-
     (result, z)
 }
-
-pub fn invert_bitmask_xy(bitmask: &BitVec) -> (u8, u64) {
+pub fn invert_bitmask_xy(bitmask: &BitVec) -> (u64, u8) {
     let bytes = &bitmask.0;
     let total_bits = bytes.len() * 8;
-    let total_layers = total_bits / 2;
+    let total_layers = (total_bits + 1) / 2;
 
-    let mut xy: u64 = 0;
-    let mut z: i64 = -1;
+    let mut uxy: u64 = 0;
+    let mut max_z: i32 = -1; // 見つかった最大のz
 
-    // 上位階層 → 下位階層 (階層1まで、階層0は除外)
-    for now_z in (1..total_layers).rev() {
+    // now_z=0 から順に処理
+    for now_z in 0..total_layers {
         let index = (now_z * 2) / 8;
         let in_index = now_z % 4;
 
-        let valid_bit_pos = 7 - in_index * 2;
-        let branch_bit_pos = 6 - in_index * 2;
-
         let byte = bytes[index];
-        let valid = (byte >> valid_bit_pos) & 1;
-        let branch = (byte >> branch_bit_pos) & 1;
+        let valid = (byte >> (7 - in_index * 2)) & 1;
+        let branch = (byte >> (6 - in_index * 2)) & 1;
 
         if valid == 1 {
-            z = z.max(now_z as i64);
-            xy <<= 1;
-            xy |= branch as u64;
+            max_z = now_z as i32;
+            // now_z の位置に branch を配置
+            uxy |= (branch as u64) << now_z;
         }
     }
 
-    // 階層0のチェック（zの更新のみ）
-    let valid_layer0 = (bytes[0] >> 7) & 1;
-    if valid_layer0 == 1 {
-        z = z.max(0);
+    // uxy を反転（ビットの並びを逆にする）
+    let final_z = max_z as u8;
+    let mut reversed_uxy = 0u64;
+    for i in 0..=final_z {
+        let bit = (uxy >> i) & 1;
+        reversed_uxy |= bit << (final_z - i);
     }
 
-    (z as u8, xy)
+    (reversed_uxy, final_z)
 }

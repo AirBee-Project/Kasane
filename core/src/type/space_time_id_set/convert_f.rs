@@ -52,18 +52,9 @@ pub fn convert_f(z: u8, dim: (i64, i64)) -> Vec<(u8, i64)> {
     result
 }
 
-pub fn convert_bitmask_f(z: u8, mut f: i64) -> (BitVec, u8) {
-    let length = (((z + 1) * 2 / 8) + 1).max(1) as usize;
+pub fn convert_bitmask_f(z: u8, f: i64) -> (BitVec, u8) {
+    let length = ((z * 2 / 8) + 1) as usize;
     let mut result = vec![0u8; length];
-
-    // z+1 ビットだけを使用（上位ビットをマスク）
-    let bit_count = (z + 1) as u32;
-    let mask = if bit_count >= 64 {
-        u64::MAX
-    } else {
-        (1u64 << bit_count) - 1
-    };
-    let mut uf = (f as u64) & mask;
 
     for now_z in (0..=z).rev() {
         let index = ((now_z) * 2 / 8) as usize;
@@ -73,11 +64,9 @@ pub fn convert_bitmask_f(z: u8, mut f: i64) -> (BitVec, u8) {
         result[index] |= 1 << (7 - in_index * 2);
 
         // 分岐ビット
-        if uf & 1 != 0 {
+        if f % 2 != 0 {
             result[index] |= 1 << (6 - in_index * 2);
         }
-
-        uf >>= 1;
     }
 
     let result = BitVec::from_vec(result);
@@ -91,49 +80,37 @@ pub fn convert_bitmask_f(z: u8, mut f: i64) -> (BitVec, u8) {
     );
     (result, z)
 }
+
 pub fn invert_bitmask_f(bitmask: &BitVec) -> (i64, u8) {
     let bytes = &bitmask.0;
     let total_bits = bytes.len() * 8;
-    let total_layers = total_bits / 2;
+    let total_layers = (total_bits + 1) / 2;
 
-    let mut uf: u64 = 0;
-    let mut z: i64 = -1;
+    let mut f: i64 = 0;
+    let mut max_z: i32 = -1; // 見つかった最大のz
 
-    // 上位階層 (z) → 下位階層 (0) の順で復元
-    for now_z in (0..total_layers).rev() {
+    for now_z in 0..total_layers {
         let index = (now_z * 2) / 8;
         let in_index = now_z % 4;
 
-        let valid_bit_pos = 7 - in_index * 2;
-        let branch_bit_pos = 6 - in_index * 2;
-
         let byte = bytes[index];
-        let valid = (byte >> valid_bit_pos) & 1;
-        let branch = (byte >> branch_bit_pos) & 1;
+        let valid = (byte >> (7 - in_index * 2)) & 1;
+        let branch = (byte >> (6 - in_index * 2)) & 1;
 
         if valid == 1 {
-            z = z.max(now_z as i64);
-            uf <<= 1; // valid なビットの時だけシフト
-            uf |= branch as u64;
+            max_z = now_z as i32;
+            // now_z の位置に branch を配置
+            f |= (branch as i64) << now_z;
         }
     }
 
-    // 符号拡張: z+1 ビットの符号付き整数として扱う
-    let bit_count = (z + 1) as u32;
-    let sign_bit_pos = z as u32;
-    let is_negative = (uf >> sign_bit_pos) & 1 == 1;
-
-    let mut result = if is_negative && bit_count < 64 {
-        // 上位ビットを1で埋める（符号拡張）
-        let sign_extension = !((1u64 << bit_count) - 1);
-        (uf | sign_extension) as i64
-    } else {
-        uf as i64
-    };
-
-    if result >= 0 {
-        result = result * 2
+    // f を反転（ビットの並びを逆にする）
+    let final_z = max_z as u8;
+    let mut reversed_f = 0i64;
+    for i in 0..=final_z {
+        let bit = (f >> i) & 1;
+        reversed_f |= bit << (final_z - i);
     }
 
-    (result, z as u8)
+    (reversed_f, final_z)
 }
