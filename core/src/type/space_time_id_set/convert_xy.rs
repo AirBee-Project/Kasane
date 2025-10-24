@@ -39,76 +39,77 @@ pub fn convert_xy(z: u8, dim: (u64, u64)) -> Vec<(u8, u64)> {
 
     result
 }
-pub fn convert_bitmask_xy(z: u8, mut xy: u64) -> (BitVec, u8) {
-    if z == 0 {
-        // 階層がない場合でも最初の層は無条件で10
+pub fn convert_bitmask_xy(z: u8, xy: u64) -> (BitVec, u8) {
+    let length = (((z + 1) * 2 / 8) + 1).max(1) as usize;
+    let mut result = vec![0u8; length];
 
-        return (BitVec::from_vec(vec![0b10_000000]), 0);
+    let mut temp_xy = xy;
+
+    // 階層 z から 1 まで処理（階層0は後で）
+    for now_z in (1..=z).rev() {
+        let index = ((now_z) * 2 / 8) as usize;
+        let in_index = now_z % 4;
+
+        // 有効ビット
+        result[index] |= 1 << (7 - in_index * 2);
+
+        // 分岐ビット
+        if temp_xy & 1 != 0 {
+            result[index] |= 1 << (6 - in_index * 2);
+        }
+
+        temp_xy >>= 1;
     }
 
-    // 必要バイト数: 1層2ビット × z, 切り上げ
+    // 階層0: 無条件で valid=1, value=0
+    result[0] |= 1 << 7; // valid bit
+                         // value bit は 0 なので何もしない
 
-    let mut result = BitVec::from_vec(vec![0; ((z as usize) * 2 + 7) / 8]);
-
-    // 最初の層は無条件で10
-    result[0] |= 1 << 7; // flag_bit = 1
-                         // value_bit = 0 はすでに0なので不要
-
-    // 残りの階層（i=1からスタート）
-    for i in 1..z {
-        let flag_bit = 1;
-        let value_bit = (xy % 2) as u8;
-        xy /= 2;
-
-        let bit_pos = i * 2;
-        let byte_index = (bit_pos / 8) as usize;
-        let bit_index = 7 - (bit_pos % 8) as usize;
-
-        result[byte_index] |= flag_bit << bit_index;
-        result[byte_index] |= value_bit << (bit_index - 1);
-    }
-
-    println!("Convert BitMask XY Z:{} XY:{} Result : {}", z, xy, result);
+    let result = BitVec::from_vec(result);
+    println!("-----");
+    println!("Convert BitMask XY Z:{} XY:{}", z, xy);
+    println!("Result : {}", result);
+    println!(
+        "Invert BitMask XY Z:{} XY:{}",
+        invert_bitmask_xy(&result).0,
+        invert_bitmask_xy(&result).1
+    );
 
     (result, z)
 }
 
 pub fn invert_bitmask_xy(bitmask: &BitVec) -> (u8, u64) {
-    if bitmask.is_empty() {
-        return (0, 0);
-    }
+    let bytes = &bitmask.0;
+    let total_bits = bytes.len() * 8;
+    let total_layers = total_bits / 2;
 
-    let mut z = 1; // 最初の層は無条件で10
-    let mut xy = 0u64;
+    let mut xy: u64 = 0;
+    let mut z: i64 = -1;
 
-    let total_bits = bitmask.len() * 8;
+    // 上位階層 → 下位階層 (階層1まで、階層0は除外)
+    for now_z in (1..total_layers).rev() {
+        let index = (now_z * 2) / 8;
+        let in_index = now_z % 4;
 
-    let mut bit_pos = 2; // 0,1 は最初の層
+        let valid_bit_pos = 7 - in_index * 2;
+        let branch_bit_pos = 6 - in_index * 2;
 
-    while bit_pos + 1 < total_bits && z < 64 {
-        let byte_index = bit_pos / 8;
-        let bit_index = 7 - (bit_pos % 8);
+        let byte = bytes[index];
+        let valid = (byte >> valid_bit_pos) & 1;
+        let branch = (byte >> branch_bit_pos) & 1;
 
-        let flag_bit = (bitmask[byte_index] >> bit_index) & 1;
-        let value_bit = (bitmask[byte_index] >> (bit_index - 1)) & 1;
-
-        if flag_bit == 0 {
-            break; // 階層無効なら終了
+        if valid == 1 {
+            z = z.max(now_z as i64);
+            xy <<= 1;
+            xy |= branch as u64;
         }
-
-        // xy に右詰めで格納
-        xy |= (value_bit as u64) << (z - 1);
-
-        z += 1;
-        bit_pos += 2; // 1層2ビットなので次の層へ
     }
 
-    (z, xy)
-}
+    // 階層0のチェック（zの更新のみ）
+    let valid_layer0 = (bytes[0] >> 7) & 1;
+    if valid_layer0 == 1 {
+        z = z.max(0);
+    }
 
-pub fn convert_bitmask_xy_multiple(inputs: &Vec<(u8, u64)>) -> Vec<(BitVec, u8)> {
-    inputs
-        .iter()
-        .map(|(z, x)| convert_bitmask_xy(*z, *x))
-        .collect()
+    (z as u8, xy)
 }

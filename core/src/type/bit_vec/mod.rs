@@ -5,7 +5,7 @@ use std::{
 };
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct BitVec(Vec<u8>);
+pub struct BitVec(pub(crate) Vec<u8>);
 
 impl fmt::Display for BitVec {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
