@@ -52,7 +52,55 @@ impl BitVec {
 
     /// 下位を検索するときに使用する範囲の終わりを示す
     pub fn generate_bottom_prefix_end(&self) -> BitVec {
-        todo!()
+        let mut bytes = self.0.clone();
+        let total_bits = bytes.len() * 8;
+        let total_layers = (total_bits + 1) / 2;
+
+        // まず、どの層が有効かを確認
+        let mut valid_layers = Vec::new();
+        for now_z in 0..total_layers {
+            let index = (now_z * 2) / 8;
+            let in_index = now_z % 4;
+            if index >= bytes.len() {
+                break;
+            }
+            let byte = bytes[index];
+            let valid = (byte >> (7 - in_index * 2)) & 1;
+            if valid == 1 {
+                valid_layers.push(now_z);
+            }
+        }
+
+        if valid_layers.is_empty() {
+            return BitVec(bytes); // 有効ビットがないならそのまま
+        }
+
+        // 下位層から繰り上げを処理
+        let mut carry = true;
+        for &now_z in valid_layers.iter().rev() {
+            let index = (now_z * 2) / 8;
+            let in_index = now_z % 4;
+
+            let byte = bytes[index];
+            let branch_bit_pos = 6 - in_index * 2;
+            let branch = (byte >> branch_bit_pos) & 1;
+
+            let new_branch = if carry { branch ^ 1 } else { branch }; // 加算（XOR で反転）
+            carry = carry && branch == 1; // branch=1なら繰り上がる
+
+            // branch部分を更新
+            if new_branch == 1 {
+                bytes[index] |= 1 << branch_bit_pos;
+            } else {
+                bytes[index] &= !(1 << branch_bit_pos);
+            }
+
+            if !carry {
+                break;
+            }
+        }
+
+        BitVec(bytes)
     }
 
     /// 2ビット単位で prefix を生成するイテレータ
@@ -99,7 +147,35 @@ impl BitVec {
 
     /// self の先頭が prefix と一致するか判定
     pub fn starts_with(&self, prefix: &BitVec) -> bool {
-        todo!()
+        let bytes_self = &self.0;
+        let bytes_prefix = &prefix.0;
+
+        let total_bits_prefix = bytes_prefix.len() * 8;
+        let total_layers_prefix = (total_bits_prefix + 1) / 2;
+
+        for now_z in 0..total_layers_prefix {
+            let index = (now_z * 2) / 8;
+            let in_index = now_z % 4;
+
+            if index >= bytes_prefix.len() || index >= bytes_self.len() {
+                return false;
+            }
+
+            let byte_prefix = bytes_prefix[index];
+            let valid_prefix = (byte_prefix >> (7 - in_index * 2)) & 1;
+            let branch_prefix = (byte_prefix >> (6 - in_index * 2)) & 1;
+
+            if valid_prefix == 1 {
+                let byte_self = bytes_self[index];
+                let branch_self = (byte_self >> (6 - in_index * 2)) & 1;
+
+                if branch_self != branch_prefix {
+                    return false;
+                }
+            }
+        }
+
+        true
     }
 }
 

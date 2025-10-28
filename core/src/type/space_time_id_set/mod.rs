@@ -4,6 +4,7 @@ use crate::r#type::{bit_vec::BitVec, interval_manager::IntervalManager};
 
 pub mod convert_f;
 pub mod convert_xy;
+pub mod get_all;
 pub mod insert;
 
 #[derive(Debug, Clone)]
