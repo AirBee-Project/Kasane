@@ -31,9 +31,9 @@ pub mod user_error;
 fn main() {
     let id = SpaceTimeId::new(
         5,
-        (Some(-10), Some(20)),
-        (Some(3), Some(20)),
-        (Some(12), Some(20)),
+        (None, None),
+        (Some(3), Some(3)),
+        (None, Some(20)),
         0,
         (None, None),
     )

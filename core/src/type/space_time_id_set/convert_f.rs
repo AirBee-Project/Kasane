@@ -56,17 +56,30 @@ pub fn convert_bitmask_f(z: u8, f: i64) -> (BitVec, u8) {
     let length = ((z * 2 / 8) + 1) as usize;
     let mut result = vec![0u8; length];
 
-    for now_z in (0..=z).rev() {
+    // 符号を保存するためにfの絶対値を使用
+    let is_negative = f < 0;
+    let mut f_abs = f.abs();
+
+    // 最初の階層(z=0)の処理 - 符号を格納
+    result[0] |= 1 << 7; // 有効ビット
+    if is_negative {
+        result[0] |= 1 << 6; // 分岐ビット（負の場合）
+    }
+
+    // それ以降の階層では各ビットを順に格納
+    for now_z in 1..=z {
         let index = ((now_z) * 2 / 8) as usize;
         let in_index = now_z % 4;
 
         // 有効ビット
         result[index] |= 1 << (7 - in_index * 2);
 
-        // 分岐ビット
-        if f % 2 != 0 {
+        // 分岐ビット - f_absの最下位ビットを使用
+        if f_abs % 2 != 0 {
             result[index] |= 1 << (6 - in_index * 2);
         }
+
+        f_abs >>= 1; // 次のビットへ
     }
 
     let result = BitVec::from_vec(result);
@@ -87,7 +100,8 @@ pub fn invert_bitmask_f(bitmask: &BitVec) -> (i64, u8) {
     let total_layers = (total_bits + 1) / 2;
 
     let mut f: i64 = 0;
-    let mut max_z: i32 = -1; // 見つかった最大のz
+    let mut max_z: i32 = -1;
+    let mut is_negative = false;
 
     for now_z in 0..total_layers {
         let index = (now_z * 2) / 8;
@@ -99,18 +113,22 @@ pub fn invert_bitmask_f(bitmask: &BitVec) -> (i64, u8) {
 
         if valid == 1 {
             max_z = now_z as i32;
-            // now_z の位置に branch を配置
-            f |= (branch as i64) << now_z;
+
+            if now_z == 0 {
+                // 最初の階層は符号情報
+                is_negative = branch == 1;
+            } else {
+                // それ以降は各ビットを復元
+                // 下位ビットから順に格納されているので、適切な位置に配置
+                f |= (branch as i64) << (now_z - 1);
+            }
         }
     }
 
-    // f を反転（ビットの並びを逆にする）
-    let final_z = max_z as u8;
-    let mut reversed_f = 0i64;
-    for i in 0..=final_z {
-        let bit = (f >> i) & 1;
-        reversed_f |= bit << (final_z - i);
+    // 符号を適用
+    if is_negative {
+        f = -f;
     }
 
-    (reversed_f, final_z)
+    (f, max_z as u8)
 }
