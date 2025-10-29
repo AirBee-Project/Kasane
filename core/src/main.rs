@@ -6,7 +6,10 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::{
+    sync::{mpsc, oneshot, Mutex},
+    task::id,
+};
 use uuid::Uuid;
 
 use crate::{
@@ -32,16 +35,29 @@ fn main() {
     let id = SpaceTimeId::new(
         5,
         (Some(3), Some(10)),
-        (Some(3), Some(7)),
-        (None, Some(20)),
+        (Some(0), Some(7)),
+        (None, Some(21)),
         0,
         (None, None),
     )
     .unwrap();
 
+    let id2 = SpaceTimeId::new(
+        5,
+        (Some(2), Some(5)),
+        (None, None),
+        (Some(3), Some(5)),
+        0,
+        (None, None),
+    )
+    .unwrap();
+
+    println!("{}", id2);
+
     let mut set = SpaceTimeIdSet::new();
 
     set.insert(id);
+    set.insert(id2);
 
     for stid in set.get_all() {
         println!("{},", stid);

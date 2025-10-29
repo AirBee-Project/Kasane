@@ -4,7 +4,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord)]
+#[derive(Debug, Clone, Eq, Hash, Ord, PartialEq)]
 pub struct BitVec(pub(crate) Vec<u8>);
 
 impl fmt::Display for BitVec {
@@ -176,6 +176,106 @@ impl BitVec {
         }
 
         true
+    }
+
+    fn get_valid_layers(&self) -> Vec<usize> {
+        let mut valid_layers = Vec::new();
+        let total_bits = self.0.len() * 8;
+        let total_layers = (total_bits + 1) / 2;
+
+        for now_z in 0..total_layers {
+            let index = (now_z * 2) / 8;
+            let in_index = now_z % 4;
+            if index >= self.0.len() {
+                break;
+            }
+            let byte = self.0[index];
+            let valid = (byte >> (7 - in_index * 2)) & 1;
+            if valid == 1 {
+                valid_layers.push(now_z);
+            }
+        }
+
+        valid_layers
+    }
+
+    ///一番下の階層の分岐Bitを判定させる
+    pub fn reverse_bottom_bit(&mut self) {
+        if self.0.is_empty() {
+            return;
+        }
+
+        let total_bits = self.0.len() * 8;
+        let total_layers = (total_bits + 1) / 2;
+
+        // 最下位の有効な層を見つける
+        let mut bottom_layer = None;
+        for now_z in (0..total_layers).rev() {
+            let index = (now_z * 2) / 8;
+            let in_index = now_z % 4;
+            if index >= self.0.len() {
+                continue;
+            }
+            let byte = self.0[index];
+            let valid = (byte >> (7 - in_index * 2)) & 1;
+            if valid == 1 {
+                bottom_layer = Some(now_z);
+                break;
+            }
+        }
+
+        if let Some(now_z) = bottom_layer {
+            let index = (now_z * 2) / 8;
+            let in_index = now_z % 4;
+            let branch_bit_pos = 6 - in_index * 2;
+
+            // 分岐ビットを反転
+            self.0[index] ^= 1 << branch_bit_pos;
+        }
+    }
+
+    ///一番下の階層の2Bitを削除して00にする
+    /// u8ごと不要になる場合はVecから最後のu8を削除する
+    pub fn remove_bottom_layer(&mut self) {
+        if self.0.is_empty() {
+            return;
+        }
+
+        let total_bits = self.0.len() * 8;
+        let total_layers = (total_bits + 1) / 2;
+
+        // 最下位の有効な層を見つける
+        let mut bottom_layer = None;
+        for now_z in (0..total_layers).rev() {
+            let index = (now_z * 2) / 8;
+            let in_index = now_z % 4;
+            if index >= self.0.len() {
+                continue;
+            }
+            let byte = self.0[index];
+            let valid = (byte >> (7 - in_index * 2)) & 1;
+            if valid == 1 {
+                bottom_layer = Some(now_z);
+                break;
+            }
+        }
+
+        if let Some(now_z) = bottom_layer {
+            let index = (now_z * 2) / 8;
+            let in_index = now_z % 4;
+
+            // valid bitとbranch bitの両方を0にする
+            let valid_bit_pos = 7 - in_index * 2;
+            let branch_bit_pos = 6 - in_index * 2;
+
+            self.0[index] &= !(1 << valid_bit_pos);
+            self.0[index] &= !(1 << branch_bit_pos);
+
+            // この層が最後のバイトにあり、かつバイト全体が0になった場合は削除
+            if index == self.0.len() - 1 && self.0[index] == 0 {
+                self.0.pop();
+            }
+        }
     }
 }
 
