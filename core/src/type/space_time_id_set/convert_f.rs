@@ -49,6 +49,8 @@ fn convert_f_logic(z: u8, dim: (i64, i64)) -> Vec<(u8, i64)> {
             } else {
                 //まとめられない
                 result.push((now_z, target.0));
+
+                result.push((now_z, target.1));
             }
 
             break;
