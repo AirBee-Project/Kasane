@@ -32,7 +32,7 @@ fn main() {
     let id = SpaceTimeId::new(
         5,
         (Some(3), Some(10)),
-        (Some(3), Some(3)),
+        (Some(3), Some(7)),
         (None, Some(20)),
         0,
         (None, None),
@@ -41,9 +41,9 @@ fn main() {
 
     let mut set = SpaceTimeIdSet::new();
 
-    println!("{:?}", id);
-
     set.insert(id);
 
-    println!("{:?}", set);
+    for stid in set.get_all() {
+        println!("{},", stid);
+    }
 }
