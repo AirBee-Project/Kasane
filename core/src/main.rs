@@ -1,65 +1,84 @@
-use actix_web::{middleware::Logger, post, web, App, HttpResponse, HttpServer, Responder};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use axum::{
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    response::IntoResponse,
+    routing::get,
+    Router,
+};
+use clap::{Parser, Subcommand};
 use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, Instant},
+    fs,
+    net::SocketAddr,
+    path::Path,
+    process::{exit, Command},
 };
-use tokio::{
-    sync::{mpsc, oneshot, Mutex},
-    task::id,
-};
-use uuid::Uuid;
+pub mod operation;
+use tokio::net::TcpListener;
+use toml_edit::{value, Document, DocumentMut};
 
-use crate::{
-    command::process,
-    io::full::Storage,
-    json::{
-        input::{parser, Packet},
-        output::Output,
-    },
-    r#type::{space_time_id::SpaceTimeId, space_time_id_set::SpaceTimeIdSet},
-    user_error::UserError,
-};
+use crate::operation::setting::configuration;
 
-#[macro_use]
-mod macros;
-pub mod command;
-pub mod io;
-pub mod json;
-pub mod r#type;
-pub mod user_error;
+const PID_FILE: &str = "kasane.pid";
 
-fn main() {
-    let id = SpaceTimeId::new(
-        5,
-        (Some(3), Some(10)),
-        (Some(0), Some(7)),
-        (None, Some(21)),
-        0,
-        (None, None),
-    )
-    .unwrap();
+#[derive(Parser)]
+#[command(name = "kasane")]
+#[command(about = "WebSocket server control")]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
 
-    let id2 = SpaceTimeId::new(
-        5,
-        (Some(2), Some(5)),
-        (None, None),
-        (Some(3), Some(5)),
-        0,
-        (None, None),
-    )
-    .unwrap();
+#[derive(Subcommand)]
+enum Commands {
+    ///kasaneを起動する
+    Up,
 
-    println!("{}", id2);
+    ///kasaneを終了する
+    Down,
 
-    let mut set = SpaceTimeIdSet::new();
+    ///kasane.tomlをチェックする
+    Check,
 
-    set.insert(id);
-    set.insert(id2);
+    ///kasane.tomlを適応する
+    Apply,
 
-    for stid in set.get_all() {
-        println!("{},", stid);
+    ///kasane.tomlをリセットする
+    Init,
+
+    ///kasaneの全てのデータをエクスポートする
+    Export,
+
+    ///kasaneのバックアップデータをインポートする
+    Import,
+
+    ///kasaneの現在のステータスを表示する
+    Status,
+}
+
+#[tokio::main]
+async fn main() {
+    let cli = Cli::parse();
+    let conf = configuration();
+
+    match cli.command {
+        Commands::Up => {
+            operation::up::up();
+        }
+        Commands::Down => {
+            println!("end");
+        }
+        Commands::Check => todo!(),
+        Commands::Apply => todo!(),
+        Commands::Init => todo!(),
+        Commands::Export => todo!(),
+        Commands::Import => todo!(),
+        Commands::Status => todo!(),
+    }
+
+    //本体プロセスを軌道
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 && args[1] == "run" {
+        // WebSocketサーバー起動
+        run_websocket_server().await;
+        return;
     }
 }

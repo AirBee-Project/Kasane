@@ -1,0 +1,13 @@
+title = "Default Title"
+
+[database]
+server = "127.0.0.1"
+connection_pool = 10
+port = 3000
+
+[cpu]
+core = 4
+
+[network]
+connection_pool = 10
+port = 3000

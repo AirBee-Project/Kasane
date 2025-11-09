@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{io::full::tools::value_entry::ValueEntry, r#type::point::Point};
+use crate::io::full::tools::value_entry::ValueEntry;
 
 // ---------------------- Space管理 ----------------------
 
@@ -106,13 +106,13 @@ pub struct SelectValue {
 pub enum Range {
     Function(Function),
     Prefix(Prefix),
-    Ids(Vec<Id>),
+    Ids(Vec<SpaceTimeIdInput>),
     //FilterValue(FilterValue),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct Id {
+pub struct SpaceTimeIdInput {
     pub z: u8,
     pub f: (Option<i64>, Option<i64>),
     pub x: (Option<u64>, Option<u64>),
@@ -413,7 +413,7 @@ pub enum Command {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Packet {
-    pub session: String,
+    pub session_id: String,
     pub command: Vec<Command>,
 }
 
