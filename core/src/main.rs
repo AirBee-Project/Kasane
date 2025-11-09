@@ -15,7 +15,15 @@ pub mod operation;
 use tokio::net::TcpListener;
 use toml_edit::{value, Document, DocumentMut};
 
-use crate::operation::setting::configuration;
+use crate::operation::{
+    kasane::{self, kasane},
+    setting::configuration,
+};
+
+pub mod command;
+pub mod io;
+pub mod json;
+pub mod user_error;
 
 const PID_FILE: &str = "kasane.pid";
 
@@ -24,7 +32,7 @@ const PID_FILE: &str = "kasane.pid";
 #[command(about = "WebSocket server control")]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
@@ -52,6 +60,9 @@ enum Commands {
 
     ///kasaneの現在のステータスを表示する
     Status,
+
+    ///kasane-viewを開く
+    View,
 }
 
 #[tokio::main]
@@ -60,25 +71,35 @@ async fn main() {
     let conf = configuration();
 
     match cli.command {
-        Commands::Up => {
-            operation::up::up();
+        Some(Commands::Up) => operation::up::up(),
+        Some(Commands::Down) => {
+            #[cfg(windows)]
+            {
+                let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(());
+                operation::cli::down::down(&shutdown_tx);
+            }
+            #[cfg(unix)]
+            operation::cli::down::down();
         }
-        Commands::Down => {
-            println!("end");
-        }
-        Commands::Check => todo!(),
-        Commands::Apply => todo!(),
-        Commands::Init => todo!(),
-        Commands::Export => todo!(),
-        Commands::Import => todo!(),
-        Commands::Status => todo!(),
-    }
+        Some(Commands::Check) => todo!(),
+        Some(Commands::Apply) => todo!(),
+        Some(Commands::Init) => todo!(),
+        Some(Commands::Export) => todo!(),
+        Some(Commands::Import) => todo!(),
+        Some(Commands::Status) => todo!(),
+        Some(Commands::View) => todo!(),
 
-    //本体プロセスを軌道
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() > 1 && args[1] == "run" {
-        // WebSocketサーバー起動
-        run_websocket_server().await;
-        return;
+        // サブコマンドが指定されなかった場合は kasane 関数を起動
+        None => {
+            #[cfg(windows)]
+            {
+                let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+                kasane::kasane(shutdown_rx, conf).await;
+            }
+            #[cfg(unix)]
+            {
+                kasane::kasane_unix().await;
+            }
+        }
     }
 }

@@ -1,6 +1,7 @@
-use crate::UserError;
 use sled::{Db, Tree};
 use std::{env, path::PathBuf};
+
+use crate::user_error::UserError;
 pub mod create_key;
 pub mod create_space;
 pub mod info_key;

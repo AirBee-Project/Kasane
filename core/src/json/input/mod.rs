@@ -121,29 +121,29 @@ pub struct SpaceTimeIdInput {
     pub t: (Option<u32>, Option<u32>),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Spot {
-    pub point1: Point,
-    pub zoom: u8,
-}
+// #[derive(Debug, Serialize, Deserialize, Clone)]
+// #[serde(rename_all = "camelCase")]
+// pub struct Spot {
+//     pub point1: Point,
+//     pub zoom: u8,
+// }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Line {
-    pub point1: Point,
-    pub point2: Point,
-    pub zoom: u8,
-}
+// #[derive(Debug, Serialize, Deserialize, Clone)]
+// #[serde(rename_all = "camelCase")]
+// pub struct Line {
+//     pub point1: Point,
+//     pub point2: Point,
+//     pub zoom: u8,
+// }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Triangle {
-    pub point1: Point,
-    pub point2: Point,
-    pub point3: Point,
-    pub zoom: u8,
-}
+// #[derive(Debug, Serialize, Deserialize, Clone)]
+// #[serde(rename_all = "camelCase")]
+// pub struct Triangle {
+//     pub point1: Point,
+//     pub point2: Point,
+//     pub point3: Point,
+//     pub zoom: u8,
+// }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -218,9 +218,9 @@ pub enum FilterText {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum Function {
-    Spot(Spot),
-    Line(Line),
-    Triangle(Triangle),
+    // Spot(Spot),
+    // Line(Line),
+    // Triangle(Triangle),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

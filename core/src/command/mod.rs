@@ -34,7 +34,11 @@ pub mod version;
 
 //関数のディスパッチ関数
 //関数の命令内容とストレージの参照権を関数に入力し、操作を行わせる
-pub async fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError> {
+pub async fn process(
+    cmd: Command,
+    s: Arc<Storage>,
+    session_id: &Uuid,
+) -> Result<Output, UserError> {
     match cmd {
         //データベース操作系
         Command::CreateSpace(v) => create_space(v, s),

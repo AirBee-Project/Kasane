@@ -19,3 +19,6 @@ axum = { version = "0.8.6", features = ["ws", "tokio", "http1", "http2"] }
 clap = { version = "4.5.51", features = ["derive"] }
 toml_edit = "0.23.7"
 toml = "0.9.8"
+windows-sys = "0.61.2"
+tower = "0.5.2"
+jsonwebtoken = "10.2.0"
