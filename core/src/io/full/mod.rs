@@ -9,8 +9,11 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
+    io::full::kv_type::{
+        key_table_key::KeyTableKey, key_table_value::KeyTableValue,
+        space_key_table_value::SpaceKeyTableValue, uuid::UuidKey,
+    },
     json::input::{KeyMode, KeyType},
-    r#type::uuid::UuidKey,
     user_error::UserError,
 };
 pub mod cleanup_expired_sessions;
@@ -32,12 +35,17 @@ pub mod verify_user;
 pub mod version;
 
 //Tableの定義
+
+//ユーザー関連
 pub const USER_TABLE: TableDefinition<&str, UuidKey> = TableDefinition::new("user_table");
 pub const USER_PASSWORD: TableDefinition<UuidKey, &str> = TableDefinition::new("user_password");
+
+//本体機能
 pub const SPACE_TABLE: TableDefinition<&str, UuidKey> = TableDefinition::new("space_table");
 pub const SPACE_KEY_TABLE: TableDefinition<UuidKey, SpaceKeyTableValue> =
     TableDefinition::new("space_key_table");
-pub const KEY_TABLE: TableDefinition<UuidKey, KeyTableValue> = TableDefinition::new("space_table");
+pub const KEY_TABLE: TableDefinition<KeyTableKey, KeyTableValue> =
+    TableDefinition::new("space_table");
 
 pub struct Storage {
     pub db: Database,

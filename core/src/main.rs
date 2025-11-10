@@ -24,7 +24,6 @@ pub mod command;
 pub mod io;
 pub mod json;
 pub mod macros;
-pub mod r#type;
 pub mod user_error;
 
 const PID_FILE: &str = "kasane.pid";

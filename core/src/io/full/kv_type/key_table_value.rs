@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct KeyTableValue {
-    key_name: String,
     key_mode: KeyMode,
     key_type: KeyType,
+    key_name: String,
 }
 
 impl Value for KeyTableValue {

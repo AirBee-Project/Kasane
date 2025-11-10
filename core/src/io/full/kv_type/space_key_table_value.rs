@@ -1,12 +1,11 @@
-use std::collections::HashSet;
-
+use bincode::{config, decode_from_slice, encode_to_vec, Decode, Encode};
 use redb::{TypeName, Value};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+use std::collections::HashSet;
 
-use crate::r#type::uuid::UuidKey;
+use crate::io::full::kv_type::uuid::UuidKey;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct SpaceKeyTableValue(pub HashSet<UuidKey>);
 
 impl Value for SpaceKeyTableValue {
@@ -21,23 +20,19 @@ impl Value for SpaceKeyTableValue {
     where
         Self: 'a,
     {
-        let mut set = HashSet::new();
-        for chunk in data.chunks_exact(16) {
-            let uuid = Uuid::from_slice(chunk).expect("invalid uuid bytes");
-            set.insert(UuidKey(uuid));
-        }
-        SpaceKeyTableValue(set)
+        // Use bincode to deserialize
+        bincode::decode_from_slice(data, config::standard())
+            .expect("Failed to decode SpaceKeyTableValue")
+            .0
     }
 
     fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
     where
         Self: 'b,
     {
-        let mut v = Vec::with_capacity(value.0.len() * 16);
-        for UuidKey(uuid) in &value.0 {
-            v.extend_from_slice(uuid.as_bytes());
-        }
-        v
+        // Use bincode to serialize
+        bincode::encode_to_vec(&value, config::standard())
+            .expect("Failed to encode SpaceKeyTableValue")
     }
 
     fn type_name() -> TypeName {

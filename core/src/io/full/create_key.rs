@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use redb::{ReadableMultimapTable, ReadableTable};
 
 use crate::{
-    io::full::{SpaceKeyTableValue, Storage, SPACE_KEY_TABLE, SPACE_TABLE},
+    io::full::{SpaceKeyTableValue, Storage, KEY_TABLE, SPACE_KEY_TABLE, SPACE_TABLE},
     json::{
         input::{KeyMode, KeyType},
         output::Output,
@@ -26,6 +26,7 @@ impl Storage {
         {
             let mut table_space = write_txn.open_table(SPACE_TABLE)?;
             let mut table_space_key = write_txn.open_table(SPACE_KEY_TABLE)?;
+            let mut table_key = write_txn.open_table(KEY_TABLE)?;
 
             //既存のSpaceのチェック
             if table_space.get_mut(space_name)?.is_some() {
