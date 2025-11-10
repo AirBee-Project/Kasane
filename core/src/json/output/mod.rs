@@ -21,7 +21,7 @@ pub struct Version {
 #[serde(rename_all = "camelCase")]
 pub struct InfoSpace {
     pub space_name: String,
-    pub key_names: Vec<InfoKey>,
+    pub keys: Vec<InfoKey>,
 }
 
 #[derive(Serialize)]

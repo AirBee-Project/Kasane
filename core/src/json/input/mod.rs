@@ -29,18 +29,20 @@ pub struct CreateKey {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Encode, Decode)]
 #[serde(rename_all = "camelCase")]
+#[repr(u8)]
 pub enum KeyMode {
-    UniqueKey,
-    MultiKey,
+    UniqueKey = 0,
+    MultiKey = 255,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Encode, Decode)]
 #[serde(rename_all = "camelCase")]
+#[repr(u8)]
 pub enum KeyType {
-    Boolean,
-    Text,
+    Text = 0,
     Float,
     Int,
+    Boolean = 255,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

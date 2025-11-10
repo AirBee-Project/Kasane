@@ -1,5 +1,7 @@
+use redb::ReadableDatabase;
+
 use crate::{
-    io::full::Storage,
+    io::full::{kv_type::key_table_key::KeyTableKey, Storage, KEY_TABLE, SPACE_TABLE},
     json::{
         input::{KeyMode, KeyType},
         output::{InfoKey, InfoSpace, Output},
@@ -11,63 +13,52 @@ use crate::{
 impl Storage {
     /// space 内の全キー情報を取得
     pub fn info_space(&self, space_name: &str) -> Result<Output, UserError> {
-        let space_bytes = space_name.as_bytes();
+        let mut result: Vec<InfoKey> = vec![];
 
-        // space_id を取得
-        let space_id = self
-            .space
-            .get(space_bytes)?
-            .ok_or(UserError::SpaceNotFound {
-                space_name: space_name.to_string(),
-                location: location!(),
-            })?;
+        let read_txn = self.db.begin_read()?;
 
-        let mut key_infos = Vec::new();
+        {
+            let table_space = read_txn.open_table(SPACE_TABLE)?;
+            let table_key = read_txn.open_table(KEY_TABLE)?;
 
-        // key データベースをイテレーションして、space_id で始まるキーを抽出
-        for item in self.key.iter() {
-            let (key_bytes, value_bytes) = item.map_err(|e| UserError::UnKnown {
-                message: e.to_string(),
-                location: location!(),
-            })?;
-
-            if key_bytes.starts_with(&space_id) {
-                // space_id の後ろが key_name
-                let key_name_bytes = &key_bytes[space_id.len()..];
-                let key_name =
-                    String::from_utf8(key_name_bytes.to_vec()).map_err(|e| UserError::UnKnown {
-                        message: e.to_string(),
-                        location: location!(),
-                    })?;
-
-                if value_bytes.len() < 8 {
-                    return Err(UserError::UnKnown {
-                        message: "Invalid key value length".to_string(),
+            let space_id = match table_space.get(space_name)? {
+                Some(v) => v.value(),
+                None => {
+                    return Err(UserError::SpaceNotFound {
+                        space_name: space_name.to_string(),
                         location: location!(),
                     });
                 }
+            };
 
-                // 値は [key_id(8バイト) + key_type + key_mode] 形式
-                let key_type_start = 8;
-                let key_type_end = value_bytes.len() - 1;
-                let key_type_bytes = &value_bytes[key_type_start..key_type_end];
-                let key_mode_bytes = &value_bytes[key_type_end..];
+            // 範囲スキャン用 start/end
+            let start_key = KeyTableKey {
+                space_id,
+                key_name: "".to_string(),     // 最小文字列
+                key_mode: KeyMode::default(), // ダミー
+                key_type: KeyType::default(), // ダミー
+            };
 
-                let key_type = KeyType::from_byte(key_type_bytes[0])?.as_str().to_string();
+            let end_key = KeyTableKey {
+                space_id,
+                key_name: "\u{FFFF}".to_string(), // Unicode最大文字で終端
+                key_mode: KeyMode::default(),
+                key_type: KeyType::default(),
+            };
 
-                let key_mode = KeyMode::from_byte(key_mode_bytes[0])?.as_str().to_string();
-
-                key_infos.push(InfoKey {
-                    key_name,
-                    key_type,
-                    key_mode,
+            for item in table_key.range(start_key..=end_key)? {
+                let (key, _value_bytes) = item?;
+                result.push(InfoKey {
+                    key_name: key.value().key_name,
+                    key_type: key.value().key_type.as_str().to_owned(),
+                    key_mode: key.value().key_type.as_str().to_owned(),
                 });
             }
         }
 
-        Ok(Output::InfoSpace(InfoSpace {
+        return Ok(Output::InfoSpace(InfoSpace {
             space_name: space_name.to_string(),
-            key_names: key_infos,
-        }))
+            keys: result,
+        }));
     }
 }

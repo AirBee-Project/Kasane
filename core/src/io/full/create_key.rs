@@ -42,22 +42,35 @@ impl Storage {
                 }
             };
 
+            // 範囲スキャン用 start/end
+            let start_key = KeyTableKey {
+                space_id,
+                key_name: key_name.to_string(), // 最小文字列
+                key_mode: KeyMode::default(),   // ダミー
+                key_type: KeyType::default(),   // ダミー
+            };
+
+            let end_key = KeyTableKey {
+                space_id,
+                key_name: key_name.to_string(), // Unicode最大文字で終端
+                key_mode: KeyMode::default(),
+                key_type: KeyType::default(),
+            };
+
             //Keyの存在の検証
-            if table_key
-                .get(KeyTableKey {
-                    space_id,
-                    key_name: key_name.to_string(),
-                    key_mode,
-                    key_type,
-                })?
-                .is_some()
-            {
+            let mut range_exists = false;
+            let mut iter = table_key.range(start_key..=end_key)?;
+            if iter.next().is_some() {
+                range_exists = true;
+            }
+
+            if range_exists {
                 return Err(UserError::KeyAlreadyExists {
                     space_name: space_name.to_string(),
                     key_name: key_name.to_string(),
                     location: location!(),
                 });
-            };
+            }
 
             let key_id = UuidKey::new();
 

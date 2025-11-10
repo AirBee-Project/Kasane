@@ -15,9 +15,12 @@ pub mod operation;
 use tokio::net::TcpListener;
 use toml_edit::{value, Document, DocumentMut};
 
-use crate::operation::{
-    kasane::{self, kasane},
-    setting::configuration,
+use crate::{
+    json::input::KeyMode,
+    operation::{
+        kasane::{self, kasane},
+        setting::configuration,
+    },
 };
 
 pub mod command;

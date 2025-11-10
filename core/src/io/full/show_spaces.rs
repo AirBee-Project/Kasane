@@ -1,5 +1,7 @@
+use redb::{ReadableDatabase, ReadableTable};
+
 use crate::{
-    io::full::Storage,
+    io::full::{Storage, SPACE_TABLE},
     json::output::{Output, ShowSpaces},
     location,
     user_error::UserError,
@@ -10,14 +12,14 @@ impl Storage {
     pub fn show_spaces(&self) -> Result<Output, UserError> {
         let mut spaces = Vec::new();
 
-        for item in self.space.iter() {
-            let (key_bytes, _value) = item.map_err(|e| UserError::UnKnown {
-                message: e.to_string(),
-                location: location!(),
-            })?;
+        let read_txn = self.db.begin_read()?;
 
-            if let Ok(space_name) = std::str::from_utf8(&key_bytes) {
-                spaces.push(space_name.to_string());
+        {
+            let table_space = read_txn.open_table(SPACE_TABLE)?;
+
+            for space in table_space.iter()? {
+                let (key, _) = space?;
+                spaces.push(key.value().to_string());
             }
         }
 
