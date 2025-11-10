@@ -1,3 +1,4 @@
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -26,14 +27,14 @@ pub struct CreateKey {
     pub key_mode: KeyMode,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Encode, Decode)]
 #[serde(rename_all = "camelCase")]
 pub enum KeyMode {
     UniqueKey,
     MultiKey,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Encode, Decode)]
 #[serde(rename_all = "camelCase")]
 pub enum KeyType {
     Boolean,

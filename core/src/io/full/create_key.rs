@@ -1,13 +1,17 @@
+use std::collections::HashSet;
+
+use redb::{ReadableMultimapTable, ReadableTable};
+
 use crate::{
-    io::full::Storage,
+    io::full::{SpaceKeyTableValue, Storage, SPACE_KEY_TABLE, SPACE_TABLE},
     json::{
         input::{KeyMode, KeyType},
         output::Output,
     },
     location,
+    r#type::uuid::UuidKey,
     user_error::UserError,
 };
-use sled::transaction::{abort, Transactional};
 
 impl Storage {
     pub fn create_key(
@@ -17,44 +21,34 @@ impl Storage {
         key_type: KeyType,
         key_mode: KeyMode,
     ) -> Result<Output, UserError> {
-        // space key を作成
-        let space_bytes = space_name.as_bytes().to_vec();
+        let write_txn = self.db.begin_write()?;
 
-        let result = (&self.space, &self.key).transaction(|(tx_space, tx_key)| {
-            let space_id = tx_space
-                .get(&space_bytes)?
-                .ok_or(UserError::SpaceNotFound {
-                    space_name: space_name.to_owned(),
+        {
+            let mut table_space = write_txn.open_table(SPACE_TABLE)?;
+            let mut table_space_key = write_txn.open_table(SPACE_KEY_TABLE)?;
+
+            //既存のSpaceのチェック
+            if table_space.get_mut(space_name)?.is_some() {
+                return Err(UserError::SpaceAlreadyExists {
+                    space_name: space_name.to_string(),
                     location: location!(),
-                })?;
-
-            let mut key_bytes = vec![];
-            key_bytes.extend_from_slice(&space_id);
-            key_bytes.extend_from_slice(key_name.as_bytes());
-
-            if tx_key.get(&key_bytes)?.is_some() {
-                abort(UserError::KeyAlreadyExists {
-                    space_name: space_name.to_owned(),
-                    key_name: key_name.to_owned(),
-                    location: location!(),
-                })?;
+                });
             }
 
-            let key_id: u64 = tx_key.generate_id()?;
+            let space_id = loop {
+                let id = UuidKey::new_v4();
+                // パスワードテーブルで既にこのIDが使われていないか確認
+                if table_space_key.get(id)?.is_none() {
+                    break id;
+                }
+            };
 
-            // 値を構築（key_id + key_type + key_mode）
-            let mut value_bytes = key_id.to_be_bytes().to_vec();
-            value_bytes.extend_from_slice(key_type.as_bytes());
-            value_bytes.extend_from_slice(key_mode.as_bytes());
+            let hash_set: SpaceKeyTableValue = SpaceKeyTableValue(HashSet::new());
 
-            tx_key.insert(key_bytes, value_bytes)?;
-
-            Ok(())
-        });
-
-        match result {
-            Ok(_) => Ok(Output::Success),
-            Err(e) => Err(e.into()),
+            table_space.insert(space_name, space_id);
+            table_space_key.insert(space_id, hash_set);
         }
+        write_txn.commit()?;
+        Ok(Output::Success)
     }
 }
