@@ -1,6 +1,11 @@
+use redb::ReadableDatabase;
+
 use crate::{
-    io::full::Storage,
-    json::output::{Output, Showkeys},
+    io::full::{kv_type::key_table_key::KeyTableKey, Storage, KEY_TABLE, SPACE_TABLE},
+    json::{
+        input::{KeyMode, KeyType},
+        output::{Output, Showkeys},
+    },
     location,
     user_error::UserError,
 };
@@ -8,35 +13,43 @@ use crate::{
 impl Storage {
     /// space 内の全キー一覧を取得
     pub fn show_keys(&self, space_name: &str) -> Result<Output, UserError> {
-        let space_bytes = space_name.as_bytes();
+        let mut result: Vec<String> = vec![];
 
-        // space_id を取得
-        let space_id = self
-            .space
-            .get(space_bytes)?
-            .ok_or(UserError::SpaceNotFound {
-                space_name: space_name.to_string(),
-                location: location!(),
-            })?;
+        let read_txn = self.db.begin_read()?;
+        {
+            let table_space = read_txn.open_table(SPACE_TABLE)?;
+            let table_key = read_txn.open_table(KEY_TABLE)?;
 
-        let mut key_names = Vec::new();
-
-        // key データベースをイテレーションして、space_id で始まるキーを抽出
-        for item in self.key.iter() {
-            let (key_bytes, _value) = item.map_err(|e| UserError::UnKnown {
-                message: e.to_string(),
-                location: location!(),
-            })?;
-
-            if key_bytes.starts_with(&space_id) {
-                // space_id の後ろが実際の key_name
-                let key_name_bytes = &key_bytes[space_id.len()..];
-                if let Ok(key_name) = std::str::from_utf8(key_name_bytes) {
-                    key_names.push(key_name.to_string());
+            let space_id = match table_space.get(space_name)? {
+                Some(v) => v.value(),
+                None => {
+                    return Err(UserError::SpaceNotFound {
+                        space_name: space_name.to_string(),
+                        location: location!(),
+                    });
                 }
+            };
+
+            // 範囲スキャン用 start/end
+            let start_key = KeyTableKey {
+                space_id,
+                key_name: "".to_string(),   // 最小文字列
+                key_mode: KeyMode::start(), // ダミー
+                key_type: KeyType::start(), // ダミー
+            };
+
+            let end_key = KeyTableKey {
+                space_id,
+                key_name: "\u{FFFF}".to_string(), // Unicode最大文字で終端
+                key_mode: KeyMode::end(),
+                key_type: KeyType::end(),
+            };
+
+            for item in table_key.range(start_key..=end_key)? {
+                let (key, _value_bytes) = item?;
+                result.push(key.value().key_name);
             }
         }
-
-        Ok(Output::Showkeys(Showkeys { key_names }))
+        return Ok(Output::Showkeys(Showkeys { key_names: result }));
     }
 }
