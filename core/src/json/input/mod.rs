@@ -413,7 +413,6 @@ pub enum Command {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Packet {
-    pub session_id: String,
     pub command: Vec<Command>,
 }
 

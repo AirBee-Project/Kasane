@@ -1,4 +1,4 @@
-use crate::user_error::UserError;
+use crate::{location, user_error::UserError};
 use std::str::Utf8Error;
 
 impl From<Utf8Error> for UserError {

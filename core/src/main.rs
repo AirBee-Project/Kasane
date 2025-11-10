@@ -23,6 +23,7 @@ use crate::operation::{
 pub mod command;
 pub mod io;
 pub mod json;
+pub mod macros;
 pub mod user_error;
 
 const PID_FILE: &str = "kasane.pid";
@@ -71,7 +72,7 @@ async fn main() {
     let conf = configuration();
 
     match cli.command {
-        Some(Commands::Up) => operation::up::up(),
+        Some(Commands::Up) => operation::cli::up::up(),
         Some(Commands::Down) => {
             #[cfg(windows)]
             {

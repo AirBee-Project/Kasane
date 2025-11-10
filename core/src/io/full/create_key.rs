@@ -4,9 +4,10 @@ use crate::{
         input::{KeyMode, KeyType},
         output::Output,
     },
+    location,
     user_error::UserError,
 };
-use sled::transaction::{Transactional, abort};
+use sled::transaction::{abort, Transactional};
 
 impl Storage {
     pub fn create_key(

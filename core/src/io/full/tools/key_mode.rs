@@ -1,4 +1,4 @@
-use crate::{json::input::KeyMode, user_error::UserError};
+use crate::{json::input::KeyMode, location, user_error::UserError};
 
 impl KeyMode {
     pub fn as_bytes(&self) -> &[u8] {

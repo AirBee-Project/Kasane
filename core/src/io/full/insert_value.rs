@@ -1,7 +1,6 @@
 use crate::{
-    io::full::{Storage, tools::value_entry::ValueEntry},
+    io::full::{tools::value_entry::ValueEntry, Storage},
     json::output::Output,
-    r#type::space_time_id::SpaceTimeId,
     user_error::UserError,
 };
 
@@ -10,7 +9,7 @@ impl Storage {
         &self,
         space_name: &str,
         key_name: &str,
-        ids: Vec<SpaceTimeId>,
+        // ids: Vec<SpaceTimeId>,
         value: ValueEntry,
     ) -> Result<Output, UserError> {
         todo!()

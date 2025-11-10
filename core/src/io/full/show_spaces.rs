@@ -1,9 +1,9 @@
 use crate::{
     io::full::Storage,
     json::output::{Output, ShowSpaces},
+    location,
     user_error::UserError,
 };
-use sled::IVec;
 
 impl Storage {
     /// 登録されているすべての space 名を取得

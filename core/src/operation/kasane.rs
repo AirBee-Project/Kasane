@@ -6,37 +6,34 @@ use axum::{
     routing::post,
     Json, Router,
 };
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
-use serde::{Deserialize, Serialize};
-use std::{
-    net::SocketAddr,
-    sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use jsonwebtoken::{decode, DecodingKey, Validation};
+use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::{mpsc, oneshot, watch};
-use uuid::Uuid;
 
 use crate::{
     command::process,
     io::full::Storage,
     json::{input::Packet, output::Output},
-    operation::setting::Configuration,
+    operation::{
+        login::{login, Claims},
+        setting::Configuration,
+    },
     user_error::UserError,
 };
 
 // ==========================
 // 設定
 // ==========================
-const MAX_KEEPALIVE_SESSIONS: usize = 30; // Keep-alive維持する最大セッション数
-const JWT_EXPIRATION_HOURS: u64 = 1; // JWT有効期限（Keep-alive用）
-const JWT_EXPIRATION_MINUTES: u64 = 5; // JWT有効期限（通常用）
-const JWT_SECRET: &[u8] = b"your-secret-key-change-this-in-production"; // 本番環境では環境変数から読み込むこと
-const WORKER_QUEUE_SIZE: usize = 1000;
+pub const MAX_KEEPALIVE_SESSIONS: usize = 30; // Keep-alive維持する最大セッション数
+pub const JWT_EXPIRATION_HOURS: u64 = 1; // JWT有効期限（Keep-alive用）
+pub const JWT_EXPIRATION_MINUTES: u64 = 5; // JWT有効期限（通常用）
+pub const JWT_SECRET: &[u8] = b"your-secret-key-change-this-in-production"; // 本番環境では環境変数から読み込むこと
+pub const WORKER_QUEUE_SIZE: usize = 1000;
 
 #[derive(Clone)]
-struct AppState {
-    storage: Arc<Storage>,
-    job_sender: JobSender,
+pub struct AppState {
+    pub storage: Arc<Storage>,
+    pub job_sender: JobSender,
 }
 
 #[derive(Clone)]
@@ -47,31 +44,7 @@ struct JobSender {
 struct Job {
     cmd: crate::json::input::Command,
     storage: Arc<Storage>,
-    session_id: String,
     resp: oneshot::Sender<Result<Output, UserError>>,
-}
-
-#[derive(Deserialize)]
-struct LoginRequest {
-    username: String,
-    password: String,
-}
-
-#[derive(Serialize)]
-struct LoginResponse {
-    token: String,
-    token_type: String,
-    expires_in: u64,
-}
-
-// JWT クレーム
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct Claims {
-    sub: String,        // ユーザー名
-    session_id: String, // セッションID（ストレージで管理）
-    exp: u64,           // 有効期限 (UNIX timestamp)
-    iat: u64,           // 発行時刻 (UNIX timestamp)
-    is_keepalive: bool, // Keep-alive対象かどうか
 }
 
 impl IntoResponse for UserError {
@@ -121,10 +94,8 @@ pub async fn kasane(mut shutdown: watch::Receiver<()>, conf: Configuration) {
                         let cmd = job.cmd.clone();
 
                         // CPU負荷の高い処理はブロッキングスレッドで実行
-                        let result = tokio::task::spawn_blocking(move || {
-                            process(cmd, storage, job.session_id)
-                        })
-                        .await;
+                        let result =
+                            tokio::task::spawn_blocking(move || process(cmd, storage)).await;
 
                         let response = match result {
                             Ok(output) => output.await,
@@ -158,7 +129,7 @@ pub async fn kasane(mut shutdown: watch::Receiver<()>, conf: Configuration) {
             app_state.clone(),
             jwt_auth_middleware,
         ))
-        .route("/login", post(login_handler))
+        .route("/login", post(login))
         .with_state(app_state);
 
     // Graceful shutdown
@@ -176,10 +147,12 @@ pub async fn kasane(mut shutdown: watch::Receiver<()>, conf: Configuration) {
     println!("RESTful API server gracefully stopped");
 }
 
-async fn jwt_auth_middleware<B>(
+use axum::body::Body;
+
+async fn jwt_auth_middleware(
     State(state): State<AppState>,
-    mut req: Request<B>,
-    next: Next<B>,
+    mut req: Request<Body>,
+    next: Next,
 ) -> Result<Response, (StatusCode, String)> {
     // Authorization ヘッダーからトークンを取得
     let auth_header = req
@@ -191,13 +164,11 @@ async fn jwt_auth_middleware<B>(
             "Missing authorization header".to_string(),
         ))?;
 
-    // "Bearer <token>" 形式をパース
     let token = auth_header.strip_prefix("Bearer ").ok_or((
         StatusCode::UNAUTHORIZED,
         "Invalid authorization format".to_string(),
     ))?;
 
-    // JWT を検証
     let claims = decode::<Claims>(
         token,
         &DecodingKey::from_secret(JWT_SECRET),
@@ -206,7 +177,6 @@ async fn jwt_auth_middleware<B>(
     .map_err(|e| (StatusCode::UNAUTHORIZED, format!("Invalid token: {}", e)))?
     .claims;
 
-    // ストレージでセッションを検証（二重チェック）
     state
         .storage
         .validate_session(&claims.session_id)
@@ -217,7 +187,6 @@ async fn jwt_auth_middleware<B>(
             )
         })?;
 
-    // リクエストの拡張データにクレームを追加
     req.extensions_mut().insert(claims);
 
     Ok(next.run(req).await)
@@ -244,10 +213,11 @@ async fn execute_handler(
         let (resp_tx, resp_rx) = oneshot::channel();
         let job = Job {
             cmd,
-            session_id: claims.session_id,
             storage: state.storage.clone(),
             resp: resp_tx,
         };
+
+        //Todoここで権限を検証
 
         // ジョブをキューに送信
         if let Err(_) = state.job_sender.tx.send(job).await {

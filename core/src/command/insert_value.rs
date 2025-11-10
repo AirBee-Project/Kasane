@@ -4,6 +4,7 @@ use crate::{
     command::tools::valid_name::valid_name,
     io::full::Storage,
     json::{input::InsertValue, output::Output},
+    location,
     user_error::UserError,
 };
 

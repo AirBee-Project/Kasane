@@ -4,6 +4,7 @@ use crate::{
         input::{KeyMode, KeyType},
         output::{InfoKey, InfoSpace, Output},
     },
+    location,
     user_error::UserError,
 };
 
