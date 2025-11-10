@@ -9,9 +9,6 @@ use crate::{
 };
 
 pub fn create_space(v: CreateSpace, s: Arc<Storage>) -> Result<Output, UserError> {
-    //危険な入力がデータベースに侵入するのを防ぐ
-
-    //Spaceの名前のチェック
     match valid_name(&v.space_name) {
         Ok(_) => {}
         Err(e) => {

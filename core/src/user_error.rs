@@ -1,3 +1,4 @@
+use bcrypt::BcryptError;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -104,21 +105,109 @@ pub enum UserError {
         key_name: String,
     },
 
-    #[error("Unknown error {message} (at {location})")]
-    UnKnown { message: String, location: String },
+    // redb関連のエラーを追加
+    #[error("Database error: {message} (at {location})")]
+    DatabaseError { message: String, location: String },
 
-    #[error("sled error: {message} (at {location})")]
-    SledError { message: String, location: String },
+    #[error("Database is already open (at {location})")]
+    DatabaseAlreadyOpen { location: String },
 
-    #[error("ZoomLevel '{zoom_level}' is out of range (valid: 0..=60) (at {location})")]
-    ZoomLevelOutOfRange { zoom_level: u8, location: String },
+    #[error("Database is corrupted: {reason} (at {location})")]
+    DatabaseCorrupted { reason: String, location: String },
 
-    #[error("F coordinate '{f}' is out of range for ZoomLevel '{z}' (at {location})")]
-    FOutOfRange { f: i64, z: u8, location: String },
+    #[error("Table '{table_name}' does not exist (at {location})")]
+    TableDoesNotExist {
+        table_name: String,
+        location: String,
+    },
 
-    #[error("X coordinate '{x}' is out of range for ZoomLevel '{z}' (at {location})")]
-    XOutOfRange { x: u64, z: u8, location: String },
+    #[error("Table '{table_name}' already exists (at {location})")]
+    TableAlreadyExists {
+        table_name: String,
+        location: String,
+    },
 
-    #[error("Y coordinate '{y}' is out of range for ZoomLevel '{z}' (at {location})")]
-    YOutOfRange { y: u64, z: u8, location: String },
+    #[error("Table type mismatch for '{table_name}': expected key={expected_key}, value={expected_value} (at {location})")]
+    TableTypeMismatch {
+        table_name: String,
+        expected_key: String,
+        expected_value: String,
+        location: String,
+    },
+
+    #[error("Transaction in progress (at {location})")]
+    TransactionInProgress { location: String },
+
+    #[error("IO error: {message} (at {location})")]
+    IoError { message: String, location: String },
+
+    //bcrypt関連
+    #[error("Password error: {message} (at {location})")]
+    PasswordError { message: String, location: String },
+
+    #[error("Password too long: {length} bytes (max 72 bytes) (at {location})")]
+    PasswordTooLong { length: usize, location: String },
+}
+
+// 主要なエラー型は詳細に処理
+impl From<redb::Error> for UserError {
+    fn from(err: redb::Error) -> Self {
+        let location = format!("{}:{}", file!(), line!());
+        match err {
+            redb::Error::TableDoesNotExist(table_name) => UserError::TableDoesNotExist {
+                table_name,
+                location,
+            },
+            redb::Error::Corrupted(reason) => UserError::DatabaseCorrupted { reason, location },
+            _ => UserError::DatabaseError {
+                message: err.to_string(),
+                location,
+            },
+        }
+    }
+}
+
+// その他のエラー型は汎用的に処理
+macro_rules! impl_from_redb_errors {
+    ($($error_type:ty),+ $(,)?) => {
+        $(
+            impl From<$error_type> for UserError {
+                fn from(err: $error_type) -> Self {
+                    let location = format!("{}:{}", file!(), line!());
+                    UserError::DatabaseError {
+                        message: err.to_string(),
+                        location,
+                    }
+                }
+            }
+        )+
+    };
+}
+
+impl_from_redb_errors!(
+    redb::TransactionError,
+    redb::StorageError,
+    redb::CommitError,
+    redb::TableError,
+);
+
+impl From<BcryptError> for UserError {
+    fn from(err: BcryptError) -> Self {
+        let location = format!("{}:{}", file!(), line!());
+
+        match err {
+            BcryptError::Io(io_err) => UserError::IoError {
+                message: format!("Password hashing IO error: {}", io_err),
+                location,
+            },
+            BcryptError::Truncation(len) => UserError::PasswordTooLong {
+                length: len,
+                location,
+            },
+            other => UserError::PasswordError {
+                message: other.to_string(),
+                location,
+            },
+        }
+    }
 }
