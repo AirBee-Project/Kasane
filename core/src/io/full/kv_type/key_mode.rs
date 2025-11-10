@@ -8,4 +8,11 @@ impl KeyMode {
     pub fn end() -> KeyMode {
         KeyMode::MultiKey
     }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            KeyMode::UniqueKey => "UniqueKey",
+            KeyMode::MultiKey => "MultiKey",
+        }
+    }
 }

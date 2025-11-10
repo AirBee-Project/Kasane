@@ -34,16 +34,16 @@ impl Storage {
             // 範囲スキャン用 start/end
             let start_key = KeyTableKey {
                 space_id,
-                key_name: "".to_string(),     // 最小文字列
-                key_mode: KeyMode::default(), // ダミー
-                key_type: KeyType::default(), // ダミー
+                key_name: "".to_string(),   // 最小文字列
+                key_mode: KeyMode::start(), // ダミー
+                key_type: KeyType::start(), // ダミー
             };
 
             let end_key = KeyTableKey {
                 space_id,
                 key_name: "\u{FFFF}".to_string(), // Unicode最大文字で終端
-                key_mode: KeyMode::default(),
-                key_type: KeyType::default(),
+                key_mode: KeyMode::end(),
+                key_type: KeyType::end(),
             };
 
             for item in table_key.range(start_key..=end_key)? {

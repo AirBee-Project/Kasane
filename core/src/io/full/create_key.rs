@@ -46,15 +46,15 @@ impl Storage {
             let start_key = KeyTableKey {
                 space_id,
                 key_name: key_name.to_string(), // 最小文字列
-                key_mode: KeyMode::default(),   // ダミー
-                key_type: KeyType::default(),   // ダミー
+                key_mode: KeyMode::start(),     // ダミー
+                key_type: KeyType::start(),     // ダミー
             };
 
             let end_key = KeyTableKey {
                 space_id,
                 key_name: key_name.to_string(), // Unicode最大文字で終端
-                key_mode: KeyMode::default(),
-                key_type: KeyType::default(),
+                key_mode: KeyMode::end(),
+                key_type: KeyType::end(),
             };
 
             //Keyの存在の検証

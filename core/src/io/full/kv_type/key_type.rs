@@ -8,8 +8,7 @@ impl KeyType {
     pub fn end() -> KeyType {
         KeyType::Boolean
     }
-}
-impl KeyType {
+
     pub fn as_str(&self) -> &'static str {
         match self {
             KeyType::Int => "Int",
