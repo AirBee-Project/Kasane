@@ -11,7 +11,7 @@ use crate::{
 };
 
 impl Storage {
-    pub fn create_user(&mut self, user_name: &str, password: &str) -> Result<Output, UserError> {
+    pub fn create_user(&self, user_name: &str, password: &str) -> Result<Output, UserError> {
         let write_txn = self.db.begin_write()?;
 
         {

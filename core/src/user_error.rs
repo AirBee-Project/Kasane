@@ -28,6 +28,12 @@ pub enum UserError {
         location: String,
     },
 
+    #[error("Invalid user password :{reason} (at {location})")]
+    UserPasswordVaildationError {
+        reason: &'static str,
+        location: String,
+    },
+
     #[error("User '{user_name}' already exists (at {location})")]
     UserAlreadyExists { user_name: String, location: String },
 

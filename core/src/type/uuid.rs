@@ -1,4 +1,6 @@
+use bincode::{Decode, Encode};
 use redb::{Key, TypeName, Value};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use uuid::Uuid;
 
@@ -6,7 +8,7 @@ use uuid::Uuid;
 // Newtype パターン: Uuidをラップした新しい型を定義
 // =========================================================================
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UuidKey(pub Uuid);
 
 // Uuidとの相互変換を簡単にする
