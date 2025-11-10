@@ -3,10 +3,9 @@ use redb::ReadableTable;
 use uuid::Uuid;
 
 use crate::{
-    io::full::{Storage, USER_PASSWORD, USER_TABLE},
+    io::full::{kv_type::uuid::UuidKey, Storage, USER_PASSWORD, USER_TABLE},
     json::output::Output,
     location,
-    r#type::uuid::UuidKey,
     user_error::UserError,
 };
 
@@ -26,10 +25,8 @@ impl Storage {
                 });
             }
 
-            // UUIDの衝突チェック（念のため）
             let user_id = loop {
-                let id = UuidKey::new_v4();
-                // パスワードテーブルで既にこのIDが使われていないか確認
+                let id = UuidKey::new();
                 if table_password.get(id)?.is_none() {
                     break id;
                 }

@@ -10,8 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     io::full::kv_type::{
-        key_table_key::KeyTableKey, key_table_value::KeyTableValue,
-        space_key_table_value::SpaceKeyTableValue, uuid::UuidKey,
+        key_table_key::KeyTableKey, space_key_table_value::SpaceKeyTableValue, uuid::UuidKey,
     },
     json::input::{KeyMode, KeyType},
     user_error::UserError,
@@ -42,10 +41,7 @@ pub const USER_PASSWORD: TableDefinition<UuidKey, &str> = TableDefinition::new("
 
 //本体機能
 pub const SPACE_TABLE: TableDefinition<&str, UuidKey> = TableDefinition::new("space_table");
-pub const SPACE_KEY_TABLE: TableDefinition<UuidKey, SpaceKeyTableValue> =
-    TableDefinition::new("space_key_table");
-pub const KEY_TABLE: TableDefinition<KeyTableKey, KeyTableValue> =
-    TableDefinition::new("space_table");
+pub const KEY_TABLE: TableDefinition<KeyTableKey, UuidKey> = TableDefinition::new("key_table");
 
 pub struct Storage {
     pub db: Database,

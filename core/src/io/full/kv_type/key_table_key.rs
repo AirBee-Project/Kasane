@@ -1,6 +1,9 @@
 use std::cmp::Ordering;
 
-use crate::io::full::kv_type::uuid::UuidKey;
+use crate::{
+    io::full::kv_type::uuid::UuidKey,
+    json::input::{KeyMode, KeyType},
+};
 use bincode::{config, decode_from_slice, Decode, Encode};
 use redb::{Key, TypeName, Value};
 use serde::{Deserialize, Serialize};
@@ -9,6 +12,8 @@ use serde::{Deserialize, Serialize};
 pub struct KeyTableKey {
     pub space_id: UuidKey,
     pub key_name: String,
+    pub key_mode: KeyMode,
+    pub key_type: KeyType,
 }
 
 impl Value for KeyTableKey {
