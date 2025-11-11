@@ -6,7 +6,6 @@ impl Storage {
         session_id: &str,
         username: &str,
         expires_at: u64,
-        is_keepalive: bool,
     ) -> Result<(), UserError> {
         Ok(())
     }

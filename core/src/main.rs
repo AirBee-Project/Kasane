@@ -1,27 +1,12 @@
-use axum::{
-    extract::ws::{Message, WebSocket, WebSocketUpgrade},
-    response::IntoResponse,
-    routing::get,
-    Router,
-};
 use clap::{Parser, Subcommand};
-use std::{
-    fs,
-    net::SocketAddr,
-    path::Path,
-    process::{exit, Command},
-};
+use std::path::{Path, PathBuf};
 pub mod operation;
-use tokio::net::TcpListener;
-use toml_edit::{value, Document, DocumentMut};
 
-use crate::{
-    json::input::KeyMode,
-    operation::{
-        kasane::{self, kasane},
-        setting::configuration,
-    },
+use crate::operation::{
+    configuration::configuration,
+    kasane::{self},
 };
+use dotenvy::from_filename;
 
 pub mod command;
 pub mod io;
@@ -42,7 +27,10 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     ///kasaneを起動する
-    Up,
+    Up {
+        #[arg(short, long, default_value_t = String::from("default.kasane"))]
+        file: String,
+    },
 
     ///kasaneを終了する
     Down,
@@ -71,15 +59,18 @@ enum Commands {
 
 #[tokio::main]
 async fn main() {
+    //環境変数の読み込み
+    load_env();
+
     let cli = Cli::parse();
     let conf = configuration();
 
     match cli.command {
-        Some(Commands::Up) => operation::cli::up::up(),
+        Some(Commands::Up { file }) => operation::cli::up::up(),
         Some(Commands::Down) => {
             #[cfg(windows)]
             {
-                let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(());
+                let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
                 operation::cli::down::down(&shutdown_tx);
             }
             #[cfg(unix)]
@@ -97,13 +88,28 @@ async fn main() {
         None => {
             #[cfg(windows)]
             {
-                let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
-                kasane::kasane(shutdown_rx, conf).await;
+                operation::cli::up::up();
             }
             #[cfg(unix)]
             {
                 kasane::kasane_unix().await;
             }
         }
+    }
+}
+
+fn load_env() {
+    // リリースビルドかどうかでファイルを決定
+    let env_file = if cfg!(debug_assertions) {
+        ".env.example" // 開発用
+    } else {
+        ".env" // 本番用
+    };
+
+    if Path::new(env_file).exists() {
+        from_filename(env_file).ok();
+        println!("Loaded environment from {}", env_file);
+    } else {
+        println!("Environment file {} not found, skipping", env_file);
     }
 }

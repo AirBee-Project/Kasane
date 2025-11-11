@@ -1,20 +1,12 @@
-use bincode::{Decode, Encode};
-use redb::{Database, MultimapTableDefinition, TableDefinition, TypeName, Value};
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::{HashMap, HashSet},
-    env,
-    path::PathBuf,
-};
-use uuid::Uuid;
+use redb::{Database, DatabaseError, TableDefinition};
+use std::{env, path::PathBuf};
 
 use crate::{
     io::full::kv_type::{key_table_key::KeyTableKey, uuid::UuidKey},
-    json::input::{KeyMode, KeyType},
     user_error::UserError,
 };
+
 pub mod cleanup_expired_sessions;
-pub mod count_keepalive_sessions;
 pub mod create_key;
 pub mod create_session;
 pub mod create_space;
@@ -31,13 +23,13 @@ pub mod validate_session;
 pub mod verify_user;
 pub mod version;
 
-//Tableの定義
+// Tableの定義
 
-//ユーザー関連
+// ユーザー関連
 pub const USER_TABLE: TableDefinition<&str, UuidKey> = TableDefinition::new("user_table");
 pub const USER_PASSWORD: TableDefinition<UuidKey, &str> = TableDefinition::new("user_password");
 
-//本体機能
+// 本体機能
 pub const SPACE_TABLE: TableDefinition<&str, UuidKey> = TableDefinition::new("space_table");
 pub const KEY_TABLE: TableDefinition<KeyTableKey, UuidKey> = TableDefinition::new("key_table");
 
@@ -46,10 +38,10 @@ pub struct Storage {
 }
 
 impl Storage {
-    ///ストレージを新しく作成
-    pub fn new(path: Option<PathBuf>) -> Result<Self, UserError> {
-        let db_path = path.unwrap_or(env::current_dir().unwrap().join("default.kasane"));
-        let db = Database::create(db_path).unwrap();
+    /// ストレージを作成または既存ファイルを読み込み
+    pub fn new(path: PathBuf) -> Result<Self, UserError> {
+        // Database::create は存在すれば読み込み、なければ新規作成
+        let db = Database::create(&path).unwrap();
         Ok(Storage { db })
     }
 }

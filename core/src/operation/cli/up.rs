@@ -12,7 +12,6 @@ pub fn up() {
     let exe = std::env::current_exe().expect("Failed to get current exe");
 
     let child = Command::new(exe)
-        .arg("run") // run サブコマンドで WebSocket サーバー起動
         .spawn()
         .expect("Failed to start kasane server");
 

@@ -1,23 +1,24 @@
 use serde::Deserialize;
 use std::fs;
-use toml_edit::{Document, DocumentMut, Item, Table};
+use toml_edit::{DocumentMut, Item, Table};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Configuration {
-    pub title: String,
     pub network: Network,
-    pub cpu: CPU,
+    pub general: General,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Network {
-    pub connection_pool: usize,
-    pub port: usize,
+    pub port: u16,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct CPU {
-    pub core: usize,
+#[derive(Debug, Deserialize, Clone)]
+pub struct General {
+    /// 指定されなかった場合は最大のCPU数を使用する
+    pub cpu_num: Option<usize>,
+    pub queue_size: usize,
+    pub jwt_expiration_minutes: usize,
 }
 
 ///kasane.tomlが存在する場合はその設定を読み込む
@@ -34,29 +35,28 @@ pub fn configuration() -> Configuration {
         panic!("Failed to load kasane.toml correctly. Run `kasane check` to identify issues, or use `kasane init` to reset the configuration.");
     });
 
-    // デフォルト値をセット（未設定の場合のみ）
-    if doc.get("title").is_none() {
-        doc["title"] = "Kasane Configuration".into();
-    }
-
     if doc.get("network").is_none() {
         doc["network"] = Item::Table(Table::new());
     }
 
-    if doc["network"].get("connection_pool").is_none() {
-        doc["network"]["connection_pool"] = 10.into();
+    if doc["network"].get("max_keepalive_sessions").is_none() {
+        doc["network"]["max_keepalive_sessions"] = 30.into();
     }
 
     if doc["network"].get("port").is_none() {
         doc["network"]["port"] = 3000.into();
     }
 
-    if doc.get("cpu").is_none() {
-        doc["cpu"] = Item::Table(Table::new());
+    if doc.get("general").is_none() {
+        doc["general"] = Item::Table(Table::new());
     }
 
-    if doc["cpu"].get("core").is_none() {
-        doc["cpu"]["core"] = 4.into();
+    if doc["general"].get("queue_size").is_none() {
+        doc["general"]["queue_size"] = 1024.into();
+    }
+
+    if doc["general"].get("jwt_expiration_minutes").is_none() {
+        doc["general"]["jwt_expiration_minutes"] = 60.into();
     }
 
     // ファイルに書き戻す

@@ -2,7 +2,7 @@ use crate::{io::full::Storage, json::output::Output, location, user_error::UserE
 
 impl Storage {
     pub fn verify_user(&self, username: &str, password: &str) -> Result<(), UserError> {
-        ///あらゆるパスワードを許可する
+        //あらゆるパスワードを許可する
         Ok(())
     }
 }

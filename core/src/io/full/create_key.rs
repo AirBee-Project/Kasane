@@ -28,7 +28,18 @@ impl Storage {
         let read_txn = self.db.begin_read()?;
 
         {
-            let table_space = read_txn.open_table(SPACE_TABLE)?;
+            let table_space = match read_txn.open_table(SPACE_TABLE) {
+                Ok(v) => v,
+                Err(e) => match e {
+                    redb::TableError::TableDoesNotExist(_) => {
+                        return Err(UserError::SpaceNotFound {
+                            space_name: space_name.to_string(),
+                            location: location!(),
+                        });
+                    }
+                    e => return Err(e.into()),
+                },
+            };
             let mut table_key = write_txn.open_table(KEY_TABLE)?;
 
             //Spaceの存在の検証

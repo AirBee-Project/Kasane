@@ -6,10 +6,8 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::operation::kasane::{
-    AppState, JWT_EXPIRATION_HOURS, JWT_EXPIRATION_MINUTES, JWT_SECRET, MAX_KEEPALIVE_SESSIONS,
-};
-use jsonwebtoken::{encode, EncodingKey, Header}; // ✅ 修正：jws::encodeを削除
+use crate::operation::kasane::AppState;
+use jsonwebtoken::{encode, EncodingKey, Header};
 
 // ==========================
 // JWT クレーム構造体
@@ -20,7 +18,6 @@ pub struct Claims {
     pub session_id: String, // セッションID（ストレージで管理）
     pub exp: u64,           // 有効期限 (UNIX timestamp)
     pub iat: u64,           // 発行時刻 (UNIX timestamp)
-    pub is_keepalive: bool, // Keep-alive対象かどうか
 }
 
 #[derive(Deserialize)]
@@ -51,12 +48,6 @@ pub async fn login(
     // 古いセッションをクリーンアップ
     let _ = state.storage.cleanup_expired_sessions();
 
-    // Keep-aliveセッション数をカウント
-    let keepalive_count = state.storage.count_keepalive_sessions().unwrap_or(0);
-
-    // 30ユーザーまでKeep-aliveを維持
-    let is_keepalive = keepalive_count < MAX_KEEPALIVE_SESSIONS;
-
     // セッションIDを生成
     let session_id = Uuid::new_v4().to_string();
 
@@ -67,17 +58,13 @@ pub async fn login(
         .as_secs();
 
     // 有効期限を計算
-    let expiration_secs = if is_keepalive {
-        JWT_EXPIRATION_HOURS * 3600
-    } else {
-        JWT_EXPIRATION_MINUTES * 60
-    };
+    let expiration_secs = (state.conf.general.jwt_expiration_minutes * 60) as u64;
     let expires_at = now_secs + expiration_secs;
 
     // ストレージにセッションを保存
     state
         .storage
-        .create_session(&session_id, &req.username, expires_at, is_keepalive)
+        .create_session(&session_id, &req.username, expiration_secs)
         .map_err(|_| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -91,14 +78,16 @@ pub async fn login(
         session_id: session_id.clone(),
         exp: expires_at,
         iat: now_secs,
-        is_keepalive,
     };
 
-    // JWT トークンを生成 ✅（修正版）
     let token = encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret(JWT_SECRET),
+        &EncodingKey::from_secret(
+            dotenvy::var("JWT_SECRET")
+                .expect("JWT_SECRET must be set")
+                .as_bytes(),
+        ),
     )
     .map_err(|_| {
         (
@@ -107,7 +96,6 @@ pub async fn login(
         )
     })?;
 
-    // レスポンスを返す
     Ok(Json(LoginResponse {
         token,
         token_type: "Bearer".to_string(),

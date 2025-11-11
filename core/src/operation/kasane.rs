@@ -7,7 +7,12 @@ use axum::{
     Json, Router,
 };
 use jsonwebtoken::{decode, DecodingKey, Validation};
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    env::{self, current_dir},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    path::PathBuf,
+    sync::Arc,
+};
 use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::{
@@ -15,25 +20,17 @@ use crate::{
     io::full::Storage,
     json::{input::Packet, output::Output},
     operation::{
+        configuration::Configuration,
         login::{login, Claims},
-        setting::Configuration,
     },
     user_error::UserError,
 };
-
-// ==========================
-// 設定
-// ==========================
-pub const MAX_KEEPALIVE_SESSIONS: usize = 30; // Keep-alive維持する最大セッション数
-pub const JWT_EXPIRATION_HOURS: u64 = 1; // JWT有効期限（Keep-alive用）
-pub const JWT_EXPIRATION_MINUTES: u64 = 5; // JWT有効期限（通常用）
-pub const JWT_SECRET: &[u8] = b"your-secret-key-change-this-in-production"; // 本番環境では環境変数から読み込むこと
-pub const WORKER_QUEUE_SIZE: usize = 1000;
 
 #[derive(Clone)]
 pub struct AppState {
     pub storage: Arc<Storage>,
     job_sender: JobSender,
+    pub conf: Configuration,
 }
 
 #[derive(Clone)]
@@ -54,13 +51,15 @@ impl IntoResponse for UserError {
     }
 }
 
-pub async fn kasane(mut shutdown: watch::Receiver<()>, conf: Configuration) {
+pub async fn kasane(mut shutdown: watch::Receiver<()>, conf: Configuration, file: PathBuf) {
     println!("RESTful API server started");
 
-    let addr: SocketAddr = "127.0.0.1:3000".parse().unwrap();
+    let addr: SocketAddr =
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), conf.network.port);
 
     // ストレージを初期化
-    let storage = Arc::new(match Storage::new(None) {
+
+    let storage = Arc::new(match Storage::new(file) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("ストレージの初期化に失敗しました: {:?}", e);
@@ -69,16 +68,25 @@ pub async fn kasane(mut shutdown: watch::Receiver<()>, conf: Configuration) {
     });
 
     // ワーカープールの構築
-    let (tx, rx) = mpsc::channel::<Job>(WORKER_QUEUE_SIZE);
+    let (tx, rx) = mpsc::channel::<Job>(conf.general.queue_size);
     let job_sender = JobSender { tx };
 
     let rx = Arc::new(tokio::sync::Mutex::new(rx));
-    let cpu_cores = num_cpus::get();
 
-    println!("Starting {} worker threads", cpu_cores);
+    //使用するCPUのコア数を設定する
+    let cpu_num = match conf.general.cpu_num {
+        Some(v) => {
+            if v > num_cpus::get() {
+                num_cpus::get()
+            } else {
+                v
+            }
+        }
+        None => num_cpus::get(),
+    };
 
     // CPU コア数分のワーカースレッドを起動
-    for worker_id in 0..cpu_cores {
+    for worker_id in 0..cpu_num {
         let rx = Arc::clone(&rx);
         tokio::spawn(async move {
             println!("Worker {} started", worker_id);
@@ -120,6 +128,7 @@ pub async fn kasane(mut shutdown: watch::Receiver<()>, conf: Configuration) {
     let app_state = AppState {
         storage: storage.clone(),
         job_sender,
+        conf,
     };
 
     // ルーター構築
@@ -171,7 +180,11 @@ async fn jwt_auth_middleware(
 
     let claims = decode::<Claims>(
         token,
-        &DecodingKey::from_secret(JWT_SECRET),
+        &DecodingKey::from_secret(
+            dotenvy::var("JWT_SECRET")
+                .expect("JWT_SECRET must be set")
+                .as_bytes(),
+        ),
         &Validation::default(),
     )
     .map_err(|e| (StatusCode::UNAUTHORIZED, format!("Invalid token: {}", e)))?
