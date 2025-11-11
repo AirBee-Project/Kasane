@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::{json::input::KeyType, user_error::UserError};
 
-#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum ValueEntry {
     TEXT(String),

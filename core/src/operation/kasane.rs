@@ -33,7 +33,7 @@ pub const WORKER_QUEUE_SIZE: usize = 1000;
 #[derive(Clone)]
 pub struct AppState {
     pub storage: Arc<Storage>,
-    pub job_sender: JobSender,
+    job_sender: JobSender,
 }
 
 #[derive(Clone)]
