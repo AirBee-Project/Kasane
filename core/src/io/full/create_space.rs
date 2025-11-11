@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use redb::{ReadableMultimapTable, ReadableTable};
 
 use crate::{
-    io::full::{kv_type::uuid::UuidKey, SpaceKeyTableValue, Storage, SPACE_TABLE},
+    io::full::{kv_type::uuid::UuidKey, Storage, SPACE_TABLE},
     json::output::Output,
     location,
     user_error::UserError,
@@ -25,7 +25,7 @@ impl Storage {
 
             let space_id = UuidKey::new();
 
-            table_space.insert(space_name, space_id);
+            let _ = table_space.insert(space_name, space_id);
         }
         write_txn.commit()?;
         Ok(Output::Success)

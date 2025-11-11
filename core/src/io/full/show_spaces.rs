@@ -3,7 +3,6 @@ use redb::{ReadableDatabase, ReadableTable};
 use crate::{
     io::full::{Storage, SPACE_TABLE},
     json::output::{Output, ShowSpaces},
-    location,
     user_error::UserError,
 };
 
@@ -15,7 +14,17 @@ impl Storage {
         let read_txn = self.db.begin_read()?;
 
         {
-            let table_space = read_txn.open_table(SPACE_TABLE)?;
+            let table_space = match read_txn.open_table(SPACE_TABLE) {
+                Ok(v) => v,
+                Err(e) => match e {
+                    redb::TableError::TableDoesNotExist(_) => {
+                        return Ok(Output::ShowSpaces(ShowSpaces {
+                            space_names: spaces,
+                        }));
+                    }
+                    e => return Err(e.into()),
+                },
+            };
 
             for space in table_space.iter()? {
                 let (key, _) = space?;

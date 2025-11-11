@@ -9,9 +9,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    io::full::kv_type::{
-        key_table_key::KeyTableKey, space_key_table_value::SpaceKeyTableValue, uuid::UuidKey,
-    },
+    io::full::kv_type::{key_table_key::KeyTableKey, uuid::UuidKey},
     json::input::{KeyMode, KeyType},
     user_error::UserError,
 };
@@ -50,8 +48,8 @@ pub struct Storage {
 impl Storage {
     ///ストレージを新しく作成
     pub fn new(path: Option<PathBuf>) -> Result<Self, UserError> {
-        let db_path = path.unwrap_or(env::current_dir().unwrap().join("default"));
-        let db = Database::create(db_path)?;
+        let db_path = path.unwrap_or(env::current_dir().unwrap().join("default.kasane"));
+        let db = Database::create(db_path).unwrap();
         Ok(Storage { db })
     }
 }

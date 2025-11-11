@@ -17,8 +17,18 @@ impl Storage {
 
         let read_txn = self.db.begin_read()?;
         {
-            let table_space = read_txn.open_table(SPACE_TABLE)?;
-            let table_key = read_txn.open_table(KEY_TABLE)?;
+            let table_space = match read_txn.open_table(SPACE_TABLE) {
+                Ok(v) => v,
+                Err(e) => match e {
+                    redb::TableError::TableDoesNotExist(_) => {
+                        return Err(UserError::SpaceNotFound {
+                            space_name: space_name.to_string(),
+                            location: location!(),
+                        });
+                    }
+                    e => return Err(e.into()),
+                },
+            };
 
             let space_id = match table_space.get(space_name)? {
                 Some(v) => v.value(),
@@ -28,6 +38,16 @@ impl Storage {
                         location: location!(),
                     });
                 }
+            };
+
+            let table_key = match read_txn.open_table(KEY_TABLE) {
+                Ok(v) => v,
+                Err(e) => match e {
+                    redb::TableError::TableDoesNotExist(_) => {
+                        return Ok(Output::Showkeys(Showkeys { key_names: result }));
+                    }
+                    e => return Err(e.into()),
+                },
             };
 
             // 範囲スキャン用 start/end

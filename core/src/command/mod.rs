@@ -4,6 +4,7 @@ use crate::command::create_key::create_key;
 use crate::command::create_space::create_space;
 use crate::command::info_key::info_key;
 use crate::command::info_space::info_space;
+use crate::command::info_user::info_user;
 use crate::command::insert_value::insert_value;
 use crate::command::show_keys::show_keys;
 use crate::command::show_spaces::show_spaces;
@@ -62,13 +63,13 @@ pub async fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError>
         //Command::Transaction(v) => todo!(),
 
         //ユーザー操作系
-        Command::CreateUser(v) => create_user(v, s),
-        Command::DropUser(v) => drop_user(v, s),
+        Command::CreateUser(v) => todo!(),
+        Command::DropUser(v) => todo!(),
         Command::InfoUser(v) => info_user(v, s),
-        Command::ShowUsers => show_users(s),
+        Command::ShowUsers => todo!(),
 
         //権限付与系
-        Command::GrantDatabase(v) => grant_database(v, s),
+        Command::GrantDatabase(v) => todo!(),
         Command::GrantSpace(v) => todo!(),
         Command::GrantKeyPrivilege(v) => todo!(),
 

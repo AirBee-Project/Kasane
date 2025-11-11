@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    io::{StorageTrait, full::Storage},
+    io::full::Storage,
     json::{
         input::{InsertValue, UpdateValue},
         output::Output,

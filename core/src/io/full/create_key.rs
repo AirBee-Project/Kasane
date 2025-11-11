@@ -6,7 +6,7 @@ use redb::{ReadableDatabase, ReadableMultimapTable, ReadableTable};
 use crate::{
     io::full::{
         kv_type::{key_table_key::KeyTableKey, uuid::UuidKey},
-        SpaceKeyTableValue, Storage, KEY_TABLE, SPACE_TABLE,
+        Storage, KEY_TABLE, SPACE_TABLE,
     },
     json::{
         input::{KeyMode, KeyType},
@@ -32,10 +32,10 @@ impl Storage {
             let mut table_key = write_txn.open_table(KEY_TABLE)?;
 
             //Spaceの存在の検証
-            let space_id = match table_space.get(key_name)? {
+            let space_id = match table_space.get(space_name)? {
                 Some(v) => v.value(),
                 None => {
-                    return Err(UserError::SpaceAlreadyExists {
+                    return Err(UserError::SpaceNotFound {
                         space_name: space_name.to_string(),
                         location: location!(),
                     });
@@ -75,7 +75,7 @@ impl Storage {
             let key_id = UuidKey::new();
 
             //Keyの挿入
-            table_key.insert(
+            let _ = table_key.insert(
                 KeyTableKey {
                     space_id,
                     key_name: key_name.to_string(),
