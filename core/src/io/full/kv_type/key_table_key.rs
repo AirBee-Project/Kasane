@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use crate::{
-    io::full::kv_type::uuid::UuidKey,
+    io::full::kv_type::{key_type::KeyTypeKind, uuid::UuidKey},
     json::input::{KeyMode, KeyType},
 };
 use bincode::{config, decode_from_slice, Decode, Encode};
@@ -13,7 +13,7 @@ pub struct KeyTableKey {
     pub space_id: UuidKey,
     pub key_name: String,
     pub key_mode: KeyMode,
-    pub key_type: KeyType,
+    pub key_type_kind: KeyTypeKind,
 }
 
 impl Value for KeyTableKey {

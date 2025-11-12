@@ -24,9 +24,9 @@ impl ValueEntry {
 
     pub fn from_bytes(keytype: KeyType, data: &[u8]) -> Option<Self> {
         match keytype {
-            KeyType::Text => Some(ValueEntry::TEXT(String::from_utf8_lossy(data).to_string())),
-            KeyType::Boolean => Some(ValueEntry::BOOLEAN(data.get(0)? != &0)),
-            KeyType::Int => {
+            KeyType::Text(_) => Some(ValueEntry::TEXT(String::from_utf8_lossy(data).to_string())),
+            KeyType::Boolean(_) => Some(ValueEntry::BOOLEAN(data.get(0)? != &0)),
+            KeyType::Int(_) => {
                 if data.len() != 4 {
                     return None;
                 }
@@ -34,7 +34,7 @@ impl ValueEntry {
                 arr.copy_from_slice(data);
                 Some(ValueEntry::INT(i32::from_le_bytes(arr)))
             }
-            KeyType::Float => {
+            KeyType::Float(_) => {
                 if data.len() != 4 {
                     return None;
                 }
@@ -49,10 +49,10 @@ impl ValueEntry {
 impl ValueEntry {
     pub fn matches_keytype(&self, key_type: &KeyType) -> bool {
         match (self, key_type) {
-            (ValueEntry::INT(_), KeyType::Int) => true,
-            (ValueEntry::BOOLEAN(_), KeyType::Boolean) => true,
-            (ValueEntry::TEXT(_), KeyType::Text) => true,
-            (ValueEntry::FLOAT(_), KeyType::Float) => true,
+            (ValueEntry::INT(_), KeyType::Int(_)) => true,
+            (ValueEntry::BOOLEAN(_), KeyType::Boolean(_)) => true,
+            (ValueEntry::TEXT(_), KeyType::Text(_)) => true,
+            (ValueEntry::FLOAT(_), KeyType::Float(_)) => true,
             _ => false,
         }
     }

@@ -1,7 +1,10 @@
 use redb::ReadableDatabase;
 
 use crate::{
-    io::full::{kv_type::key_table_key::KeyTableKey, Storage, KEY_TABLE, SPACE_TABLE},
+    io::full::{
+        kv_type::{key_table_key::KeyTableKey, key_type::KeyTypeKind},
+        Storage, KEY_TABLE, SPACE_TABLE,
+    },
     json::{
         input::{KeyMode, KeyType},
         output::{InfoKey, Output},
@@ -31,16 +34,16 @@ impl Storage {
             // 範囲スキャン用 start/end
             let start_key = KeyTableKey {
                 space_id,
-                key_name: key_name.to_string(), // 最小文字列
-                key_mode: KeyMode::start(),     // ダミー
-                key_type: KeyType::start(),     // ダミー
+                key_name: key_name.to_string(),      // 最小文字列
+                key_mode: KeyMode::start(),          // ダミー
+                key_type_kind: KeyTypeKind::start(), // ダミー
             };
 
             let end_key = KeyTableKey {
                 space_id,
                 key_name: key_name.to_string(), // Unicode最大文字で終端
                 key_mode: KeyMode::end(),
-                key_type: KeyType::end(),
+                key_type_kind: KeyTypeKind::end(),
             };
 
             match table_key.range(start_key..=end_key)?.next() {
@@ -48,7 +51,7 @@ impl Storage {
                     let (key, _value_bytes) = v?;
                     return Ok(Output::InfoKey(InfoKey {
                         key_name: key.value().key_name,
-                        key_type: key.value().key_type.as_str().to_string(),
+                        key_type: key.value().key_type_kind.as_str().to_string(),
                         key_mode: key.value().key_mode.as_str().to_string(),
                     }));
                 }

@@ -5,7 +5,7 @@ use redb::{ReadableDatabase, ReadableMultimapTable, ReadableTable};
 
 use crate::{
     io::full::{
-        kv_type::{key_table_key::KeyTableKey, uuid::UuidKey},
+        kv_type::{key_table_key::KeyTableKey, key_type::KeyTypeKind, uuid::UuidKey},
         Storage, KEY_TABLE, SPACE_TABLE,
     },
     json::{
@@ -26,6 +26,8 @@ impl Storage {
     ) -> Result<Output, UserError> {
         let write_txn = self.db.begin_write()?;
         let read_txn = self.db.begin_read()?;
+
+        let key_type_kind = key_type.as_kind();
 
         {
             let table_space = match read_txn.open_table(SPACE_TABLE) {
@@ -56,16 +58,16 @@ impl Storage {
             // 範囲スキャン用 start/end
             let start_key = KeyTableKey {
                 space_id,
-                key_name: key_name.to_string(), // 最小文字列
-                key_mode: KeyMode::start(),     // ダミー
-                key_type: KeyType::start(),     // ダミー
+                key_name: key_name.to_string(),      // 最小文字列
+                key_mode: KeyMode::start(),          // ダミー
+                key_type_kind: KeyTypeKind::start(), // ダミー
             };
 
             let end_key = KeyTableKey {
                 space_id,
                 key_name: key_name.to_string(), // Unicode最大文字で終端
                 key_mode: KeyMode::end(),
-                key_type: KeyType::end(),
+                key_type_kind: KeyTypeKind::end(),
             };
 
             //Keyの存在の検証
@@ -91,7 +93,7 @@ impl Storage {
                     space_id,
                     key_name: key_name.to_string(),
                     key_mode,
-                    key_type,
+                    key_type_kind,
                 },
                 key_id,
             );
