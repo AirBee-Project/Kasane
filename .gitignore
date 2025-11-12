@@ -30,3 +30,6 @@ Thumbs.db
 data.mdb
 lock.mdb
 sled_db
+
+default.kasane
+kasane.toml

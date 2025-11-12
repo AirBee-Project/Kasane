@@ -3,6 +3,5 @@ max_keepalive_sessions = 30
 port = 3000
 
 [general]
-cpu_num=10
 queue_size = 1024
 jwt_expiration_minutes = 60
