@@ -19,10 +19,7 @@ use crate::{
     command::process,
     io::full::Storage,
     json::{input::Packet, output::Output},
-    operation::{
-        configuration::Configuration,
-        login::{login, Claims},
-    },
+    operation::configuration::Configuration,
     user_error::UserError,
 };
 
@@ -134,10 +131,6 @@ pub async fn kasane(mut shutdown: watch::Receiver<()>, conf: Configuration, file
     // ルーター構築
     let app = Router::new()
         .route("/", post(execute_handler))
-        .route_layer(middleware::from_fn_with_state(
-            app_state.clone(),
-            jwt_auth_middleware,
-        ))
         .route("/login", post(login))
         .with_state(app_state);
 
@@ -156,69 +149,13 @@ pub async fn kasane(mut shutdown: watch::Receiver<()>, conf: Configuration, file
     println!("RESTful API server gracefully stopped");
 }
 
-use axum::body::Body;
-
-async fn jwt_auth_middleware(
-    State(state): State<AppState>,
-    mut req: Request<Body>,
-    next: Next,
-) -> Result<Response, (StatusCode, String)> {
-    // Authorization ヘッダーからトークンを取得
-    let auth_header = req
-        .headers()
-        .get(AUTHORIZATION)
-        .and_then(|h| h.to_str().ok())
-        .ok_or((
-            StatusCode::UNAUTHORIZED,
-            "Missing authorization header".to_string(),
-        ))?;
-
-    let token = auth_header.strip_prefix("Bearer ").ok_or((
-        StatusCode::UNAUTHORIZED,
-        "Invalid authorization format".to_string(),
-    ))?;
-
-    let claims = decode::<Claims>(
-        token,
-        &DecodingKey::from_secret(
-            dotenvy::var("JWT_SECRET")
-                .expect("JWT_SECRET must be set")
-                .as_bytes(),
-        ),
-        &Validation::default(),
-    )
-    .map_err(|e| (StatusCode::UNAUTHORIZED, format!("Invalid token: {}", e)))?
-    .claims;
-
-    state
-        .storage
-        .validate_session(&claims.session_id)
-        .map_err(|e| {
-            (
-                StatusCode::UNAUTHORIZED,
-                format!("Session expired or invalid: {}", e),
-            )
-        })?;
-
-    req.extensions_mut().insert(claims);
-
-    Ok(next.run(req).await)
-}
+async fn login() {}
 
 /// POST / - コマンド実行エンドポイント
 async fn execute_handler(
     State(state): State<AppState>,
-    claims: axum::Extension<Claims>,
     Json(packet): Json<Packet>,
 ) -> Result<Json<Vec<Result<Output, UserError>>>, (StatusCode, String)> {
-    // JWT認証 + ストレージセッション検証済み
-    // claims.sub にユーザー名、claims.session_id にセッションID
-
-    println!(
-        "Authenticated user: {} (session: {})",
-        claims.sub, claims.session_id
-    );
-
     // コマンドを順次処理
     let mut results = Vec::with_capacity(packet.command.len());
 
