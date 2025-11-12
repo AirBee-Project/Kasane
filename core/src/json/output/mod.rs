@@ -1,81 +1,18 @@
+// Module declarations and re-exports
+pub mod space;
+pub mod key;
+pub mod value;
+pub mod user;
+pub mod version;
+
+// Re-export types from submodules
+pub use space::*;
+pub use key::*;
+pub use value::*;
+pub use user::*;
+pub use version::*;
+
 use serde::Serialize;
-
-use crate::{
-    io::full::tools::value_entry::ValueEntry,
-    json::input::{DatabaseCommand, KeyCommand, SpaceCommand},
-};
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ShowSpaces {
-    pub space_names: Vec<String>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Version {
-    pub version: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InfoSpace {
-    pub space_name: String,
-    pub keys: Vec<InfoKey>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InfoKey {
-    pub key_name: String,
-    pub key_type: String,
-    pub key_mode: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Showkeys {
-    pub key_names: Vec<String>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Value {
-    // pub id: SpaceTimeId,
-    // pub center: Point,
-    // pub vertex: [Point; 8],
-    pub id_string: String,
-    pub value: Vec<(std::string::String, ValueEntry)>,
-}
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ShowUsers {
-    pub users: Vec<String>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InfoUser {
-    pub user_name: String,
-    database_command: Vec<DatabaseCommand>,
-    space_command: Vec<InfoUserSpace>,
-    key_commnad: Vec<InfoUserKey>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InfoUserSpace {
-    space_name: String,
-    space_commnad: Vec<SpaceCommand>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InfoUserKey {
-    space_name: String,
-    key_name: String,
-    key_commnad: Vec<KeyCommand>,
-}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
