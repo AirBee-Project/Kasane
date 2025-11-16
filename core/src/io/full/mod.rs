@@ -9,13 +9,14 @@ use crate::{
     user_error::UserError,
 };
 
-pub mod space;
 pub mod key;
-pub mod value;
-pub mod user;
-pub mod session;
 pub mod kv_type;
+pub mod permission;
+pub mod session;
+pub mod space;
 pub mod tools;
+pub mod user;
+pub mod value;
 
 // Tableの定義
 
