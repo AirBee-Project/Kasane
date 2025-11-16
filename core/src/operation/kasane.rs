@@ -81,6 +81,9 @@ pub async fn kasane(mut shutdown: watch::Receiver<()>, conf: Configuration, file
         }
     });
 
+    //開発環境用にアカウントを作成
+    let _ = storage.create_user("admin", "admin");
+
     // ワーカープールの構築
     let (tx, rx) = mpsc::channel::<Job>(conf.general.queue_size);
     let job_sender = JobSender { tx };
@@ -170,25 +173,26 @@ pub async fn kasane(mut shutdown: watch::Receiver<()>, conf: Configuration, file
 async fn login(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
-) -> Result<Json<LoginResponse>, StatusCode> {
-    //ここは本番環境では消す
-    if payload.username != "admin" || payload.password != "password" {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
+) -> Result<Json<LoginResponse>, (StatusCode, String)> {
+    let session_id = Uuid::new_v4();
 
-    let session_id = Uuid::new_v4().to_string();
-
-    let expires_at = SystemTime::now()
-        .checked_add(Duration::from_secs(
-            state.conf.general.session_expiration_secs,
-        ))
-        .unwrap()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+    let expires_at = match state.storage.create_session(
+        &payload.username,
+        &payload.password,
+        &session_id,
+        state.conf.general.session_expiration_secs,
+    ) {
+        Ok(v) => v,
+        Err(_) => {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "Invalid or expired session".into(),
+            ))
+        }
+    };
 
     let response = LoginResponse {
-        session_id,
+        session_id: session_id.to_string(),
         expires_at,
     };
 

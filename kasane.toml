@@ -4,4 +4,4 @@ port = 3000
 
 [general]
 queue_size = 1024
-jwt_expiration_minutes = 60
+session_expiration_secs = 3600

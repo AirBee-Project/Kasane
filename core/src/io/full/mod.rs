@@ -45,6 +45,7 @@ impl Storage {
     pub fn new(path: PathBuf) -> Result<Self, UserError> {
         // Database::create は存在すれば読み込み、なければ新規作成
         let db = Database::create(&path).unwrap();
+
         Ok(Storage { db })
     }
 }

@@ -21,7 +21,7 @@ impl Storage {
         &self,
         user_name: &str,
         password: &str,
-        session_id: Uuid,
+        session_id: &Uuid,
         session_expiration_secs: u64,
     ) -> Result<u64, UserError> {
         //ユーザーが存在するのかの検証
@@ -69,10 +69,10 @@ impl Storage {
             //新しいSessionIDの発行
             let key = UserSessionKey {
                 expires_at,
-                session_id: session_id.into(),
+                session_id: session_id.clone().into(),
             };
 
-            let _ = table_session.insert(key, UuidKey::from(session_id));
+            let _ = table_session.insert(key, UuidKey::from(session_id.clone()));
 
             //古いSessionIDの削除
             let delete_at = now
