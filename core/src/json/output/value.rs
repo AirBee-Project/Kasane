@@ -1,7 +1,8 @@
 use crate::io::full::tools::value_entry::ValueEntry;
 use serde::Serialize;
+use ts_rs::TS;
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Value {
     // pub id: SpaceTimeId,

@@ -1,13 +1,14 @@
 use crate::json::input::{DatabaseCommand, KeyCommand, SpaceCommand};
 use serde::Serialize;
+use ts_rs::TS;
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ShowUsers {
     pub users: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct InfoUser {
     pub user_name: String,
@@ -16,14 +17,14 @@ pub struct InfoUser {
     key_commnad: Vec<InfoUserKey>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct InfoUserSpace {
     space_name: String,
     space_commnad: Vec<SpaceCommand>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct InfoUserKey {
     space_name: String,
