@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::command::create_key::create_key;
 use crate::command::create_space::create_space;
+use crate::command::create_user::create_user;
 use crate::command::info_key::info_key;
 use crate::command::info_space::info_space;
 use crate::command::info_user::info_user;
@@ -29,6 +30,7 @@ pub mod patch_value;
 pub mod select_value;
 pub mod show_keys;
 pub mod show_spaces;
+pub mod show_users;
 pub mod show_values;
 pub mod tools;
 pub mod update_value;
@@ -63,7 +65,7 @@ pub async fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError>
         //Command::Transaction(v) => todo!(),
 
         //ユーザー操作系
-        Command::CreateUser(v) => todo!(),
+        Command::CreateUser(v) => create_user(v, s),
         Command::DropUser(v) => todo!(),
         Command::InfoUser(v) => info_user(v, s),
         Command::ShowUsers => todo!(),

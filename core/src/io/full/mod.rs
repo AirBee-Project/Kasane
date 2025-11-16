@@ -5,7 +5,7 @@ use crate::{
     io::full::kv_type::{
         key_table_key::KeyTableKey, user_session_key::UserSessionKey, uuid::UuidKey,
     },
-    json::input::{DatabaseCommand, SpaceCommand},
+    json::input::{DatabaseCommand, KeyCommand, SpaceCommand},
     user_error::UserError,
 };
 
@@ -20,6 +20,7 @@ pub mod insert_value;
 pub mod kv_type;
 pub mod show_keys;
 pub mod show_spaces;
+pub mod show_users;
 pub mod tools;
 pub mod validate_session;
 pub mod verify_session;
@@ -37,7 +38,9 @@ pub const USER_SESSION: TableDefinition<UserSessionKey, UuidKey> =
 pub const PERMISSION_DATABASE: MultimapTableDefinition<UuidKey, DatabaseCommand> =
     MultimapTableDefinition::new("permission_database");
 pub const PERMISSION_SPACE: MultimapTableDefinition<UuidKey, SpaceCommand> =
-    MultimapTableDefinition::new("permission_database");
+    MultimapTableDefinition::new("permission_space");
+pub const PERMISSION_KEY: MultimapTableDefinition<UuidKey, KeyCommand> =
+    MultimapTableDefinition::new("permission_key");
 
 // 本体機能
 pub const SPACE_TABLE: TableDefinition<&str, UuidKey> = TableDefinition::new("space_table");
