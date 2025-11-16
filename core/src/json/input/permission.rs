@@ -11,7 +11,7 @@ pub struct GrantDatabase {
     pub command: Vec<DatabaseCommand>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, TS)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, TS, Encode, Decode)]
 #[serde(rename_all = "camelCase")]
 #[repr(u8)]
 pub enum DatabaseCommand {
@@ -30,14 +30,15 @@ pub struct GrantSpace {
     pub command: Vec<SpaceCommand>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, TS)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, TS, Encode, Decode)]
 #[serde(rename_all = "camelCase")]
+#[repr(u8)]
 pub enum SpaceCommand {
-    ALL,
-    CreateKey,
-    DropKey,
-    InfoSpace,
-    ShowKeys,
+    ALL = 0,
+    CreateKey = 1,
+    DropKey = 2,
+    InfoSpace = 3,
+    ShowKeys = 4,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
@@ -49,18 +50,19 @@ pub struct GrantKey {
     pub command: Vec<KeyCommand>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, TS, Encode, Decode)]
 #[serde(rename_all = "camelCase")]
+#[repr(u8)]
 pub enum KeyCommand {
-    ALL,
-    InsertValue,
-    PatchValue,
-    UpdateValue,
-    DropKey,
-    SelectValue,
-    InfoKey,
-    ShowValues,
-    FilterValue,
+    ALL = 0,
+    InsertValue = 1,
+    PatchValue = 2,
+    UpdateValue = 3,
+    DropKey = 4,
+    SelectValue = 5,
+    InfoKey = 6,
+    ShowValues = 7,
+    FilterValue = 8,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]

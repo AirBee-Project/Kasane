@@ -1,10 +1,11 @@
-use redb::{Database, DatabaseError, TableDefinition};
+use redb::{Database, DatabaseError, MultimapTableDefinition, TableDefinition, Value};
 use std::{env, path::PathBuf};
 
 use crate::{
     io::full::kv_type::{
         key_table_key::KeyTableKey, user_session_key::UserSessionKey, uuid::UuidKey,
     },
+    json::input::{DatabaseCommand, SpaceCommand},
     user_error::UserError,
 };
 
@@ -31,6 +32,12 @@ pub const USER_TABLE: TableDefinition<&str, UuidKey> = TableDefinition::new("use
 pub const USER_PASSWORD: TableDefinition<UuidKey, &str> = TableDefinition::new("user_password");
 pub const USER_SESSION: TableDefinition<UserSessionKey, UuidKey> =
     TableDefinition::new("user_session");
+
+//権限関連
+pub const PERMISSION_DATABASE: MultimapTableDefinition<UuidKey, DatabaseCommand> =
+    MultimapTableDefinition::new("permission_database");
+pub const PERMISSION_SPACE: MultimapTableDefinition<UuidKey, SpaceCommand> =
+    MultimapTableDefinition::new("permission_database");
 
 // 本体機能
 pub const SPACE_TABLE: TableDefinition<&str, UuidKey> = TableDefinition::new("space_table");
