@@ -2,11 +2,12 @@ use redb::{Database, DatabaseError, TableDefinition};
 use std::{env, path::PathBuf};
 
 use crate::{
-    io::full::kv_type::{key_table_key::KeyTableKey, uuid::UuidKey},
+    io::full::kv_type::{
+        key_table_key::KeyTableKey, user_session_key::UserSessionKey, uuid::UuidKey,
+    },
     user_error::UserError,
 };
 
-pub mod cleanup_expired_sessions;
 pub mod create_key;
 pub mod create_session;
 pub mod create_space;
@@ -20,7 +21,7 @@ pub mod show_keys;
 pub mod show_spaces;
 pub mod tools;
 pub mod validate_session;
-pub mod verify_user;
+pub mod verify_session;
 pub mod version;
 
 // Tableの定義
@@ -28,6 +29,8 @@ pub mod version;
 // ユーザー関連
 pub const USER_TABLE: TableDefinition<&str, UuidKey> = TableDefinition::new("user_table");
 pub const USER_PASSWORD: TableDefinition<UuidKey, &str> = TableDefinition::new("user_password");
+pub const USER_SESSION: TableDefinition<UserSessionKey, UuidKey> =
+    TableDefinition::new("user_session");
 
 // 本体機能
 pub const SPACE_TABLE: TableDefinition<&str, UuidKey> = TableDefinition::new("space_table");

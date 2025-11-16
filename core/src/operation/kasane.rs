@@ -1,19 +1,20 @@
 use axum::{
     extract::State,
-    http::{header::AUTHORIZATION, Request, StatusCode},
-    middleware::{self, Next},
+    http::StatusCode,
     response::{IntoResponse, Response},
     routing::post,
     Json, Router,
 };
-use jsonwebtoken::{decode, DecodingKey, Validation};
+use serde::{Deserialize, Serialize};
+use std::time::SystemTime;
 use std::{
-    env::{self, current_dir},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
     sync::Arc,
+    time::{Duration, UNIX_EPOCH},
 };
 use tokio::sync::{mpsc, oneshot, watch};
+use uuid::Uuid;
 
 use crate::{
     command::process,
@@ -22,6 +23,19 @@ use crate::{
     operation::configuration::Configuration,
     user_error::UserError,
 };
+
+#[derive(Deserialize)]
+struct LoginRequest {
+    username: String,
+    password: String,
+}
+
+// レスポンス
+#[derive(Serialize)]
+struct LoginResponse {
+    session_id: String,
+    expires_at: u64,
+}
 
 #[derive(Clone)]
 pub struct AppState {
@@ -149,7 +163,34 @@ pub async fn kasane(mut shutdown: watch::Receiver<()>, conf: Configuration, file
     println!("RESTful API server gracefully stopped");
 }
 
-async fn login() {}
+// ログインハンドラー
+async fn login(
+    State(state): State<AppState>,
+    Json(payload): Json<LoginRequest>,
+) -> Result<Json<LoginResponse>, StatusCode> {
+    //ここは本番環境では消す
+    if payload.username != "admin" || payload.password != "password" {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let session_id = Uuid::new_v4().to_string();
+
+    let expires_at = SystemTime::now()
+        .checked_add(Duration::from_secs(
+            state.conf.general.session_expiration_secs,
+        ))
+        .unwrap()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let response = LoginResponse {
+        session_id,
+        expires_at,
+    };
+
+    Ok(Json(response))
+}
 
 /// POST / - コマンド実行エンドポイント
 async fn execute_handler(
@@ -166,8 +207,6 @@ async fn execute_handler(
             storage: state.storage.clone(),
             resp: resp_tx,
         };
-
-        //Todoここで権限を検証
 
         // ジョブをキューに送信
         if let Err(_) = state.job_sender.tx.send(job).await {

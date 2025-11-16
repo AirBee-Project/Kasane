@@ -40,6 +40,9 @@ pub enum UserError {
     #[error("User '{user_name}' not found")]
     UserNotFound { user_name: String },
 
+    #[error("Username or password is missing")]
+    UserNameOrPasswordMissing,
+
     #[error("Parse error: {message} (at {location})")]
     ParseError { message: String, location: String },
 
@@ -92,6 +95,9 @@ pub enum UserError {
         received_type: String,
         location: String,
     },
+
+    #[error("Session error: {message} (at {location})")]
+    SessionError { message: String, location: String },
 
     #[error("Failed to send job to queue (at {location})")]
     QueueSendError { location: String },

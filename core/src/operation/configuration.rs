@@ -18,7 +18,7 @@ pub struct General {
     /// 指定されなかった場合は最大のCPU数を使用する
     pub cpu_num: Option<usize>,
     pub queue_size: usize,
-    pub jwt_expiration_minutes: usize,
+    pub session_expiration_secs: u64,
 }
 
 ///kasane.tomlが存在する場合はその設定を読み込む
@@ -55,8 +55,8 @@ pub fn configuration() -> Configuration {
         doc["general"]["queue_size"] = 1024.into();
     }
 
-    if doc["general"].get("jwt_expiration_minutes").is_none() {
-        doc["general"]["jwt_expiration_minutes"] = 60.into();
+    if doc["general"].get("session_expiration_secs").is_none() {
+        doc["general"]["session_expiration_secs"] = 3600.into();
     }
 
     // ファイルに書き戻す
