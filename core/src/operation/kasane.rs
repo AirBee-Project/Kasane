@@ -19,7 +19,10 @@ use uuid::Uuid;
 use crate::{
     command::process,
     io::full::Storage,
-    json::{input::Packet, output::Output},
+    json::{
+        input::{Command, Packet},
+        output::Output,
+    },
     operation::configuration::Configuration,
     user_error::UserError,
 };
@@ -192,12 +195,29 @@ async fn login(
     Ok(Json(response))
 }
 
+#[derive(Deserialize)]
+struct ExecuteRequest {
+    session_id: String,
+    command: Vec<Command>,
+}
+
 /// POST / - コマンド実行エンドポイント
 async fn execute_handler(
     State(state): State<AppState>,
-    Json(packet): Json<Packet>,
+    Json(packet): Json<ExecuteRequest>,
 ) -> Result<Json<Vec<Result<Output, UserError>>>, (StatusCode, String)> {
-    // コマンドを順次処理
+    // 1. セッション検証
+    let user_id = match state.storage.verify_session(&packet.session_id) {
+        Ok(uid) => uid,
+        Err(_) => {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "Invalid or expired session".into(),
+            ))
+        }
+    };
+
+    // 2. コマンドを順次処理
     let mut results = Vec::with_capacity(packet.command.len());
 
     for cmd in packet.command {
@@ -208,7 +228,6 @@ async fn execute_handler(
             resp: resp_tx,
         };
 
-        // ジョブをキューに送信
         if let Err(_) = state.job_sender.tx.send(job).await {
             results.push(Err(UserError::QueueSendError {
                 location: "execute_handler".to_string(),
@@ -216,7 +235,6 @@ async fn execute_handler(
             continue;
         }
 
-        // 結果を受信（順次処理）
         match resp_rx.await {
             Ok(res) => results.push(res),
             Err(_) => results.push(Err(UserError::QueueReceiveError {
