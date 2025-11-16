@@ -24,7 +24,6 @@ pub mod show_users;
 pub mod tools;
 pub mod validate_session;
 pub mod verify_session;
-pub mod version;
 
 // Tableの定義
 
