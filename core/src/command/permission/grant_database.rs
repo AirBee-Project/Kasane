@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use crate::{
     io::full::Storage,
@@ -6,6 +6,7 @@ use crate::{
     user_error::UserError,
 };
 
-pub fn grant_database(_v: GrantDatabase, _s: Arc<Storage>) -> Result<Output, UserError> {
-    todo!()
+pub fn grant_database(v: GrantDatabase, s: Arc<Storage>) -> Result<Output, UserError> {
+    let commands: HashSet<_> = v.command.into_iter().collect();
+    s.grant_database(&v.user_name, commands)
 }

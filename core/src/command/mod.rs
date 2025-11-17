@@ -16,7 +16,8 @@ pub mod version;
 
 use key::{create_key, drop_key, info_key, show_keys};
 use permission::{
-    grant_database, grant_key, grant_space, revoke_database, revoke_key, revoke_space,
+    grant_database, grant_key, grant_space, grant_user, revoke_database, revoke_key,
+    revoke_space, revoke_user,
 };
 use space::{create_space, drop_space, info_space, show_spaces};
 use user::{create_user, drop_user, info_user, show_users};
@@ -61,12 +62,12 @@ pub async fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError>
         Command::GrantDatabase(v) => grant_database(v, s),
         Command::GrantSpace(v) => grant_space(v, s),
         Command::GrantKey(v) => grant_key(v, s),
-        Command::GrantUser(v) => todo!(),
+        Command::GrantUser(v) => grant_user(v, s),
 
         //権限取り上げる系
         Command::RevokeDatabase(v) => revoke_database(v, s),
         Command::RevokeSpace(v) => revoke_space(v, s),
         Command::RevokeKey(v) => revoke_key(v, s),
-        Command::RevokeUser(v) => todo!(),
+        Command::RevokeUser(v) => revoke_user(v, s),
     }
 }

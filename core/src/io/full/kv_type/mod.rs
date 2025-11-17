@@ -1,6 +1,7 @@
 pub mod key_mode;
 pub mod key_table_key;
 pub mod key_type;
+pub mod permission_user_value;
 pub mod premisson_database_value;
 pub mod premisson_space_key;
 pub mod premisson_space_value;
