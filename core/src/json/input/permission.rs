@@ -88,3 +88,36 @@ pub struct RevokeKey {
     pub target_key: Vec<String>,
     pub command: Vec<KeyCommand>,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct RevokeUser {
+    pub user_name: String,
+    pub command: Vec<UserCommand>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct GrantUser {
+    pub user_name: String,
+    pub command: Vec<UserCommand>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, TS, Encode, Decode)]
+#[serde(rename_all = "camelCase")]
+#[repr(u8)]
+pub enum UserCommand {
+    ALL = 0,
+    CreateUser = 1,
+    DropUser = 2,
+    InfoUser = 3,
+    ShowUsers = 4,
+    GrantDatabase = 5,
+    GrantSpace = 6,
+    GrantKey = 7,
+    GrauntUser = 8,
+    RevokeDatabase = 9,
+    RevokeSpace = 10,
+    RevokeKey = 11,
+    RevokeUser = 12,
+}

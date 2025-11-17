@@ -1,20 +1,20 @@
 // Module declarations and re-exports
-pub mod space;
-pub mod key;
-pub mod value;
-pub mod range;
 pub mod info;
-pub mod user;
+pub mod key;
 pub mod permission;
+pub mod range;
+pub mod space;
+pub mod user;
+pub mod value;
 
 // Re-export types from submodules
-pub use space::*;
-pub use key::*;
-pub use value::*;
-pub use range::*;
 pub use info::*;
-pub use user::*;
+pub use key::*;
 pub use permission::*;
+pub use range::*;
+pub use space::*;
+pub use user::*;
+pub use value::*;
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -56,12 +56,14 @@ pub enum Command {
     //権限付与系
     GrantDatabase(GrantDatabase),
     GrantSpace(GrantSpace),
-    GrantKeyPrivilege(GrantKey),
+    GrantKey(GrantKey),
+    GrantUser(GrantUser),
 
     //権限取り上げ系
     RevokeDatabase(RevokeDatabase),
-    RevokeSpacePrivilege(RevokeSpace),
-    RevokeKeyPrivilege(RevokeKey),
+    RevokeSpace(RevokeSpace),
+    RevokeKey(RevokeKey),
+    RevokeUser(RevokeUser),
 }
 
 #[derive(Debug, Serialize, Deserialize, TS)]

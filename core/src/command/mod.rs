@@ -6,19 +6,21 @@ use crate::{
     user_error::UserError,
 };
 
-pub mod space;
 pub mod key;
-pub mod value;
-pub mod user;
 pub mod permission;
+pub mod space;
 pub mod tools;
+pub mod user;
+pub mod value;
 pub mod version;
 
-use space::{create_space, drop_space, info_space, show_spaces};
 use key::{create_key, drop_key, info_key, show_keys};
-use value::{delete_value, insert_value, patch_value, select_value, show_values, update_value};
+use permission::{
+    grant_database, grant_key, grant_space, revoke_database, revoke_key, revoke_space,
+};
+use space::{create_space, drop_space, info_space, show_spaces};
 use user::{create_user, drop_user, info_user, show_users};
-use permission::{grant_database, grant_key, grant_space, revoke_database, revoke_key, revoke_space};
+use value::{delete_value, insert_value, patch_value, select_value, show_values, update_value};
 use version::version;
 
 //関数のディスパッチ関数
@@ -58,11 +60,13 @@ pub async fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError>
         //権限付与系
         Command::GrantDatabase(v) => grant_database(v, s),
         Command::GrantSpace(v) => grant_space(v, s),
-        Command::GrantKeyPrivilege(v) => grant_key(v, s),
+        Command::GrantKey(v) => grant_key(v, s),
+        Command::GrantUser(v) => todo!(),
 
         //権限取り上げる系
         Command::RevokeDatabase(v) => revoke_database(v, s),
-        Command::RevokeSpacePrivilege(v) => revoke_space(v, s),
-        Command::RevokeKeyPrivilege(v) => revoke_key(v, s),
+        Command::RevokeSpace(v) => revoke_space(v, s),
+        Command::RevokeKey(v) => revoke_key(v, s),
+        Command::RevokeUser(v) => todo!(),
     }
 }
