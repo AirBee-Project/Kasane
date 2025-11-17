@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use crate::{
     io::full::Storage,
@@ -6,6 +6,7 @@ use crate::{
     user_error::UserError,
 };
 
-pub fn revoke_database(_v: RevokeDatabase, _s: Arc<Storage>) -> Result<Output, UserError> {
-    todo!()
+pub fn revoke_database(v: RevokeDatabase, s: Arc<Storage>) -> Result<Output, UserError> {
+    let commands: HashSet<_> = v.command.into_iter().collect();
+    s.revoke_database(&v.user_name, commands)
 }
