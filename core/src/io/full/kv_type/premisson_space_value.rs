@@ -20,8 +20,8 @@ impl Value for SpaceCommand {
             0 => SpaceCommand::ALL,
             1 => SpaceCommand::CreateKey,
             2 => SpaceCommand::DropKey,
-            3 => SpaceCommand::InfoSpace,
-            4 => SpaceCommand::ShowKeys,
+            3 => SpaceCommand::ShowKeys,
+            4 => SpaceCommand::InfoKey,
             other => panic!("Invalid SpaceCommand value: {}", other),
         }
     }
