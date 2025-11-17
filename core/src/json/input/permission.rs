@@ -20,6 +20,7 @@ pub enum DatabaseCommand {
     DropSpace = 2,
     ShowSpaces = 3,
     Version = 4,
+    InfoSpace = 5,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
@@ -37,8 +38,8 @@ pub enum SpaceCommand {
     ALL = 0,
     CreateKey = 1,
     DropKey = 2,
-    InfoSpace = 3,
-    ShowKeys = 4,
+    ShowKeys = 3,
+    InfoKey = 4,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
@@ -58,11 +59,9 @@ pub enum KeyCommand {
     InsertValue = 1,
     PatchValue = 2,
     UpdateValue = 3,
-    DropKey = 4,
-    SelectValue = 5,
-    InfoKey = 6,
-    ShowValues = 7,
-    FilterValue = 8,
+    SelectValue = 4,
+    DeleteValue = 5,
+    ShowValues = 6,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
@@ -108,16 +107,22 @@ pub struct GrantUser {
 #[repr(u8)]
 pub enum UserCommand {
     ALL = 0,
+
+    // User management
     CreateUser = 1,
     DropUser = 2,
     InfoUser = 3,
     ShowUsers = 4,
-    GrantDatabase = 5,
-    GrantSpace = 6,
-    GrantKey = 7,
-    GrauntUser = 8,
-    RevokeDatabase = 9,
-    RevokeSpace = 10,
-    RevokeKey = 11,
-    RevokeUser = 12,
+
+    // Grant
+    GrantUser = 5,
+    GrantDatabase = 6,
+    GrantSpace = 7,
+    GrantKey = 8,
+
+    // Revoke
+    RevokeUser = 9,
+    RevokeDatabase = 10,
+    RevokeSpace = 11,
+    RevokeKey = 12,
 }
