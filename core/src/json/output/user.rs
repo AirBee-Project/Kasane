@@ -12,9 +12,9 @@ pub struct ShowUsers {
 #[serde(rename_all = "camelCase")]
 pub struct InfoUser {
     pub user_name: String,
-    database_command: Vec<DatabaseCommand>,
-    space_command: Vec<InfoUserSpace>,
-    key_commnad: Vec<InfoUserKey>,
+    pub database_command: Vec<DatabaseCommand>,
+    pub space_command: Vec<InfoUserSpace>,
+    pub key_commnad: Vec<InfoUserKey>,
 }
 
 #[derive(Serialize, TS)]
