@@ -4,8 +4,8 @@ use tokio::sync::watch;
 use crate::operation::{configuration::configuration, kasane::kasane};
 
 pub mod command;
+pub mod interface;
 pub mod io;
-pub mod json;
 pub mod macros;
 pub mod operation;
 pub mod user_error;

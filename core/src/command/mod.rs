@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::io::full::Storage;
 use crate::{
-    json::{input::Command, output::Output},
+    interface::{input::Command, output::Output},
     user_error::UserError,
 };
 

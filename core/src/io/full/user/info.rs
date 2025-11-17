@@ -11,7 +11,7 @@ use crate::{
         Storage, KEY_TABLE, PERMISSION_DATABASE, PERMISSION_KEY, PERMISSION_SPACE, SPACE_TABLE,
         USER_TABLE,
     },
-    json::{
+    interface::{
         input::{DatabaseCommand, KeyCommand, KeyMode, SpaceCommand},
         output::{InfoUser, InfoUserKey, InfoUserSpace, Output},
     },

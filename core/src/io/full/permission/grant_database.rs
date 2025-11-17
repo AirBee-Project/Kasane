@@ -4,7 +4,7 @@ use redb::ReadableTable;
 
 use crate::{
     io::full::{Storage, PERMISSION_DATABASE, USER_TABLE},
-    json::{input::DatabaseCommand, output::Output},
+    interface::{input::DatabaseCommand, output::Output},
     user_error::UserError,
 };
 

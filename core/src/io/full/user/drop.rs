@@ -3,7 +3,7 @@ use crate::{
         Storage, PERMISSION_DATABASE, PERMISSION_KEY, PERMISSION_SPACE, PERMISSION_USER,
         USER_PASSWORD, USER_TABLE,
     },
-    json::output::Output,
+    interface::output::Output,
     user_error::UserError,
 };
 

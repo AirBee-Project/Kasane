@@ -9,7 +9,7 @@ use crate::{
         },
         Storage, KEY_TABLE, PERMISSION_KEY, SPACE_TABLE, USER_TABLE,
     },
-    json::{input::{KeyCommand, KeyMode}, output::Output},
+    interface::{input::{KeyCommand, KeyMode}, output::Output},
     location,
     user_error::UserError,
 };

@@ -1,7 +1,7 @@
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-use crate::json::input::KeyType;
+use crate::interface::input::KeyType;
 
 impl KeyType {
     pub fn as_str(&self) -> &'static str {

@@ -2,7 +2,7 @@ use std::{collections::HashSet, sync::Arc};
 
 use crate::{
     io::full::Storage,
-    json::{input::RevokeKey, output::Output},
+    interface::{input::RevokeKey, output::Output},
     user_error::UserError,
 };
 

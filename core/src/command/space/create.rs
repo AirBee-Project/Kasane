@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{
     command::tools::valid_name::valid_name,
     io::full::Storage,
-    json::{input::CreateSpace, output::Output},
+    interface::{input::CreateSpace, output::Output},
     location,
     user_error::UserError,
 };

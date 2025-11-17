@@ -2,7 +2,7 @@ use redb::{ReadableDatabase, ReadableTable};
 
 use crate::{
     io::full::{Storage, SPACE_TABLE, USER_TABLE},
-    json::output::{Output, ShowSpaces, ShowUsers},
+    interface::output::{Output, ShowSpaces, ShowUsers},
     user_error::UserError,
 };
 

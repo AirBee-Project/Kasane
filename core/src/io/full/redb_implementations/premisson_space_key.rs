@@ -1,7 +1,7 @@
 use redb::{Key, Value};
 use std::cmp::Ordering;
 
-use crate::json::input::KeyCommand;
+use crate::interface::input::KeyCommand;
 
 impl Value for KeyCommand {
     type SelfType<'a> = KeyCommand;
