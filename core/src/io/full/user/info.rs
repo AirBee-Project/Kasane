@@ -103,63 +103,49 @@ impl Storage {
 
         // Now we need to build the output structure
         // We need to map space_id and key_id back to their names
-        let mut space_command_list = vec![];
-        let mut key_command_list = vec![];
+        // Build lookup maps for efficient name resolution
+        let mut space_id_to_name: HashMap<UuidKey, String> = HashMap::new();
+        let mut key_id_to_info: HashMap<UuidKey, (UuidKey, String)> = HashMap::new();
 
         {
             let table_space = read_txn.open_table(SPACE_TABLE)?;
             let table_key = read_txn.open_table(KEY_TABLE)?;
 
-            // Map space permissions back to space names
-            for (space_id, commands) in space_commands_map {
-                // Find the space name for this space_id
-                let mut space_name_opt = None;
-                for space_entry in table_space.iter()? {
-                    let (name, id_guard) = space_entry?;
-                    if id_guard.value() == space_id {
-                        space_name_opt = Some(name.value().to_string());
-                        break;
-                    }
-                }
-
-                if let Some(space_name) = space_name_opt {
-                    space_command_list.push(InfoUserSpace {
-                        space_name,
-                        space_commnad: commands,
-                    });
-                }
+            // Build space_id -> space_name lookup
+            for space_entry in table_space.iter()? {
+                let (name, id_guard) = space_entry?;
+                space_id_to_name.insert(id_guard.value(), name.value().to_string());
             }
 
-            // Map key permissions back to space and key names
-            for ((space_id, key_id), commands) in key_commands_map {
-                // Find the space name for this space_id
-                let mut space_name_opt = None;
-                for space_entry in table_space.iter()? {
-                    let (name, id_guard) = space_entry?;
-                    if id_guard.value() == space_id {
-                        space_name_opt = Some(name.value().to_string());
-                        break;
-                    }
-                }
+            // Build key_id -> (space_id, key_name) lookup
+            for key_entry in table_key.iter()? {
+                let (key_table_key, id_guard) = key_entry?;
+                let key_id = id_guard.value();
+                let space_id = key_table_key.value().space_id;
+                let key_name = key_table_key.value().key_name.clone();
+                key_id_to_info.insert(key_id, (space_id, key_name));
+            }
+        }
 
-                // Find the key name for this key_id in this space
-                let mut key_name_opt = None;
-                if space_name_opt.is_some() {
-                    for key_entry in table_key.iter()? {
-                        let (key_table_key, id_guard) = key_entry?;
-                        if id_guard.value() == key_id
-                            && key_table_key.value().space_id == space_id
-                        {
-                            key_name_opt = Some(key_table_key.value().key_name.clone());
-                            break;
-                        }
-                    }
-                }
+        // Map space permissions back to space names
+        let mut space_command_list = vec![];
+        for (space_id, commands) in space_commands_map {
+            if let Some(space_name) = space_id_to_name.get(&space_id) {
+                space_command_list.push(InfoUserSpace {
+                    space_name: space_name.clone(),
+                    space_commnad: commands,
+                });
+            }
+        }
 
-                if let (Some(space_name), Some(key_name)) = (space_name_opt, key_name_opt) {
+        // Map key permissions back to space and key names
+        let mut key_command_list = vec![];
+        for ((space_id, key_id), commands) in key_commands_map {
+            if let Some((_, key_name)) = key_id_to_info.get(&key_id) {
+                if let Some(space_name) = space_id_to_name.get(&space_id) {
                     key_command_list.push(InfoUserKey {
-                        space_name,
-                        key_name,
+                        space_name: space_name.clone(),
+                        key_name: key_name.clone(),
                         key_commnad: commands,
                     });
                 }
