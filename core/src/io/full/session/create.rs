@@ -50,7 +50,12 @@ impl Storage {
             };
 
             //パスワードの照合
-            if !verify(password, &hash).unwrap() {
+            let is_valid = verify(password, &hash).map_err(|e| UserError::PasswordError {
+                message: format!("Password verification failed: {}", e),
+                location: location!(),
+            })?;
+            
+            if !is_valid {
                 return Err(UserError::PasswordError {
                     message: "Incorrect password".to_string(),
                     location: location!(),
@@ -61,9 +66,15 @@ impl Storage {
 
             expires_at = now
                 .checked_add(Duration::from_secs(session_expiration_secs))
-                .unwrap()
+                .ok_or_else(|| UserError::SessionError {
+                    message: "Session expiration time overflow".to_string(),
+                    location: location!(),
+                })?
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .map_err(|_| UserError::SessionError {
+                    message: "System time error".to_string(),
+                    location: location!(),
+                })?
                 .as_secs();
 
             //新しいSessionIDの発行
@@ -77,9 +88,15 @@ impl Storage {
             //古いSessionIDの削除
             let delete_at = now
                 .checked_sub(Duration::from_secs(session_expiration_secs))
-                .unwrap()
+                .ok_or_else(|| UserError::SessionError {
+                    message: "Session deletion time underflow".to_string(),
+                    location: location!(),
+                })?
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .map_err(|_| UserError::SessionError {
+                    message: "System time error".to_string(),
+                    location: location!(),
+                })?
                 .as_secs();
 
             let start_key = UserSessionKey {

@@ -23,8 +23,8 @@ pub fn create_user(v: CreateUser, s: Arc<Storage>) -> Result<Output, UserError> 
     }
 
     //パスワードの検証
-    let has_letter = Regex::new(r"[A-Za-z]").unwrap();
-    let has_digit = Regex::new(r"\d").unwrap();
+    let has_letter = Regex::new(r"[A-Za-z]").expect("Invalid regex pattern");
+    let has_digit = Regex::new(r"\d").expect("Invalid regex pattern");
 
     if v.password.len() < 10
         || !has_letter.is_match(&v.password)
