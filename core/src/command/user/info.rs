@@ -7,5 +7,5 @@ use crate::{
 };
 
 pub fn info_user(v: InfoUser, s: Arc<Storage>) -> Result<Output, UserError> {
-    todo!()
+    s.info_user(&v.user_name)
 }
