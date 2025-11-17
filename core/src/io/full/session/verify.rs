@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     io::full::{
-        kv_type::{user_session_key::UserSessionKey, uuid::UuidKey},
+        redb_implementations::{user_session_key::UserSessionKey, uuid::UuidKey},
         Storage, USER_SESSION,
     },
     location,

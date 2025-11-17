@@ -2,19 +2,19 @@ use redb::{Database, DatabaseError, MultimapTableDefinition, TableDefinition, Va
 use std::{env, path::PathBuf};
 
 use crate::{
-    io::full::kv_type::{
+    io::full::redb_implementations::{
         key_table_key::KeyTableKey, user_session_key::UserSessionKey, uuid::UuidKey,
     },
     json::input::{DatabaseCommand, KeyCommand, SpaceCommand, UserCommand},
     user_error::UserError,
 };
 
+pub mod command_helpers;
 pub mod key;
-pub mod kv_type;
 pub mod permission;
+pub mod redb_implementations;
 pub mod session;
 pub mod space;
-pub mod tools;
 pub mod user;
 pub mod value;
 
