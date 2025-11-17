@@ -2,7 +2,7 @@ use redb::ReadableDatabase;
 
 use crate::{
     io::full::{
-        kv_type::{key_table_key::KeyTableKey, key_type::KeyTypeKind},
+        redb_implementations::{key_table_key::KeyTableKey, key_type::KeyTypeKind},
         Storage, KEY_TABLE, SPACE_TABLE,
     },
     json::{

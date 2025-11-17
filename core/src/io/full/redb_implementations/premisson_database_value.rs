@@ -22,6 +22,7 @@ impl Value for DatabaseCommand {
             2 => DatabaseCommand::DropSpace,
             3 => DatabaseCommand::ShowSpaces,
             4 => DatabaseCommand::Version,
+            5 => DatabaseCommand::InfoSpace,
             other => panic!("Invalid DatabaseCommand value: {}", other),
         }
     }

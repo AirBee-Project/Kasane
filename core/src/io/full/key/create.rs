@@ -5,7 +5,7 @@ use redb::{ReadableDatabase, ReadableMultimapTable, ReadableTable};
 
 use crate::{
     io::full::{
-        kv_type::{key_table_key::KeyTableKey, key_type::KeyTypeKind, uuid::UuidKey},
+        redb_implementations::{key_table_key::KeyTableKey, key_type::KeyTypeKind, uuid::UuidKey},
         Storage, KEY_TABLE, SPACE_TABLE,
     },
     json::{

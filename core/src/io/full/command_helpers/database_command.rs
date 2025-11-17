@@ -9,6 +9,7 @@ impl DatabaseCommand {
         set.insert(DatabaseCommand::DropSpace);
         set.insert(DatabaseCommand::ShowSpaces);
         set.insert(DatabaseCommand::Version);
+        set.insert(DatabaseCommand::InfoSpace);
         set
     }
 }

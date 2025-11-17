@@ -7,8 +7,8 @@ impl SpaceCommand {
         let mut set = HashSet::new();
         set.insert(SpaceCommand::CreateKey);
         set.insert(SpaceCommand::DropKey);
-        set.insert(SpaceCommand::InfoSpace);
         set.insert(SpaceCommand::ShowKeys);
+        set.insert(SpaceCommand::InfoKey);
         set
     }
 }

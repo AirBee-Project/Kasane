@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use crate::{
-    io::full::kv_type::{key_type::KeyTypeKind, uuid::UuidKey},
+    io::full::redb_implementations::{key_type::KeyTypeKind, uuid::UuidKey},
     json::input::{KeyMode, KeyType},
 };
 use bincode::{config, decode_from_slice, Decode, Encode};

@@ -1,5 +1,5 @@
 use crate::{
-    io::full::{tools::value_entry::ValueEntry, Storage},
+    io::full::{command_helpers::value_entry::ValueEntry, Storage},
     json::output::Output,
     user_error::UserError,
 };

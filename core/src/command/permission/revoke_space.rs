@@ -8,5 +8,5 @@ use crate::{
 
 pub fn revoke_space(v: RevokeSpace, s: Arc<Storage>) -> Result<Output, UserError> {
     let commands: HashSet<_> = v.command.into_iter().collect();
-    s.revoke_space(&v.user_name, commands)
+    s.revoke_space(&v.user_name, &v.target_space, commands)
 }

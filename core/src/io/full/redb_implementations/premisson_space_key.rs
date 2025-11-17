@@ -20,11 +20,9 @@ impl Value for KeyCommand {
             1 => KeyCommand::InsertValue,
             2 => KeyCommand::PatchValue,
             3 => KeyCommand::UpdateValue,
-            4 => KeyCommand::DropKey,
-            5 => KeyCommand::SelectValue,
-            6 => KeyCommand::InfoKey,
-            7 => KeyCommand::ShowValues,
-            8 => KeyCommand::FilterValue,
+            4 => KeyCommand::SelectValue,
+            5 => KeyCommand::DeleteValue,
+            6 => KeyCommand::ShowValues,
             other => panic!("Invalid KeyCommand value: {}", other),
         }
     }
