@@ -8,5 +8,5 @@ use crate::{
 
 pub fn grant_space(v: GrantSpace, s: Arc<Storage>) -> Result<Output, UserError> {
     let commands: HashSet<_> = v.command.into_iter().collect();
-    s.grant_space(&v.user_name, commands)
+    s.grant_space(&v.user_name, &v.target_space, commands)
 }

@@ -3,7 +3,9 @@ use std::{env, path::PathBuf};
 
 use crate::{
     io::full::redb_implementations::{
-        key_table_key::KeyTableKey, user_session_key::UserSessionKey, uuid::UuidKey,
+        key_table_key::KeyTableKey, permission_key_key::PermissionKeyKey,
+        permission_space_key::PermissionSpaceKey, user_session_key::UserSessionKey,
+        uuid::UuidKey,
     },
     json::input::{DatabaseCommand, KeyCommand, SpaceCommand, UserCommand},
     user_error::UserError,
@@ -29,9 +31,9 @@ pub const USER_SESSION: TableDefinition<UserSessionKey, UuidKey> =
 //権限関連
 pub const PERMISSION_DATABASE: MultimapTableDefinition<UuidKey, DatabaseCommand> =
     MultimapTableDefinition::new("permission_database");
-pub const PERMISSION_SPACE: MultimapTableDefinition<UuidKey, SpaceCommand> =
+pub const PERMISSION_SPACE: MultimapTableDefinition<PermissionSpaceKey, SpaceCommand> =
     MultimapTableDefinition::new("permission_space");
-pub const PERMISSION_KEY: MultimapTableDefinition<UuidKey, KeyCommand> =
+pub const PERMISSION_KEY: MultimapTableDefinition<PermissionKeyKey, KeyCommand> =
     MultimapTableDefinition::new("permission_key");
 pub const PERMISSION_USER: MultimapTableDefinition<UuidKey, UserCommand> =
     MultimapTableDefinition::new("permission_user");
