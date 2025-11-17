@@ -1,7 +1,7 @@
 use redb::{Key, Value};
 use std::cmp::Ordering;
 
-use crate::json::input::SpaceCommand;
+use crate::interface::input::SpaceCommand;
 
 impl Value for SpaceCommand {
     type SelfType<'a> = SpaceCommand;

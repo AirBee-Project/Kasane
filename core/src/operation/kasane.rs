@@ -19,7 +19,7 @@ use uuid::Uuid;
 use crate::{
     command::process,
     io::full::Storage,
-    json::{
+    interface::{
         input::{Command, Packet},
         output::Output,
     },
@@ -53,7 +53,7 @@ struct JobSender {
 }
 
 struct Job {
-    cmd: crate::json::input::Command,
+    cmd: crate::interface::input::Command,
     storage: Arc<Storage>,
     resp: oneshot::Sender<Result<Output, UserError>>,
 }

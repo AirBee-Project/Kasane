@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::json::input::KeyCommand;
+use crate::interface::input::KeyCommand;
 
 impl KeyCommand {
     pub fn all() -> HashSet<KeyCommand> {

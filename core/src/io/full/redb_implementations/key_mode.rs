@@ -1,4 +1,4 @@
-use crate::json::input::KeyMode;
+use crate::interface::input::KeyMode;
 
 impl KeyMode {
     pub fn start() -> KeyMode {

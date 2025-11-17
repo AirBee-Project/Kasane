@@ -4,7 +4,7 @@ use redb::{ReadableMultimapTable, ReadableTable};
 
 use crate::{
     io::full::{redb_implementations::uuid::UuidKey, Storage, SPACE_TABLE},
-    json::output::Output,
+    interface::output::Output,
     location,
     user_error::UserError,
 };

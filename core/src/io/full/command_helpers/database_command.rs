@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::json::input::DatabaseCommand;
+use crate::interface::input::DatabaseCommand;
 
 impl DatabaseCommand {
     pub fn all() -> HashSet<DatabaseCommand> {

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::json::input::SpaceCommand;
+use crate::interface::input::SpaceCommand;
 
 impl SpaceCommand {
     pub fn all() -> HashSet<SpaceCommand> {

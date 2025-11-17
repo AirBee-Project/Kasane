@@ -7,7 +7,7 @@ use crate::{
         permission_space_key::PermissionSpaceKey, user_session_key::UserSessionKey,
         uuid::UuidKey,
     },
-    json::input::{DatabaseCommand, KeyCommand, SpaceCommand, UserCommand},
+    interface::input::{DatabaseCommand, KeyCommand, SpaceCommand, UserCommand},
     user_error::UserError,
 };
 

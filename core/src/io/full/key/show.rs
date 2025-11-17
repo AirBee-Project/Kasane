@@ -5,7 +5,7 @@ use crate::{
         redb_implementations::{key_table_key::KeyTableKey, key_type::KeyTypeKind},
         Storage, KEY_TABLE, SPACE_TABLE,
     },
-    json::{
+    interface::{
         input::{KeyMode, KeyType},
         output::{Output, Showkeys},
     },

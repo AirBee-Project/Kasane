@@ -7,7 +7,7 @@ use crate::{
         redb_implementations::permission_space_key::PermissionSpaceKey, Storage, PERMISSION_SPACE,
         SPACE_TABLE, USER_TABLE,
     },
-    json::{input::SpaceCommand, output::Output},
+    interface::{input::SpaceCommand, output::Output},
     location,
     user_error::UserError,
 };

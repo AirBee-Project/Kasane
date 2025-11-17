@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::json::input::UserCommand;
+use crate::interface::input::UserCommand;
 
 impl UserCommand {
     pub fn all() -> HashSet<UserCommand> {

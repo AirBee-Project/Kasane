@@ -1,6 +1,6 @@
 use crate::{
     io::full::{command_helpers::value_entry::ValueEntry, Storage},
-    json::output::Output,
+    interface::output::Output,
     user_error::UserError,
 };
 

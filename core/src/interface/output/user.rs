@@ -1,4 +1,4 @@
-use crate::json::input::{DatabaseCommand, KeyCommand, SpaceCommand};
+use crate::interface::input::{DatabaseCommand, KeyCommand, SpaceCommand};
 use serde::Serialize;
 use ts_rs::TS;
 

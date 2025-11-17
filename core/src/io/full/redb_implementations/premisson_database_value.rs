@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use crate::json::input::DatabaseCommand;
+use crate::interface::input::DatabaseCommand;
 use redb::{Key, Value};
 
 impl Value for DatabaseCommand {
