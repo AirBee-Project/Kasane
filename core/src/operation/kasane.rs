@@ -155,7 +155,9 @@ pub async fn kasane(mut shutdown: watch::Receiver<()>, conf: Configuration, file
         .with_state(app_state);
 
     // Graceful shutdown
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .expect("Failed to bind to address");
     println!("Listening on {}", addr);
 
     axum::serve(listener, app)
@@ -164,7 +166,7 @@ pub async fn kasane(mut shutdown: watch::Receiver<()>, conf: Configuration, file
             println!("Shutdown signal received");
         })
         .await
-        .unwrap();
+        .expect("Failed to serve application");
 
     println!("RESTful API server gracefully stopped");
 }

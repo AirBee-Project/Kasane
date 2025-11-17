@@ -22,7 +22,10 @@ impl Storage {
 
         let now_secs = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .map_err(|_| UserError::SessionError {
+                message: "System time error".to_string(),
+                location: location!(),
+            })?
             .as_secs();
 
         let user_id;

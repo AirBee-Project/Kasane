@@ -197,6 +197,7 @@ macro_rules! impl_from_redb_errors {
 }
 
 impl_from_redb_errors!(
+    redb::DatabaseError,
     redb::TransactionError,
     redb::StorageError,
     redb::CommitError,
