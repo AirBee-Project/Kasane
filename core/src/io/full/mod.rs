@@ -2,18 +2,17 @@ use redb::{Database, DatabaseError, MultimapTableDefinition, TableDefinition, Va
 use std::{env, path::PathBuf};
 
 use crate::{
+    interface::input::{DatabaseCommand, KeyCommand, SpaceCommand, UserCommand},
     io::full::redb_implementations::{
         key_table_key::KeyTableKey, permission_key_key::PermissionKeyKey,
-        permission_space_key::PermissionSpaceKey, user_session_key::UserSessionKey,
-        uuid::UuidKey,
+        permission_space_key::PermissionSpaceKey, user_session_key::UserSessionKey, uuid::UuidKey,
     },
-    interface::input::{DatabaseCommand, KeyCommand, SpaceCommand, UserCommand},
     user_error::UserError,
 };
 
 pub mod command_helpers;
 pub mod key;
-pub mod permission;
+// pub mod permission;
 pub mod redb_implementations;
 pub mod session;
 pub mod space;
@@ -28,15 +27,15 @@ pub const USER_PASSWORD: TableDefinition<UuidKey, &str> = TableDefinition::new("
 pub const USER_SESSION: TableDefinition<UserSessionKey, UuidKey> =
     TableDefinition::new("user_session");
 
-//権限関連
-pub const PERMISSION_DATABASE: MultimapTableDefinition<UuidKey, DatabaseCommand> =
-    MultimapTableDefinition::new("permission_database");
-pub const PERMISSION_SPACE: MultimapTableDefinition<PermissionSpaceKey, SpaceCommand> =
-    MultimapTableDefinition::new("permission_space");
-pub const PERMISSION_KEY: MultimapTableDefinition<PermissionKeyKey, KeyCommand> =
-    MultimapTableDefinition::new("permission_key");
-pub const PERMISSION_USER: MultimapTableDefinition<UuidKey, UserCommand> =
-    MultimapTableDefinition::new("permission_user");
+// //権限関連
+// pub const PERMISSION_DATABASE: MultimapTableDefinition<UuidKey, DatabaseCommand> =
+//     MultimapTableDefinition::new("permission_database");
+// pub const PERMISSION_SPACE: MultimapTableDefinition<PermissionSpaceKey, SpaceCommand> =
+//     MultimapTableDefinition::new("permission_space");
+// pub const PERMISSION_KEY: MultimapTableDefinition<PermissionKeyKey, KeyCommand> =
+//     MultimapTableDefinition::new("permission_key");
+// pub const PERMISSION_USER: MultimapTableDefinition<UuidKey, UserCommand> =
+//     MultimapTableDefinition::new("permission_user");
 
 // 本体機能
 pub const SPACE_TABLE: TableDefinition<&str, UuidKey> = TableDefinition::new("space_table");

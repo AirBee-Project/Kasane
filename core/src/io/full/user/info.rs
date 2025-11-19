@@ -3,17 +3,18 @@ use std::collections::HashMap;
 use redb::{ReadableDatabase, ReadableMultimapTable, ReadableTable};
 
 use crate::{
-    io::full::{
-        redb_implementations::{
-            key_table_key::KeyTableKey, key_type::KeyTypeKind, permission_key_key::PermissionKeyKey,
-            permission_space_key::PermissionSpaceKey, uuid::UuidKey,
-        },
-        Storage, KEY_TABLE, PERMISSION_DATABASE, PERMISSION_KEY, PERMISSION_SPACE, SPACE_TABLE,
-        USER_TABLE,
-    },
     interface::{
         input::{DatabaseCommand, KeyCommand, KeyMode, SpaceCommand},
         output::{InfoUser, InfoUserKey, InfoUserSpace, Output},
+    },
+    io::full::{
+        redb_implementations::{
+            key_table_key::KeyTableKey, key_type::KeyTypeKind,
+            permission_key_key::PermissionKeyKey, permission_space_key::PermissionSpaceKey,
+            uuid::UuidKey,
+        },
+        Storage, KEY_TABLE, PERMISSION_DATABASE, PERMISSION_KEY, PERMISSION_SPACE, SPACE_TABLE,
+        USER_TABLE,
     },
     user_error::UserError,
 };
@@ -111,13 +112,11 @@ impl Storage {
             let table_space = read_txn.open_table(SPACE_TABLE)?;
             let table_key = read_txn.open_table(KEY_TABLE)?;
 
-            // Build space_id -> space_name lookup
             for space_entry in table_space.iter()? {
                 let (name, id_guard) = space_entry?;
                 space_id_to_name.insert(id_guard.value(), name.value().to_string());
             }
 
-            // Build key_id -> (space_id, key_name) lookup
             for key_entry in table_key.iter()? {
                 let (key_table_key, id_guard) = key_entry?;
                 let key_id = id_guard.value();

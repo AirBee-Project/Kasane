@@ -48,22 +48,21 @@ pub enum Command {
     //Transaction(Vec<Command>),
 
     //ユーザー操作系
-    CreateUser(CreateUser),
-    DropUser(DropUser),
-    InfoUser(InfoUser),
+    // CreateUser(CreateUser),
+    // DropUser(DropUser),
+    // InfoUser(InfoUser),
     ShowUsers,
+    // //権限付与系
+    // GrantDatabase(GrantDatabase),
+    // GrantSpace(GrantSpace),
+    // GrantKey(GrantKey),
+    // GrantUser(GrantUser),
 
-    //権限付与系
-    GrantDatabase(GrantDatabase),
-    GrantSpace(GrantSpace),
-    GrantKey(GrantKey),
-    GrantUser(GrantUser),
-
-    //権限取り上げ系
-    RevokeDatabase(RevokeDatabase),
-    RevokeSpace(RevokeSpace),
-    RevokeKey(RevokeKey),
-    RevokeUser(RevokeUser),
+    // //権限取り上げ系
+    // RevokeDatabase(RevokeDatabase),
+    // RevokeSpace(RevokeSpace),
+    // RevokeKey(RevokeKey),
+    // RevokeUser(RevokeUser),
 }
 
 #[derive(Debug, Serialize, Deserialize, TS)]
