@@ -24,3 +24,4 @@ regex = "1.12.2"
 bincode = {version="2",features=["derive","serde"]}
 ts-rs = "11.1.0"
 dotenvy = "0.15.7"
+kasane-logic={path="../../kasane-logic"}

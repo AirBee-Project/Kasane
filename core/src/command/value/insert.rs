@@ -2,14 +2,15 @@ use std::sync::Arc;
 
 use crate::{
     command::tools::valid_name::valid_name,
-    io::full::Storage,
     interface::{input::InsertValue, output::Output},
+    io::full::Storage,
     location,
     user_error::UserError,
 };
 
 pub fn insert_value(v: InsertValue, s: Arc<Storage>) -> Result<Output, UserError> {
     //危険な入力がデータベースに侵入するのを防ぐ
+    //Rangeの範囲を整頓する
 
     //Spaceの名前のチェック
     match valid_name(&v.space_name) {
