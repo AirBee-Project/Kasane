@@ -1,13 +1,13 @@
 use redb::ReadableDatabase;
 
 use crate::{
+    interface::{
+        input::{KeyType, ValueMode},
+        output::{Output, Showkeys},
+    },
     io::full::{
         redb_implementations::{key_table_key::KeyTableKey, key_type::KeyTypeKind},
         Storage, KEY_TABLE, SPACE_TABLE,
-    },
-    interface::{
-        input::{KeyMode, KeyType},
-        output::{Output, Showkeys},
     },
     location,
     user_error::UserError,
@@ -57,14 +57,14 @@ impl Storage {
             let start_key = KeyTableKey {
                 space_id,
                 key_name: "".to_string(), // 最小文字列
-                key_mode: KeyMode::start(),
+                value_mode: ValueMode::start(),
                 key_type_kind: KeyTypeKind::start(),
             };
 
             let end_key = KeyTableKey {
                 space_id,
                 key_name: "\u{FFFF}".to_string(), // Unicode最大文字で終端
-                key_mode: KeyMode::end(),
+                value_mode: ValueMode::end(),
                 key_type_kind: KeyTypeKind::end(),
             };
 

@@ -4,13 +4,13 @@ use bincode::enc::write;
 use redb::{ReadableDatabase, ReadableMultimapTable, ReadableTable};
 
 use crate::{
+    interface::{
+        input::{KeyType, ValueMode},
+        output::Output,
+    },
     io::full::{
         redb_implementations::{key_table_key::KeyTableKey, key_type::KeyTypeKind, uuid::UuidKey},
         Storage, KEY_TABLE, SPACE_TABLE,
-    },
-    interface::{
-        input::{KeyMode, KeyType},
-        output::Output,
     },
     location,
     user_error::UserError,
@@ -22,7 +22,7 @@ impl Storage {
         space_name: &str,
         key_name: &str,
         key_type: KeyType,
-        key_mode: KeyMode,
+        value_mode: ValueMode,
     ) -> Result<Output, UserError> {
         let write_txn = self.db.begin_write()?;
         let read_txn = self.db.begin_read()?;
@@ -59,14 +59,14 @@ impl Storage {
             let start_key = KeyTableKey {
                 space_id,
                 key_name: key_name.to_string(),      // 最小文字列
-                key_mode: KeyMode::start(),          // ダミー
+                value_mode: ValueMode::start(),      // ダミー
                 key_type_kind: KeyTypeKind::start(), // ダミー
             };
 
             let end_key = KeyTableKey {
                 space_id,
                 key_name: key_name.to_string(), // Unicode最大文字で終端
-                key_mode: KeyMode::end(),
+                value_mode: ValueMode::end(),
                 key_type_kind: KeyTypeKind::end(),
             };
 
@@ -92,7 +92,7 @@ impl Storage {
                 KeyTableKey {
                     space_id,
                     key_name: key_name.to_string(),
-                    key_mode,
+                    value_mode,
                     key_type_kind,
                 },
                 key_id,

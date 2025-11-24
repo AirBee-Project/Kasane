@@ -10,25 +10,25 @@ pub struct CreateKey {
     pub space_name: String,
     pub key_name: String,
     pub key_type: KeyType,
-    pub key_mode: KeyMode,
+    pub value_mode: ValueMode,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Encode, Decode, TS)]
 #[serde(rename_all = "camelCase")]
 #[repr(u8)]
-pub enum KeyMode {
-    UniqueKey = 0,
-    MultiKey = 255,
+pub enum ValueMode {
+    UniqueValue = 0,
+    MultiValue = 255,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Encode, Decode, TS)]
 #[serde(rename_all = "camelCase")]
 #[repr(u8)]
 pub enum KeyType {
-    Text(Vec<TextOption>),
-    Float(Vec<FloatOption>),
-    Int(Vec<IntOption>),
-    Boolean(Vec<BooleanOption>),
+    Text(Option<Vec<TextOption>>),
+    Float(Option<Vec<FloatOption>>),
+    Int(Option<Vec<IntOption>>),
+    Boolean(Option<Vec<BooleanOption>>),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]

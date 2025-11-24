@@ -1,18 +1,18 @@
-use crate::interface::input::KeyMode;
+use crate::interface::input::ValueMode;
 
-impl KeyMode {
-    pub fn start() -> KeyMode {
-        KeyMode::UniqueKey
+impl ValueMode {
+    pub fn start() -> ValueMode {
+        ValueMode::UniqueValue
     }
 
-    pub fn end() -> KeyMode {
-        KeyMode::MultiKey
+    pub fn end() -> ValueMode {
+        ValueMode::MultiValue
     }
 
     pub fn as_str(&self) -> &'static str {
         match self {
-            KeyMode::UniqueKey => "UniqueKey",
-            KeyMode::MultiKey => "MultiKey",
+            ValueMode::UniqueValue => "UniqueValue",
+            ValueMode::MultiValue => "MultiValue",
         }
     }
 }

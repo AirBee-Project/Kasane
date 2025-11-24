@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
 
 use crate::{
+    interface::input::{KeyType, ValueMode},
     io::full::redb_implementations::{key_type::KeyTypeKind, uuid::UuidKey},
-    interface::input::{KeyMode, KeyType},
 };
 use bincode::{config, decode_from_slice, Decode, Encode};
 use redb::{Key, TypeName, Value};
@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 pub struct KeyTableKey {
     pub space_id: UuidKey,
     pub key_name: String,
-    pub key_mode: KeyMode,
+    pub value_mode: ValueMode,
     pub key_type_kind: KeyTypeKind,
 }
 

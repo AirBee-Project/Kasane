@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use crate::io::full::Storage;
 use crate::interface::input::CreateKey;
 use crate::interface::output::Output;
+use crate::io::full::Storage;
 use crate::location;
 use crate::{command::tools::valid_name::valid_name, user_error::UserError};
 
@@ -34,5 +34,5 @@ pub fn create_key(v: CreateKey, s: Arc<Storage>) -> Result<Output, UserError> {
     }
 
     //ストレージに対して操作を実行する
-    s.create_key(&v.space_name, &v.key_name, v.key_type, v.key_mode)
+    s.create_key(&v.space_name, &v.key_name, v.key_type, v.value_mode)
 }

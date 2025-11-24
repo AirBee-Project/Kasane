@@ -134,5 +134,8 @@ pub enum Function {
 pub enum Prefix {
     AND(Vec<Range>),
     OR(Vec<Range>),
-    NOT(Box<Range>),
+    DIFF {
+        base: Box<Range>,   // 引かれる集合（元集合）
+        remove: Box<Range>, // 引く集合
+    },
 }
