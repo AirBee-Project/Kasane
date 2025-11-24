@@ -2,6 +2,8 @@ use kasane_logic::point::Point;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::interface::effect::Effect;
+
 // ---------------------- Range & Function ----------------------
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
@@ -11,6 +13,7 @@ pub enum Range {
     Prefix(Prefix),
     Ids(Vec<SpaceTimeIdInput>),
     FilterValue(FilterValue),
+    Effect(Effect),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]

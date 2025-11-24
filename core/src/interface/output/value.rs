@@ -6,8 +6,6 @@ use ts_rs::TS;
 #[serde(rename_all = "camelCase")]
 pub struct Value {
     // pub id: SpaceTimeId,
-    // pub center: Point,
-    // pub vertex: [Point; 8],
     pub id_string: String,
     pub value: Vec<(std::string::String, ValueEntry)>,
 }
