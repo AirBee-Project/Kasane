@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use redb::{ReadableMultimapTable, ReadableTable};
 
 use crate::{
-    io::full::{redb_implementations::uuid::UuidKey, Storage, SPACE_TABLE},
+    io::full::{table_types::uuid::UuidKey, Storage, SPACE_TABLE},
     interface::output::Output,
     location,
     user_error::UserError,

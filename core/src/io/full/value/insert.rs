@@ -3,7 +3,7 @@ use crate::{
         input::{Calculation, Function, Range},
         output::Output,
     },
-    io::full::{command_helpers::value_entry::ValueEntry, Storage},
+    io::full::{table_types::value_entry::ValueEntry, Storage},
     user_error::UserError,
 };
 use kasane_logic::{

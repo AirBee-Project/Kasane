@@ -2,22 +2,22 @@ use redb::{Database, MultimapTableDefinition, TableDefinition};
 use std::path::PathBuf;
 
 use crate::{
-    io::full::{
-        command_helpers::value_entry::ValueEntry,
-        redb_implementations::{
-            dimension_key::DimensionKey, dimension_value::DimensionValue,
-            key_table_key::KeyTableKey, reverse_key::ReverseKey, reverse_value::ReverseValue,
-            user_session_key::UserSessionKey, uuid::UuidKey, value_reverse_key::ValueReverseKey,
-        },
+    io::full::table_types::{
+        dimension_key::DimensionKey, dimension_value::DimensionValue,
+        key_table_key::KeyTableKey, reverse_key::ReverseKey, reverse_value::ReverseValue,
+        user_session_key::UserSessionKey, uuid::UuidKey, value_entry::ValueEntry,
+        value_reverse_key::ValueReverseKey,
     },
     user_error::UserError,
 };
 
-pub mod command_helpers;
+/// Command extension implementations (impl blocks for input types)
+pub mod command_impls;
 pub mod key;
-pub mod redb_implementations;
 pub mod session;
 pub mod space;
+/// Types used as keys/values in redb table definitions
+pub mod table_types;
 pub mod user;
 pub mod value;
 

@@ -1,12 +1,10 @@
-use std::{cmp::Ordering, collections::BTreeSet};
+use std::collections::BTreeSet;
 
-use crate::io::full::{
-    command_helpers::value_entry::ValueEntry, redb_implementations::uuid::UuidKey,
-};
+use crate::io::full::table_types::uuid::UuidKey;
 use kasane_logic::bit_vec::BitVec;
 
 use bincode::{Decode, Encode, config, decode_from_slice};
-use redb::{Key, TypeName, Value};
+use redb::{TypeName, Value};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]

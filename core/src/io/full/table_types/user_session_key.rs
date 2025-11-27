@@ -1,4 +1,4 @@
-use crate::io::full::redb_implementations::uuid::UuidKey;
+use crate::io::full::table_types::uuid::UuidKey;
 use redb::{Key, TypeName, Value};
 use std::cmp::Ordering;
 

@@ -2,8 +2,9 @@ use std::cmp::Ordering;
 
 use crate::{
     interface::input::{KeyType, ValueMode},
-    io::full::redb_implementations::{key_type::KeyTypeKind, uuid::UuidKey},
+    io::full::command_impls::key_type::KeyTypeKind,
 };
+use crate::io::full::table_types::uuid::UuidKey;
 use bincode::{config, decode_from_slice, Decode, Encode};
 use redb::{Key, TypeName, Value};
 use serde::{Deserialize, Serialize};
