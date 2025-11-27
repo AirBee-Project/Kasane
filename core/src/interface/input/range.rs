@@ -10,7 +10,7 @@ pub enum Range {
     Function(Function),
     Calculation(Calculation),
     Ids(Vec<SpaceTimeIDInput>),
-    FilterValue(FilterValue),
+    //FilterValue(FilterValue),
     //Effect(Effect),
 }
 
