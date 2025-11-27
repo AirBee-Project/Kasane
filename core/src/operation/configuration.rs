@@ -60,8 +60,7 @@ pub fn configuration() -> Configuration {
     }
 
     // ファイルに書き戻す
-    fs::write("kasane.toml", doc.to_string())
-        .expect("Failed to write kasane.toml");
+    fs::write("kasane.toml", doc.to_string()).expect("Failed to write kasane.toml");
 
     // toml_edit::Document を文字列化して構造体に変換
     let setting: Configuration = toml::from_str(&doc.to_string())

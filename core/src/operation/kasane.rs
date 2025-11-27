@@ -1,9 +1,9 @@
 use axum::{
+    Json, Router,
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::post,
-    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, time::SystemTime};
@@ -189,7 +189,7 @@ async fn login(
             return Err((
                 StatusCode::UNAUTHORIZED,
                 "Invalid or expired session".into(),
-            ))
+            ));
         }
     };
 
@@ -219,7 +219,7 @@ async fn execute_handler(
             return Err((
                 StatusCode::UNAUTHORIZED,
                 "Invalid or expired session".into(),
-            ))
+            ));
         }
     };
 

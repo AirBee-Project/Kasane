@@ -1,25 +1,25 @@
-use redb::{Database, DatabaseError, MultimapTableDefinition, TableDefinition, Value};
-use std::{env, path::PathBuf};
+use redb::{Database, MultimapTableDefinition, TableDefinition};
+use std::path::PathBuf;
 
 use crate::{
-    interface::input::{DatabaseCommand, KeyCommand, SpaceCommand, UserCommand},
-    io::full::redb_implementations::{
-        key_table_key::KeyTableKey, permission_key_key::PermissionKeyKey,
-        permission_space_key::PermissionSpaceKey, user_session_key::UserSessionKey, uuid::UuidKey,
+    io::full::{
+        command_helpers::value_entry::ValueEntry,
+        redb_implementations::{
+            dimension_key::DimensionKey, dimension_value::DimensionValue,
+            key_table_key::KeyTableKey, reverse_key::ReverseKey, reverse_value::ReverseValue,
+            user_session_key::UserSessionKey, uuid::UuidKey, value_reverse_key::ValueReverseKey,
+        },
     },
     user_error::UserError,
 };
 
 pub mod command_helpers;
 pub mod key;
-// pub mod permission;
 pub mod redb_implementations;
 pub mod session;
 pub mod space;
 pub mod user;
 pub mod value;
-
-// Tableの定義
 
 // ユーザー関連
 pub const USER_TABLE: TableDefinition<&str, UuidKey> = TableDefinition::new("user_table");
@@ -27,19 +27,23 @@ pub const USER_PASSWORD: TableDefinition<UuidKey, &str> = TableDefinition::new("
 pub const USER_SESSION: TableDefinition<UserSessionKey, UuidKey> =
     TableDefinition::new("user_session");
 
-// //権限関連
-// pub const PERMISSION_DATABASE: MultimapTableDefinition<UuidKey, DatabaseCommand> =
-//     MultimapTableDefinition::new("permission_database");
-// pub const PERMISSION_SPACE: MultimapTableDefinition<PermissionSpaceKey, SpaceCommand> =
-//     MultimapTableDefinition::new("permission_space");
-// pub const PERMISSION_KEY: MultimapTableDefinition<PermissionKeyKey, KeyCommand> =
-//     MultimapTableDefinition::new("permission_key");
-// pub const PERMISSION_USER: MultimapTableDefinition<UuidKey, UserCommand> =
-//     MultimapTableDefinition::new("permission_user");
-
 // 本体機能
 pub const SPACE_TABLE: TableDefinition<&str, UuidKey> = TableDefinition::new("space_table");
 pub const KEY_TABLE: TableDefinition<KeyTableKey, UuidKey> = TableDefinition::new("key_table");
+
+//各次元のBitVec
+pub const F_TABLE: TableDefinition<DimensionKey, DimensionValue> = TableDefinition::new("f_table");
+pub const X_TABLE: TableDefinition<DimensionKey, DimensionValue> = TableDefinition::new("x_table");
+pub const Y_TABLE: TableDefinition<DimensionKey, DimensionValue> = TableDefinition::new("y_table");
+
+//時空間IDの逆引き用のTable
+pub const REVERSE_TABLE: TableDefinition<ReverseKey, ReverseValue> =
+    TableDefinition::new("reverse_table");
+
+//Value管理用のTable
+pub const VALUE_TABLE: TableDefinition<UuidKey, ValueEntry> = TableDefinition::new("value_table");
+pub const VALUE_REVERSE_TABLE: MultimapTableDefinition<ValueReverseKey, u64> =
+    MultimapTableDefinition::new("value_table");
 
 pub struct Storage {
     pub db: Database,
