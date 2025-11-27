@@ -29,15 +29,15 @@ impl Value for ReverseValue {
         Self: 'a,
     {
         decode_from_slice(data, config::standard())
-            .expect("Failed to decode ReverseKey")
+            .expect("Failed to decode ReverseValue")
             .0
     }
 
     fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a> {
-        bincode::encode_to_vec(value, config::standard()).expect("Failed to encode ReverseKey")
+        bincode::encode_to_vec(value, config::standard()).expect("Failed to encode ReverseValue")
     }
 
     fn type_name() -> TypeName {
-        TypeName::new("ReverseKey")
+        TypeName::new("ReverseValue")
     }
 }
