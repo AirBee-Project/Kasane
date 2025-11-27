@@ -25,10 +25,10 @@ pub enum ValueMode {
 #[serde(rename_all = "camelCase")]
 #[repr(u8)]
 pub enum KeyType {
-    Text(Option<Vec<TextOption>>),
-    Float(Option<Vec<FloatOption>>),
-    Int(Option<Vec<IntOption>>),
-    Boolean(Option<Vec<BooleanOption>>),
+    Text(Vec<TextOption>),
+    Float(Vec<FloatOption>),
+    Int(Vec<IntOption>),
+    Boolean(Vec<BooleanOption>),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]

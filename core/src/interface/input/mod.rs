@@ -51,7 +51,7 @@ pub enum Command {
     // CreateUser(CreateUser),
     // DropUser(DropUser),
     // InfoUser(InfoUser),
-    ShowUsers,
+    // ShowUsers,
     // //権限付与系
     // GrantDatabase(GrantDatabase),
     // GrantSpace(GrantSpace),

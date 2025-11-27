@@ -48,9 +48,9 @@ pub struct Storage {
 impl Storage {
     /// ストレージを作成または既存ファイルを読み込み
     pub fn new(path: PathBuf) -> Result<Self, UserError> {
+        
         // Database::create は存在すれば読み込み、なければ新規作成
         let db = Database::create(&path)?;
-
         Ok(Storage { db })
     }
 }

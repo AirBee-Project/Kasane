@@ -2,15 +2,21 @@ use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-// ---------------------- 権限管理 ----------------------
+// ---------------------- スコープ ----------------------
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
 #[serde(rename_all = "camelCase")]
-pub struct GrantDatabase {
-    pub user_name: String,
-    pub command: Vec<DatabaseCommand>,
+pub enum Scope {
+    Global,
+    Database,
+    Space(Vec<String>),
+    Key { space: String, keys: Vec<String> },
+    User,
 }
 
+// ---------------------- コマンド列挙 ----------------------
+
+// ========== Database Commands ==========
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, TS, Encode, Decode)]
 #[serde(rename_all = "camelCase")]
 #[repr(u8)]
@@ -23,14 +29,7 @@ pub enum DatabaseCommand {
     InfoSpace = 5,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
-pub struct GrantSpace {
-    pub user_name: String,
-    pub target_space: Vec<String>,
-    pub command: Vec<SpaceCommand>,
-}
-
+// ========== Space Commands ==========
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, TS, Encode, Decode)]
 #[serde(rename_all = "camelCase")]
 #[repr(u8)]
@@ -42,15 +41,7 @@ pub enum SpaceCommand {
     InfoKey = 4,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
-pub struct GrantKey {
-    pub user_name: String,
-    pub target_space: String,
-    pub target_key: Vec<String>,
-    pub command: Vec<KeyCommand>,
-}
-
+// ========== Key Commands ==========
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, TS, Encode, Decode)]
 #[serde(rename_all = "camelCase")]
 #[repr(u8)]
@@ -64,44 +55,7 @@ pub enum KeyCommand {
     ShowValues = 6,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
-pub struct RevokeDatabase {
-    pub user_name: String,
-    pub command: Vec<DatabaseCommand>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
-pub struct RevokeSpace {
-    pub user_name: String,
-    pub target_space: Vec<String>,
-    pub command: Vec<SpaceCommand>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
-pub struct RevokeKey {
-    pub user_name: String,
-    pub target_space: String,
-    pub target_key: Vec<String>,
-    pub command: Vec<KeyCommand>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
-pub struct RevokeUser {
-    pub user_name: String,
-    pub command: Vec<UserCommand>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
-pub struct GrantUser {
-    pub user_name: String,
-    pub command: Vec<UserCommand>,
-}
-
+// ========== User Commands ==========
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, TS, Encode, Decode)]
 #[serde(rename_all = "camelCase")]
 #[repr(u8)]
@@ -125,4 +79,31 @@ pub enum UserCommand {
     RevokeDatabase = 10,
     RevokeSpace = 11,
     RevokeKey = 12,
+}
+
+// ---------------------- 権限操作（Grant / Revoke） ----------------------
+
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum PermissionCommand {
+    Database(Vec<DatabaseCommand>),
+    Space(Vec<SpaceCommand>),
+    Key(Vec<KeyCommand>),
+    User(Vec<UserCommand>),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Grant {
+    pub user_name: String,
+    pub scope: Scope,
+    pub command: PermissionCommand,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Revoke {
+    pub user_name: String,
+    pub scope: Scope,
+    pub command: PermissionCommand,
 }

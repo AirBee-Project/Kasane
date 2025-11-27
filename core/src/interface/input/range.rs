@@ -1,8 +1,6 @@
-use kasane_logic::point::Point;
+use kasane_logic::point::{Coordinate, ECEF};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-
-use crate::interface::effect::Effect;
 
 // ---------------------- Range & Function ----------------------
 
@@ -10,45 +8,43 @@ use crate::interface::effect::Effect;
 #[serde(rename_all = "camelCase")]
 pub enum Range {
     Function(Function),
-    Prefix(Prefix),
-    Ids(Vec<SpaceTimeIdInput>),
+    Calculation(Calculation),
+    Ids(Vec<SpaceTimeIDInput>),
     FilterValue(FilterValue),
-    Effect(Effect),
+    //Effect(Effect),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
 #[serde(rename_all = "camelCase")]
-pub struct SpaceTimeIdInput {
+pub struct SpaceTimeIDInput {
     pub z: u8,
-    pub f: (Option<i64>, Option<i64>),
-    pub x: (Option<u64>, Option<u64>),
-    pub y: (Option<u64>, Option<u64>),
-    pub i: u32,
-    pub t: (Option<u32>, Option<u32>),
+    pub f: [Option<i64>; 2],
+    pub x: [Option<u64>; 2],
+    pub y: [Option<u64>; 2],
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
 #[serde(rename_all = "camelCase")]
-pub struct Spot {
-    pub point1: Point,
-    pub zoom: u8,
+pub struct Point {
+    pub z: u8,
+    pub point1: Coordinate,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Line {
-    pub point1: Point,
-    pub point2: Point,
-    pub zoom: u8,
+    pub z: u8,
+    pub point1: Coordinate,
+    pub point2: Coordinate,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Triangle {
-    pub point1: Point,
-    pub point2: Point,
-    pub point3: Point,
-    pub zoom: u8,
+    pub z: u8,
+    pub point1: Coordinate,
+    pub point2: Coordinate,
+    pub point3: Coordinate,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
@@ -124,14 +120,14 @@ pub enum FilterText {
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum Function {
-    Spot(Spot),
+    Point(Point),
     Line(Line),
     Triangle(Triangle),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
 #[serde(rename_all = "camelCase")]
-pub enum Prefix {
+pub enum Calculation {
     AND(Vec<Range>),
     OR(Vec<Range>),
     DIFF {

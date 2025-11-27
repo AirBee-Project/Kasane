@@ -48,7 +48,6 @@ pub async fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError>
         Command::DeleteValue(v) => delete_value(v, s),
         Command::SelectValue(v) => select_value(v, s),
         Command::ShowValues(v) => show_values(v, s),
-
         //ツール系
         //Command::Transaction(v) => todo!(),
 
@@ -56,7 +55,7 @@ pub async fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError>
         // Command::CreateUser(v) => create_user(v, s),
         // Command::DropUser(v) => drop_user(v, s),
         // Command::InfoUser(v) => info_user(v, s),
-        Command::ShowUsers => show_users(s),
+        // Command::ShowUsers => show_users(s),
         //権限付与系
         // Command::GrantDatabase(v) => grant_database(v, s),
         // Command::GrantSpace(v) => grant_space(v, s),

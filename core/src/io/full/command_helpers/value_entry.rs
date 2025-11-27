@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{interface::input::KeyType, user_error::UserError};
+use crate::interface::input::KeyType;
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug, TS)]
 #[serde(rename_all = "camelCase")]
