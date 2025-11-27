@@ -1,7 +1,0 @@
-[network]
-max_keepalive_sessions = 30
-port = 3000
-
-[general]
-queue_size = 1024
-session_expiration_secs = 3600
