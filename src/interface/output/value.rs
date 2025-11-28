@@ -11,16 +11,16 @@ use ts_rs::TS;
 #[cfg_attr(feature = "serde", derive(Serialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-pub struct ShowValue {
-    space_time_id: SpaceTimeID,
-    value: ValueEntry,
-}
+pub struct ShowValues {}
 
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "ts-rs", derive(TS))]
-pub struct SelectValue {
-    space_time_id: SpaceTimeID,
-    value: ValueEntry,
-}
+pub struct SelectValue {}
+
+#[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+pub struct Value {}

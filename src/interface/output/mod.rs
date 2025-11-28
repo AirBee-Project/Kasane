@@ -23,6 +23,6 @@ pub enum Output {
     Showkeys(Showkeys),
 
     //Value操作系
-    SelectValue(Vec<SelectValue>),
-    ShowValues(Vec<ShowValue>),
+    SelectValue(SelectValue),
+    ShowValues(ShowValues),
 }

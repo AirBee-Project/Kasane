@@ -22,14 +22,14 @@ static STORAGE: OnceCell<Arc<Storage>> = OnceCell::new();
 
 #[cfg(feature = "wasm")]
 pub fn init(conf: Configuration, import: Option<Vec<Storage>>) {
-    let storage = Arc::new(Storage::new(conf, None));
+    let storage = Arc::new(Storage::new(conf, import));
     STORAGE.set(storage).expect("Storage already initialized");
 }
 
 #[cfg(feature = "wasm")]
 pub fn kasane(command: Command) -> Result<Output, UserError> {
     let mut s = STORAGE.get().expect("storage not initialized").clone();
-    command::process(command, s)
+    command::process(command, &mut s)
 }
 
 #[cfg(feature = "wasm")]

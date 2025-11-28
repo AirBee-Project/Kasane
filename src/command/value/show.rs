@@ -6,6 +6,6 @@ use crate::{
 };
 use std::sync::Arc;
 
-pub fn show_values(v: ShowValues, s: Arc<Storage>) -> Result<Output, UserError> {
-    todo!()
+pub fn show_values(v: ShowValues, s: &mut Storage) -> Result<Output, UserError> {
+    s.show_values(v.key_name)
 }
