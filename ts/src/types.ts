@@ -246,18 +246,44 @@ export interface ShowkeysOutput {
 }
 
 /**
- * Output for selectValue command
- * @remarks This interface is a placeholder matching the Rust implementation.
- *          The structure will be populated as the Rust implementation evolves.
+ * A serializable representation of SpaceTimeID for output
  */
-export interface SelectValueOutput {}
+export interface SpaceTimeIDOutput {
+  z: number;
+  f: [number, number];
+  x: [number, number];
+  y: [number, number];
+}
 
 /**
- * Output for showValues command
- * @remarks This interface is a placeholder matching the Rust implementation.
- *          The structure will be populated as the Rust implementation evolves.
+ * A value with its associated SpaceTimeID
  */
-export interface ShowValuesOutput {}
+export interface Value {
+  id: SpaceTimeIDOutput;
+  value: ValueEntry;
+}
+
+/**
+ * Values for a single key in SelectValue response
+ */
+export interface KeyValues {
+  keyName: string;
+  values: Value[];
+}
+
+/**
+ * Output for selectValue command - returns values for multiple keys within a range
+ */
+export interface SelectValueOutput {
+  keyValues: KeyValues[];
+}
+
+/**
+ * Output for showValues command - returns all values for a single key
+ */
+export interface ShowValuesOutput {
+  values: Value[];
+}
 
 /**
  * Output type union - all possible command outputs
