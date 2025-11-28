@@ -1,0 +1,44 @@
+{
+  "name": "@kasane/wasm",
+  "version": "0.0.2",
+  "description": "TypeScript wrapper for Kasane Wasm - a spatio-temporal database engine",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "kasane",
+    "wasm",
+    "webassembly",
+    "database",
+    "spatio-temporal",
+    "4d",
+    "drone",
+    "spatial"
+  ],
+  "author": "AirBee Project",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AirBee-Project/Kasane.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AirBee-Project/Kasane/issues"
+  },
+  "homepage": "https://kasane.dev",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

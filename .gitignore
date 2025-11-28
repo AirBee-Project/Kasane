@@ -33,3 +33,9 @@ default.kasane
 kasane.toml
 default.kasane
 /core/bindings
+
+# === TypeScript / Node.js ===
+node_modules
+/ts/dist
+/ts/node_modules
+*.tsbuildinfo
