@@ -12,7 +12,7 @@ use ts_rs::TS;
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct CreateKey {
-    pub space_name: String,
+    // pub space_name: String,
     pub key_name: String,
     pub key_type: KeyType,
     pub value_mode: ValueMode,
@@ -36,10 +36,10 @@ pub enum ValueMode {
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[repr(u8)]
 pub enum KeyType {
-    Text(Vec<TextOption>),
-    Float(Vec<FloatOption>),
-    Int(Vec<IntOption>),
-    Boolean(Vec<BooleanOption>),
+    Text,
+    Float,
+    Int,
+    Boolean,
 }
 
 #[derive(Debug, Clone)]
@@ -47,40 +47,16 @@ pub enum KeyType {
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct DropKey {
-    pub space_name: String,
+    // pub space_name: String,
     pub key_name: String,
 }
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "file", derive(Encode, Decode))]
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-pub enum TextOption {}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "file", derive(Encode, Decode))]
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-pub enum FloatOption {}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "file", derive(Encode, Decode))]
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-pub enum IntOption {}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "file", derive(Encode, Decode))]
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-pub enum BooleanOption {}
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct ShowKeys {
-    pub space_name: String,
+    // pub space_name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -88,6 +64,7 @@ pub struct ShowKeys {
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct InfoKey {
-    pub space_name: String,
+    // pub space_name: String,
     pub key_name: String,
+    pub key_type: KeyType,
 }

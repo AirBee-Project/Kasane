@@ -29,5 +29,5 @@ pub fn init(conf: Configuration) {
 #[cfg(feature = "wasm")]
 pub async fn kasane(command: Command) -> Result<Output, UserError> {
     let s = STORAGE.get().expect("storage not initialized").clone();
-    command::process(command, s)
+    command::process(command, &mut s)
 }

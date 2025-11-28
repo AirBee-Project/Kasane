@@ -7,17 +7,6 @@ use crate::{command::tools::valid_name::valid_name, user_error::UserError};
 use std::sync::Arc;
 
 pub fn create_key(v: CreateKey, s: Arc<Storage>) -> Result<Output, UserError> {
-    match valid_name(&v.space_name) {
-        Ok(_) => {}
-        Err(e) => {
-            return Err(UserError::SpaceNameValidationError {
-                name: v.space_name,
-                reason: e,
-                location: location!(),
-            });
-        }
-    }
-
     match valid_name(&v.key_name) {
         Ok(_) => {}
         Err(e) => {

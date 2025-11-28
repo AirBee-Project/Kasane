@@ -7,26 +7,23 @@ use crate::{
 use std::sync::Arc;
 
 pub mod key;
-pub mod space;
 pub mod tools;
 pub mod value;
 pub mod version;
 
 use key::{create_key, drop_key, info_key, show_keys};
-use space::{create_space, drop_space, info_space, show_spaces};
 use value::{delete_value, insert_value, patch_value, select_value, show_values, update_value};
-use version::version;
 
 //関数のディスパッチ関数
 //関数の命令内容とストレージの参照権を関数に入力し、操作を行わせる
 pub fn process(cmd: Command, s: &mut Storage) -> Result<Output, UserError> {
     match cmd {
         //データベース操作系
-        Command::CreateSpace(v) => create_space(v, s),
-        Command::DropSpace(v) => drop_space(v, s),
-        Command::ShowSpaces => show_spaces(s),
-        Command::InfoSpace(v) => info_space(v, s),
-        Command::Version => version(),
+        // Command::CreateSpace(v) => create_space(v, s),
+        // Command::DropSpace(v) => drop_space(v, s),
+        // Command::ShowSpaces => show_spaces(s),
+        // Command::InfoSpace(v) => info_space(v, s),
+        // Command::Version => version(),
 
         //Key操作系
         Command::CreateKey(v) => create_key(v, s),

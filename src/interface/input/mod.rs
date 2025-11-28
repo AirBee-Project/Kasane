@@ -7,7 +7,6 @@ pub mod value;
 // Re-export types from submodules
 pub use key::*;
 pub use range::*;
-pub use space::*;
 pub use value::*;
 
 #[cfg(feature = "serde")]
@@ -23,11 +22,11 @@ use ts_rs::TS;
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum Command {
     //データベース操作系
-    CreateSpace(CreateSpace),
-    DropSpace(DropSpace),
-    InfoSpace(InfoSpace),
-    ShowSpaces,
-    Version,
+    // CreateSpace(CreateSpace),
+    // DropSpace(DropSpace),
+    // InfoSpace(InfoSpace),
+    // ShowSpaces,
+    // Version,
 
     //Key操作系
     CreateKey(CreateKey),

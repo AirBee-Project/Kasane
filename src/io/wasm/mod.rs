@@ -1,20 +1,34 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    clone,
+    collections::{HashMap, HashSet},
+};
 
 use kasane_logic::encode_id_map::EncodeIDMap;
 
-use crate::{configuration::Configuration, interface::input::ValueEntry};
+use crate::{
+    configuration::Configuration,
+    interface::input::{KeyType, ValueEntry},
+};
 
-pub mod space;
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Storage {
-    inner: HashMap<String, HashMap<String, EncodeIDMap<ValueEntry>>>,
+    ///時空間IDを記録する
+    inner: HashMap<String, EncodeIDMap<ValueEntry>>,
+
+    ///Keyごとに型を記録する
+    r#type: HashMap<String, String>,
 }
 
 impl Storage {
-    pub fn new(conf: Configuration) -> Storage {
+    pub fn new(conf: Configuration, import: Option<Vec<Storage>>) -> Storage {
+        //もしImportするものがあればそれをImportに含めると、初期状態で追加される
         Storage {
             inner: HashMap::new(),
+            r#type: HashMap::new(),
         }
+    }
+
+    pub fn export(&self) -> Storage {
+        self.clone()
     }
 }
