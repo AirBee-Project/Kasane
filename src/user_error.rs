@@ -1,8 +1,11 @@
+#[cfg(feature = "file")]
 use bcrypt::BcryptError;
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum UserError {
     // ==================== Validation Errors ====================
     // バリデーションエラー: 名前やパスワードの検証で使用
@@ -115,6 +118,7 @@ pub enum UserError {
 }
 
 //Kasane-Logicのエラー型を変換
+#[cfg(feature = "file")]
 impl From<kasane_logic::error::Error> for UserError {
     fn from(err: kasane_logic::error::Error) -> Self {
         let location = format!("{}:{}", file!(), line!());
@@ -164,6 +168,7 @@ impl From<kasane_logic::error::Error> for UserError {
 }
 
 // 主要なエラー型は詳細に処理
+#[cfg(feature = "file")]
 impl From<redb::Error> for UserError {
     fn from(err: redb::Error) -> Self {
         let location = format!("{}:{}", file!(), line!());
@@ -182,6 +187,7 @@ impl From<redb::Error> for UserError {
 }
 
 // その他のエラー型は汎用的に処理
+#[cfg(feature = "file")]
 macro_rules! impl_from_redb_errors {
     ($($error_type:ty),+ $(,)?) => {
         $(
@@ -198,6 +204,7 @@ macro_rules! impl_from_redb_errors {
     };
 }
 
+#[cfg(feature = "file")]
 impl_from_redb_errors!(
     redb::DatabaseError,
     redb::TransactionError,
@@ -206,6 +213,7 @@ impl_from_redb_errors!(
     redb::TableError,
 );
 
+#[cfg(feature = "file")]
 impl From<BcryptError> for UserError {
     fn from(err: BcryptError) -> Self {
         let location = format!("{}:{}", file!(), line!());

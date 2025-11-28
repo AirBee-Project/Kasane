@@ -1,7 +1,5 @@
-pub struct Storage {}
+#[cfg(feature = "wasm")]
+pub mod wasm;
 
-impl Storage {
-    pub fn new() -> Storage {
-        Storage {}
-    }
-}
+#[cfg(feature = "wasm")]
+pub use wasm as io;

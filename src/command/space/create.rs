@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use crate::{
     command::tools::valid_name::valid_name,
-    io::full::Storage,
     interface::{input::CreateSpace, output::Output},
+    io::io::Storage,
     location,
     user_error::UserError,
 };
@@ -20,6 +20,5 @@ pub fn create_space(v: CreateSpace, s: Arc<Storage>) -> Result<Output, UserError
         }
     }
 
-    //ストレージに対して操作を実行する
     s.create_space(&v.space_name)
 }

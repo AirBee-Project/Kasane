@@ -1,13 +1,10 @@
-use std::sync::Arc;
+use crate::io::io::Storage;
 
 use crate::{
-    io::full::Storage,
-    interface::{
-        input::ShowValues,
-        output::{Output, Value},
-    },
+    interface::{input::ShowValues, output::Output},
     user_error::UserError,
 };
+use std::sync::Arc;
 
 pub fn show_values(v: ShowValues, s: Arc<Storage>) -> Result<Output, UserError> {
     todo!()
