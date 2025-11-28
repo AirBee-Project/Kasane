@@ -247,11 +247,15 @@ export interface ShowkeysOutput {
 
 /**
  * Output for selectValue command
+ * @remarks This interface is a placeholder matching the Rust implementation.
+ *          The structure will be populated as the Rust implementation evolves.
  */
 export interface SelectValueOutput {}
 
 /**
  * Output for showValues command
+ * @remarks This interface is a placeholder matching the Rust implementation.
+ *          The structure will be populated as the Rust implementation evolves.
  */
 export interface ShowValuesOutput {}
 
