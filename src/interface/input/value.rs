@@ -42,7 +42,6 @@ pub struct SelectValue {
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct ShowValues {
-    pub space_name: String,
     pub key_name: String,
 }
 

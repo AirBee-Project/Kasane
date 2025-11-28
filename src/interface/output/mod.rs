@@ -19,15 +19,10 @@ use serde::Serialize;
 pub enum Output {
     Success,
 
-    // //データベース操作系
-    // InfoSpace(InfoSpace),
-    // ShowSpaces(ShowSpaces),
-    // Version(Version),
-
     //Key操作系
     Showkeys(Showkeys),
 
     //Value操作系
-    SelectValue(Vec<Value>),
-    ShowValues(Vec<Value>),
+    SelectValue(Vec<SelectValue>),
+    ShowValues(Vec<ShowValue>),
 }

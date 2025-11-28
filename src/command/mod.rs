@@ -11,7 +11,7 @@ pub mod tools;
 pub mod value;
 
 use key::{create_key, drop_key, show_keys};
-use value::{delete_value, insert_value, patch_value, select_value, show_values, update_value};
+use value::{delete_value, insert_value, select_value, show_values};
 
 //関数のディスパッチ関数
 //関数の命令内容とストレージの参照権を関数に入力し、操作を行わせる

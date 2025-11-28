@@ -35,8 +35,6 @@ pub enum Command {
 
     //Value操作系
     InsertValue(InsertValue),
-    PatchValue(PatchValue),
-    UpdateValue(UpdateValue),
     DeleteValue(DeleteValue),
     SelectValue(SelectValue),
     ShowValues(ShowValues),
