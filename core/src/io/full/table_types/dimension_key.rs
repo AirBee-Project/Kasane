@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use crate::io::full::redb_implementations::uuid::UuidKey;
+use crate::io::full::table_types::uuid::UuidKey;
 use kasane_logic::bit_vec::BitVec;
 
 use bincode::{Decode, Encode, config, decode_from_slice};

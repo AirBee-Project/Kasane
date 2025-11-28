@@ -1,8 +1,6 @@
 use std::cmp::Ordering;
 
-use crate::io::full::{
-    command_helpers::value_entry::ValueEntry, redb_implementations::uuid::UuidKey,
-};
+use crate::io::full::table_types::{uuid::UuidKey, value_entry::ValueEntry};
 
 use bincode::{Decode, Encode, config, decode_from_slice};
 use redb::{Key, TypeName, Value};

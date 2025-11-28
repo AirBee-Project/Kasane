@@ -1,4 +1,4 @@
-use crate::io::full::command_helpers::value_entry::ValueEntry;
+use crate::io::full::table_types::value_entry::ValueEntry;
 use serde::Serialize;
 use ts_rs::TS;
 

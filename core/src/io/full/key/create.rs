@@ -9,7 +9,8 @@ use crate::{
         output::Output,
     },
     io::full::{
-        redb_implementations::{key_table_key::KeyTableKey, key_type::KeyTypeKind, uuid::UuidKey},
+        command_impls::key_type::KeyTypeKind,
+        table_types::{key_table_key::KeyTableKey, uuid::UuidKey},
         Storage, KEY_TABLE, SPACE_TABLE,
     },
     location,

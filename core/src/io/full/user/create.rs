@@ -3,7 +3,7 @@ use redb::ReadableTable;
 use uuid::Uuid;
 
 use crate::{
-    io::full::{redb_implementations::uuid::UuidKey, Storage, USER_PASSWORD, USER_TABLE},
+    io::full::{table_types::uuid::UuidKey, Storage, USER_PASSWORD, USER_TABLE},
     interface::output::Output,
     location,
     user_error::UserError,
