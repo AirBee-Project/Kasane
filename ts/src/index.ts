@@ -5,10 +5,11 @@
  *
  * @example
  * ```typescript
- * // Load from Vite /public folder
- * import { loadKasane } from '@kasane/wasm';
+ * // Using wasm-pack generated module (--target web)
+ * import init, * as kasaneWasm from './pkg/kasane.js';
+ * import { initKasaneFromWasmPack } from '@kasane/wasm';
  *
- * const kasane = await loadKasane('/kasane.wasm');
+ * const kasane = await initKasaneFromWasmPack(kasaneWasm, '/pkg/kasane_bg.wasm');
  *
  * // Create a key
  * const result = kasane.createKey('temperature', 'float');
@@ -33,7 +34,9 @@ export {
   createKasane,
   loadKasane,
   loadKasaneModule,
+  initKasaneFromWasmPack,
   type KasaneResult,
   type KasaneWasmExports,
+  type WasmPackModule,
   type LoadKasaneOptions,
 } from "./kasane";

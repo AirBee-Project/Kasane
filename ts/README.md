@@ -8,15 +8,29 @@ TypeScript wrapper for Kasane Wasm - a spatio-temporal database engine.
 npm install @kasane/wasm
 ```
 
+## Building the Wasm Module
+
+Build the Kasane Wasm module using wasm-pack:
+
+```bash
+wasm-pack build --target web --release --features wasm
+```
+
+This generates a `pkg/` directory with:
+- `kasane.js` - JavaScript glue code
+- `kasane_bg.wasm` - WebAssembly binary
+- `kasane.d.ts` - TypeScript definitions
+
 ## Usage
 
-### Loading from Vite /public folder (Recommended)
+### Using wasm-pack Generated Module (Recommended)
 
 ```typescript
-import { loadKasane } from '@kasane/wasm';
+import { initKasaneFromWasmPack } from '@kasane/wasm';
+import init, * as kasaneWasm from './pkg/kasane.js';
 
-// Load Wasm from /public/kasane.wasm
-const kasane = await loadKasane('/kasane.wasm');
+// Initialize Kasane from wasm-pack generated module
+const kasane = await initKasaneFromWasmPack(kasaneWasm, '/pkg/kasane_bg.wasm');
 
 // Create a key for storing temperature data
 const result = kasane.createKey('temperature', 'float');
@@ -56,17 +70,29 @@ const data = kasane.export();
 localStorage.setItem('kasane-data', JSON.stringify(data));
 ```
 
+### Loading from Vite /public folder
+
+```typescript
+import { loadKasane } from '@kasane/wasm';
+
+// Load Wasm from /public/kasane.wasm (raw wasm file)
+const kasane = await loadKasane('/kasane.wasm');
+
+kasane.createKey('temperature', 'float');
+```
+
 ### Loading with Import Data
 
 ```typescript
-import { loadKasane, Storage } from '@kasane/wasm';
+import { initKasaneFromWasmPack, Storage } from '@kasane/wasm';
+import init, * as kasaneWasm from './pkg/kasane.js';
 
 // Load previously exported data
 const savedData = localStorage.getItem('kasane-data');
 const importData: Storage[] = savedData ? [JSON.parse(savedData)] : undefined;
 
-// Load and initialize with imported data
-const kasane = await loadKasane('/kasane.wasm', {
+// Initialize with imported data
+const kasane = await initKasaneFromWasmPack(kasaneWasm, '/pkg/kasane_bg.wasm', {
   importData
 });
 ```
@@ -99,9 +125,20 @@ const kasane = createKasane(wasmModule);
 
 ## API
 
+### `initKasaneFromWasmPack(wasmPackModule, wasmUrl?, options?)`
+
+Initialize Kasane from a wasm-pack generated module (`--target web`).
+
+- `wasmPackModule`: The wasm-pack generated module
+- `wasmUrl`: Optional URL to the `.wasm` file
+- `options.config`: Optional configuration object
+- `options.importData`: Optional array of Storage data to import
+
+Returns: `Promise<Kasane>`
+
 ### `loadKasane(wasmUrl, options?)`
 
-Load Kasane from a Wasm file URL and create an initialized instance.
+Load Kasane from a raw Wasm file URL and create an initialized instance.
 
 - `wasmUrl`: URL to the Wasm file (e.g., '/kasane.wasm' for Vite public folder)
 - `options.config`: Optional configuration object
