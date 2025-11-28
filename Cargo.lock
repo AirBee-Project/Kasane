@@ -193,6 +193,7 @@ dependencies = [
 [[package]]
 name = "kasane-logic"
 version = "0.1.0"
+source = "git+https://github.com/AirBee-Project/Kasane-Logic.git#b6f386e8ecd03c15cb82b60a9c314039c124da9b"
 dependencies = [
  "bincode",
  "itertools",

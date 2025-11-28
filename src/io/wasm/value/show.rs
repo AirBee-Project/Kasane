@@ -1,20 +1,30 @@
 use crate::io::wasm::Storage;
 
-use kasane_logic::space_time_id::encode;
-
 use crate::{
-    interface::{
-        input::{Range, ValueEntry},
-        output::Output,
-    },
+    interface::output::{Output, ShowValues, SpaceTimeIDOutput, Value},
     location,
     user_error::UserError,
 };
 
-use std::collections::hash_map::Entry::{Occupied, Vacant};
-
 impl Storage {
-    pub fn show_values(&mut self, key_name: String) -> Result<Output, UserError> {
-        todo!()
+    pub fn show_values(&self, key_name: String) -> Result<Output, UserError> {
+        match self.inner.get(&key_name) {
+            Some((_, id_map)) => {
+                let mut values = vec![];
+
+                for (encode_id, value_entry) in id_map.iter() {
+                    values.push(Value {
+                        id: SpaceTimeIDOutput::from(encode_id.decode()),
+                        value: value_entry,
+                    });
+                }
+
+                Ok(Output::ShowValues(ShowValues { values }))
+            }
+            None => Err(UserError::KeyNotFound {
+                key_name,
+                location: location!(),
+            }),
+        }
     }
 }
