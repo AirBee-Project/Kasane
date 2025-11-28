@@ -14,29 +14,6 @@ use super::range::Range;
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct InsertValue {
-    pub space_name: String,
-    pub key_name: String,
-    pub range: Range,
-    pub value: ValueEntry,
-}
-
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-pub struct PatchValue {
-    pub space_name: String,
-    pub key_name: String,
-    pub range: Range,
-    pub value: ValueEntry,
-}
-
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-pub struct UpdateValue {
-    pub space_name: String,
     pub key_name: String,
     pub range: Range,
     pub value: ValueEntry,
@@ -47,7 +24,6 @@ pub struct UpdateValue {
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct DeleteValue {
-    pub space_name: String,
     pub key_name: String,
     pub range: Range,
 }
@@ -57,13 +33,8 @@ pub struct DeleteValue {
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct SelectValue {
-    pub space_name: String,
     pub key_names: Vec<String>,
     pub range: Range,
-    pub vertex: bool,
-    pub center: bool,
-    pub id_string: bool,
-    pub id_pure: bool,
 }
 
 #[derive(Debug, Clone)]

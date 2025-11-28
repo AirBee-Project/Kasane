@@ -1,7 +1,6 @@
 // Module declarations and re-exports
 pub mod key;
 pub mod value;
-pub mod version;
 
 // Re-export types from submodules
 pub use key::*;

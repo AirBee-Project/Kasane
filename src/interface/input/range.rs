@@ -1,3 +1,4 @@
+use kasane_logic::point::Coordinate;
 #[cfg(feature = "file")]
 use kasane_logic::point::Coordinate;
 #[cfg(feature = "serde")]
@@ -15,8 +16,7 @@ pub enum Range {
     Function(Function),
     Calculation(Calculation),
     Ids(Vec<SpaceTimeIDInput>),
-    //FilterValue(FilterValue),
-    //Effect(Effect),
+    FilterValue(FilterValue),
 }
 
 #[derive(Debug, Clone)]
@@ -30,7 +30,6 @@ pub struct SpaceTimeIDInput {
     pub y: [Option<u64>; 2],
 }
 
-#[cfg(feature = "file")]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
@@ -40,7 +39,6 @@ pub struct Point {
     pub point1: Coordinate,
 }
 
-#[cfg(feature = "file")]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
@@ -51,7 +49,6 @@ pub struct Line {
     pub point2: Coordinate,
 }
 
-#[cfg(feature = "file")]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
@@ -68,7 +65,6 @@ pub struct Triangle {
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct FilterValue {
-    pub space_name: String,
     pub key_name: String,
     pub filter: Filter,
 }
@@ -150,11 +146,8 @@ pub enum FilterText {
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum Function {
-    #[cfg(feature = "file")]
     Point(Point),
-    #[cfg(feature = "file")]
     Line(Line),
-    #[cfg(feature = "file")]
     Triangle(Triangle),
 }
 

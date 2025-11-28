@@ -31,8 +31,6 @@ pub fn process(cmd: Command, s: &mut Storage) -> Result<Output, UserError> {
 
         //Value操作系
         Command::InsertValue(v) => insert_value(v, s),
-        Command::PatchValue(v) => patch_value(v, s),
-        Command::UpdateValue(v) => update_value(v, s),
         Command::DeleteValue(v) => delete_value(v, s),
         Command::SelectValue(v) => select_value(v, s),
         Command::ShowValues(v) => show_values(v, s),

@@ -9,6 +9,6 @@ use crate::{
     user_error::UserError,
 };
 
-pub fn insert_value(v: InsertValue, s: Arc<Storage>) -> Result<Output, UserError> {
-    todo!()
+pub fn insert_value(v: InsertValue, s: &mut Storage) -> Result<Output, UserError> {
+    s.insert_value(v.key_name, v.range, v.value)
 }

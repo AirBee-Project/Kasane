@@ -8,6 +8,6 @@ use crate::{
 };
 
 #[allow(unused_variables)]
-pub fn delete_value(v: DeleteValue, s: Arc<Storage>) -> Result<Output, UserError> {
-    todo!()
+pub fn delete_value(v: DeleteValue, s: &mut Storage) -> Result<Output, UserError> {
+    s.delete_value(v.key_name, v.range)
 }

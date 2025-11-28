@@ -1,24 +1,10 @@
-use kasane_logic::space_time_id::encode;
-
-use crate::{
-    interface::{
-        input::{Range, ValueEntry},
-        output::Output,
-    },
-    io::wasm::Storage,
-    location,
-    user_error::UserError,
-};
-
+use crate::{interface::input::Range, io::wasm::Storage};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 
+use crate::{interface::output::Output, location, user_error::UserError};
+
 impl Storage {
-    pub fn insert_value(
-        &mut self,
-        key_name: String,
-        range: Range,
-        value: ValueEntry,
-    ) -> Result<Output, UserError> {
+    pub fn delete_value(&mut self, key_name: String, range: Range) -> Result<Output, UserError> {
         match self.inner.entry(key_name.clone()) {
             Occupied(mut entry) => {
                 let encode_ids = Self::process_range(range)?;
@@ -26,7 +12,7 @@ impl Storage {
                 let (_, set) = entry.get_mut();
 
                 for encode_id in encode_ids.iter() {
-                    set.insert(encode_id, value.clone());
+                    set.remove(encode_id);
                 }
                 Ok(Output::Success)
             }
