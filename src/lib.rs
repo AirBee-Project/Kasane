@@ -21,13 +21,22 @@ use crate::{
 static STORAGE: OnceCell<Arc<Storage>> = OnceCell::new();
 
 #[cfg(feature = "wasm")]
-pub fn init(conf: Configuration) {
+pub fn init(conf: Configuration, import: Option<Vec<Storage>>) {
     let storage = Arc::new(Storage::new(conf, None));
     STORAGE.set(storage).expect("Storage already initialized");
 }
 
 #[cfg(feature = "wasm")]
-pub async fn kasane(command: Command) -> Result<Output, UserError> {
-    let s = STORAGE.get().expect("storage not initialized").clone();
-    command::process(command, &mut s)
+pub fn kasane(command: Command) -> Result<Output, UserError> {
+    let mut s = STORAGE.get().expect("storage not initialized").clone();
+    command::process(command, s)
+}
+
+#[cfg(feature = "wasm")]
+pub fn export() -> Storage {
+    STORAGE
+        .get()
+        .expect("storage not initialized")
+        .clone()
+        .export()
 }

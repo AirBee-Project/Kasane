@@ -18,6 +18,7 @@ pub struct Storage {
 
 impl Storage {
     pub fn new(conf: Configuration, import: Option<Vec<Storage>>) -> Storage {
+        //import経由で外のストレージのデータをインポートする
         Storage {
             inner: HashMap::new(),
         }
