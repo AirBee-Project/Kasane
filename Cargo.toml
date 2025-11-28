@@ -27,7 +27,7 @@ crate-type = ["cdylib"]
 # ストレージ設定
 wasm = []            #Wasm上で動作
 on-memory = []       #OnMemoryDBとして動作
-file = ["dep:redb", "dep:bincode", "dep:bcrypt", "dep:regex"]  #redbを用いてファイルに対して書き込み
+file = ["dep:redb","dep:bincode","dep:bcrypt","dep:regex"]
 
 # 型情報の書き出し
 serde = ["dep:serde"]

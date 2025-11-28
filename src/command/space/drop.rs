@@ -8,6 +8,6 @@ use crate::{
     user_error::UserError,
 };
 
-pub fn drop_space(v: DropSpace, s: Arc<Storage>) -> Result<Output, UserError> {
-    todo!()
+pub fn drop_space(v: DropSpace, s: &mut Storage) -> Result<Output, UserError> {
+    s.drop_space(v.space_name)
 }

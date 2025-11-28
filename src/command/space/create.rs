@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::{
     command::tools::valid_name::valid_name,
@@ -8,7 +8,7 @@ use crate::{
     user_error::UserError,
 };
 
-pub fn create_space(v: CreateSpace, s: Arc<Storage>) -> Result<Output, UserError> {
+pub fn create_space(v: CreateSpace, s: &mut Storage) -> Result<Output, UserError> {
     match valid_name(&v.space_name) {
         Ok(_) => {}
         Err(e) => {
@@ -20,5 +20,5 @@ pub fn create_space(v: CreateSpace, s: Arc<Storage>) -> Result<Output, UserError
         }
     }
 
-    s.create_space(&v.space_name)
+    s.create_space(v.space_name)
 }

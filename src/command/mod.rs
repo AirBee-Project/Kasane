@@ -19,7 +19,7 @@ use version::version;
 
 //関数のディスパッチ関数
 //関数の命令内容とストレージの参照権を関数に入力し、操作を行わせる
-pub fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError> {
+pub fn process(cmd: Command, s: &mut Storage) -> Result<Output, UserError> {
     match cmd {
         //データベース操作系
         Command::CreateSpace(v) => create_space(v, s),
