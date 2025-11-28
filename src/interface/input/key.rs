@@ -15,18 +15,6 @@ pub struct CreateKey {
     // pub space_name: String,
     pub key_name: String,
     pub key_type: KeyType,
-    pub value_mode: ValueMode,
-}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
-#[cfg_attr(feature = "file", derive(Encode, Decode))]
-#[cfg_attr(feature = "ts-rs", derive(TS))]
-#[repr(u8)]
-pub enum ValueMode {
-    UniqueValue = 0,
-    MultiValue = 255,
 }
 
 #[derive(Debug, PartialEq, Clone)]

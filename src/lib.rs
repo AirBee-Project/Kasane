@@ -22,7 +22,7 @@ static STORAGE: OnceCell<Arc<Storage>> = OnceCell::new();
 
 #[cfg(feature = "wasm")]
 pub fn init(conf: Configuration) {
-    let storage = Arc::new(Storage::new(conf));
+    let storage = Arc::new(Storage::new(conf, None));
     STORAGE.set(storage).expect("Storage already initialized");
 }
 

@@ -9,9 +9,8 @@ use std::sync::Arc;
 pub mod key;
 pub mod tools;
 pub mod value;
-pub mod version;
 
-use key::{create_key, drop_key, info_key, show_keys};
+use key::{create_key, drop_key, show_keys};
 use value::{delete_value, insert_value, patch_value, select_value, show_values, update_value};
 
 //関数のディスパッチ関数
@@ -29,7 +28,6 @@ pub fn process(cmd: Command, s: &mut Storage) -> Result<Output, UserError> {
         Command::CreateKey(v) => create_key(v, s),
         Command::DropKey(v) => drop_key(v, s),
         Command::ShowKeys(v) => show_keys(v, s),
-        Command::InfoKey(v) => info_key(v, s),
 
         //Value操作系
         Command::InsertValue(v) => insert_value(v, s),

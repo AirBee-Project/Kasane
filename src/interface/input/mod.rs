@@ -1,7 +1,6 @@
 // Module declarations and re-exports
 pub mod key;
 pub mod range;
-pub mod space;
 pub mod value;
 
 // Re-export types from submodules
@@ -32,7 +31,7 @@ pub enum Command {
     CreateKey(CreateKey),
     DropKey(DropKey),
     ShowKeys(ShowKeys),
-    InfoKey(InfoKey),
+    // InfoKey(InfoKey),
 
     //Value操作系
     InsertValue(InsertValue),

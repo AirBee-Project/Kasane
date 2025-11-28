@@ -9,13 +9,6 @@ use thiserror::Error;
 pub enum UserError {
     // ==================== Validation Errors ====================
     // バリデーションエラー: 名前やパスワードの検証で使用
-    #[error("Invalid space name '{name}': {reason} (at {location})")]
-    SpaceNameValidationError {
-        name: String,
-        reason: &'static str,
-        location: String,
-    },
-
     #[error("Invalid key name '{name}': {reason} (at {location})")]
     KeyNameValidationError {
         name: String,
@@ -28,36 +21,13 @@ pub enum UserError {
 
     // ==================== Entity Not Found Errors ====================
     // エンティティが存在しないエラー
-    #[error("User '{user_name}' not found")]
-    UserNotFound { user_name: String },
-
-    #[error("Space '{space_name}' not found (at {location})")]
-    SpaceNotFound {
-        space_name: String,
-        location: String,
-    },
-
-    #[error("Key '{key_name}' not found in space '{space_name}' (at {location})")]
-    KeyNotFound {
-        key_name: String,
-        space_name: String,
-        location: String,
-    },
+    #[error("Key '{key_name}' not found (at {location})")]
+    KeyNotFound { key_name: String, location: String },
 
     // ==================== Entity Already Exists Errors ====================
     // エンティティが既に存在するエラー
-    #[error("Space '{space_name}' already exists (at {location})")]
-    SpaceAlreadyExists {
-        space_name: String,
-        location: String,
-    },
-
-    #[error("Key '{key_name}' already exists in space '{space_name}' (at {location})")]
-    KeyAlreadyExists {
-        key_name: String,
-        space_name: String,
-        location: String,
-    },
+    #[error("Key '{key_name}' already exists (at {location})")]
+    KeyAlreadyExists { key_name: String, location: String },
 }
 
 //Kasane-Logicのエラー型を変換
