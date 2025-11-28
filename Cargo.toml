@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"], optional = true }
-uuid = { version="1.18.1", features = ["v4","serde"]}
+uuid = { version="1.18.1", features = ["v4","serde"], optional = true}
 tokio = { version = "1.48.0", features = ["full"], optional = true  }
 num_cpus = { version = "1.17.0", optional = true }
 thiserror = "2.0.17"
@@ -27,7 +27,7 @@ crate-type = ["cdylib"]
 # ストレージ設定
 wasm = []            #Wasm上で動作
 on-memory = []       #OnMemoryDBとして動作
-file = ["dep:redb","dep:bincode","dep:bcrypt","dep:regex"]
+file = ["dep:redb","dep:bincode","dep:bcrypt","dep:regex","dep:uuid"]
 
 # 型情報の書き出し
 serde = ["dep:serde"]
