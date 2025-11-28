@@ -1,13 +1,8 @@
-#[cfg(feature = "file")]
-use std::sync::Arc;
+use crate::io::io::Storage;
 
 use crate::{interface::output::Output, user_error::UserError};
-#[cfg(feature = "file")]
-use crate::io::full::Storage;
+use std::sync::Arc;
 
-#[cfg(feature = "file")]
-pub fn show_spaces(s: Arc<&Storage>) -> Result<Output, UserError> {
-    //ストレージに対して操作を実行する
-
+pub fn show_spaces(s: Arc<Storage>) -> Result<Output, UserError> {
     s.show_spaces()
 }

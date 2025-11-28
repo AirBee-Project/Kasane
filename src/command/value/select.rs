@@ -1,15 +1,11 @@
-#[cfg(feature = "file")]
-use std::sync::Arc;
+use crate::io::io::Storage;
 
 use crate::{
-    user_error::UserError,
     interface::{input::SelectValue, output::Output},
+    user_error::UserError,
 };
-#[cfg(feature = "file")]
-use crate::io::full::Storage;
+use std::sync::Arc;
 
-#[cfg(feature = "file")]
-#[allow(unused_variables)]
-pub fn select_value(v: SelectValue, s: Arc<&Storage>) -> Result<Output, UserError> {
+pub fn select_value(v: SelectValue, s: Arc<Storage>) -> Result<Output, UserError> {
     todo!()
 }

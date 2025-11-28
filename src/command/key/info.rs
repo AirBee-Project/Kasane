@@ -1,5 +1,4 @@
-#[cfg(feature = "file")]
-use std::sync::Arc;
+use crate::io::io::Storage;
 
 use crate::{
     command::tools::valid_name::valid_name,
@@ -7,12 +6,9 @@ use crate::{
     location,
     user_error::UserError,
 };
-#[cfg(feature = "file")]
-use crate::io::full::Storage;
+use std::sync::Arc;
 
-#[cfg(feature = "file")]
-pub fn info_key(v: InfoKey, s: Arc<&Storage>) -> Result<Output, UserError> {
-    //Spaceの名前のチェック
+pub fn info_key(v: InfoKey, s: Arc<Storage>) -> Result<Output, UserError> {
     match valid_name(&v.space_name) {
         Ok(_) => {}
         Err(e) => {
@@ -24,7 +20,6 @@ pub fn info_key(v: InfoKey, s: Arc<&Storage>) -> Result<Output, UserError> {
         }
     }
 
-    //Keyの名前のチェック
     match valid_name(&v.key_name) {
         Ok(_) => {}
         Err(e) => {

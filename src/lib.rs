@@ -1,4 +1,3 @@
-#[cfg(feature = "file")]
 pub mod command;
 pub mod configuration;
 pub mod interface;
@@ -6,40 +5,29 @@ pub mod io;
 pub mod macros;
 pub mod user_error;
 
-#[cfg(feature = "file")]
+#[cfg(feature = "wasm")]
 use once_cell::sync::OnceCell;
+use std::sync::Arc;
 
-#[cfg(any(feature = "wasm", feature = "file"))]
-use crate::configuration::Configuration;
-
-#[cfg(feature = "file")]
+#[cfg(feature = "wasm")]
 use crate::{
-    command::process, interface::input::Command, interface::output::Output, io::full::Storage,
+    configuration::Configuration,
+    interface::{input::Command, output::Output},
+    io::wasm::Storage,
     user_error::UserError,
 };
 
-// ---- グローバルインスタンス ----
-#[cfg(feature = "file")]
-static STORAGE: OnceCell<Box<Storage>> = OnceCell::new();
+#[cfg(feature = "wasm")]
+static STORAGE: OnceCell<Arc<Storage>> = OnceCell::new();
 
 #[cfg(feature = "wasm")]
-pub fn init(_conf: Configuration) {
-    // WASM initialization
+pub fn init(conf: Configuration) {
+    let storage = Arc::new(Storage::new(conf));
+    STORAGE.set(storage).expect("Storage already initialized");
 }
 
-#[cfg(feature = "file")]
-pub fn init(_conf: Configuration) {
-    // File-based storage initialization would go here
-}
-
-#[cfg(feature = "file")]
+#[cfg(feature = "wasm")]
 pub async fn kasane(command: Command) -> Result<Output, UserError> {
-    if let Some(storage) = STORAGE.get() {
-        process(command, std::sync::Arc::new(storage.as_ref())).await
-    } else {
-        Err(UserError::DatabaseError {
-            message: "Storage not initialized".to_string(),
-            location: format!("{}:{}", file!(), line!()),
-        })
-    }
+    let s = STORAGE.get().expect("storage not initialized").clone();
+    command::process(command, s)
 }

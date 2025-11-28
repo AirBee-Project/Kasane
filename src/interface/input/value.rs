@@ -17,7 +17,6 @@ pub struct InsertValue {
     pub space_name: String,
     pub key_name: String,
     pub range: Range,
-    #[cfg(feature = "file")]
     pub value: ValueEntry,
 }
 
@@ -29,7 +28,6 @@ pub struct PatchValue {
     pub space_name: String,
     pub key_name: String,
     pub range: Range,
-    #[cfg(feature = "file")]
     pub value: ValueEntry,
 }
 
@@ -41,7 +39,6 @@ pub struct UpdateValue {
     pub space_name: String,
     pub key_name: String,
     pub range: Range,
-    #[cfg(feature = "file")]
     pub value: ValueEntry,
 }
 
@@ -63,9 +60,28 @@ pub struct SelectValue {
     pub space_name: String,
     pub key_names: Vec<String>,
     pub range: Range,
-    //ここには出力物を加工できるような概念が必要
     pub vertex: bool,
     pub center: bool,
     pub id_string: bool,
     pub id_pure: bool,
+}
+
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+pub struct ShowValues {
+    pub space_name: String,
+    pub key_name: String,
+}
+
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+pub enum ValueEntry {
+    TEXT(String),
+    FLOAT(f32),
+    INT(i32),
+    BOOLEAN(bool),
 }

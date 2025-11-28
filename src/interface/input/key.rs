@@ -74,3 +74,20 @@ pub enum IntOption {}
 #[cfg_attr(feature = "file", derive(Encode, Decode))]
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum BooleanOption {}
+
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+pub struct ShowKeys {
+    pub space_name: String,
+}
+
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+pub struct InfoKey {
+    pub space_name: String,
+    pub key_name: String,
+}

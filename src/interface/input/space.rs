@@ -20,3 +20,11 @@ pub struct CreateSpace {
 pub struct DropSpace {
     pub space_name: String,
 }
+
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+pub struct InfoSpace {
+    pub space_name: String,
+}

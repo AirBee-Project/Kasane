@@ -1,18 +1,12 @@
-#[cfg(feature = "file")]
-use std::sync::Arc;
-
 use crate::interface::input::CreateKey;
 use crate::interface::output::Output;
+use crate::io::io::Storage;
+
 use crate::location;
 use crate::{command::tools::valid_name::valid_name, user_error::UserError};
-#[cfg(feature = "file")]
-use crate::io::full::Storage;
+use std::sync::Arc;
 
-#[cfg(feature = "file")]
-pub fn create_key(v: CreateKey, s: Arc<&Storage>) -> Result<Output, UserError> {
-    //危険な入力がデータベースに侵入するのを防ぐ
-
-    //Spaceの名前のチェック
+pub fn create_key(v: CreateKey, s: Arc<Storage>) -> Result<Output, UserError> {
     match valid_name(&v.space_name) {
         Ok(_) => {}
         Err(e) => {
@@ -24,7 +18,6 @@ pub fn create_key(v: CreateKey, s: Arc<&Storage>) -> Result<Output, UserError> {
         }
     }
 
-    //Keyの名前のチェック
     match valid_name(&v.key_name) {
         Ok(_) => {}
         Err(e) => {
@@ -36,6 +29,5 @@ pub fn create_key(v: CreateKey, s: Arc<&Storage>) -> Result<Output, UserError> {
         }
     }
 
-    //ストレージに対して操作を実行する
     s.create_key(&v.space_name, &v.key_name, v.key_type, v.value_mode)
 }
