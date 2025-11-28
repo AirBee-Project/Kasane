@@ -4,9 +4,11 @@ use crate::io::full::table_types::{uuid::UuidKey, value_entry::ValueEntry};
 
 use bincode::{Decode, Encode, config, decode_from_slice};
 use redb::{Key, TypeName, Value};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ValueReverseKey {
     pub key_id: UuidKey,
     pub value: ValueEntry,

@@ -1,15 +1,19 @@
+#[cfg(feature = "file")]
 use std::sync::Arc;
 
 use crate::{
     command::tools::valid_name::valid_name,
-    io::full::Storage,
     interface::{input::CreateUser, output::Output},
     location,
     user_error::UserError,
 };
+#[cfg(feature = "file")]
+use crate::io::full::Storage;
+#[cfg(feature = "file")]
 use regex::Regex;
 
-pub fn create_user(v: CreateUser, s: Arc<Storage>) -> Result<Output, UserError> {
+#[cfg(feature = "file")]
+pub fn create_user(v: CreateUser, s: Arc<&Storage>) -> Result<Output, UserError> {
     //ユーザー命名規則の検証
     match valid_name(&v.user_name) {
         Ok(_) => {}

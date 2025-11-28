@@ -1,14 +1,17 @@
+#[cfg(feature = "file")]
 use std::sync::Arc;
 
 use crate::{
     command::tools::valid_name::valid_name,
-    io::full::Storage,
     interface::{input::InfoSpace, output::Output},
     location,
     user_error::UserError,
 };
+#[cfg(feature = "file")]
+use crate::io::full::Storage;
 
-pub fn info_space(v: InfoSpace, s: Arc<Storage>) -> Result<Output, UserError> {
+#[cfg(feature = "file")]
+pub fn info_space(v: InfoSpace, s: Arc<&Storage>) -> Result<Output, UserError> {
     //危険な入力がデータベースに侵入するのを防ぐ
 
     //エラーの位置

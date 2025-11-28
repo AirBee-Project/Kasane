@@ -2,13 +2,17 @@ use std::cmp::Ordering;
 
 use bincode::{Decode, Encode, config, decode_from_slice};
 use redb::{Key, TypeName, Value};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
 use crate::interface::input::KeyType;
 
-#[derive(Clone, PartialEq, Serialize, Deserialize, Debug, TS, Encode, Decode)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, PartialEq, Debug, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum ValueEntry {
     TEXT(String),
     BOOLEAN(bool),

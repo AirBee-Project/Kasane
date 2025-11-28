@@ -1,11 +1,16 @@
+#[cfg(feature = "file")]
 use bincode::{Decode, Encode};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
 // ---------------------- Key管理 ----------------------
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct CreateKey {
     pub space_name: String,
     pub key_name: String,
@@ -13,16 +18,22 @@ pub struct CreateKey {
     pub value_mode: ValueMode,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Encode, Decode, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "file", derive(Encode, Decode))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[repr(u8)]
 pub enum ValueMode {
     UniqueValue = 0,
     MultiValue = 255,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Encode, Decode, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "file", derive(Encode, Decode))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 #[repr(u8)]
 pub enum KeyType {
     Text(Vec<TextOption>),
@@ -31,21 +42,35 @@ pub enum KeyType {
     Boolean(Vec<BooleanOption>),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct DropKey {
     pub space_name: String,
     pub key_name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Encode, Decode, TS)]
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "file", derive(Encode, Decode))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum TextOption {}
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Encode, Decode, TS)]
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "file", derive(Encode, Decode))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum FloatOption {}
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Encode, Decode, TS)]
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "file", derive(Encode, Decode))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum IntOption {}
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Encode, Decode, TS)]
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "file", derive(Encode, Decode))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum BooleanOption {}

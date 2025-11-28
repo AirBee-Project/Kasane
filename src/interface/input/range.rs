@@ -1,11 +1,16 @@
-use kasane_logic::point::{Coordinate, ECEF};
+#[cfg(feature = "file")]
+use kasane_logic::point::Coordinate;
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
 // ---------------------- Range & Function ----------------------
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum Range {
     Function(Function),
     Calculation(Calculation),
@@ -14,8 +19,10 @@ pub enum Range {
     //Effect(Effect),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct SpaceTimeIDInput {
     pub z: u8,
     pub f: [Option<i64>; 2],
@@ -23,23 +30,32 @@ pub struct SpaceTimeIDInput {
     pub y: [Option<u64>; 2],
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[cfg(feature = "file")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct Point {
     pub z: u8,
     pub point1: Coordinate,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[cfg(feature = "file")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct Line {
     pub z: u8,
     pub point1: Coordinate,
     pub point2: Coordinate,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[cfg(feature = "file")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct Triangle {
     pub z: u8,
     pub point1: Coordinate,
@@ -47,16 +63,20 @@ pub struct Triangle {
     pub point3: Coordinate,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct FilterValue {
     pub space_name: String,
     pub key_name: String,
     pub filter: Filter,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum Filter {
     FilterBoolean(FilterBoolean),
     FilterInt(FilterInt),
@@ -64,8 +84,10 @@ pub enum Filter {
     FilterText(FilterText),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum FilterBoolean {
     HasValue,
     IsTrue,
@@ -74,8 +96,10 @@ pub enum FilterBoolean {
     NotEquals(bool),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum FilterFloat {
     HasValue,
     Equal(f32),
@@ -89,8 +113,10 @@ pub enum FilterFloat {
     NotIn(Vec<f32>),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum FilterInt {
     HasValue,
     Equal(i32),
@@ -104,8 +130,10 @@ pub enum FilterInt {
     NotIn(Vec<i32>),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum FilterText {
     HasValue,
     Equal(String),
@@ -117,16 +145,23 @@ pub enum FilterText {
     CaseInsensitiveEqual(String),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum Function {
+    #[cfg(feature = "file")]
     Point(Point),
+    #[cfg(feature = "file")]
     Line(Line),
+    #[cfg(feature = "file")]
     Triangle(Triangle),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum Calculation {
     AND(Vec<Range>),
     OR(Vec<Range>),

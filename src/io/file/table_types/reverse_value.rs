@@ -5,9 +5,11 @@ use kasane_logic::bit_vec::BitVec;
 
 use bincode::{Decode, Encode, config, decode_from_slice};
 use redb::{TypeName, Value};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ReverseValue {
     pub f: BitVec,
     pub x: BitVec,

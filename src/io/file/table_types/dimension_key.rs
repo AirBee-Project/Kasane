@@ -5,9 +5,11 @@ use kasane_logic::bit_vec::BitVec;
 
 use bincode::{Decode, Encode, config, decode_from_slice};
 use redb::{Key, TypeName, Value};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DimensionKey {
     pub key_id: UuidKey,
     pub bit_vec: BitVec,

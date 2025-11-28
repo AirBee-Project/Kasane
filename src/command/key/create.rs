@@ -1,12 +1,15 @@
+#[cfg(feature = "file")]
 use std::sync::Arc;
 
 use crate::interface::input::CreateKey;
 use crate::interface::output::Output;
-use crate::io::full::Storage;
 use crate::location;
 use crate::{command::tools::valid_name::valid_name, user_error::UserError};
+#[cfg(feature = "file")]
+use crate::io::full::Storage;
 
-pub fn create_key(v: CreateKey, s: Arc<Storage>) -> Result<Output, UserError> {
+#[cfg(feature = "file")]
+pub fn create_key(v: CreateKey, s: Arc<&Storage>) -> Result<Output, UserError> {
     //危険な入力がデータベースに侵入するのを防ぐ
 
     //Spaceの名前のチェック

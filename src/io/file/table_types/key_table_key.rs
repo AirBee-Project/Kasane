@@ -1,15 +1,17 @@
 use std::cmp::Ordering;
 
 use crate::{
-    interface::input::{KeyType, ValueMode},
+    interface::input::ValueMode,
     io::full::command_impls::key_type::KeyTypeKind,
 };
 use crate::io::full::table_types::uuid::UuidKey;
 use bincode::{config, decode_from_slice, Decode, Encode};
 use redb::{Key, TypeName, Value};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct KeyTableKey {
     pub space_id: UuidKey,
     pub key_name: String,

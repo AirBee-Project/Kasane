@@ -1,12 +1,12 @@
 use bincode::{Decode, Encode};
 use redb::{Key, TypeName, Value};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, convert::TryInto};
 use uuid::Uuid; // for try_into()
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct UuidKey(pub [u8; 16]);
 
 impl Value for UuidKey {

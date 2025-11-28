@@ -1,4 +1,5 @@
 use bincode::{Decode, Encode};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 use crate::interface::input::KeyType;
@@ -23,7 +24,8 @@ impl KeyType {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum KeyTypeKind {
     Text = 0,
     Float,

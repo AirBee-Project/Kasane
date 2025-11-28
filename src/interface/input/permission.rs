@@ -1,11 +1,16 @@
+#[cfg(feature = "file")]
 use bincode::{Decode, Encode};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
 // ---------------------- スコープ ----------------------
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum Scope {
     Global,
     Database,
@@ -17,8 +22,11 @@ pub enum Scope {
 // ---------------------- コマンド列挙 ----------------------
 
 // ========== Database Commands ==========
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, TS, Encode, Decode)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "file", derive(Encode, Decode))]
 #[repr(u8)]
 pub enum DatabaseCommand {
     ALL = 0,
@@ -30,8 +38,11 @@ pub enum DatabaseCommand {
 }
 
 // ========== Space Commands ==========
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, TS, Encode, Decode)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "file", derive(Encode, Decode))]
 #[repr(u8)]
 pub enum SpaceCommand {
     ALL = 0,
@@ -42,8 +53,11 @@ pub enum SpaceCommand {
 }
 
 // ========== Key Commands ==========
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, TS, Encode, Decode)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "file", derive(Encode, Decode))]
 #[repr(u8)]
 pub enum KeyCommand {
     ALL = 0,
@@ -56,8 +70,11 @@ pub enum KeyCommand {
 }
 
 // ========== User Commands ==========
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, TS, Encode, Decode)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "file", derive(Encode, Decode))]
 #[repr(u8)]
 pub enum UserCommand {
     ALL = 0,
@@ -83,8 +100,10 @@ pub enum UserCommand {
 
 // ---------------------- 権限操作（Grant / Revoke） ----------------------
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum PermissionCommand {
     Database(Vec<DatabaseCommand>),
     Space(Vec<SpaceCommand>),
@@ -92,16 +111,20 @@ pub enum PermissionCommand {
     User(Vec<UserCommand>),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct Grant {
     pub user_name: String,
     pub scope: Scope,
     pub command: PermissionCommand,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub struct Revoke {
     pub user_name: String,
     pub scope: Scope,

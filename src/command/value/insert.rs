@@ -1,14 +1,18 @@
+#[cfg(feature = "file")]
 use std::sync::Arc;
 
 use crate::{
     command::tools::valid_name::valid_name,
     interface::{input::InsertValue, output::Output},
-    io::full::Storage,
     location,
     user_error::UserError,
 };
+#[cfg(feature = "file")]
+use crate::io::full::Storage;
 
-pub fn insert_value(v: InsertValue, s: Arc<Storage>) -> Result<Output, UserError> {
+#[cfg(feature = "file")]
+#[allow(unused_variables)]
+pub fn insert_value(v: InsertValue, s: Arc<&Storage>) -> Result<Output, UserError> {
     //危険な入力がデータベースに侵入するのを防ぐ
     //Rangeの範囲を整頓する
 

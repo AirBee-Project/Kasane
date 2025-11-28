@@ -1,32 +1,46 @@
+#[cfg(feature = "file")]
 use std::sync::Arc;
 
+#[cfg(feature = "file")]
 use crate::io::full::Storage;
+#[cfg(feature = "file")]
 use crate::{
     interface::{input::Command, output::Output},
     user_error::UserError,
 };
 
+#[cfg(feature = "file")]
 pub mod key;
 // pub mod permission;
+#[cfg(feature = "file")]
 pub mod space;
 pub mod tools;
+#[cfg(feature = "file")]
 pub mod user;
+#[cfg(feature = "file")]
 pub mod value;
+#[cfg(feature = "file")]
 pub mod version;
 
+#[cfg(feature = "file")]
 use key::{create_key, drop_key, info_key, show_keys};
 // use permission::{
 //     grant_database, grant_key, grant_space, grant_user, revoke_database, revoke_key, revoke_space,
 //     revoke_user,
 // };
+#[cfg(feature = "file")]
 use space::{create_space, drop_space, info_space, show_spaces};
+#[cfg(feature = "file")]
 use user::{create_user, show_users};
+#[cfg(feature = "file")]
 use value::{delete_value, insert_value, patch_value, select_value, show_values, update_value};
+#[cfg(feature = "file")]
 use version::version;
 
 //関数のディスパッチ関数
 //関数の命令内容とストレージの参照権を関数に入力し、操作を行わせる
-pub async fn process(cmd: Command, s: Arc<Storage>) -> Result<Output, UserError> {
+#[cfg(feature = "file")]
+pub async fn process(cmd: Command, s: Arc<&Storage>) -> Result<Output, UserError> {
     match cmd {
         //データベース操作系
         Command::CreateSpace(v) => create_space(v, s),

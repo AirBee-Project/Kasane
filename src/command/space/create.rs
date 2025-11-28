@@ -1,14 +1,17 @@
+#[cfg(feature = "file")]
 use std::sync::Arc;
 
 use crate::{
     command::tools::valid_name::valid_name,
-    io::full::Storage,
     interface::{input::CreateSpace, output::Output},
     location,
     user_error::UserError,
 };
+#[cfg(feature = "file")]
+use crate::io::full::Storage;
 
-pub fn create_space(v: CreateSpace, s: Arc<Storage>) -> Result<Output, UserError> {
+#[cfg(feature = "file")]
+pub fn create_space(v: CreateSpace, s: Arc<&Storage>) -> Result<Output, UserError> {
     match valid_name(&v.space_name) {
         Ok(_) => {}
         Err(e) => {

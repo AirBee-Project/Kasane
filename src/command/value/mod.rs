@@ -1,13 +1,25 @@
+#[cfg(feature = "file")]
 pub mod delete;
+#[cfg(feature = "file")]
 pub mod insert;
+#[cfg(feature = "file")]
 pub mod patch;
+#[cfg(feature = "file")]
 pub mod select;
+#[cfg(feature = "file")]
 pub mod show;
+#[cfg(feature = "file")]
 pub mod update;
 
+#[cfg(feature = "file")]
 pub use delete::delete_value;
+#[cfg(feature = "file")]
 pub use insert::insert_value;
+#[cfg(feature = "file")]
 pub use patch::patch_value;
+#[cfg(feature = "file")]
 pub use select::select_value;
+#[cfg(feature = "file")]
 pub use show::show_values;
+#[cfg(feature = "file")]
 pub use update::update_value;
