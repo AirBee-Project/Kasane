@@ -9,7 +9,7 @@ pub mod user_error;
 #[cfg(feature = "file")]
 use once_cell::sync::OnceCell;
 
-#[cfg(any(feature = "wasm", feature = "file"))]
+#[cfg(any(feature = "wasm", feature = "file", feature = "on-memory"))]
 use crate::configuration::Configuration;
 
 #[cfg(feature = "file")]
@@ -22,9 +22,14 @@ use crate::{
 #[cfg(feature = "file")]
 static STORAGE: OnceCell<Box<Storage>> = OnceCell::new();
 
-#[cfg(feature = "wasm")]
+#[cfg(all(feature = "wasm", not(feature = "file")))]
 pub fn init(_conf: Configuration) {
     // WASM initialization
+}
+
+#[cfg(all(feature = "on-memory", not(feature = "file"), not(feature = "wasm")))]
+pub fn init(_conf: Configuration) {
+    // On-memory initialization
 }
 
 #[cfg(feature = "file")]
