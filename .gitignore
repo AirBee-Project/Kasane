@@ -6,8 +6,6 @@
 # === IDE / Editor ===
 /.idea
 **/.idea
-.vscode/
-**/.vscode/
 *.swp
 *.swo
 *.log

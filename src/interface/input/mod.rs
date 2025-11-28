@@ -64,10 +64,3 @@ pub enum Command {
     // RevokeKey(RevokeKey),
     // RevokeUser(RevokeUser),
 }
-
-#[derive(Debug, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export, export_to = "input/input.ts")]
-pub struct Packet {
-    pub command: Vec<Command>,
-}

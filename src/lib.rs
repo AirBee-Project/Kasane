@@ -1,14 +1,27 @@
-use serde_json::Value;
-use wasm_bindgen::prelude::*;
+pub mod command;
+pub mod configuration;
+pub mod interface;
+pub mod io;
+pub mod macros;
+pub mod user_error;
 
-#[wasm_bindgen]
-pub fn process_json(input: &str) -> String {
-    // JSON文字列をパース
-    let mut json: Value = serde_json::from_str(input).unwrap();
+use std::process::Command;
 
-    // JSONにフィールドを追加
-    json["status"] = Value::from("ok");
+use once_cell::sync::OnceCell;
 
-    // 返す
-    serde_json::to_string(&json).unwrap()
+use crate::{
+    command::process, configuration::Configuration, interface::output::Output, io::Storage,
+    user_error::UserError,
+};
+
+// ---- グローバルインスタンス ----
+static STORAGE: OnceCell<Box<dyn Storage + Send + Sync>> = OnceCell::new();
+
+pub fn init(conf: Configuration) {
+    #[cfg(feature = "wasm")]
+    STORAGE.set(Box::new(Storage::new())).unwrap();
+}
+
+pub fn kasane(command: Command) -> Result<Output, UserError> {
+    process(command, STORAGE)
 }
