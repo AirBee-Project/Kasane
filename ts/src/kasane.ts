@@ -58,6 +58,99 @@ export interface KasaneWasmExports {
 }
 
 /**
+ * Options for loading the Wasm module
+ */
+export interface LoadKasaneOptions {
+  /**
+   * Configuration for the Kasane instance
+   */
+  config?: Configuration;
+  /**
+   * Optional storage data to import from a previous session
+   */
+  importData?: Storage[];
+  /**
+   * Import object to pass to WebAssembly.instantiate
+   * Required for wasm-bindgen generated modules
+   */
+  importObject?: WebAssembly.Imports;
+}
+
+/**
+ * Load Kasane from a Wasm file URL and create an initialized instance
+ *
+ * @example
+ * ```typescript
+ * // In Vite, load from /public/kasane.wasm
+ * const kasane = await loadKasane('/kasane.wasm');
+ *
+ * // Create a key
+ * kasane.createKey('temperature', 'float');
+ * ```
+ *
+ * @param wasmUrl - URL to the Wasm file (e.g., '/kasane.wasm' for Vite public folder)
+ * @param options - Optional configuration and import options
+ * @returns Promise resolving to an initialized Kasane instance
+ */
+export async function loadKasane(
+  wasmUrl: string,
+  options: LoadKasaneOptions = {}
+): Promise<Kasane> {
+  const { config = {}, importData, importObject = {} } = options;
+
+  // Fetch and instantiate the Wasm module
+  const response = await fetch(wasmUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Wasm module: ${response.status} ${response.statusText}`);
+  }
+
+  const wasmBytes = await response.arrayBuffer();
+  const wasmModule = await WebAssembly.instantiate(wasmBytes, importObject);
+
+  // Extract exports from the instantiated module
+  const exports = wasmModule.instance.exports as unknown as KasaneWasmExports;
+
+  // Create and initialize the Kasane instance
+  const kasane = new Kasane(exports);
+  kasane.init(config, importData);
+
+  return kasane;
+}
+
+/**
+ * Load Kasane from a Wasm file URL without auto-initialization
+ *
+ * @example
+ * ```typescript
+ * // Load without auto-initialization
+ * const kasane = await loadKasaneModule('/kasane.wasm');
+ *
+ * // Initialize manually with custom options
+ * kasane.init({}, savedData);
+ * ```
+ *
+ * @param wasmUrl - URL to the Wasm file
+ * @param importObject - Optional import object for WebAssembly.instantiate
+ * @returns Promise resolving to a Kasane instance (not initialized)
+ */
+export async function loadKasaneModule(
+  wasmUrl: string,
+  importObject: WebAssembly.Imports = {}
+): Promise<Kasane> {
+  const response = await fetch(wasmUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Wasm module: ${response.status} ${response.statusText}`);
+  }
+
+  const wasmBytes = await response.arrayBuffer();
+  const wasmModule = await WebAssembly.instantiate(wasmBytes, importObject);
+
+  const exports = wasmModule.instance.exports as unknown as KasaneWasmExports;
+
+  return new Kasane(exports);
+}
+
+/**
  * Kasane client class for interacting with the Wasm module
  */
 export class Kasane {

@@ -10,14 +10,13 @@ npm install @kasane/wasm
 
 ## Usage
 
-### Basic Example
+### Loading from Vite /public folder (Recommended)
 
 ```typescript
-import { Kasane, createKasane } from '@kasane/wasm';
-import * as wasmModule from './kasane_bg.wasm';
+import { loadKasane } from '@kasane/wasm';
 
-// Initialize Kasane with the Wasm module
-const kasane = createKasane(wasmModule);
+// Load Wasm from /public/kasane.wasm
+const kasane = await loadKasane('/kasane.wasm');
 
 // Create a key for storing temperature data
 const result = kasane.createKey('temperature', 'float');
@@ -57,42 +56,72 @@ const data = kasane.export();
 localStorage.setItem('kasane-data', JSON.stringify(data));
 ```
 
-### Initialization with Import Data
+### Loading with Import Data
 
 ```typescript
-import { Kasane, createKasane, Storage } from '@kasane/wasm';
-import * as wasmModule from './kasane_bg.wasm';
+import { loadKasane, Storage } from '@kasane/wasm';
 
 // Load previously exported data
 const savedData = localStorage.getItem('kasane-data');
 const importData: Storage[] = savedData ? [JSON.parse(savedData)] : undefined;
 
-// Initialize with imported data
-const kasane = createKasane(wasmModule, {}, importData);
+// Load and initialize with imported data
+const kasane = await loadKasane('/kasane.wasm', {
+  importData
+});
 ```
 
-### Manual Initialization
+### Manual Loading (Without Auto-Initialization)
 
 ```typescript
-import { Kasane } from '@kasane/wasm';
+import { loadKasaneModule, Storage } from '@kasane/wasm';
+
+// Load without auto-initialization
+const kasane = await loadKasaneModule('/kasane.wasm');
+
+// Load saved data
+const savedData = localStorage.getItem('kasane-data');
+const importData: Storage[] = savedData ? [JSON.parse(savedData)] : undefined;
+
+// Initialize manually
+kasane.init({}, importData);
+```
+
+### Using Pre-loaded Wasm Module
+
+```typescript
+import { Kasane, createKasane } from '@kasane/wasm';
 import * as wasmModule from './kasane_bg.wasm';
 
-const kasane = new Kasane(wasmModule);
-
-// Initialize later
-kasane.init({}, importData);
-
-// Check initialization status
-if (kasane.isInitialized()) {
-  // Ready to use
-}
+// Initialize Kasane with a pre-loaded Wasm module
+const kasane = createKasane(wasmModule);
 ```
 
 ## API
 
+### `loadKasane(wasmUrl, options?)`
+
+Load Kasane from a Wasm file URL and create an initialized instance.
+
+- `wasmUrl`: URL to the Wasm file (e.g., '/kasane.wasm' for Vite public folder)
+- `options.config`: Optional configuration object
+- `options.importData`: Optional array of Storage data to import
+- `options.importObject`: Optional WebAssembly import object
+
+Returns: `Promise<Kasane>`
+
+### `loadKasaneModule(wasmUrl, importObject?)`
+
+Load Kasane from a Wasm file URL without auto-initialization.
+
+- `wasmUrl`: URL to the Wasm file
+- `importObject`: Optional WebAssembly import object
+
+Returns: `Promise<Kasane>` (not initialized)
+
 ### `createKasane(wasmModule, config?, importData?)`
 
-Create and initialize a new Kasane instance.
+Create and initialize a new Kasane instance from a pre-loaded module.
 
 - `wasmModule`: The loaded Wasm module exports
 - `config`: Optional configuration object (empty for Wasm mode)

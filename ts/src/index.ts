@@ -5,11 +5,10 @@
  *
  * @example
  * ```typescript
- * import { Kasane, createKasane } from '@kasane/wasm';
- * import wasmModule from './kasane_bg.wasm';
+ * // Load from Vite /public folder
+ * import { loadKasane } from '@kasane/wasm';
  *
- * // Initialize Kasane
- * const kasane = createKasane(wasmModule);
+ * const kasane = await loadKasane('/kasane.wasm');
  *
  * // Create a key
  * const result = kasane.createKey('temperature', 'float');
@@ -29,4 +28,12 @@
 export * from "./types";
 
 // Re-export main classes and functions
-export { Kasane, createKasane, type KasaneResult, type KasaneWasmExports } from "./kasane";
+export {
+  Kasane,
+  createKasane,
+  loadKasane,
+  loadKasaneModule,
+  type KasaneResult,
+  type KasaneWasmExports,
+  type LoadKasaneOptions,
+} from "./kasane";
