@@ -1,15 +1,14 @@
-use std::sync::Arc;
+use crate::io::io::Storage;
 
 use crate::{
     command::tools::valid_name::valid_name,
-    io::full::Storage,
     interface::{input::InfoKey, output::Output},
     location,
     user_error::UserError,
 };
+use std::sync::Arc;
 
 pub fn info_key(v: InfoKey, s: Arc<Storage>) -> Result<Output, UserError> {
-    //Spaceの名前のチェック
     match valid_name(&v.space_name) {
         Ok(_) => {}
         Err(e) => {
@@ -21,7 +20,6 @@ pub fn info_key(v: InfoKey, s: Arc<Storage>) -> Result<Output, UserError> {
         }
     }
 
-    //Keyの名前のチェック
     match valid_name(&v.key_name) {
         Ok(_) => {}
         Err(e) => {

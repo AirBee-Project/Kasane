@@ -5,23 +5,29 @@ pub mod io;
 pub mod macros;
 pub mod user_error;
 
-use std::process::Command;
-
+#[cfg(feature = "wasm")]
 use once_cell::sync::OnceCell;
+use std::sync::Arc;
 
+#[cfg(feature = "wasm")]
 use crate::{
-    command::process, configuration::Configuration, interface::output::Output, io::Storage,
+    configuration::Configuration,
+    interface::{input::Command, output::Output},
+    io::wasm::Storage,
     user_error::UserError,
 };
 
-// ---- グローバルインスタンス ----
-static STORAGE: OnceCell<Box<dyn Storage + Send + Sync>> = OnceCell::new();
+#[cfg(feature = "wasm")]
+static STORAGE: OnceCell<Arc<Storage>> = OnceCell::new();
 
+#[cfg(feature = "wasm")]
 pub fn init(conf: Configuration) {
-    #[cfg(feature = "wasm")]
-    STORAGE.set(Box::new(Storage::new())).unwrap();
+    let storage = Arc::new(Storage::new(conf));
+    STORAGE.set(storage).expect("Storage already initialized");
 }
 
-pub fn kasane(command: Command) -> Result<Output, UserError> {
-    process(command, STORAGE)
+#[cfg(feature = "wasm")]
+pub async fn kasane(command: Command) -> Result<Output, UserError> {
+    let s = STORAGE.get().expect("storage not initialized").clone();
+    command::process(command, s)
 }

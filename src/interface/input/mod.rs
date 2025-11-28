@@ -1,28 +1,26 @@
 // Module declarations and re-exports
-pub mod info;
 pub mod key;
-pub mod permission;
 pub mod range;
 pub mod space;
-pub mod user;
 pub mod value;
 
 // Re-export types from submodules
-pub use info::*;
 pub use key::*;
-pub use permission::*;
 pub use range::*;
 pub use space::*;
-pub use user::*;
 pub use value::*;
 
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
 // ---------------------- Packet & Command ----------------------
 
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
 pub enum Command {
     //データベース操作系
     CreateSpace(CreateSpace),

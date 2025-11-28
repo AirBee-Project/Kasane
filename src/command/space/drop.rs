@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
+use crate::io::io::Storage;
+
 use crate::{
     command::tools::valid_name::valid_name,
-    io::full::Storage,
     interface::{input::DropSpace, output::Output},
     user_error::UserError,
 };
