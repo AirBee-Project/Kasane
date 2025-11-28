@@ -20,11 +20,10 @@ crate-type = ["cdylib"]
 
 
 [features]
-
 # ストレージ設定
 wasm = []            #Wasm上で動作
 on-memory = []       #OnMemoryDBとして動作
-#file = ["dep:redb"]  #redbを用いてファイルに対して書き込み
+file = ["dep:redb"]  #redbを用いてファイルに対して書き込み
 
 # 型情報の書き出し
 serde = ["dep:serde", "kasane-logic/serde"]
