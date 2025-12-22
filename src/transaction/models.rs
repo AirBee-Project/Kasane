@@ -1,24 +1,19 @@
-use kasane_logic::geometry::coordinate::Coordinate;
+use kasane_logic::{geometry::coordinate::Coordinate, id::space_id::range::RangeID};
 
+#[repr(u8)]
+#[derive(Debug, Copy, Clone)]
 pub enum KeyType {
-    Text,
-    Float,
-    Int,
-    Boolean,
+    Text = 0,
+    Float = 1,
+    Int = 2,
+    Boolean = 3,
 }
 
 pub enum Range {
     Function(Function),
     Calculation(Calculation),
-    Ids(Vec<SpaceTimeIDInput>),
+    Ids(Vec<RangeID>),
     FilterValue(FilterValue),
-}
-
-pub struct SpaceTimeIDInput {
-    pub z: u8,
-    pub f: [Option<i64>; 2],
-    pub x: [Option<u64>; 2],
-    pub y: [Option<u64>; 2],
 }
 
 pub struct Point {

@@ -1,3 +1,6 @@
+use std::f32::consts::E;
+
+use redb::TableError;
 #[cfg(feature = "on_disk")]
 use redb::{CommitError, DatabaseError, TransactionError};
 
@@ -17,6 +20,8 @@ pub enum Error {
     TransactionError(TransactionError),
     #[cfg(feature = "on_disk")]
     CommitError(CommitError),
+    #[cfg(feature = "on_disk")]
+    TableError(TableError),
 }
 
 #[cfg(feature = "on_disk")]
@@ -37,5 +42,11 @@ impl From<TransactionError> for Error {
 impl From<CommitError> for Error {
     fn from(err: CommitError) -> Self {
         Error::CommitError(err)
+    }
+}
+
+impl From<TableError> for Error {
+    fn from(err: TableError) -> Self {
+        Error::TableError(err)
     }
 }

@@ -4,6 +4,7 @@ use std::path::Path;
 use crate::error::Error;
 use crate::transaction::{read::ReadTxTrait, write::WriteTxTrait};
 
+pub mod in_memory;
 pub mod on_disk;
 
 pub trait Kasane {
