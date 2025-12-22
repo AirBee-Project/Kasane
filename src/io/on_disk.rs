@@ -1,15 +1,13 @@
-use std::path::Path;
-
-use redb::ReadableDatabase;
-
 use crate::{
     error::Error,
     io::Kasane,
     transaction::{read::ReadTxTrait, write::WriteTxTrait},
 };
+use redb::{ReadableDatabase, TableDefinition};
+use std::path::Path;
 
 pub struct OnDisk {
-    db: redb::Database,
+    pub(crate) db: redb::Database,
 }
 
 pub struct OnDiskWriteTx {
@@ -19,6 +17,8 @@ pub struct OnDiskWriteTx {
 pub struct OnDiskReadTx {
     pub(crate) inner: redb::ReadTransaction,
 }
+
+static KEY_TABLE: TableDefinition<String, u64> = TableDefinition::new("key");
 
 impl Kasane for OnDisk {
     fn new(path: &Path) -> Result<OnDisk, Error> {

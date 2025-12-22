@@ -13,7 +13,7 @@ pub trait Kasane {
         Self: Sized;
 
     #[cfg(feature = "in_memory")]
-    fn new() -> Result<dyn Kasane, Error>;
+    fn new() -> Result<Self, Error>;
 
     fn write_begin(&'_ mut self) -> Result<impl WriteTxTrait, Error>;
     fn read_begin(&'_ self) -> Result<impl ReadTxTrait, Error>;
