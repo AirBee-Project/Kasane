@@ -1,8 +1,6 @@
 {
   // Rust Analyzer の Cargo 設定
-  "rust-analyzer.cargo.features": [
-    "wasm" // ← デフォルト有効にする feature
-  ],
+  "rust-analyzer.cargo.features": [],
   "rust-analyzer.cargo.noDefaultFeatures": true, // default-features オフにする場合
   // Feature を workspace 単位で扱う
   "rust-analyzer.cargo.workspace": true,

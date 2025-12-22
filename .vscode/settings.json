@@ -1,6 +1,6 @@
 {
   "rust-analyzer.cargo.features": [
-    "wasm"
+    "on_disk"
   ],
   "rust-analyzer.cargo.noDefaultFeatures": true,
   "rust-analyzer.procMacro.enable": true
