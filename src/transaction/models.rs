@@ -98,9 +98,9 @@ pub enum Function {
 }
 
 pub enum Calculation {
-    AND(Vec<Range>),
-    OR(Vec<Range>),
-    DIFF {
+    And(Vec<Range>),
+    Or(Vec<Range>),
+    Diff {
         base: Box<Range>,   // 引かれる集合（元集合）
         remove: Box<Range>, // 引く集合
     },
