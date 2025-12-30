@@ -1,29 +1,23 @@
-#[cfg(feature = "on_disk")]
 use redb::ReadableTable;
 
 use crate::{
     error::{DataCorruptionKind, Error},
-    io::{
-        models::FieldDef,
-        on_disk::{OnDiskWriteTx, FIELD_TABLE, META_FIELD_ID, META_TABLE},
-    },
+    io::on_disk::{OnDiskWriteTx, FIELD_TABLE, META_FIELD_ID, META_TABLE},
     location,
-    transaction::models::{FieldType, Range},
+    transaction::models::Range,
 };
 
 pub trait WriteTxTrait {
-    fn create_field(&mut self, field_name: &str, key_type: FieldType) -> Result<(), Error>;
+    fn create_field(&mut self, field_name: &str) -> Result<(), Error>;
     fn drop_field(&mut self, field_name: &str) -> Result<(), Error>;
     fn delete_value(&mut self, field_name: &str, range: Range);
-    fn insert_value<T>(&mut self, field_name: &str, value: T, range: Range);
+    fn insert_value<T>(&mut self, field_name: &str, value: &[u8], range: Range);
     fn commit(self) -> Result<(), Error>;
     fn rollback(self) -> Result<(), Error>;
 }
 
-#[cfg(feature = "on_disk")]
 impl WriteTxTrait for OnDiskWriteTx {
-    fn create_field(&mut self, field_name: &str, field_type: FieldType) -> Result<(), Error> {
-        // WriteTransaction は self.inner
+    fn create_field(&mut self, field_name: &str) -> Result<(), Error> {
         let write_txn = &self.inner;
 
         // FIELD_TABLE を開く
@@ -40,9 +34,9 @@ impl WriteTxTrait for OnDiskWriteTx {
         // META_TABLE を開く
         let mut meta_table = write_txn.open_table(META_TABLE)?;
 
-        // 次に割り当てる FieldID を取得
+        // 次に割り当てる FieldID を取得（初期値 0）
         let next_field_id = match meta_table.get(META_FIELD_ID)? {
-            Some(v) => v.value() + 1,
+            Some(v) => v.value(),
             None => {
                 return Err(Error::DataCorruption {
                     location: location!(),
@@ -51,15 +45,11 @@ impl WriteTxTrait for OnDiskWriteTx {
             }
         };
 
-        // META_TABLE を更新（次の ID を保存）
-        meta_table.insert(META_FIELD_ID, next_field_id)?;
+        // フィールドに ID を割り当て
+        field_table.insert(field_name.to_string(), next_field_id)?;
 
-        // FieldDef を作成して FIELD_TABLE に挿入
-        let field_info = FieldDef {
-            type_u8: field_type.into(),
-            id: next_field_id,
-        };
-        field_table.insert(field_name.to_string(), field_info)?;
+        // 次の ID を保存
+        meta_table.insert(META_FIELD_ID, next_field_id + 1)?;
 
         Ok(())
     }
@@ -72,7 +62,7 @@ impl WriteTxTrait for OnDiskWriteTx {
         todo!()
     }
 
-    fn insert_value<T>(&mut self, field_name: &str, value: T, range: Range) {
+    fn insert_value<T>(&mut self, field_name: &str, value: &[u8], range: Range) {
         todo!()
     }
 

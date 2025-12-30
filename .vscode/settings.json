@@ -1,7 +1,0 @@
-{
-  "rust-analyzer.cargo.features": [
-    "on_disk"
-  ],
-  "rust-analyzer.cargo.noDefaultFeatures": true,
-  "rust-analyzer.procMacro.enable": true
-}

@@ -5,8 +5,4 @@ edition = "2021"
 
 [dependencies]
 kasane-logic = { path = "../kasane-logic" }
-redb = { version = "3.1.0", optional = true }
-
-[features]
-in_memory = []
-on_disk = ["dep:redb"]
+redb = { version = "3.1.0" }

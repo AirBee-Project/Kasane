@@ -1,43 +1,70 @@
+use std::collections::{BTreeSet, HashSet};
+
+use kasane_logic::bit_vec::BitVec;
+use redb::Key;
 //ここではKV-Storeに入れる共通の型を定義する
-#[cfg(feature = "on_disk")]
 use redb::Value;
 
-#[derive(Debug)]
-pub struct FieldDef {
-    //フィールド型を表す番号
-    // アプリケーション側に変換の責任を持たすことで、redb側でのエラーを強制的にpanicしなくていいようにする
-    //賛否のある実装ですね。型Firstではない。
-    pub type_u8: u8,
+//Defは内部用の型である
 
-    //フィールドに対して一意な番号を作る
-    pub id: u64,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SegmentInfoDef {
+    pub pointers: BTreeSet<u64>,
+    pub under_count: u64,
 }
 
-#[cfg(feature = "on_disk")]
-impl Value for FieldDef {
+impl Value for SegmentInfoDef {
     type SelfType<'a>
-        = FieldDef
+        = SegmentInfoDef
     where
         Self: 'a;
+
     type AsBytes<'a>
-        = [u8; 9]
+        = Vec<u8>
     where
         Self: 'a;
 
     fn fixed_width() -> Option<usize> {
-        Some(9)
+        None
     }
 
     fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
     where
         Self: 'a,
     {
-        let mut id_bytes = [0u8; 8];
-        id_bytes.copy_from_slice(&data[1..9]);
+        let mut offset = 0;
 
-        FieldDef {
-            type_u8: data[0],
-            id: u64::from_le_bytes(id_bytes),
+        // count
+        let under_count = u64::from_le_bytes(
+            data[offset..offset + 8]
+                .try_into()
+                .expect("invalid SegmentInfoDef"),
+        );
+        offset += 8;
+
+        // pointers length
+        let len = u64::from_le_bytes(
+            data[offset..offset + 8]
+                .try_into()
+                .expect("invalid SegmentInfoDef"),
+        ) as usize;
+        offset += 8;
+
+        let mut pointers = BTreeSet::new();
+
+        for _ in 0..len {
+            let ptr = u64::from_le_bytes(
+                data[offset..offset + 8]
+                    .try_into()
+                    .expect("invalid SegmentInfoDef"),
+            );
+            offset += 8;
+            pointers.insert(ptr);
+        }
+
+        SegmentInfoDef {
+            pointers,
+            under_count,
         }
     }
 
@@ -45,13 +72,132 @@ impl Value for FieldDef {
     where
         Self: 'b,
     {
-        let mut bytes = [0u8; 9];
-        bytes[0] = value.type_u8 as u8;
-        bytes[1..9].copy_from_slice(&value.id.to_le_bytes());
+        let mut bytes = Vec::new();
+
+        // count
+        bytes.extend_from_slice(&value.under_count.to_le_bytes());
+
+        // pointers length
+        let len = value.pointers.len() as u64;
+        bytes.extend_from_slice(&len.to_le_bytes());
+
+        // BTreeSet は常に昇順
+        for ptr in &value.pointers {
+            bytes.extend_from_slice(&ptr.to_le_bytes());
+        }
+
         bytes
     }
 
     fn type_name() -> redb::TypeName {
-        redb::TypeName::new("FieldDef")
+        redb::TypeName::new("SegmentInfoDef")
+    }
+}
+
+#[derive(Debug)]
+pub struct SegmentDef {
+    field_id: u64,
+    bit_vec: BitVec,
+}
+
+impl Value for SegmentDef {
+    type SelfType<'a>
+        = SegmentDef
+    where
+        Self: 'a;
+
+    type AsBytes<'a>
+        = Vec<u8>
+    where
+        Self: 'a;
+
+    fn fixed_width() -> Option<usize> {
+        None
+    }
+
+    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
+    where
+        Self: 'a,
+    {
+        use std::convert::TryInto;
+
+        let field_id = u64::from_le_bytes(data[0..8].try_into().expect("invalid SegmentDef"));
+
+        let bit_bytes = &data[8..];
+        let bit_vec = BitVec::from_slice(bit_bytes);
+
+        SegmentDef { field_id, bit_vec }
+    }
+
+    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
+    where
+        Self: 'b,
+    {
+        let mut bytes = Vec::new();
+
+        bytes.extend_from_slice(&value.field_id.to_le_bytes());
+
+        let bit_vec = value.bit_vec.clone();
+
+        bytes.extend_from_slice(&bit_vec.as_slice());
+
+        bytes
+    }
+
+    fn type_name() -> redb::TypeName {
+        redb::TypeName::new("SegmentDef")
+    }
+}
+
+impl Key for SegmentDef {
+    fn compare(data1: &[u8], data2: &[u8]) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+
+        // field_id
+        let id1 = u64::from_le_bytes(data1[0..8].try_into().unwrap());
+        let id2 = u64::from_le_bytes(data2[0..8].try_into().unwrap());
+
+        match id1.cmp(&id2) {
+            Ordering::Equal => {}
+            other => return other,
+        }
+
+        // bit bytes
+        let bits1 = &data1[8..];
+        let bits2 = &data2[8..];
+
+        bits1.cmp(bits2)
+    }
+}
+
+#[derive(Debug)]
+pub struct EncodeIdDef {
+    f: BitVec,
+    x: BitVec,
+    y: BitVec,
+    value: Vec<u8>, // 可変長に変更
+}
+
+impl Value for EncodeIdDef {
+    type SelfType<'a> = EncodeIdDef;
+    type AsBytes<'a> = Vec<u8>;
+
+    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
+    where
+        Self: 'a,
+    {
+        todo!()
+    }
+
+    fn fixed_width() -> Option<usize> {
+        None // 可変長のため
+    }
+
+    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a> {
+        todo!()
+    }
+
+    fn type_name() -> redb::TypeName {
+        redb::TypeName::new("EncodeIdDef")
     }
 }

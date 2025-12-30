@@ -1,7 +1,9 @@
 use crate::{
     error::Error,
-    io::{models::FieldDef, Kasane},
-    transaction::{read::ReadTxTrait, write::WriteTxTrait},
+    io::{
+        models::{EncodeIdDef, SegmentDef, SegmentInfoDef},
+        Kasane,
+    },
 };
 
 use redb::{
@@ -34,17 +36,31 @@ pub struct OnDiskReadTx {
 ========================= */
 
 // フィールド一覧
-pub(crate) static FIELD_TABLE: TableDefinition<String, FieldDef> =
-    TableDefinition::new("FIELD_TABLE");
+pub(crate) static FIELD_TABLE: TableDefinition<String, u64> = TableDefinition::new("FIELD_TABLE");
 
 // メタ情報
 pub(crate) static META_TABLE: TableDefinition<&'static str, u64> =
     TableDefinition::new("META_TABLE");
 
+//検索用の各次元のセグメント情報
+pub(crate) static F_SEGMENT_TABLE: TableDefinition<SegmentDef, SegmentInfoDef> =
+    TableDefinition::new("F_SEGMENT_TABLE");
+pub(crate) static X_SEGMENT_TABLE: TableDefinition<SegmentDef, SegmentInfoDef> =
+    TableDefinition::new("X_SEGMENT_TABLE");
+pub(crate) static Y_SEGMENT_TABLE: TableDefinition<SegmentDef, SegmentInfoDef> =
+    TableDefinition::new("Y_SEGMENT_TABLE");
+
+//空間ID情報とValueの対応情報
+pub(crate) static ENCODE_ID_TABLE: TableDefinition<(u64, u64), EncodeIdDef> =
+    TableDefinition::new("ENCODE_ID_TABLE");
+
 // META_TABLE keys
 pub const META_FIELD_ID: &str = "FieldID";
 
 impl Kasane for OnDisk {
+    type WriteTx = OnDiskWriteTx;
+    type ReadTx = OnDiskReadTx;
+
     /// DB を開く（存在しなければ作成）＋スキーマ初期化
     fn new(path: &Path) -> Result<Self, Error> {
         let db = if path.exists() {
@@ -74,12 +90,12 @@ impl Kasane for OnDisk {
         Ok(Self { db })
     }
 
-    fn write_begin(&mut self) -> Result<impl WriteTxTrait, Error> {
+    fn write_begin(&mut self) -> Result<Self::WriteTx, Error> {
         let tx = self.db.begin_write()?;
         Ok(OnDiskWriteTx { inner: tx })
     }
 
-    fn read_begin(&self) -> Result<impl ReadTxTrait, Error> {
+    fn read_begin(&self) -> Result<Self::ReadTx, Error> {
         let tx = self.db.begin_read()?;
         Ok(OnDiskReadTx { inner: tx })
     }
