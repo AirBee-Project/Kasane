@@ -1,6 +1,6 @@
 use crate::{
     error::Error,
-    io::{models::FieldInfo, Kasane},
+    io::{models::FieldDef, Kasane},
     transaction::{read::ReadTxTrait, write::WriteTxTrait},
 };
 
@@ -34,7 +34,7 @@ pub struct OnDiskReadTx {
 ========================= */
 
 // フィールド一覧
-pub(crate) static FIELD_TABLE: TableDefinition<String, FieldInfo> =
+pub(crate) static FIELD_TABLE: TableDefinition<String, FieldDef> =
     TableDefinition::new("FIELD_TABLE");
 
 // メタ情報

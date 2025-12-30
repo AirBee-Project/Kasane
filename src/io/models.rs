@@ -1,8 +1,9 @@
 //ここではKV-Storeに入れる共通の型を定義する
+#[cfg(feature = "on_disk")]
 use redb::Value;
 
 #[derive(Debug)]
-pub struct FieldInfo {
+pub struct FieldDef {
     //フィールド型を表す番号
     // アプリケーション側に変換の責任を持たすことで、redb側でのエラーを強制的にpanicしなくていいようにする
     //賛否のある実装ですね。型Firstではない。
@@ -12,9 +13,10 @@ pub struct FieldInfo {
     pub id: u64,
 }
 
-impl Value for FieldInfo {
+#[cfg(feature = "on_disk")]
+impl Value for FieldDef {
     type SelfType<'a>
-        = FieldInfo
+        = FieldDef
     where
         Self: 'a;
     type AsBytes<'a>
@@ -33,7 +35,7 @@ impl Value for FieldInfo {
         let mut id_bytes = [0u8; 8];
         id_bytes.copy_from_slice(&data[1..9]);
 
-        FieldInfo {
+        FieldDef {
             type_u8: data[0],
             id: u64::from_le_bytes(id_bytes),
         }
@@ -50,6 +52,6 @@ impl Value for FieldInfo {
     }
 
     fn type_name() -> redb::TypeName {
-        redb::TypeName::new("FieldInfo")
+        redb::TypeName::new("FieldDef")
     }
 }

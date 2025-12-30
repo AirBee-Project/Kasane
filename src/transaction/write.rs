@@ -1,9 +1,10 @@
+#[cfg(feature = "on_disk")]
 use redb::ReadableTable;
 
 use crate::{
     error::{DataCorruptionKind, Error},
     io::{
-        models::FieldInfo,
+        models::FieldDef,
         on_disk::{OnDiskWriteTx, FIELD_TABLE, META_FIELD_ID, META_TABLE},
     },
     location,
@@ -19,6 +20,7 @@ pub trait WriteTxTrait {
     fn rollback(self) -> Result<(), Error>;
 }
 
+#[cfg(feature = "on_disk")]
 impl WriteTxTrait for OnDiskWriteTx {
     fn create_field(&mut self, field_name: &str, field_type: FieldType) -> Result<(), Error> {
         // WriteTransaction は self.inner
@@ -52,8 +54,8 @@ impl WriteTxTrait for OnDiskWriteTx {
         // META_TABLE を更新（次の ID を保存）
         meta_table.insert(META_FIELD_ID, next_field_id)?;
 
-        // FieldInfo を作成して FIELD_TABLE に挿入
-        let field_info = FieldInfo {
+        // FieldDef を作成して FIELD_TABLE に挿入
+        let field_info = FieldDef {
             type_u8: field_type.into(),
             id: next_field_id,
         };
