@@ -1,100 +1,86 @@
 use crate::{
     error::Error,
-    io::Kasane,
-    transaction::{models::KeyType, read::ReadTxTrait, write::WriteTxTrait},
+    io::{models::FieldInfo, Kasane},
+    transaction::{read::ReadTxTrait, write::WriteTxTrait},
 };
-use redb::{ReadableDatabase, TableDefinition, Value};
+
+use redb::{
+    Database, ReadTransaction, ReadableDatabase, ReadableTable, TableDefinition, WriteTransaction,
+};
 use std::path::Path;
 
+/* =========================
+   OnDisk Database
+========================= */
+
 pub struct OnDisk {
-    pub(crate) db: redb::Database,
+    pub(crate) db: Database,
 }
 
+/* =========================
+   Transactions (User-facing)
+========================= */
+
 pub struct OnDiskWriteTx {
-    pub(crate) inner: redb::WriteTransaction,
+    pub(crate) inner: WriteTransaction,
 }
 
 pub struct OnDiskReadTx {
-    pub(crate) inner: redb::ReadTransaction,
+    pub(crate) inner: ReadTransaction,
 }
 
-static KEY_TABLE: TableDefinition<String, KeyInfo> = TableDefinition::new("key");
+/* =========================
+   Table Definitions
+========================= */
+
+// フィールド一覧
+pub(crate) static FIELD_TABLE: TableDefinition<String, FieldInfo> =
+    TableDefinition::new("FIELD_TABLE");
+
+// メタ情報
+pub(crate) static META_TABLE: TableDefinition<&'static str, u64> =
+    TableDefinition::new("META_TABLE");
+
+// META_TABLE keys
+pub const META_FIELD_ID: &str = "FieldID";
 
 impl Kasane for OnDisk {
-    fn new(path: &Path) -> Result<OnDisk, Error> {
-        use redb::Database;
-        let db = Database::create(path)?;
+    /// DB を開く（存在しなければ作成）＋スキーマ初期化
+    fn new(path: &Path) -> Result<Self, Error> {
+        let db = if path.exists() {
+            Database::open(path)?
+        } else {
+            Database::create(path)?
+        };
+
+        //トランザクションを開始
+        let write_tx = db.begin_write()?;
+
+        // スキーマ初期化
         {
-            let write_txn = db.begin_write()?;
-            write_txn.open_table(KEY_TABLE)?;
-            write_txn.commit()?;
+            // テーブル作成（存在しなければ）
+            write_tx.open_table(FIELD_TABLE)?;
+            let mut meta_table = write_tx.open_table(META_TABLE)?;
+
+            // FieldID 初期化（次に割り当てる ID）
+            if meta_table.get(META_FIELD_ID)?.is_none() {
+                meta_table.insert(META_FIELD_ID, 0)?;
+            }
         }
 
-        Ok(OnDisk { db })
+        //トランザクションを反映
+        write_tx.commit()?;
+
+        Ok(Self { db })
     }
 
-    fn write_begin(&'_ mut self) -> Result<impl WriteTxTrait, Error> {
+    fn write_begin(&mut self) -> Result<impl WriteTxTrait, Error> {
         let tx = self.db.begin_write()?;
         Ok(OnDiskWriteTx { inner: tx })
     }
 
-    fn read_begin(&'_ self) -> Result<impl ReadTxTrait, Error> {
+    fn read_begin(&self) -> Result<impl ReadTxTrait, Error> {
         let tx = self.db.begin_read()?;
         Ok(OnDiskReadTx { inner: tx })
-    }
-}
-
-#[derive(Debug)]
-pub struct KeyInfo {
-    r#type: KeyType,
-    id: u64,
-}
-impl Value for KeyInfo {
-    type SelfType<'a>
-        = KeyInfo
-    where
-        Self: 'a;
-    type AsBytes<'a>
-        = [u8; 9]
-    where
-        Self: 'a;
-
-    fn fixed_width() -> Option<usize> {
-        Some(9)
-    }
-
-    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
-    where
-        Self: 'a,
-    {
-        assert_eq!(data.len(), 9);
-
-        let r#type = match data[0] {
-            0 => KeyType::Text,
-            1 => KeyType::Float,
-            2 => KeyType::Int,
-            3 => KeyType::Boolean,
-            _ => panic!("invalid KeyType"),
-        };
-
-        let mut id_bytes = [0u8; 8];
-        id_bytes.copy_from_slice(&data[1..9]);
-        let id = u64::from_le_bytes(id_bytes);
-
-        KeyInfo { r#type, id }
-    }
-
-    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
-    where
-        Self: 'b,
-    {
-        let mut bytes = [0u8; 9];
-        bytes[0] = value.r#type as u8;
-        bytes[1..9].copy_from_slice(&value.id.to_le_bytes());
-        bytes
-    }
-
-    fn type_name() -> redb::TypeName {
-        redb::TypeName::new("KeyInfo")
     }
 }

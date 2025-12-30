@@ -1,17 +1,20 @@
-use std::f32::consts::E;
-
-use redb::TableError;
 #[cfg(feature = "on_disk")]
-use redb::{CommitError, DatabaseError, TransactionError};
+use redb::{CommitError, DatabaseError, StorageError, TableError, TransactionError};
 
+#[derive(Debug)]
 pub enum Error {
-    KeyNotFound {
-        key_name: String,
+    FieldNotFound {
+        field_name: String,
         location: String,
     },
-    KeyAlreadyExists {
-        key_name: String,
+    FieldAlreadyExists {
+        field_name: String,
         location: String,
+    },
+
+    DataCorruption {
+        location: String,
+        kind: DataCorruptionKind,
     },
 
     #[cfg(feature = "on_disk")]
@@ -22,6 +25,23 @@ pub enum Error {
     CommitError(CommitError),
     #[cfg(feature = "on_disk")]
     TableError(TableError),
+}
+
+///Diskレベルでエラーはでなかったが、アプリケーションレベルで期待した値の読み書きが行われなかった場合のエラー群
+#[derive(Debug)]
+pub enum DataCorruptionKind {
+    ///フィールド型をu8からDecodeしたときに、対応する数値がなかった場合
+    InvalidFieldType,
+
+    //Redbにおいて、Meta Table内にあるべきなデータがなかった場合
+    MissingMetadata,
+    UnexpectedNull,
+    VersionMismatch {
+        expected: u32,
+        actual: u32,
+    },
+    ChecksumMismatch,
+    InconsistentIndex,
 }
 
 #[cfg(feature = "on_disk")]
@@ -45,8 +65,16 @@ impl From<CommitError> for Error {
     }
 }
 
+#[cfg(feature = "on_disk")]
 impl From<TableError> for Error {
     fn from(err: TableError) -> Self {
         Error::TableError(err)
+    }
+}
+
+#[cfg(feature = "on_disk")]
+impl From<StorageError> for Error {
+    fn from(err: StorageError) -> Self {
+        Error::TableError(redb::TableError::Storage(err))
     }
 }

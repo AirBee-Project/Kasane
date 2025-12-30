@@ -5,8 +5,10 @@ use crate::error::Error;
 use crate::transaction::{read::ReadTxTrait, write::WriteTxTrait};
 
 pub mod in_memory;
+pub mod models;
 pub mod on_disk;
 
+///Kasaneの機能をTraitで抽象化し、複数のストレージに対応する。
 pub trait Kasane {
     #[cfg(feature = "on_disk")]
     fn new(path: &Path) -> Result<Self, Error>

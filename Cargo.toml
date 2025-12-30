@@ -4,7 +4,7 @@ version = "0.0.2"
 edition = "2021"
 
 [dependencies]
-kasane-logic = { git = "https://github.com/AirBee-Project/Kasane-Logic.git" }
+kasane-logic = { path = "../kasane-logic" }
 redb = { version = "3.1.0", optional = true }
 
 [features]

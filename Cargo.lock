@@ -28,7 +28,6 @@ dependencies = [
 [[package]]
 name = "kasane-logic"
 version = "0.1.1"
-source = "git+https://github.com/AirBee-Project/Kasane-Logic.git#118f0e7d5777f5af8d0e2ae90697fdd63901690a"
 dependencies = [
  "itertools",
  "thiserror",

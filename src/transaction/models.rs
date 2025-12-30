@@ -1,14 +1,6 @@
 use kasane_logic::{geometry::coordinate::Coordinate, id::space_id::range::RangeID};
 
-#[repr(u8)]
-#[derive(Debug, Copy, Clone)]
-pub enum KeyType {
-    Text = 0,
-    Float = 1,
-    Int = 2,
-    Boolean = 3,
-}
-
+use crate::{error::Error, location};
 pub enum Range {
     Function(Function),
     Calculation(Calculation),
@@ -104,4 +96,38 @@ pub enum Calculation {
         base: Box<Range>,   // 引かれる集合（元集合）
         remove: Box<Range>, // 引く集合
     },
+}
+
+///そのフィールドの型を表現する
+/// 番号は上から予約していく
+#[repr(u8)]
+#[derive(Debug, Copy, Clone)]
+pub enum FieldType {
+    Text = 0,
+    Float = 1,
+    Int = 2,
+    Boolean = 3,
+}
+
+impl From<FieldType> for u8 {
+    fn from(value: FieldType) -> Self {
+        value as u8
+    }
+}
+
+impl TryFrom<u8> for FieldType {
+    type Error = Error;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(FieldType::Text),
+            1 => Ok(FieldType::Float),
+            2 => Ok(FieldType::Int),
+            3 => Ok(FieldType::Boolean),
+            _ => Err(Error::DataCorruption {
+                location: location!(),
+                kind: crate::error::DataCorruptionKind::InvalidFieldType,
+            }),
+        }
+    }
 }
