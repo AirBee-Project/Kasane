@@ -1,7 +1,7 @@
 use crate::{
     error::Error,
     io::{
-        models::{EncodeIdDef, SegmentDef, SegmentInfoDef},
+        models::{EncodeIDPointer, EncodeIdDef, FieldID, SegmentDef, SegmentInfoDef},
         Kasane,
     },
 };
@@ -36,7 +36,8 @@ pub struct OnDiskReadTx {
 ========================= */
 
 // フィールド一覧
-pub(crate) static FIELD_TABLE: TableDefinition<String, u64> = TableDefinition::new("FIELD_TABLE");
+pub(crate) static FIELD_TABLE: TableDefinition<String, FieldID> =
+    TableDefinition::new("FIELD_TABLE");
 
 // メタ情報
 pub(crate) static META_TABLE: TableDefinition<&'static str, u64> =
@@ -50,8 +51,8 @@ pub(crate) static X_SEGMENT_TABLE: TableDefinition<SegmentDef, SegmentInfoDef> =
 pub(crate) static Y_SEGMENT_TABLE: TableDefinition<SegmentDef, SegmentInfoDef> =
     TableDefinition::new("Y_SEGMENT_TABLE");
 
-//空間ID情報とValueの対応情報
-pub(crate) static ENCODE_ID_TABLE: TableDefinition<(u64, u64), EncodeIdDef> =
+//空間ID情報とValueの対応情報 FIELD_ID+ENCODE_ID_POINTERをKeyとする
+pub(crate) static ENCODE_ID_TABLE: TableDefinition<(FieldID, EncodeIDPointer), EncodeIdDef> =
     TableDefinition::new("ENCODE_ID_TABLE");
 
 // META_TABLE keys

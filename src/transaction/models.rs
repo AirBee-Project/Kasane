@@ -5,6 +5,7 @@ pub enum Range {
     Function(Function),
     Calculation(Calculation),
     Ids(Vec<RangeID>),
+    //値の有無とVec<u8>のRangeだけは追加
 }
 
 pub struct Point {
