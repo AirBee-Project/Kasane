@@ -64,6 +64,10 @@ impl WriteTxTrait for OnDiskWriteTx {
 
     fn insert_value<T>(&mut self, field_name: &str, value: &[u8], range: Range) {
         todo!()
+
+        //fieldがあるかどうかを検証する
+
+        //これより下でKasane-Logicに投げる
     }
 
     fn commit(self) -> Result<(), Error> {

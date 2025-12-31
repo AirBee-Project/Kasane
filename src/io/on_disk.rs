@@ -1,7 +1,10 @@
 use crate::{
     error::Error,
     io::{
-        models::{EncodeIDPointer, EncodeIdDef, FieldID, SegmentDef, SegmentInfoDef},
+        models::{
+            EncodeIDDef, EncodeIDPointer, FieldID, SegmentDef, SegmentInfoDef, ValueDef,
+            ValueInfoDef,
+        },
         Kasane,
     },
 };
@@ -9,7 +12,10 @@ use crate::{
 use redb::{
     Database, ReadTransaction, ReadableDatabase, ReadableTable, TableDefinition, WriteTransaction,
 };
-use std::path::Path;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::Path,
+};
 
 /* =========================
    OnDisk Database
@@ -52,7 +58,11 @@ pub(crate) static Y_SEGMENT_TABLE: TableDefinition<SegmentDef, SegmentInfoDef> =
     TableDefinition::new("Y_SEGMENT_TABLE");
 
 //空間ID情報とValueの対応情報 FIELD_ID+ENCODE_ID_POINTERをKeyとする
-pub(crate) static ENCODE_ID_TABLE: TableDefinition<(FieldID, EncodeIDPointer), EncodeIdDef> =
+pub(crate) static ENCODE_ID_TABLE: TableDefinition<(FieldID, EncodeIDPointer), EncodeIDDef> =
+    TableDefinition::new("ENCODE_ID_TABLE");
+
+//Valueに対してクエリをかけられるようにするためのTable
+pub(crate) static VALUE_TABLE: TableDefinition<ValueDef, ValueInfoDef> =
     TableDefinition::new("ENCODE_ID_TABLE");
 
 // META_TABLE keys

@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashSet};
 
 use kasane_logic::bit_vec::EncodeSegment;
@@ -176,7 +177,7 @@ impl Key for SegmentDef {
 }
 
 #[derive(Debug)]
-pub struct EncodeIdDef {
+pub struct EncodeIDDef {
     f: EncodeSegment,
     x: EncodeSegment,
     y: EncodeSegment,
@@ -185,8 +186,8 @@ pub struct EncodeIdDef {
     value: Vec<u8>,
 }
 
-impl Value for EncodeIdDef {
-    type SelfType<'a> = EncodeIdDef;
+impl Value for EncodeIDDef {
+    type SelfType<'a> = EncodeIDDef;
     type AsBytes<'a> = Vec<u8>;
 
     fn fixed_width() -> Option<usize> {
@@ -223,7 +224,7 @@ impl Value for EncodeIdDef {
         // value
         let value = data[offset..offset + value_len].to_vec();
 
-        EncodeIdDef { f, x, y, value }
+        EncodeIDDef { f, x, y, value }
     }
 
     fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a> {
@@ -245,5 +246,138 @@ impl Value for EncodeIdDef {
 
     fn type_name() -> TypeName {
         TypeName::new("EncodeIdDef")
+    }
+}
+
+#[derive(Debug)]
+pub struct ValueDef {
+    field_id: FieldID,
+    value: Vec<u8>,
+}
+
+impl Value for ValueDef {
+    type SelfType<'a>
+        = ValueDef
+    where
+        Self: 'a;
+
+    type AsBytes<'a>
+        = Vec<u8>
+    where
+        Self: 'a;
+
+    fn fixed_width() -> Option<usize> {
+        None
+    }
+
+    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
+    where
+        Self: 'a,
+    {
+        let mut offset = 0;
+
+        // field_id (BE)
+        let field_id = u64::from_be_bytes(data[offset..offset + 8].try_into().unwrap());
+        offset += 8;
+
+        // value length
+        let value_len = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap()) as usize;
+        offset += 4;
+
+        // value
+        let value = data[offset..offset + value_len].to_vec();
+
+        ValueDef { field_id, value }
+    }
+
+    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
+    where
+        Self: 'b,
+    {
+        let mut bytes = Vec::with_capacity(8 + 4 + value.value.len());
+
+        // field_id (BE)
+        bytes.extend_from_slice(&value.field_id.to_be_bytes());
+
+        // value length
+        let len = value.value.len() as u32;
+        bytes.extend_from_slice(&len.to_le_bytes());
+
+        // value
+        bytes.extend_from_slice(&value.value);
+
+        bytes
+    }
+
+    fn type_name() -> TypeName {
+        TypeName::new("ValueDef")
+    }
+}
+impl Key for ValueDef {
+    fn compare(data1: &[u8], data2: &[u8]) -> Ordering {
+        // field_id は先頭 8 bytes（BE）
+        let a = &data1[..8];
+        let b = &data2[..8];
+
+        a.cmp(b)
+    }
+}
+
+#[derive(Debug)]
+pub struct ValueInfoDef(BTreeSet<EncodeIDPointer>);
+
+impl Value for ValueInfoDef {
+    type SelfType<'a>
+        = ValueInfoDef
+    where
+        Self: 'a;
+
+    type AsBytes<'a>
+        = Vec<u8>
+    where
+        Self: 'a;
+
+    fn fixed_width() -> Option<usize> {
+        None
+    }
+
+    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
+    where
+        Self: 'a,
+    {
+        let mut offset = 0;
+
+        // 要素数
+        let count = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap()) as usize;
+        offset += 4;
+
+        let mut set = BTreeSet::new();
+
+        for _ in 0..count {
+            let id = u64::from_be_bytes(data[offset..offset + 8].try_into().unwrap());
+            set.insert(id);
+            offset += 8;
+        }
+
+        ValueInfoDef(set)
+    }
+
+    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a> {
+        let mut bytes = Vec::with_capacity(4 + value.0.len() * 8);
+
+        // 要素数
+        let count = value.0.len() as u32;
+        bytes.extend_from_slice(&count.to_le_bytes());
+
+        // BTreeSet は昇順保証
+        for id in &value.0 {
+            bytes.extend_from_slice(&id.to_be_bytes());
+        }
+
+        bytes
+    }
+
+    fn type_name() -> TypeName {
+        TypeName::new("ValueInfoDef")
     }
 }
