@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
 use kasane_logic::bit_vec::EncodeSegment;
 use redb::Key;
@@ -15,7 +15,7 @@ pub type FieldID = u64;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SegmentInfoDef {
     pub pointers: BTreeSet<EncodeIDPointer>,
-    pub under_count: u64,
+    pub descendant_count: u64,
 }
 
 impl Value for SegmentInfoDef {
@@ -40,7 +40,7 @@ impl Value for SegmentInfoDef {
         let mut offset = 0;
 
         // count
-        let under_count = u64::from_le_bytes(
+        let descendant_count = u64::from_le_bytes(
             data[offset..offset + 8]
                 .try_into()
                 .expect("invalid SegmentInfoDef"),
@@ -69,7 +69,7 @@ impl Value for SegmentInfoDef {
 
         SegmentInfoDef {
             pointers,
-            under_count,
+            descendant_count,
         }
     }
 
@@ -80,7 +80,7 @@ impl Value for SegmentInfoDef {
         let mut bytes = Vec::new();
 
         // count
-        bytes.extend_from_slice(&value.under_count.to_le_bytes());
+        bytes.extend_from_slice(&value.descendant_count.to_le_bytes());
 
         // pointers length
         let len = value.pointers.len() as u64;

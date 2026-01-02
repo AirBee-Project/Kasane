@@ -1,5 +1,7 @@
 use redb::{CommitError, DatabaseError, StorageError, TableError, TransactionError};
 
+use crate::io::Kasane;
+
 #[derive(Debug)]
 pub enum Error {
     FieldNotFound {
@@ -10,12 +12,11 @@ pub enum Error {
         field_name: String,
         location: String,
     },
-
     DataCorruption {
         location: String,
         kind: DataCorruptionKind,
     },
-
+    Logic(kasane_logic::error::Error),
     Database(DatabaseError),
     TransactionError(TransactionError),
     CommitError(CommitError),
@@ -66,5 +67,11 @@ impl From<TableError> for Error {
 impl From<StorageError> for Error {
     fn from(err: StorageError) -> Self {
         Error::TableError(redb::TableError::Storage(err))
+    }
+}
+
+impl From<kasane_logic::error::Error> for Error {
+    fn from(err: kasane_logic::error::Error) -> Self {
+        Error::Logic(err)
     }
 }
