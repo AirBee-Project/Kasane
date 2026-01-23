@@ -5,7 +5,12 @@ use crate::transaction::{read::ReadTxTrait, write::WriteTxTrait};
 
 pub mod in_memory;
 pub mod models;
+
 pub mod on_disk;
+
+pub type FieldId = u64;
+pub type FlexRank = u64;
+pub type RankId = u64;
 
 ///Kasaneの機能をTraitで抽象化し、複数のストレージに対応する。
 pub trait Kasane {

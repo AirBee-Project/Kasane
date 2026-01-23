@@ -62,14 +62,6 @@ impl WriteTxTrait for OnDiskWriteTx {
         todo!()
     }
 
-    fn insert_value<T>(&mut self, field_name: &str, value: &[u8], range: Range) {
-        todo!()
-
-        //fieldがあるかどうかを検証する
-
-        //これより下でKasane-Logicに投げる
-    }
-
     fn commit(self) -> Result<(), Error> {
         Ok(self.inner.commit()?)
     }
@@ -77,5 +69,9 @@ impl WriteTxTrait for OnDiskWriteTx {
     fn rollback(self) -> Result<(), Error> {
         let _ = self.inner.abort();
         Ok(())
+    }
+
+    fn insert_value<T>(&mut self, field_name: &str, value: &[u8], range: Range) {
+        todo!()
     }
 }

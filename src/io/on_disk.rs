@@ -1,33 +1,17 @@
 use crate::{
     error::Error,
-    io::{
-        models::{
-            EncodeIDDef, EncodeIDPointer, FieldID, SegmentDef, SegmentInfoDef, ValueDef,
-            ValueInfoDef,
-        },
-        Kasane,
-    },
+    io::{FieldId, FlexRank, Kasane},
 };
 
+use kasane_logic::{segment::Segment, FlexId, RoaringTreemap};
 use redb::{
     Database, ReadTransaction, ReadableDatabase, ReadableTable, TableDefinition, WriteTransaction,
 };
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    path::Path,
-};
-
-/* =========================
-   OnDisk Database
-========================= */
+use std::path::Path;
 
 pub struct OnDisk {
     pub(crate) db: Database,
 }
-
-/* =========================
-   Transactions (User-facing)
-========================= */
 
 pub struct OnDiskWriteTx {
     pub(crate) inner: WriteTransaction,
@@ -37,12 +21,8 @@ pub struct OnDiskReadTx {
     pub(crate) inner: ReadTransaction,
 }
 
-/* =========================
-   Table Definitions
-========================= */
-
 // フィールド一覧
-pub(crate) static FIELD_TABLE: TableDefinition<String, FieldID> =
+pub(crate) static FIELD_TABLE: TableDefinition<String, FieldId> =
     TableDefinition::new("FIELD_TABLE");
 
 // メタ情報
@@ -50,23 +30,28 @@ pub(crate) static META_TABLE: TableDefinition<&'static str, u64> =
     TableDefinition::new("META_TABLE");
 
 //検索用の各次元のセグメント情報
-pub(crate) static F_SEGMENT_TABLE: TableDefinition<SegmentDef, SegmentInfoDef> =
+pub(crate) static F: TableDefinition<(FieldId, [u8; Segment::ARRAY_LENGTH]), RoaringTreemap> =
     TableDefinition::new("F_SEGMENT_TABLE");
-pub(crate) static X_SEGMENT_TABLE: TableDefinition<SegmentDef, SegmentInfoDef> =
+pub(crate) static X: TableDefinition<(FieldId, [u8; Segment::ARRAY_LENGTH]), RoaringTreemap> =
     TableDefinition::new("X_SEGMENT_TABLE");
-pub(crate) static Y_SEGMENT_TABLE: TableDefinition<SegmentDef, SegmentInfoDef> =
+pub(crate) static Y: TableDefinition<(FieldId, [u8; Segment::ARRAY_LENGTH]), RoaringTreemap> =
     TableDefinition::new("Y_SEGMENT_TABLE");
 
-//空間ID情報とValueの対応情報 FIELD_ID+ENCODE_ID_POINTERをKeyとする
-pub(crate) static ENCODE_ID_TABLE: TableDefinition<(FieldID, EncodeIDPointer), EncodeIDDef> =
-    TableDefinition::new("ENCODE_ID_TABLE");
+pub(crate) static MAIN: TableDefinition<
+    (FieldId, u64),
+    (
+        [u8; Segment::ARRAY_LENGTH],
+        [u8; Segment::ARRAY_LENGTH],
+        [u8; Segment::ARRAY_LENGTH],
+    ),
+> = TableDefinition::new("ENCODE_ID_TABLE");
 
 //Valueに対してクエリをかけられるようにするためのTable
-pub(crate) static VALUE_TABLE: TableDefinition<ValueDef, ValueInfoDef> =
+pub(crate) static FORWARD: TableDefinition<(FieldId, Vec<u8>), ValueInfoDef> =
     TableDefinition::new("ENCODE_ID_TABLE");
 
 // META_TABLE keys
-pub const META_FIELD_ID: &str = "FieldID";
+pub const META_FIELD_ID: &str = "FieldId";
 
 impl Kasane for OnDisk {
     type WriteTx = OnDiskWriteTx;
@@ -89,7 +74,7 @@ impl Kasane for OnDisk {
             write_tx.open_table(FIELD_TABLE)?;
             let mut meta_table = write_tx.open_table(META_TABLE)?;
 
-            // FieldID 初期化（次に割り当てる ID）
+            // FieldId 初期化（次に割り当てる ID）
             if meta_table.get(META_FIELD_ID)?.is_none() {
                 meta_table.insert(META_FIELD_ID, 0)?;
             }

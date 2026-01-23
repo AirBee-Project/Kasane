@@ -16,7 +16,7 @@ pub enum Error {
         location: String,
         kind: DataCorruptionKind,
     },
-    Logic(kasane_logic::error::Error),
+    Logic(kasane_logic::Error),
     Database(DatabaseError),
     TransactionError(TransactionError),
     CommitError(CommitError),
@@ -70,8 +70,8 @@ impl From<StorageError> for Error {
     }
 }
 
-impl From<kasane_logic::error::Error> for Error {
-    fn from(err: kasane_logic::error::Error) -> Self {
+impl From<kasane_logic::Error> for Error {
+    fn from(err: kasane_logic::Error) -> Self {
         Error::Logic(err)
     }
 }
