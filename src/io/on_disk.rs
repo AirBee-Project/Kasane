@@ -1,6 +1,6 @@
 use crate::{
     error::Error,
-    io::{FieldId, FlexRank, Kasane},
+    io::{models::RedbRoaringTreemap, FieldId, FlexRank, Kasane},
 };
 
 use kasane_logic::{segment::Segment, FlexId, RoaringTreemap};
@@ -30,11 +30,11 @@ pub(crate) static META_TABLE: TableDefinition<&'static str, u64> =
     TableDefinition::new("META_TABLE");
 
 //検索用の各次元のセグメント情報
-pub(crate) static F: TableDefinition<(FieldId, [u8; Segment::ARRAY_LENGTH]), RoaringTreemap> =
+pub(crate) static F: TableDefinition<(FieldId, [u8; Segment::ARRAY_LENGTH]), RedbRoaringTreemap> =
     TableDefinition::new("F_SEGMENT_TABLE");
-pub(crate) static X: TableDefinition<(FieldId, [u8; Segment::ARRAY_LENGTH]), RoaringTreemap> =
+pub(crate) static X: TableDefinition<(FieldId, [u8; Segment::ARRAY_LENGTH]), RedbRoaringTreemap> =
     TableDefinition::new("X_SEGMENT_TABLE");
-pub(crate) static Y: TableDefinition<(FieldId, [u8; Segment::ARRAY_LENGTH]), RoaringTreemap> =
+pub(crate) static Y: TableDefinition<(FieldId, [u8; Segment::ARRAY_LENGTH]), RedbRoaringTreemap> =
     TableDefinition::new("Y_SEGMENT_TABLE");
 
 pub(crate) static MAIN: TableDefinition<
