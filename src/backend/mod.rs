@@ -32,12 +32,16 @@ pub trait Backend: Sync + Send {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 pub trait ReadTransaction {
     async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>>;
+    async fn show_fields(&self) -> Result<Vec<String>>;
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 pub trait WriteTransaction: ReadTransaction {
     async fn set(&mut self, key: &[u8], value: &[u8]) -> Result<()>;
+    async fn create_field(&mut self, field_name: String) -> Result<()>;
+    async fn drop_field(&mut self, field_name: String) -> Result<()>;
+    async fn rename_field(&mut self, old_field_name: String, new_field_name: String) -> Result<()>;
 
     async fn commit(self) -> Result<()>
     where

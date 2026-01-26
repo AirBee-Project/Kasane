@@ -71,6 +71,10 @@ impl ReadTransaction for MemoryReadTx {
     async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         Ok(self.data.get(key).cloned())
     }
+
+    async fn show_fields(&self) -> Result<Vec<String>> {
+        todo!()
+    }
 }
 
 // --- Write Transaction ---
@@ -85,6 +89,10 @@ impl ReadTransaction for MemoryWriteTx {
     async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         Ok(self.staging.get(key).cloned())
     }
+
+    async fn show_fields(&self) -> Result<Vec<String>> {
+        todo!()
+    }
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
@@ -95,6 +103,21 @@ impl WriteTransaction for MemoryWriteTx {
         Ok(())
     }
 
+    // (追加予定のフィールド操作系メソッドは todo!() のままでOK)
+    async fn create_field(&mut self, _field_name: String) -> Result<()> {
+        todo!()
+    }
+    async fn drop_field(&mut self, _field_name: String) -> Result<()> {
+        todo!()
+    }
+    async fn rename_field(
+        &mut self,
+        _old_field_name: String,
+        _new_field_name: String,
+    ) -> Result<()> {
+        todo!()
+    }
+
     async fn commit(self) -> Result<()> {
         #[cfg(not(target_arch = "wasm32"))]
         let mut guard = self.target.write().map_err(|_| DbError::LockPoisoned)?;
@@ -102,7 +125,14 @@ impl WriteTransaction for MemoryWriteTx {
         #[cfg(target_arch = "wasm32")]
         let mut guard = self.target.borrow_mut();
 
+        // ステージングの内容を本体に上書き（ここでのみ反映される）
         *guard = self.staging;
+        Ok(())
+    }
+
+    // ★修正箇所★
+    async fn rollback(self) -> Result<()> {
+        // 何もしないで終了 -> self.staging が破棄される -> ロールバック完了
         Ok(())
     }
 }

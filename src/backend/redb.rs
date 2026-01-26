@@ -47,6 +47,10 @@ impl ReadTransaction for RedbReadTx {
         let res = table.get(key)?;
         Ok(res.map(|v| v.value().to_vec()))
     }
+
+    async fn show_fields(&self) -> Result<Vec<String>> {
+        todo!()
+    }
 }
 
 // --- Write Transaction ---
@@ -59,6 +63,10 @@ impl ReadTransaction for RedbWriteTx {
         let res = table.get(key)?;
         Ok(res.map(|v| v.value().to_vec()))
     }
+
+    async fn show_fields(&self) -> Result<Vec<String>> {
+        todo!()
+    }
 }
 
 #[async_trait]
@@ -67,6 +75,17 @@ impl WriteTransaction for RedbWriteTx {
         let mut table = self.0.open_table(TABLE)?;
         table.insert(key, value)?;
         Ok(())
+    }
+
+    async fn create_field(&mut self, field_name: String) -> Result<()> {
+        todo!()
+    }
+    async fn drop_field(&mut self, field_name: String) -> Result<()> {
+        todo!()
+    }
+
+    async fn rename_field(&mut self, old_field_name: String, new_field_name: String) -> Result<()> {
+        todo!()
     }
 
     async fn commit(self) -> Result<()> {
