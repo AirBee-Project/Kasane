@@ -19,12 +19,14 @@ impl Backend for TikvBackend {
         Ok(Self { client })
     }
 
-    async fn begin_read(&self) -> Self::ReadTx<'_> {
+    // ▼▼▼ 修正: 戻り値を anyhow::Result で包む ▼▼▼
+    async fn begin_read(&self) -> anyhow::Result<Self::ReadTx<'_>> {
         let txn = self.client.begin_optimistic().await?;
         Ok(TikvReadTx(txn))
     }
 
-    async fn begin_write(&self) -> Self::WriteTx<'_> {
+    // ▼▼▼ 修正: 戻り値を anyhow::Result で包む ▼▼▼
+    async fn begin_write(&self) -> anyhow::Result<Self::WriteTx<'_>> {
         let txn = self.client.begin_optimistic().await?;
         Ok(TikvWriteTx(txn))
     }
