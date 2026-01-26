@@ -1,8 +1,8 @@
-#![cfg(not(target_arch = "wasm32"))]
+#![cfg(all(not(target_arch = "wasm32"), feature = "redb"))]
 
-use super::{Backend, Transaction};
+use super::{Backend, ReadTransaction, WriteTransaction};
 use async_trait::async_trait;
-use redb::{Database, ReadableDatabase as _, ReadableTable as _, TableDefinition};
+use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 
 const TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("main");
 
@@ -12,11 +12,13 @@ pub struct RedbBackend {
 
 #[async_trait]
 impl Backend for RedbBackend {
-    // RedbTxにライフタイム 'a を渡す
-    type Tx<'a> = RedbTx;
+    // Redbのトランザクションは所有権を持つ(Arc)ため、ライフタイム 'a は無視する
+    type ReadTx<'a> = RedbReadTx;
+    type WriteTx<'a> = RedbWriteTx;
 
     async fn new(path: &str) -> anyhow::Result<Self> {
         let db = Database::create(path)?;
+        // 初回テーブル作成
         let txn = db.begin_write()?;
         {
             txn.open_table(TABLE)?;
@@ -25,58 +27,59 @@ impl Backend for RedbBackend {
         Ok(Self { db })
     }
 
-    async fn begin_read(&self) -> Self::Tx<'_> {
-        let txn = self.db.begin_read().expect("Failed to begin read");
-        RedbTx::Read(txn)
+    async fn begin_read(&self) -> anyhow::Result<Self::ReadTx<'_>> {
+        let txn = self.db.begin_read()?;
+        Ok(RedbReadTx(txn))
     }
 
-    async fn begin_write(&self) -> Self::Tx<'_> {
-        let txn = self.db.begin_write().expect("Failed to begin write");
-        RedbTx::Write(txn)
+    async fn begin_write(&self) -> anyhow::Result<Self::WriteTx<'_>> {
+        let txn = self.db.begin_write()?;
+        Ok(RedbWriteTx(txn))
     }
 }
 
-pub enum RedbTx {
-    Read(redb::ReadTransaction),
-    Write(redb::WriteTransaction),
+// --- Read Transaction ---
+// 修正: ライフタイム <'a> を削除
+pub struct RedbReadTx(redb::ReadTransaction);
+
+#[async_trait]
+impl ReadTransaction for RedbReadTx {
+    async fn get(&self, key: &[u8]) -> anyhow::Result<Option<Vec<u8>>> {
+        let table = self.0.open_table(TABLE)?;
+        let res = table.get(key)?;
+        Ok(res.map(|v| v.value().to_vec()))
+    }
+}
+
+// --- Write Transaction ---
+// 修正: ライフタイム <'a> を削除
+pub struct RedbWriteTx(redb::WriteTransaction);
+
+// WriteTxもReadTransactionを実装
+#[async_trait]
+impl ReadTransaction for RedbWriteTx {
+    async fn get(&self, key: &[u8]) -> anyhow::Result<Option<Vec<u8>>> {
+        let table = self.0.open_table(TABLE)?;
+        let res = table.get(key)?;
+        Ok(res.map(|v| v.value().to_vec()))
+    }
 }
 
 #[async_trait]
-impl<'a> Transaction for RedbTx {
-    async fn get(&self, key: &[u8]) -> anyhow::Result<Option<Vec<u8>>> {
-        let val = match self {
-            Self::Read(txn) => {
-                let table = txn.open_table(TABLE)?;
-                let res = table.get(key)?;
-                res.map(|v| v.value().to_vec())
-            }
-            Self::Write(txn) => {
-                let table = txn.open_table(TABLE)?;
-                let res = table.get(key)?;
-                res.map(|v| v.value().to_vec())
-            }
-        };
-        Ok(val)
-    }
-
+impl WriteTransaction for RedbWriteTx {
     async fn set(&mut self, key: &[u8], value: &[u8]) -> anyhow::Result<()> {
-        match self {
-            Self::Write(txn) => {
-                let mut table = txn.open_table(TABLE)?;
-                table.insert(key, value)?;
-                Ok(())
-            }
-            Self::Read(_) => anyhow::bail!("Cannot write to read transaction"),
-        }
+        let mut table = self.0.open_table(TABLE)?;
+        table.insert(key, value)?;
+        Ok(())
     }
 
     async fn commit(self) -> anyhow::Result<()> {
-        match self {
-            Self::Write(txn) => {
-                txn.commit()?;
-                Ok(())
-            }
-            Self::Read(_) => Ok(()),
-        }
+        self.0.commit()?;
+        Ok(())
+    }
+
+    async fn rollback(self) -> anyhow::Result<()> {
+        self.0.abort()?;
+        Ok(())
     }
 }
