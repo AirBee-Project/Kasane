@@ -1,8 +1,30 @@
 [package]
 name = "kasane"
-version = "0.0.2"
+version = "0.1.0"
 edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["redb"]
+redb = ["dep:redb", "dep:tokio"]
+tikv = ["dep:tikv-client", "dep:tokio"]
+memory = []
 
 [dependencies]
 kasane-logic = { path = "../kasane-logic" }
-redb = { version = "3.1.0" }
+async-trait = "0.1.89"
+anyhow = "1.0.100"
+thiserror = "2.0.18"
+
+# --- Native Dependencies ---
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+redb = { version = "3.1.0", optional = true }
+tikv-client = { version = "0.3.0", optional = true }
+tokio = { version = "1.49.0", features = ["full"], optional = true }
+
+# --- Wasm Dependencies ---
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2.108"
+console_error_panic_hook = "0.1.7"
