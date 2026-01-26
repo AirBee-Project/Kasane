@@ -1,5 +1,11 @@
 pub mod backend;
+pub mod error;
+
 use backend::{Backend, ReadTransaction, WriteTransaction};
+pub use error::DbError;
+
+/// このクレート全体で使うResult型
+pub type Result<T> = std::result::Result<T, DbError>;
 
 // --- バックエンドの実体決定ロジック ---
 
@@ -31,32 +37,21 @@ pub struct KasaneDb {
 
 impl KasaneDb {
     /// DBを開く
-    /// - Redb: ファイルパス (例: "./data.redb")
-    /// - TiKV: PDアドレス (例: "127.0.0.1:2379")
-    /// - Memory: 無視されます
-    pub async fn open(connection_string: &str) -> anyhow::Result<Self> {
+    pub async fn open(connection_string: &str) -> Result<Self> {
         let inner = InnerBackend::new(connection_string).await?;
         Ok(Self { inner })
     }
 
-    /// 読み取り専用トランザクションを開始する
-    ///
-    /// 戻り値は `impl ReadTransaction` なので、バックエンドの具体的な型を意識せずに使える。
-    /// ライフタイム `'_` は、トランザクションがDB本体(`&self`)より長く生きられないことを保証する。
-    pub async fn begin_read(&self) -> anyhow::Result<impl ReadTransaction + '_> {
+    pub async fn begin_read(&self) -> Result<impl ReadTransaction + '_> {
         self.inner.begin_read().await
     }
 
-    /// 書き込みトランザクションを開始する
-    ///
-    /// `WriteTransaction` は `ReadTransaction` を継承しているため、
-    /// 書き込み中に `.get()` で自分の変更を読むことも可能。
-    pub async fn begin_write(&self) -> anyhow::Result<impl WriteTransaction + '_> {
+    pub async fn begin_write(&self) -> Result<impl WriteTransaction + '_> {
         self.inner.begin_write().await
     }
 }
 
-// --- Wasm初期化用 ---
+// Wasm初期化用
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 

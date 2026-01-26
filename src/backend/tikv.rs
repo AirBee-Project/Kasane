@@ -1,6 +1,7 @@
 #![cfg(all(not(target_arch = "wasm32"), feature = "tikv"))]
 
 use super::{Backend, ReadTransaction, WriteTransaction};
+use crate::Result;
 use async_trait::async_trait;
 use tikv_client::{Transaction as TikvInnerTx, TransactionClient};
 
@@ -13,20 +14,17 @@ impl Backend for TikvBackend {
     type ReadTx<'a> = TikvReadTx;
     type WriteTx<'a> = TikvWriteTx;
 
-    async fn new(path: &str) -> anyhow::Result<Self> {
-        // pathをPDのエンドポイント(例: 127.0.0.1:2379)として扱う
+    async fn new(path: &str) -> Result<Self> {
         let client = TransactionClient::new(vec![path]).await?;
         Ok(Self { client })
     }
 
-    // ▼▼▼ 修正: 戻り値を anyhow::Result で包む ▼▼▼
-    async fn begin_read(&self) -> anyhow::Result<Self::ReadTx<'_>> {
+    async fn begin_read(&self) -> Result<Self::ReadTx<'_>> {
         let txn = self.client.begin_optimistic().await?;
         Ok(TikvReadTx(txn))
     }
 
-    // ▼▼▼ 修正: 戻り値を anyhow::Result で包む ▼▼▼
-    async fn begin_write(&self) -> anyhow::Result<Self::WriteTx<'_>> {
+    async fn begin_write(&self) -> Result<Self::WriteTx<'_>> {
         let txn = self.client.begin_optimistic().await?;
         Ok(TikvWriteTx(txn))
     }
@@ -37,7 +35,7 @@ pub struct TikvReadTx(TikvInnerTx);
 
 #[async_trait]
 impl ReadTransaction for TikvReadTx {
-    async fn get(&self, key: &[u8]) -> anyhow::Result<Option<Vec<u8>>> {
+    async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         Ok(self.0.get(key.to_vec()).await?)
     }
 }
@@ -47,24 +45,24 @@ pub struct TikvWriteTx(TikvInnerTx);
 
 #[async_trait]
 impl ReadTransaction for TikvWriteTx {
-    async fn get(&self, key: &[u8]) -> anyhow::Result<Option<Vec<u8>>> {
+    async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         Ok(self.0.get(key.to_vec()).await?)
     }
 }
 
 #[async_trait]
 impl WriteTransaction for TikvWriteTx {
-    async fn set(&mut self, key: &[u8], value: &[u8]) -> anyhow::Result<()> {
+    async fn set(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
         self.0.put(key.to_vec(), value.to_vec()).await?;
         Ok(())
     }
 
-    async fn commit(mut self) -> anyhow::Result<()> {
+    async fn commit(mut self) -> Result<()> {
         self.0.commit().await?;
         Ok(())
     }
 
-    async fn rollback(mut self) -> anyhow::Result<()> {
+    async fn rollback(mut self) -> Result<()> {
         self.0.rollback().await?;
         Ok(())
     }

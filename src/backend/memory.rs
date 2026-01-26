@@ -1,4 +1,5 @@
 use super::{Backend, ReadTransaction, WriteTransaction};
+use crate::{DbError, Result};
 use async_trait::async_trait;
 use std::collections::HashMap;
 
@@ -29,25 +30,26 @@ impl Backend for MemoryBackend {
     type ReadTx<'a> = MemoryReadTx;
     type WriteTx<'a> = MemoryWriteTx;
 
-    async fn new(_path: &str) -> anyhow::Result<Self> {
+    async fn new(_path: &str) -> Result<Self> {
         Ok(Self {
             data: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
-    // ▼▼▼ 修正: Resultを返すように変更 ▼▼▼
-    async fn begin_read(&self) -> anyhow::Result<Self::ReadTx<'_>> {
+    async fn begin_read(&self) -> Result<Self::ReadTx<'_>> {
         #[cfg(not(target_arch = "wasm32"))]
-        let data = self.data.read().expect("Lock poisoned").clone();
+        let data = self.data.read().map_err(|_| DbError::LockPoisoned)?.clone();
+
         #[cfg(target_arch = "wasm32")]
         let data = self.data.borrow().clone();
 
         Ok(MemoryReadTx { data })
     }
 
-    async fn begin_write(&self) -> anyhow::Result<Self::WriteTx<'_>> {
+    async fn begin_write(&self) -> Result<Self::WriteTx<'_>> {
         #[cfg(not(target_arch = "wasm32"))]
-        let snapshot = self.data.read().expect("Lock poisoned").clone();
+        let snapshot = self.data.read().map_err(|_| DbError::LockPoisoned)?.clone();
+
         #[cfg(target_arch = "wasm32")]
         let snapshot = self.data.borrow().clone();
 
@@ -58,7 +60,6 @@ impl Backend for MemoryBackend {
     }
 }
 
-// ... (後略)
 // --- Read Transaction ---
 pub struct MemoryReadTx {
     data: HashMap<Vec<u8>, Vec<u8>>,
@@ -67,7 +68,7 @@ pub struct MemoryReadTx {
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl ReadTransaction for MemoryReadTx {
-    async fn get(&self, key: &[u8]) -> anyhow::Result<Option<Vec<u8>>> {
+    async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         Ok(self.data.get(key).cloned())
     }
 }
@@ -78,12 +79,10 @@ pub struct MemoryWriteTx {
     target: DbMap,
 }
 
-// WriteTransactionはReadTransactionを実装する必要がある
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl ReadTransaction for MemoryWriteTx {
-    async fn get(&self, key: &[u8]) -> anyhow::Result<Option<Vec<u8>>> {
-        // 自分の作業領域から読む
+    async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
         Ok(self.staging.get(key).cloned())
     }
 }
@@ -91,18 +90,14 @@ impl ReadTransaction for MemoryWriteTx {
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl WriteTransaction for MemoryWriteTx {
-    async fn set(&mut self, key: &[u8], value: &[u8]) -> anyhow::Result<()> {
+    async fn set(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
         self.staging.insert(key.to_vec(), value.to_vec());
         Ok(())
     }
 
-    async fn commit(self) -> anyhow::Result<()> {
-        // ここでロックを取って書き戻す
+    async fn commit(self) -> Result<()> {
         #[cfg(not(target_arch = "wasm32"))]
-        let mut guard = self
-            .target
-            .write()
-            .map_err(|_| anyhow::anyhow!("Lock poisoned"))?;
+        let mut guard = self.target.write().map_err(|_| DbError::LockPoisoned)?;
 
         #[cfg(target_arch = "wasm32")]
         let mut guard = self.target.borrow_mut();
@@ -111,4 +106,3 @@ impl WriteTransaction for MemoryWriteTx {
         Ok(())
     }
 }
-// ... (前略)

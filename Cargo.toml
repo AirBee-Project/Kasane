@@ -15,7 +15,6 @@ memory = []
 [dependencies]
 kasane-logic = { path = "../kasane-logic" }
 async-trait = "0.1.89"
-anyhow = "1.0.100"
 thiserror = "2.0.18"
 
 # --- Native Dependencies ---
