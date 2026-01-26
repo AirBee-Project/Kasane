@@ -1,4 +1,5 @@
 pub mod backend;
+pub mod bucket;
 pub mod error;
 
 use backend::{Backend, ReadTransaction, WriteTransaction};
