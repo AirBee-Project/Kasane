@@ -26,7 +26,6 @@ impl<V> TypedBucket<V>
 where
     V: Serialize + DeserializeOwned + Send + Sync,
 {
-    /// 型付きの読み込み
     pub async fn get(
         &self,
         txn: &impl crate::backend::ReadTransaction,
