@@ -1,5 +1,6 @@
-use crate::Result;
 use kasane_logic::{SetOnMemory, TableOnMemory};
+
+use crate::Error;
 
 pub mod memory;
 
@@ -11,7 +12,6 @@ pub mod redb;
 #[cfg(all(not(target_arch = "wasm32"), feature = "tikv"))]
 pub mod tikv;
 
-#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 pub trait Backend: Sync + Send {
     type ReadTx<'a>: ReadTransaction
     where
@@ -21,33 +21,31 @@ pub trait Backend: Sync + Send {
     where
         Self: 'a;
 
-    fn new(path: &str) -> Result<Self>
+    fn new(path: &str) -> Result<Self, Error>
     where
         Self: Sized;
 
-    fn begin_read(&self) -> Result<Self::ReadTx<'_>>;
-    fn begin_write(&self) -> Result<Self::WriteTx<'_>>;
+    fn begin_read(&self) -> Result<Self::ReadTx<'_>, Error>;
+    fn begin_write(&self) -> Result<Self::WriteTx<'_>, Error>;
 }
 
-#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 pub trait ReadTransaction {
-    fn show_field_ids(&self) -> Result<Vec<FieldId>>;
-    fn select(&self, field_id: FieldId, range: SetOnMemory) -> TableOnMemory<Vec<u8>>;
+    fn show_field_ids(&self) -> Result<Vec<FieldId>, Error>;
+    fn select(&self, field_id: FieldId, range: SetOnMemory) -> TableOnMemory<&[u8]>;
 }
 
-#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 pub trait WriteTransaction: ReadTransaction {
-    fn create_field(&mut self) -> Result<FieldId>;
-    fn drop_field(&mut self, field_id: FieldId) -> Result<()>;
-    fn insert(&mut self, field_id: FieldId, range: SetOnMemory, value: Vec<u8>) -> Result<()>;
-    fn merge(&mut self, field_id: FieldId, range: SetOnMemory, value: Vec<u8>) -> Result<()>;
-    fn update(&mut self, field_id: FieldId, range: SetOnMemory, value: Vec<u8>) -> Result<()>;
+    fn create_field(&mut self) -> Result<FieldId, Error>;
+    fn drop_field(&mut self, field_id: FieldId) -> Result<(), Error>;
+    fn insert(&mut self, field_id: FieldId, range: SetOnMemory, value: &[u8]) -> Result<(), Error>;
+    fn merge(&mut self, field_id: FieldId, range: SetOnMemory, value: &[u8]) -> Result<(), Error>;
+    fn update(&mut self, field_id: FieldId, range: SetOnMemory, value: &[u8]) -> Result<(), Error>;
 
-    fn commit(self) -> Result<()>
+    fn commit(self) -> Result<(), Error>
     where
         Self: Sized;
 
-    fn rollback(self) -> Result<()>
+    fn rollback(self) -> Result<(), Error>
     where
         Self: Sized,
     {

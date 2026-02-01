@@ -1,5 +1,5 @@
 use super::{Backend, ReadTransaction, WriteTransaction};
-use crate::{Error, Result};
+use crate::Error;
 use std::collections::HashMap;
 
 // --- 環境別のロック機構切り替え ---
@@ -27,13 +27,13 @@ impl Backend for MemoryBackend {
     type ReadTx<'a> = MemoryReadTx;
     type WriteTx<'a> = MemoryWriteTx;
 
-    fn new(_path: &str) -> Result<Self> {
+    fn new(_path: &str) -> Result<Self, Error> {
         Ok(Self {
             data: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
-    fn begin_read(&self) -> Result<Self::ReadTx<'_>> {
+    fn begin_read(&self) -> Result<Self::ReadTx<'_>, Error> {
         #[cfg(not(target_arch = "wasm32"))]
         let data = self.data.read().map_err(|_| Error::LockPoisoned)?.clone();
 
@@ -43,7 +43,7 @@ impl Backend for MemoryBackend {
         Ok(MemoryReadTx { data })
     }
 
-    fn begin_write(&self) -> Result<Self::WriteTx<'_>> {
+    fn begin_write(&self) -> Result<Self::WriteTx<'_>, Error> {
         #[cfg(not(target_arch = "wasm32"))]
         let snapshot = self.data.read().map_err(|_| Error::LockPoisoned)?.clone();
 
@@ -63,7 +63,7 @@ pub struct MemoryReadTx {
 
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl ReadTransaction for MemoryReadTx {
-    fn show_field_ids(&self) -> Result<Vec<super::FieldId>> {
+    fn show_field_ids(&self) -> Result<Vec<super::FieldId>, Error> {
         todo!()
     }
 
@@ -71,7 +71,7 @@ impl ReadTransaction for MemoryReadTx {
         &self,
         field_id: super::FieldId,
         range: kasane_logic::SetOnMemory,
-    ) -> kasane_logic::TableOnMemory<Vec<u8>> {
+    ) -> kasane_logic::TableOnMemory<&[u8]> {
         todo!()
     }
 }
@@ -83,7 +83,7 @@ pub struct MemoryWriteTx {
 
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl ReadTransaction for MemoryWriteTx {
-    fn show_field_ids(&self) -> Result<Vec<super::FieldId>> {
+    fn show_field_ids(&self) -> Result<Vec<super::FieldId>, Error> {
         todo!()
     }
 
@@ -91,18 +91,18 @@ impl ReadTransaction for MemoryWriteTx {
         &self,
         field_id: super::FieldId,
         range: kasane_logic::SetOnMemory,
-    ) -> kasane_logic::TableOnMemory<Vec<u8>> {
+    ) -> kasane_logic::TableOnMemory<&[u8]> {
         todo!()
     }
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl WriteTransaction for MemoryWriteTx {
-    fn create_field(&mut self) -> Result<super::FieldId> {
+    fn create_field(&mut self) -> Result<super::FieldId, Error> {
         todo!()
     }
 
-    fn drop_field(&mut self, field_id: super::FieldId) -> Result<()> {
+    fn drop_field(&mut self, field_id: super::FieldId) -> Result<(), Error> {
         todo!()
     }
 
@@ -110,8 +110,8 @@ impl WriteTransaction for MemoryWriteTx {
         &mut self,
         field_id: super::FieldId,
         range: kasane_logic::SetOnMemory,
-        value: Vec<u8>,
-    ) -> Result<()> {
+        value: &[u8],
+    ) -> Result<(), Error> {
         todo!()
     }
 
@@ -119,8 +119,8 @@ impl WriteTransaction for MemoryWriteTx {
         &mut self,
         field_id: super::FieldId,
         range: kasane_logic::SetOnMemory,
-        value: Vec<u8>,
-    ) -> Result<()> {
+        value: &[u8],
+    ) -> Result<(), Error> {
         todo!()
     }
 
@@ -128,12 +128,12 @@ impl WriteTransaction for MemoryWriteTx {
         &mut self,
         field_id: super::FieldId,
         range: kasane_logic::SetOnMemory,
-        value: Vec<u8>,
-    ) -> Result<()> {
+        value: &[u8],
+    ) -> Result<(), Error> {
         todo!()
     }
 
-    fn commit(self) -> Result<()>
+    fn commit(self) -> Result<(), Error>
     where
         Self: Sized,
     {

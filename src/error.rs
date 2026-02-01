@@ -11,7 +11,6 @@ pub enum Error {
     #[error("Serialization error: {0}")]
     Serialization(String),
 
-    // --- Redb Specific Errors ---
     #[cfg(feature = "redb")]
     #[error("Redb error: {0}")]
     Redb(#[from] redb::Error),

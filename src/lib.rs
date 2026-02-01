@@ -4,9 +4,6 @@ pub mod error;
 use backend::{Backend, ReadTransaction, WriteTransaction};
 pub use error::Error;
 
-/// このクレート全体で使うResult型
-pub type Result<T> = std::result::Result<T, Error>;
-
 // --- バックエンドの実体決定ロジック ---
 
 // 1. Wasm: 強制的にMemory
@@ -37,16 +34,15 @@ pub struct KasaneDb {
 
 impl KasaneDb {
     /// DBを開く
-    pub async fn open(connection_string: &str) -> Result<Self> {
-        let inner = InnerBackend::new(connection_string);
-        Ok(Self { inner })
+    pub async fn open(connection_string: &str) -> Result<Self, Error> {
+        todo!()
     }
 
-    pub async fn begin_read(&self) -> Result<impl ReadTransaction + '_> {
+    pub async fn begin_read(&self) -> Result<impl ReadTransaction + '_, Error> {
         self.inner.begin_read()
     }
 
-    pub async fn begin_write(&self) -> Result<impl WriteTransaction + '_> {
+    pub async fn begin_write(&self) -> Result<impl WriteTransaction + '_, Error> {
         self.inner.begin_write()
     }
 }
