@@ -63,13 +63,13 @@ pub struct MemoryReadTx {
 
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl ReadTransaction for MemoryReadTx {
-    fn show_field_ids(&self) -> Result<Vec<super::FieldId>, Error> {
+    fn show_field_ids(&self) -> Result<Vec<String>, Error> {
         todo!()
     }
 
     fn select(
         &self,
-        field_id: super::FieldId,
+        field_name: String,
         range: kasane_logic::SetOnMemory,
     ) -> kasane_logic::TableOnMemory<&[u8]> {
         todo!()
@@ -83,13 +83,13 @@ pub struct MemoryWriteTx {
 
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl ReadTransaction for MemoryWriteTx {
-    fn show_field_ids(&self) -> Result<Vec<super::FieldId>, Error> {
+    fn show_field_ids(&self) -> Result<Vec<String>, Error> {
         todo!()
     }
 
     fn select(
         &self,
-        field_id: super::FieldId,
+        field_name: String,
         range: kasane_logic::SetOnMemory,
     ) -> kasane_logic::TableOnMemory<&[u8]> {
         todo!()
@@ -98,17 +98,17 @@ impl ReadTransaction for MemoryWriteTx {
 
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl WriteTransaction for MemoryWriteTx {
-    fn create_field(&mut self) -> Result<super::FieldId, Error> {
+    fn create_field(&mut self) -> Result<(), Error> {
         todo!()
     }
 
-    fn drop_field(&mut self, field_id: super::FieldId) -> Result<(), Error> {
+    fn drop_field(&mut self, field_name: String) -> Result<(), Error> {
         todo!()
     }
 
     fn insert(
         &mut self,
-        field_id: super::FieldId,
+        field_name: String,
         range: kasane_logic::SetOnMemory,
         value: &[u8],
     ) -> Result<(), Error> {
@@ -117,7 +117,7 @@ impl WriteTransaction for MemoryWriteTx {
 
     fn merge(
         &mut self,
-        field_id: super::FieldId,
+        field_name: String,
         range: kasane_logic::SetOnMemory,
         value: &[u8],
     ) -> Result<(), Error> {
@@ -126,7 +126,7 @@ impl WriteTransaction for MemoryWriteTx {
 
     fn update(
         &mut self,
-        field_id: super::FieldId,
+        field_name: String,
         range: kasane_logic::SetOnMemory,
         value: &[u8],
     ) -> Result<(), Error> {

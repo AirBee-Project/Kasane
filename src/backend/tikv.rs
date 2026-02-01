@@ -30,7 +30,6 @@ impl Backend for TikvBackend {
     }
 }
 
-// --- Read Transaction ---
 pub struct TikvReadTx(TikvInnerTx);
 
 #[async_trait]
@@ -40,7 +39,6 @@ impl ReadTransaction for TikvReadTx {
     }
 }
 
-// --- Write Transaction ---
 pub struct TikvWriteTx(TikvInnerTx);
 
 #[async_trait]

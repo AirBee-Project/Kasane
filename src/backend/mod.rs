@@ -2,7 +2,7 @@ use kasane_logic::{SetOnMemory, TableOnMemory};
 
 use crate::Error;
 
-pub mod memory;
+// pub mod memory;
 
 pub type FieldId = u64;
 
@@ -30,17 +30,15 @@ pub trait Backend: Sync + Send {
 }
 
 pub trait ReadTransaction {
-    fn show_field_ids(&self) -> Result<Vec<FieldId>, Error>;
-    fn select(&self, field_id: FieldId, range: SetOnMemory) -> TableOnMemory<&[u8]>;
+    fn show_fields(&self) -> Result<Vec<String>, Error>;
+    fn get(&self, field_name: String, range: SetOnMemory) -> TableOnMemory<&[u8]>;
 }
 
 pub trait WriteTransaction: ReadTransaction {
-    fn create_field(&mut self) -> Result<FieldId, Error>;
-    fn drop_field(&mut self, field_id: FieldId) -> Result<(), Error>;
-    fn insert(&mut self, field_id: FieldId, range: SetOnMemory, value: &[u8]) -> Result<(), Error>;
-    fn merge(&mut self, field_id: FieldId, range: SetOnMemory, value: &[u8]) -> Result<(), Error>;
-    fn update(&mut self, field_id: FieldId, range: SetOnMemory, value: &[u8]) -> Result<(), Error>;
-
+    fn create_field(&mut self, field_name: String) -> Result<(), Error>;
+    fn drop_field(&mut self, field_name: String) -> Result<(), Error>;
+    fn insert(&mut self, field_name: String, range: SetOnMemory, value: &[u8])
+        -> Result<(), Error>;
     fn commit(self) -> Result<(), Error>
     where
         Self: Sized;
