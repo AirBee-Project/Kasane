@@ -1,12 +1,11 @@
 pub mod backend;
-pub mod bucket;
 pub mod error;
 
 use backend::{Backend, ReadTransaction, WriteTransaction};
-pub use error::DbError;
+pub use error::Error;
 
 /// このクレート全体で使うResult型
-pub type Result<T> = std::result::Result<T, DbError>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 // --- バックエンドの実体決定ロジック ---
 
@@ -39,16 +38,16 @@ pub struct KasaneDb {
 impl KasaneDb {
     /// DBを開く
     pub async fn open(connection_string: &str) -> Result<Self> {
-        let inner = InnerBackend::new(connection_string).await?;
+        let inner = InnerBackend::new(connection_string);
         Ok(Self { inner })
     }
 
     pub async fn begin_read(&self) -> Result<impl ReadTransaction + '_> {
-        self.inner.begin_read().await
+        self.inner.begin_read()
     }
 
     pub async fn begin_write(&self) -> Result<impl WriteTransaction + '_> {
-        self.inner.begin_write().await
+        self.inner.begin_write()
     }
 }
 

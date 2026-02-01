@@ -1,7 +1,9 @@
 use crate::Result;
-use async_trait::async_trait;
+use kasane_logic::{SetOnMemory, TableOnMemory};
 
 pub mod memory;
+
+pub type FieldId = u64;
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "redb"))]
 pub mod redb;
@@ -10,7 +12,6 @@ pub mod redb;
 pub mod tikv;
 
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 pub trait Backend: Sync + Send {
     type ReadTx<'a>: ReadTransaction
     where
@@ -20,34 +21,33 @@ pub trait Backend: Sync + Send {
     where
         Self: 'a;
 
-    async fn new(path: &str) -> Result<Self>
+    fn new(path: &str) -> Result<Self>
     where
         Self: Sized;
 
-    async fn begin_read(&self) -> Result<Self::ReadTx<'_>>;
-    async fn begin_write(&self) -> Result<Self::WriteTx<'_>>;
+    fn begin_read(&self) -> Result<Self::ReadTx<'_>>;
+    fn begin_write(&self) -> Result<Self::WriteTx<'_>>;
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 pub trait ReadTransaction {
-    async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>>;
-    async fn show_fields(&self) -> Result<Vec<String>>;
+    fn show_field_ids(&self) -> Result<Vec<FieldId>>;
+    fn select(&self, field_id: FieldId, range: SetOnMemory) -> TableOnMemory<Vec<u8>>;
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 pub trait WriteTransaction: ReadTransaction {
-    async fn set(&mut self, key: &[u8], value: &[u8]) -> Result<()>;
-    async fn create_field(&mut self, field_name: String) -> Result<()>;
-    async fn drop_field(&mut self, field_name: String) -> Result<()>;
-    async fn rename_field(&mut self, old_field_name: String, new_field_name: String) -> Result<()>;
+    fn create_field(&mut self) -> Result<FieldId>;
+    fn drop_field(&mut self, field_id: FieldId) -> Result<()>;
+    fn insert(&mut self, field_id: FieldId, range: SetOnMemory, value: Vec<u8>) -> Result<()>;
+    fn merge(&mut self, field_id: FieldId, range: SetOnMemory, value: Vec<u8>) -> Result<()>;
+    fn update(&mut self, field_id: FieldId, range: SetOnMemory, value: Vec<u8>) -> Result<()>;
 
-    async fn commit(self) -> Result<()>
+    fn commit(self) -> Result<()>
     where
         Self: Sized;
 
-    async fn rollback(self) -> Result<()>
+    fn rollback(self) -> Result<()>
     where
         Self: Sized,
     {

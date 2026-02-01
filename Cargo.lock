@@ -852,7 +852,6 @@ dependencies = [
 name = "kasane"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "bincode",
  "console_error_panic_hook",
  "kasane-logic",

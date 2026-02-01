@@ -1,2 +1,3 @@
 - Kasane-Logic > 時空間IDの演算ロジック
 - Kasane-Core > ストレージ層に対する抽象化,トランザクションの責任管理
+- Kasane-Coreはfield-idとVec<u8>の管理しかしない

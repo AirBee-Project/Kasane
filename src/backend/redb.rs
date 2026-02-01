@@ -1,9 +1,8 @@
 #![cfg(all(not(target_arch = "wasm32"), feature = "redb"))]
-
 use super::{Backend, ReadTransaction, WriteTransaction};
-use crate::Result;
-use async_trait::async_trait;
-use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
+use crate::{backend::FieldId, Result};
+use kasane_logic::{SetOnMemory, TableOnMemory};
+use redb::{Database, ReadableDatabase, TableDefinition};
 
 const TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("main");
 
@@ -11,12 +10,14 @@ pub struct RedbBackend {
     db: Database,
 }
 
-#[async_trait]
+pub struct RedbReadTx(redb::ReadTransaction);
+pub struct RedbWriteTx(redb::WriteTransaction);
+
 impl Backend for RedbBackend {
     type ReadTx<'a> = RedbReadTx;
     type WriteTx<'a> = RedbWriteTx;
 
-    async fn new(path: &str) -> Result<Self> {
+    fn new(path: &str) -> Result<Self> {
         let db = Database::create(path)?;
         let txn = db.begin_write()?;
         {
@@ -26,75 +27,64 @@ impl Backend for RedbBackend {
         Ok(Self { db })
     }
 
-    async fn begin_read(&self) -> Result<Self::ReadTx<'_>> {
+    fn begin_read(&self) -> Result<Self::ReadTx<'_>> {
         let txn = self.db.begin_read()?;
         Ok(RedbReadTx(txn))
     }
 
-    async fn begin_write(&self) -> Result<Self::WriteTx<'_>> {
+    fn begin_write(&self) -> Result<Self::WriteTx<'_>> {
         let txn = self.db.begin_write()?;
         Ok(RedbWriteTx(txn))
     }
 }
 
-// --- Read Transaction ---
-pub struct RedbReadTx(redb::ReadTransaction);
-
-#[async_trait]
 impl ReadTransaction for RedbReadTx {
-    async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        let table = self.0.open_table(TABLE)?;
-        let res = table.get(key)?;
-        Ok(res.map(|v| v.value().to_vec()))
+    fn show_field_ids(&self) -> Result<Vec<FieldId>> {
+        todo!()
     }
-
-    async fn show_fields(&self) -> Result<Vec<String>> {
+    fn select(&self, field_id: FieldId, range: SetOnMemory) -> TableOnMemory<Vec<u8>> {
         todo!()
     }
 }
 
-// --- Write Transaction ---
-pub struct RedbWriteTx(redb::WriteTransaction);
-
-#[async_trait]
 impl ReadTransaction for RedbWriteTx {
-    async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        let table = self.0.open_table(TABLE)?;
-        let res = table.get(key)?;
-        Ok(res.map(|v| v.value().to_vec()))
+    fn show_field_ids(&self) -> Result<Vec<FieldId>> {
+        todo!()
     }
 
-    async fn show_fields(&self) -> Result<Vec<String>> {
+    fn select(&self, field_id: FieldId, range: SetOnMemory) -> TableOnMemory<Vec<u8>> {
         todo!()
     }
 }
 
-#[async_trait]
 impl WriteTransaction for RedbWriteTx {
-    async fn set(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
-        let mut table = self.0.open_table(TABLE)?;
-        table.insert(key, value)?;
-        Ok(())
-    }
-
-    async fn create_field(&mut self, field_name: String) -> Result<()> {
+    fn create_field(&mut self) -> Result<FieldId> {
         todo!()
     }
-    async fn drop_field(&mut self, field_name: String) -> Result<()> {
+    fn drop_field(&mut self, field_id: FieldId) -> Result<()> {
+        todo!()
+    }
+    fn insert(&mut self, field_id: FieldId, range: SetOnMemory, value: Vec<u8>) -> Result<()> {
+        todo!()
+    }
+    fn merge(&mut self, field_id: FieldId, range: SetOnMemory, value: Vec<u8>) -> Result<()> {
+        todo!()
+    }
+    fn update(&mut self, field_id: FieldId, range: SetOnMemory, value: Vec<u8>) -> Result<()> {
         todo!()
     }
 
-    async fn rename_field(&mut self, old_field_name: String, new_field_name: String) -> Result<()> {
+    fn commit(self) -> Result<()>
+    where
+        Self: Sized,
+    {
         todo!()
     }
 
-    async fn commit(self) -> Result<()> {
-        self.0.commit()?;
-        Ok(())
-    }
-
-    async fn rollback(self) -> Result<()> {
-        self.0.abort()?;
+    fn rollback(self) -> Result<()>
+    where
+        Self: Sized,
+    {
         Ok(())
     }
 }
