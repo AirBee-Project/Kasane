@@ -1,44 +1,25 @@
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
-    #[error("Field already exists: {0}")]
-    FieldAlreadyExists(String),
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    #[error("Filed Id Overflow")]
+    FiledIdOverflow,
 
-    #[error("Lock poisoned")]
-    LockPoisoned,
+    #[error("Filed Already Exists: {filed_name}")]
+    FiledAlreadyExists { filed_name: String },
 
-    #[error("Serialization error: {0}")]
-    Serialization(String),
+    #[error("Redb Database Error: {0}")]
+    RedbDatabaseError(#[from] redb::DatabaseError),
 
-    #[cfg(feature = "redb")]
-    #[error("Redb error: {0}")]
-    Redb(#[from] redb::Error),
+    #[error("Redb Transaction Error: {0}")]
+    RedbTransactionError(#[from] redb::TransactionError),
 
-    #[cfg(feature = "redb")]
-    #[error("Redb database error: {0}")]
-    RedbDatabase(#[from] redb::DatabaseError),
+    #[error("Redb Commit Error: {0}")]
+    RedbCommitError(#[from] redb::CommitError),
 
-    #[cfg(feature = "redb")]
-    #[error("Redb table error: {0}")]
-    RedbTable(#[from] redb::TableError),
+    #[error("Redb Table Error: {0}")]
+    RedbTableError(#[from] redb::TableError),
 
-    #[cfg(feature = "redb")]
-    #[error("Redb transaction error: {0}")]
-    RedbTransaction(#[from] redb::TransactionError),
-
-    #[cfg(feature = "redb")]
-    #[error("Redb storage error: {0}")]
-    RedbStorage(#[from] redb::StorageError),
-
-    #[cfg(feature = "redb")]
-    #[error("Redb commit error: {0}")]
-    RedbCommit(#[from] redb::CommitError),
-
-    // --- TiKV Specific Errors ---
-    #[cfg(feature = "tikv")]
-    #[error("TiKV error: {0}")]
-    Tikv(#[from] tikv_client::Error),
+    #[error("Redb Storage Error: {0}")]
+    RedbStorageError(#[from] redb::StorageError),
 }

@@ -1,58 +1,55 @@
-pub mod backend;
+use std::{io::Read, path::Path};
+
+use redb::{Database, ReadableDatabase, TableDefinition};
+
+use crate::{error::Error, write::WriteTx};
 pub mod error;
+pub mod write;
 
-use backend::{Backend, ReadTransaction, WriteTransaction};
-pub use error::Error;
+///field_nameとfiled_idの変換
+pub const FILED_DICTIONARY: TableDefinition<&str, u64> = TableDefinition::new("filed_dictonary");
 
-// --- バックエンドの実体決定ロジック ---
+///全体の管理に必要な情報を入れておく
+pub const GLOBAL_STATE: TableDefinition<&str, u64> = TableDefinition::new("global_state");
+const FIELD_ID_KEY: &str = "next_field_id";
 
-// 1. Wasm: 強制的にMemory
-#[cfg(target_arch = "wasm32")]
-type InnerBackend = backend::memory::MemoryBackend;
-
-// 2. Native & TiKV有効
-#[cfg(all(not(target_arch = "wasm32"), feature = "tikv"))]
-type InnerBackend = backend::tikv::TikvBackend;
-
-// 3. Native & Redb有効 (TiKVが無効)
-#[cfg(all(not(target_arch = "wasm32"), feature = "redb", not(feature = "tikv")))]
-type InnerBackend = backend::redb::RedbBackend;
-
-// 4. Native & Memory有効 (Redb/TiKV無効)
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    not(feature = "redb"),
-    not(feature = "tikv")
-))]
-type InnerBackend = backend::memory::MemoryBackend;
-
-// ----------------------------------------
-
-pub struct KasaneDb {
-    inner: InnerBackend,
+///これは組み込みのデータベースである
+/// redbをバックエンドとして動作する
+/// プリミティブな動作を提供する
+/// リッチな動作（最適な実行手法など）は求めない
+/// redbとの境界を満たし、トランザクション機能を提供することを主眼とする
+/// ログ機能、型安全性なども提供しない
+/// 型は全て&[u8]である
+pub struct Kasane {
+    db: Database,
 }
 
-impl KasaneDb {
-    /// DBを開く
-    pub async fn open(connection_string: &str) -> Result<Self, Error> {
-        todo!()
-    }
-
-    pub async fn begin_read(&self) -> Result<impl ReadTransaction + '_, Error> {
-        self.inner.begin_read()
-    }
-
-    pub async fn begin_write(&self) -> Result<impl WriteTransaction + '_, Error> {
-        self.inner.begin_write()
-    }
+pub struct ReadTx {
+    tx: redb::ReadTransaction,
 }
 
-// Wasm初期化用
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
+impl Kasane {
+    ///データベースの初期化
+    pub fn init(path: &Path) -> Result<Self, Error> {
+        let db = Database::create(path)?;
+        let write_txn = db.begin_write()?;
+        {
+            let _ = write_txn.open_table(FILED_DICTIONARY);
+        }
+        write_txn.commit()?;
 
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen(start)]
-pub fn start() {
-    console_error_panic_hook::set_once();
+        Ok(Self { db })
+    }
+
+    ///read transactionの発行
+    pub fn read_tx(&self) -> Result<ReadTx, Error> {
+        let tx = self.db.begin_read()?;
+        Ok(ReadTx { tx })
+    }
+
+    ///write transactionの発行
+    pub fn write_tx(&self) -> Result<WriteTx, Error> {
+        let tx = self.db.begin_write()?;
+        Ok(WriteTx { tx })
+    }
 }
