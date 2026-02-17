@@ -1,12 +1,14 @@
+use kasane_logic::SetOnMemory;
 use redb::ReadableTable;
 
-use crate::{FIELD_ID_KEY, FILED_DICTIONARY, GLOBAL_STATE, error::Error};
+use crate::{FIELD_ID_KEY, FILED_DICTIONARY, FiledRank, GLOBAL_STATE, error::Error};
 
 pub struct WriteTx {
     pub tx: redb::WriteTransaction,
 }
 
 impl WriteTx {
+    ///新しいFiledを作成する
     pub fn create_field(&self, filed_name: &str) -> Result<(), Error> {
         let mut filed_dictonary = self.tx.open_table(FILED_DICTIONARY)?;
 
@@ -24,7 +26,7 @@ impl WriteTx {
     }
 
     ///次のFiledIdを取得する
-    fn fetch_filed_id(&self) -> Result<u64, Error> {
+    fn fetch_filed_id(&self) -> Result<FiledRank, Error> {
         let mut global_state = self.tx.open_table(GLOBAL_STATE)?;
 
         let current_id = global_state
@@ -37,5 +39,14 @@ impl WriteTx {
         global_state.insert(FIELD_ID_KEY, &next)?;
 
         Ok(next)
+    }
+
+    ///時空間IDとValueをInsertする
+    pub fn insert(&self, range: SetOnMemory, value: &[u8]) -> Result<(), Error> {
+        todo!()
+    }
+
+    pub fn commit(self) -> Result<(), Error> {
+        Ok(self.tx.commit()?)
     }
 }
