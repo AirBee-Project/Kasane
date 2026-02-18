@@ -127,6 +127,10 @@ impl SerializableRoaringTreemap {
         &self.0
     }
 
+    pub fn mut_treemap(&mut self) -> &mut RoaringTreemap {
+        &mut self.0
+    }
+
     /// 内部の RoaringTreemap を取り出す（所有権を移動）
     pub fn into_inner(self) -> RoaringTreemap {
         self.0
