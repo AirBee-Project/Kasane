@@ -5,6 +5,7 @@ use redb::{Database, ReadableDatabase};
 use crate::{error::Error, read::ReadTx, write::WriteTx};
 pub mod error;
 pub mod read;
+pub mod scanner;
 pub mod tables;
 pub mod write;
 

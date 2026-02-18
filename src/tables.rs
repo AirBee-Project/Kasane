@@ -120,3 +120,22 @@ impl RedbValue for SerializableRoaringTreemap {
         None
     }
 }
+
+impl SerializableRoaringTreemap {
+    /// 内部の RoaringTreemap への参照を取得する
+    pub fn as_treemap(&self) -> &RoaringTreemap {
+        &self.0
+    }
+
+    /// 内部の RoaringTreemap を取り出す（所有権を移動）
+    pub fn into_inner(self) -> RoaringTreemap {
+        self.0
+    }
+}
+
+// 既存の型から変換できるように From も実装しておくと便利です
+impl From<RoaringTreemap> for SerializableRoaringTreemap {
+    fn from(tree: RoaringTreemap) -> Self {
+        Self(tree)
+    }
+}

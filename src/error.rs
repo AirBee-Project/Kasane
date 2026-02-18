@@ -22,4 +22,7 @@ pub enum Error {
 
     #[error("Redb Storage Error: {0}")]
     RedbStorageError(#[from] redb::StorageError),
+
+    #[error("Redb Error: {0}")]
+    RedbError(#[from] redb::Error),
 }
