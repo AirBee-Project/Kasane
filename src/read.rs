@@ -1,6 +1,6 @@
 use redb::ReadableTable;
 
-use crate::{FILED_DICTIONARY, error::Error};
+use crate::{Kasane, error::Error};
 
 pub struct ReadTx {
     pub tx: redb::ReadTransaction,
@@ -8,7 +8,7 @@ pub struct ReadTx {
 
 impl ReadTx {
     pub fn show_fields(&self) -> Result<Vec<String>, Error> {
-        let filed_dictonary = self.tx.open_table(FILED_DICTIONARY)?;
+        let filed_dictonary = self.tx.open_table(Kasane::FILED)?;
 
         let mut result = Vec::new();
 

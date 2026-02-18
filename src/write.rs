@@ -1,7 +1,7 @@
 use kasane_logic::SetOnMemory;
 use redb::ReadableTable;
 
-use crate::{FIELD_ID_KEY, FILED_DICTIONARY, FiledRank, GLOBAL_STATE, error::Error};
+use crate::{Kasane, error::Error, tables::FiledRank};
 
 pub struct WriteTx {
     pub tx: redb::WriteTransaction,
@@ -10,7 +10,7 @@ pub struct WriteTx {
 impl WriteTx {
     ///新しいFiledを作成する
     pub fn create_field(&self, filed_name: &str) -> Result<(), Error> {
-        let mut filed_dictonary = self.tx.open_table(FILED_DICTIONARY)?;
+        let mut filed_dictonary = self.tx.open_table(Kasane::FILED)?;
 
         //既に同じ名前のFiledが存在する場合
         if filed_dictonary.get(filed_name)?.is_some() {
@@ -27,16 +27,16 @@ impl WriteTx {
 
     ///次のFiledIdを取得する
     fn fetch_filed_id(&self) -> Result<FiledRank, Error> {
-        let mut global_state = self.tx.open_table(GLOBAL_STATE)?;
+        let mut global_state = self.tx.open_table(Kasane::GLOBAL_STATE)?;
 
         let current_id = global_state
-            .get(FIELD_ID_KEY)?
+            .get(Kasane::G_NEXT_FIELD_RANK)?
             .map(|v| v.value())
             .unwrap_or(0);
 
         let next = current_id.checked_add(1).ok_or(Error::FiledIdOverflow)?;
 
-        global_state.insert(FIELD_ID_KEY, &next)?;
+        global_state.insert(Kasane::G_NEXT_FIELD_RANK, &next)?;
 
         Ok(next)
     }
