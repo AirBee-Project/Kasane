@@ -3,6 +3,7 @@ use crate::routes::create_router;
 pub mod error;
 pub mod handlers;
 pub mod models;
+pub mod repositories;
 pub mod routes;
 
 #[derive(Debug, Clone)]
