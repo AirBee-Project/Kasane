@@ -1,28 +1,38 @@
-use thiserror::Error;
+use axum::{
+    Json,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
+use serde_json::json;
+use std::fmt;
 
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("Filed Id Overflow")]
-    FiledIdOverflow,
+#[derive(Debug)]
+pub enum AppError {
+    TableNotFound { name: String },
+}
+impl fmt::Display for AppError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AppError::TableNotFound { name } => write!(f, "Table '{}' not found", name),
+        }
+    }
+}
 
-    #[error("Filed Already Exists: {filed_name}")]
-    FiledAlreadyExists { filed_name: String },
+impl std::error::Error for AppError {}
 
-    #[error("Redb Database Error: {0}")]
-    RedbDatabaseError(#[from] redb::DatabaseError),
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        // エラーの種類に応じて、ステータスコードとメッセージを決定
+        let (status, error_message) = match self {
+            AppError::TableNotFound { name } => {
+                (StatusCode::NOT_FOUND, format!("Table '{}' not found", name))
+            }
+        };
 
-    #[error("Redb Transaction Error: {0}")]
-    RedbTransactionError(#[from] redb::TransactionError),
+        let body = Json(json!({
+            "error": error_message,
+        }));
 
-    #[error("Redb Commit Error: {0}")]
-    RedbCommitError(#[from] redb::CommitError),
-
-    #[error("Redb Table Error: {0}")]
-    RedbTableError(#[from] redb::TableError),
-
-    #[error("Redb Storage Error: {0}")]
-    RedbStorageError(#[from] redb::StorageError),
-
-    #[error("Redb Error: {0}")]
-    RedbError(#[from] redb::Error),
+        (status, body).into_response()
+    }
 }
