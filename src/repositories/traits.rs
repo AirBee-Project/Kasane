@@ -1,2 +1,2 @@
-///onDiskな時空間IDデータベースを抽象化するためのTrait
-pub trait SpatialIdDB {}
+///onDiskな時空間IDデータベースを抽象化
+pub struct SpatialIdDB {}
