@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 #[allow(dead_code)]
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Debug, Deserialize, Serialize, ToSchema, Clone)]
 ///Table内の時空間IDに付与する値の型を指定する
 /// 型の名前はMySQLと同じ命名規則を採用
 pub enum TableDataType {
@@ -125,6 +125,13 @@ pub struct DeleteTableRequest {
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct InfoTableResponse {
+    pub name: String,
+    pub r#type: TableDataType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+/// テーブルの現在の状態（メタデータ）を表すドメインモデル
+pub struct TableInfo {
     pub name: String,
     pub r#type: TableDataType,
 }
