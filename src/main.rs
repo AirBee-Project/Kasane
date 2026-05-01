@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
-use kasane::{AppState, kasane};
-use redb::Database;
+use kasane::{AppState, db_init, kasane};
 
 #[tokio::main]
 async fn main() {
-    let redb = Database::create("default.kasane").unwrap();
+    let redb = db_init::initialize_database("default.kasane");
 
     let app = kasane(AppState {
         redb: Arc::new(redb),

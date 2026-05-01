@@ -1,6 +1,7 @@
 use std::{ops::RangeBounds, sync::Arc};
 
 use kasane_logic::IntoFlexIds;
+use redb::WriteTransaction;
 
 use crate::{
     error::AppError,
@@ -8,9 +9,7 @@ use crate::{
 };
 
 ///onDiskな時空間IDデータベースを抽象化
-pub struct SpatialIdDB {
-    //トランザクションが入る気がする
-}
+pub struct SpatialIdDB {}
 
 impl SpatialIdDB {
     ///Tableが存在している場合はTableの情報を返す
