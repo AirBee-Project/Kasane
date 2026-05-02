@@ -1,10 +1,12 @@
 use redb::{Database, TableDefinition};
 
+use crate::models::table::entity::TableMetadata;
+
 /// KasaneのTable情報を管理するための内部Table
 ///
 /// Key: Tableの名前
 /// Value: Tableの情報をシリアライズしたバイト列
-pub const TABLES: TableDefinition<&str, &[u8]> = TableDefinition::new("table_info");
+pub const TABLES: TableDefinition<&str, TableMetadata> = TableDefinition::new("table_info");
 
 pub fn initialize_database(path: &str) -> Database {
     let database = Database::create(path).unwrap();

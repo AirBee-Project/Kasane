@@ -6,6 +6,6 @@ mod table;
 
 pub fn create_router(app_state: AppState) -> Router {
     Router::new()
-        .nest("/table", table::routes())
+    .nest("/tables", table::routes())
         .with_state(app_state)
 }

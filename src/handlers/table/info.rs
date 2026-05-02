@@ -1,11 +1,17 @@
-use crate::models::table::TableDataType;
-use crate::{error::AppError, models::table::InfoTableResponse};
-use axum::{Json, extract::Path};
+use axum::{
+    Json,
+    extract::{Path, State},
+};
 
-pub async fn info(Path(name): Path<String>) -> Result<Json<InfoTableResponse>, AppError> {
-    let res = InfoTableResponse {
-        name: name.clone(),
-        r#type: TableDataType::Boolean,
-    };
+use crate::{
+    AppState, error::AppError, models::table::InfoTableResponse,
+    services::table::info as table_info_service,
+};
+
+pub async fn info(
+    State(app_state): State<AppState>,
+    Path(name): Path<String>,
+) -> Result<Json<InfoTableResponse>, AppError> {
+    let res = table_info_service::info(&app_state, &name).await?;
     Ok(Json(res))
 }
