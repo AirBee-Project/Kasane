@@ -6,9 +6,7 @@ use axum::{
 };
 
 use crate::{
-    AppState,
-    error::AppError,
-    models::table::CreateTableRequest,
+    AppState, error::AppError, models::table::CreateTableRequest,
     services::table::create as table_create_service,
 };
 
@@ -20,9 +18,9 @@ pub async fn create(
         &app_state,
         &request.name,
         request.r#type.clone(),
+        request.max_zoom_level,
     )
     .await?;
-
     Ok((
         StatusCode::CREATED,
         [(LOCATION, format!("/tables/{}", request.name))],

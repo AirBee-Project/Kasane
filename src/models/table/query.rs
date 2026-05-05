@@ -1,21 +1,29 @@
 use std::fmt::Debug;
 
-use kasane_logic::{Coordinate, FlexId, RangeId, SingleId};
+use kasane_logic::Coordinate;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "type", content = "data")]
-#[allow(dead_code)]
+
 pub enum SpatialId {
-    Single(SingleId),
-    Flex(FlexId),
-    Range(RangeId),
+    SingleId {
+        z: u8,
+        f: i32,
+        x: u32,
+        y: u32,
+    },
+    RangeId {
+        z: u8,
+        f: [i32; 2],
+        x: [u32; 2],
+        y: [u32; 2],
+    },
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
 /// 時空間IDを指定するクエリ
-#[allow(dead_code)]
 pub enum Query {
     Union {
         #[schema(no_recursion)]
@@ -36,13 +44,12 @@ pub enum Query {
         subtract: Box<Self>,
     },
     GeometryQuery(Geometry),
-    TableFilter(TableFilter),
+    // TableFilter(TableFilter),
     SpatialIds(Vec<SpatialId>),
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
 ///Tableを参照して条件を指定する場合
-#[allow(dead_code)]
 pub struct TableFilter {
     pub name: String,
     pub query: TableFilterType,
@@ -50,7 +57,7 @@ pub struct TableFilter {
 
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(tag = "type", content = "condition")]
-#[allow(dead_code)]
+
 pub enum TableFilterType {
     Text(TableFilterText),
     Int(TableFilterInt),
@@ -59,7 +66,7 @@ pub enum TableFilterType {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-#[allow(dead_code)]
+
 pub enum TableFilterText {
     /// 等しい
     Equal(String),
@@ -72,7 +79,7 @@ pub enum TableFilterText {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-#[allow(dead_code)]
+
 pub enum TableFilterInt {
     Equal(i32),
     NotEqual(i32),
@@ -87,7 +94,6 @@ pub enum TableFilterInt {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-#[allow(dead_code)]
 pub enum TableFilterFloat {
     Equal(f32),
     NotEqual(f32),
@@ -99,29 +105,35 @@ pub enum TableFilterFloat {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-#[allow(dead_code)]
+
 pub enum TableFilterBoolean {
     Equal(bool),
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-#[allow(dead_code)]
+pub struct PointCoordinate {
+    pub latitude: f64,
+    pub longitude: f64,
+    pub altitude: f64,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
 pub enum Geometry {
-    Point {
+    Coordinate {
         zoomlevel: u8,
-        coordinate: Coordinate,
+        coordinate: PointCoordinate,
     },
     Line {
         zoomlevel: u8,
-        points: [Coordinate; 2],
+        points: [PointCoordinate; 2],
     },
     Triangle {
         zoomlevel: u8,
-        points: [Coordinate; 3],
+        points: [PointCoordinate; 3],
     },
     Sphere {
         zoomlevel: u8,
-        radius: f64,
-        center: Coordinate,
+        radius_m: f64,
+        center: PointCoordinate,
     },
 }

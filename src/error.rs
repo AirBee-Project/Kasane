@@ -11,6 +11,7 @@ pub enum AppError {
     TableAlreadyExists { name: String },
     StorageError(redb::Error),
     InvalidName { reason: String },
+    LogicError(kasane_logic::Error),
 }
 
 impl fmt::Display for AppError {
@@ -19,17 +20,17 @@ impl fmt::Display for AppError {
             AppError::TableNotFound { name } => {
                 write!(f, "Table '{}' not found", name)
             }
-
             AppError::TableAlreadyExists { name } => {
                 write!(f, "Table '{}' already exists", name)
             }
-
             AppError::StorageError(message) => {
                 write!(f, "{}", message)
             }
-
             AppError::InvalidName { reason } => {
                 write!(f, "Invalid name: {}", reason)
+            }
+            AppError::LogicError(error) => {
+                write!(f, "Logic Error: {}", error)
             }
         }
     }
@@ -43,18 +44,18 @@ impl IntoResponse for AppError {
             AppError::TableNotFound { name } => {
                 (StatusCode::NOT_FOUND, format!("Table '{}' not found", name))
             }
-
             AppError::TableAlreadyExists { name } => (
                 StatusCode::CONFLICT,
                 format!("Table '{}' already exists", name),
             ),
-
             AppError::StorageError(message) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, message.to_string())
             }
-
             AppError::InvalidName { reason } => {
                 (StatusCode::BAD_REQUEST, format!("Invalid name: {}", reason))
+            }
+            AppError::LogicError(error) => {
+                (StatusCode::BAD_REQUEST, format!("Logic Error: {}", error))
             }
         };
 
@@ -117,5 +118,11 @@ impl From<redb::CompactionError> for AppError {
 impl From<redb::SetDurabilityError> for AppError {
     fn from(error: redb::SetDurabilityError) -> Self {
         AppError::StorageError(error.into())
+    }
+}
+
+impl From<kasane_logic::Error> for AppError {
+    fn from(value: kasane_logic::Error) -> Self {
+        AppError::LogicError(value)
     }
 }

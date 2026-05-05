@@ -1,4 +1,4 @@
-use crate::{AppState, models::table::InsertTableRequest};
+use crate::{AppState, models::table::InsertValueRequest};
 
 use axum::{
     Json,
@@ -8,6 +8,6 @@ use axum::{
 pub async fn insert(
     State(app_state): State<AppState>,
     Path(name): Path<String>,
-    Json(payload): Json<InsertTableRequest>,
+    Json(payload): Json<InsertValueRequest>,
 ) {
 }
