@@ -1,12 +1,12 @@
 use crate::{
-    AppState, error::AppError, models::table::entity::TableMetadata,
-    repositories::write::SpatialDbWrite, services::helpers::name_valid::name_valid,
+    AppState, error::AppError, models::table::TableDataType, repositories::write::SpatialDbWrite,
+    services::helpers::name_valid::name_valid,
 };
 
 pub async fn create(
     app_state: &AppState,
     name: &str,
-    meta_data: TableMetadata,
+    data_type: TableDataType,
 ) -> Result<(), AppError> {
     let write_txn = app_state.redb.begin_write()?;
     let db = SpatialDbWrite::new(write_txn);
@@ -21,7 +21,7 @@ pub async fn create(
     //Table名のバリデーション
     let _ = name_valid(name)?;
 
-    db.table_create(name, meta_data)?;
+    db.table_create(name, data_type)?;
     db.commit()?;
-    return Ok(());
+    Ok(())
 }

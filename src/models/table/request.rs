@@ -93,9 +93,9 @@ pub enum Expression {
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, ToSchema)]
 ///時空間IDの範囲を[Query]で指定して値を挿入する
-pub struct InsertTableRequest<V> {
+pub struct InsertTableRequest {
     pub name: String,
-    pub value: V,
+    pub value: serde_json::Value,
     pub query: Query,
 }
 

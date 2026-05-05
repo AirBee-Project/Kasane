@@ -8,7 +8,7 @@ use axum::{
 use crate::{
     AppState,
     error::AppError,
-    models::table::{CreateTableRequest, entity::TableMetadata},
+    models::table::CreateTableRequest,
     services::table::create as table_create_service,
 };
 
@@ -19,9 +19,7 @@ pub async fn create(
     table_create_service::create(
         &app_state,
         &request.name,
-        TableMetadata {
-            r#type: request.r#type,
-        },
+        request.r#type.clone(),
     )
     .await?;
 
