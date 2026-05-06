@@ -10,6 +10,17 @@ use crate::{
     services::table::table_create as table_create_service,
 };
 
+#[utoipa::path(
+    post,
+    path = "/tables",
+    request_body = CreateTableRequest,
+    responses(
+        (status = 201, description = "Table created"),
+        (status = 400, description = "Invalid request"),
+        (status = 409, description = "Table already exists")
+    ),
+    tag = "tables"
+)]
 pub async fn create(
     State(app_state): State<AppState>,
     Json(request): Json<CreateTableRequest>,

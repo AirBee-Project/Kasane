@@ -1,8 +1,9 @@
 use redb::{TypeName, Value};
+use serde::Deserialize;
 
 use crate::models::table::TableDataType;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
 pub struct TableMetadata {
     pub rank: u64,
     pub r#type: TableDataType,

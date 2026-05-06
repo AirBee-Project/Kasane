@@ -8,6 +8,18 @@ use crate::{
     services::table::table_info as table_info_service,
 };
 
+#[utoipa::path(
+    get,
+    path = "/tables/{name}",
+    params(
+        ("name" = String, Path, description = "Table name")
+    ),
+    responses(
+        (status = 200, description = "Table information", body = InfoTableResponse),
+        (status = 404, description = "Table not found")
+    ),
+    tag = "tables"
+)]
 pub async fn info(
     State(app_state): State<AppState>,
     Path(name): Path<String>,

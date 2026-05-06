@@ -4,8 +4,8 @@ use utoipa::ToSchema;
 
 #[repr(u8)]
 #[derive(Debug, Deserialize, Serialize, ToSchema, Clone, PartialEq, Eq, Hash, Copy)]
-///Table内の時空間IDに付与する値の型を指定する
-/// 型の名前はMySQLと同じ命名規則を採用
+///Table内の時空間IDに付与する値の型。
+/// 型の名前はMySQLと同じ命名規則を採用。
 pub enum TableDataType {
     ///Rustの[String]に対応
     Text = 0,

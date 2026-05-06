@@ -8,6 +8,7 @@ pub mod db_init;
 pub mod error;
 pub mod handlers;
 pub mod models;
+pub mod openapi;
 pub mod repositories;
 pub mod routes;
 pub mod services;
