@@ -1,12 +1,12 @@
-use redb::{TypeName, Value};
+use redb::Value;
 use serde::Deserialize;
 
-use crate::models::table::TableDataType;
+use super::TableDataType;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
 pub struct TableMetadata {
-    pub rank: u64,
-    pub r#type: TableDataType,
+    pub id: u64,
+    pub data_type: TableDataType,
     pub max_zoom_level: u8,
 }
 
@@ -23,13 +23,13 @@ impl Value for TableMetadata {
     where
         Self: 'a,
     {
-        let rank = u64::from_le_bytes(data[0..8].try_into().expect("invalid u64 bytes"));
-        let r#type = TableDataType::from_bytes(&data[8..9]);
+        let id = u64::from_le_bytes(data[0..8].try_into().expect("invalid u64 bytes"));
+        let data_type = TableDataType::from_bytes(&data[8..9]);
         let max_zoom_level = data[9..10].first().unwrap().clone();
 
         TableMetadata {
-            rank,
-            r#type,
+            id,
+            data_type,
             max_zoom_level,
         }
     }
@@ -40,14 +40,14 @@ impl Value for TableMetadata {
     {
         let mut bytes = [0u8; 10];
 
-        bytes[0..8].copy_from_slice(&value.rank.to_le_bytes());
-        bytes[8] = value.r#type.clone() as u8;
+        bytes[0..8].copy_from_slice(&value.id.to_le_bytes());
+        bytes[8] = value.data_type.clone() as u8;
         bytes[9] = value.max_zoom_level;
 
         bytes
     }
 
-    fn type_name() -> TypeName {
-        TypeName::new("my_crate::TableMetadata")
+    fn type_name() -> redb::TypeName {
+        redb::TypeName::new("my_crate::TableMetadata")
     }
 }

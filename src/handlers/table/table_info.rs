@@ -4,7 +4,7 @@ use axum::{
 };
 
 use crate::{
-    AppState, error::AppError, models::table::InfoTableResponse,
+    AppState, error::AppError, models::table::TableInfoResponse,
     services::table::table_info as table_info_service,
 };
 
@@ -15,7 +15,7 @@ use crate::{
         ("name" = String, Path, description = "Table name")
     ),
     responses(
-        (status = 200, description = "Table information", body = InfoTableResponse),
+        (status = 200, description = "Table information", body = TableInfoResponse),
         (status = 404, description = "Table not found")
     ),
     tag = "tables"
@@ -23,7 +23,12 @@ use crate::{
 pub async fn info(
     State(app_state): State<AppState>,
     Path(name): Path<String>,
-) -> Result<Json<InfoTableResponse>, AppError> {
-    let res = table_info_service::table_info(&app_state, &name).await?;
+) -> Result<Json<TableInfoResponse>, AppError> {
+    let table = table_info_service::table_info(&app_state, &name).await?;
+    let res = TableInfoResponse {
+        name: table.name,
+        data_type: table.data_type,
+        max_zoom_level: table.max_zoom_level,
+    };
     Ok(Json(res))
 }

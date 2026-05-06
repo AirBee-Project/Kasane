@@ -13,5 +13,5 @@ pub fn routes() -> Router<AppState> {
             "/{name}",
             delete(crate::handlers::table::table_remove::remove),
         )
-        .route("/", post(crate::handlers::table::table_create::create))
+        .route("/", post(crate::handlers::table::table_create::create).get(crate::handlers::table::table_list::list))
 }

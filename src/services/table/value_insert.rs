@@ -1,5 +1,5 @@
 use crate::{
-    AppState, error::AppError, models::table::Query, repositories::write::SpatialDbWrite,
+    AppState, error::AppError, models::query::Query, repositories::write::SpatialDbWrite,
     services::helpers::value::interpret_value,
 };
 
@@ -13,7 +13,7 @@ pub async fn insert(
     let db = SpatialDbWrite::new(write_txn);
 
     //Tableが存在することを検証
-    let table_meta = match db.table_info(table_name)? {
+    let table = match db.table_info(table_name)? {
         Some(v) => v,
         None => {
             return Err(AppError::TableNotFound {
@@ -23,12 +23,12 @@ pub async fn insert(
     };
 
     //Valueの解釈
-    let value = interpret_value(table_meta.r#type, value)?;
+    let value = interpret_value(table.data_type, value)?;
 
     //クエリの解釈と取得範囲の決定
-    let ids = query.process(table_meta.max_zoom_level)?;
+    let ids = query.process(table.max_zoom_level)?;
 
     //データベースの操作と反映
-    db.spatial_insert(table_meta.rank, ids, &value)?;
+    db.value_insert(table.id, ids, &value)?;
     db.commit()
 }

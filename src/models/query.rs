@@ -1,12 +1,10 @@
 use std::fmt::Debug;
 
-use kasane_logic::Coordinate;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "type", content = "data")]
-
 pub enum SpatialId {
     SingleId {
         z: u8,
@@ -57,7 +55,6 @@ pub struct TableFilter {
 
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(tag = "type", content = "condition")]
-
 pub enum TableFilterType {
     Text(TableFilterText),
     Int(TableFilterInt),
@@ -66,7 +63,6 @@ pub enum TableFilterType {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-
 pub enum TableFilterText {
     /// 等しい
     Equal(String),
@@ -79,7 +75,6 @@ pub enum TableFilterText {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-
 pub enum TableFilterInt {
     Equal(i32),
     NotEqual(i32),
@@ -105,7 +100,6 @@ pub enum TableFilterFloat {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-
 pub enum TableFilterBoolean {
     Equal(bool),
 }

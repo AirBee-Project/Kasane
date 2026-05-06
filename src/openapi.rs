@@ -1,16 +1,21 @@
 use utoipa::OpenApi;
 
-use crate::models::table::response::GetValueResponse;
 use crate::models::table::{
-    CreateTableRequest, Geometry, InfoTableResponse, InsertValueRequest, PointCoordinate, Query,
-    RemoveValueRequest, SpatialId, TableDataType, TableFilter, TableFilterBoolean,
+    CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse,
+};
+use crate::models::query::{
+    Geometry, PointCoordinate, Query, SpatialId, TableFilter, TableFilterBoolean, 
     TableFilterFloat, TableFilterInt, TableFilterText, TableFilterType,
+};
+use crate::models::value::{
+    GetValueResponse, InsertValueRequest, RemoveValueRequest,
 };
 
 #[derive(OpenApi)]
 #[openapi(
     paths(
         crate::handlers::table::table_create::create,
+        crate::handlers::table::table_list::list,
         crate::handlers::table::table_info::info,
         crate::handlers::table::table_remove::remove,
     ),
@@ -18,7 +23,8 @@ use crate::models::table::{
         CreateTableRequest,
         Geometry,
         GetValueResponse,
-        InfoTableResponse,
+        TableInfoResponse,
+        TableListResponse,
         InsertValueRequest,
         PointCoordinate,
         Query,

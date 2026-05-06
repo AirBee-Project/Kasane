@@ -28,7 +28,7 @@ pub async fn create(
     table_create_service::create(
         &app_state,
         &request.name,
-        request.r#type.clone(),
+        request.data_type.clone(),
         request.max_zoom_level,
     )
     .await?;

@@ -2,7 +2,7 @@ use kasane_logic::{
     Coordinate, CoverSingleIds, Line, RangeId, SingleId, SpatialIdSet, Sphere, Triangle,
 };
 
-use crate::{error::AppError, models::table::Query};
+use crate::{error::AppError, models::query::Query};
 
 impl Query {
     ///[Query]を実行して時空間IDの集合に変換する
@@ -18,7 +18,7 @@ impl Query {
                 Ok(base.process(max_zoom_level)? - subtract.process(max_zoom_level)?)
             }
             Query::GeometryQuery(geometry) => match geometry {
-                crate::models::table::Geometry::Coordinate {
+                crate::models::query::Geometry::Coordinate {
                     zoomlevel,
                     coordinate,
                 } => {
@@ -33,7 +33,7 @@ impl Query {
                     );
                     Ok(result)
                 }
-                crate::models::table::Geometry::Line { zoomlevel, points } => {
+                crate::models::query::Geometry::Line { zoomlevel, points } => {
                     let mut result = SpatialIdSet::new();
                     let start = Coordinate::new(
                         points[0].latitude,
@@ -50,7 +50,7 @@ impl Query {
                     }
                     Ok(result)
                 }
-                crate::models::table::Geometry::Triangle { zoomlevel, points } => {
+                crate::models::query::Geometry::Triangle { zoomlevel, points } => {
                     let mut result = SpatialIdSet::new();
                     let mut checked_coords = [Coordinate::default(); 3];
                     for (i, raw) in points.into_iter().enumerate() {
@@ -62,7 +62,7 @@ impl Query {
                     }
                     Ok(result)
                 }
-                crate::models::table::Geometry::Sphere {
+                crate::models::query::Geometry::Sphere {
                     zoomlevel,
                     radius_m,
                     center,
@@ -82,10 +82,10 @@ impl Query {
                 let mut result = SpatialIdSet::new();
                 for spatial_id in spatial_ids {
                     match spatial_id {
-                        crate::models::table::SpatialId::SingleId { z, f, x, y } => {
+                        crate::models::query::SpatialId::SingleId { z, f, x, y } => {
                             result.insert(SingleId::new(*z, *f, *x, *y)?);
                         }
-                        crate::models::table::SpatialId::RangeId { z, f, x, y } => {
+                        crate::models::query::SpatialId::RangeId { z, f, x, y } => {
                             result.insert(RangeId::new(*z, *f, *x, *y)?);
                         }
                     }
