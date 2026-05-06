@@ -1,15 +1,11 @@
 use redb::ReadableDatabase;
 
 use crate::{
-    AppState,
-    error::AppError,
-    models::query::Query,
-    models::value::GetValueResponse,
-    repositories::read::SpatialDbRead,
-    services::helpers::value::restore_value,
+    AppState, error::AppError, models::query::Query, models::value::GetValueResponse,
+    repositories::read::SpatialDbRead, services::helpers::value::restore_value,
 };
 
-pub async fn get(
+pub async fn value_get(
     app_state: &AppState,
     table_name: &str,
     query: Query,

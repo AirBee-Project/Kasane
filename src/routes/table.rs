@@ -5,7 +5,11 @@ use axum::routing::{delete, get, post};
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route(
-            "/{name}/insert",
+            "/{name}/values/query",
+            post(crate::handlers::table::value_get::value_get),
+        )
+        .route(
+            "/{name}/values",
             post(crate::handlers::table::value_insert::value_insert),
         )
         .route(

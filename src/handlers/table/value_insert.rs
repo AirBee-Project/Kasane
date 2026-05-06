@@ -10,7 +10,7 @@ use crate::{error::AppError, services::table::value_insert as value_insert_servi
 
 #[utoipa::path(
     post,
-    path = "/tables/{name}/insert",
+    path = "/tables/{name}/values",
     params(
         ("name" = String, Path, description = "Table name")
     ),
