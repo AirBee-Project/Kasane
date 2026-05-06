@@ -1,4 +1,4 @@
-use kasane_logic::{FlexId, SpatialIdSet};
+use kasane_logic::{FlexId, SingleId, SpatialIdSet};
 use redb::ReadTransaction;
 
 use crate::{db_init::TABLES, error::AppError, models::table::entity::TableMetadata};
@@ -26,9 +26,9 @@ impl SpatialDbRead {
     //Todo
     pub fn spatial_get(
         &self,
-        table_name: &str,
+        table_rank: u64,
         ids: SpatialIdSet,
-    ) -> Result<impl Iterator<Item = (FlexId, &[u8])>, AppError> {
-        Ok(std::iter::empty::<(FlexId, &'static [u8])>())
+    ) -> Result<impl Iterator<Item = (SingleId, &[u8])>, AppError> {
+        Ok(std::iter::empty::<(SingleId, &'static [u8])>())
     }
 }

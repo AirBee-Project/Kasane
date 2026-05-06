@@ -23,6 +23,9 @@ pub enum AppError {
         actual: String,
         expected: String,
     },
+    InvalidStoredValue {
+        reason: String,
+    },
     StorageError(redb::Error),
     InvalidName {
         reason: String,
@@ -62,6 +65,9 @@ impl fmt::Display for AppError {
                     expected, actual
                 )
             }
+            AppError::InvalidStoredValue { reason } => {
+                write!(f, "Invalid stored value: {}", reason)
+            }
         }
     }
 }
@@ -100,6 +106,10 @@ impl IntoResponse for AppError {
                     "Numeric value out of range: expected {}, but got {}",
                     expected, actual
                 ),
+            ),
+            AppError::InvalidStoredValue { reason } => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Invalid stored value: {}", reason),
             ),
         };
 

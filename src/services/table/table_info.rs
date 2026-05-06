@@ -5,16 +5,19 @@ use crate::{
 };
 
 /// Services層からTableに関する情報を返す
-pub async fn table_info(app_state: &AppState, name: &str) -> Result<InfoTableResponse, AppError> {
+pub async fn table_info(
+    app_state: &AppState,
+    table_name: &str,
+) -> Result<InfoTableResponse, AppError> {
     let read_txn = app_state.redb.begin_read()?;
     let db = SpatialDbRead::new(read_txn);
 
-    let table_metadata = match db.table_info(name) {
+    let table_metadata = match db.table_info(table_name) {
         Ok(result) => match result {
             Some(v) => v,
             None => {
                 return Err(AppError::TableNotFound {
-                    name: name.to_string(),
+                    name: table_name.to_string(),
                 });
             }
         },
@@ -24,7 +27,7 @@ pub async fn table_info(app_state: &AppState, name: &str) -> Result<InfoTableRes
     };
 
     Ok(InfoTableResponse {
-        name: name.to_string(),
+        name: table_name.to_string(),
         r#type: table_metadata.r#type,
         max_zoom_level: table_metadata.max_zoom_level,
     })

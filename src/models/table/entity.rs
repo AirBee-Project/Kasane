@@ -2,7 +2,7 @@ use redb::{TypeName, Value};
 
 use crate::models::table::TableDataType;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TableMetadata {
     pub rank: u64,
     pub r#type: TableDataType,

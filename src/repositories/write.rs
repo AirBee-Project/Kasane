@@ -68,10 +68,7 @@ impl SpatialDbWrite {
         ids: SpatialIdSet,
         value: &[u8],
     ) -> Result<(), AppError> {
-        for single_id in ids {
-            //まず自分の親が値を持つかを調べる
-            for parent in single_id.spatial_parents() {}
-        }
+        Ok(())
     }
 
     ///次のTableに対して割り当てるRankを返す
