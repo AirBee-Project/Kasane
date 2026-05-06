@@ -3,20 +3,12 @@ use utoipa::ToSchema;
 
 use super::query::Query;
 
-#[allow(dead_code)]
 #[derive(Debug, Deserialize, ToSchema)]
 ///時空間IDと値が対応するTableを作成する
 pub struct CreateTableRequest {
     pub name: String,
     pub r#type: super::TableDataType,
     pub max_zoom_level: u8,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, ToSchema)]
-///Tableを削除する
-pub struct DropTableRequest {
-    pub name: String,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]

@@ -1,5 +1,5 @@
-pub mod create;
-pub mod get;
-pub mod info;
-pub mod insert;
-pub mod remove;
+pub mod table_create;
+pub mod table_info;
+pub mod table_remove;
+pub mod value_get;
+pub mod value_insert;

@@ -1,9 +1,10 @@
+use axum::Json;
 use redb::{TypeName, Value};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 #[repr(u8)]
-#[derive(Debug, Deserialize, Serialize, ToSchema, Clone)]
+#[derive(Debug, Deserialize, Serialize, ToSchema, Clone, PartialEq, Eq)]
 ///Table内の時空間IDに付与する値の型を指定する
 /// 型の名前はMySQLと同じ命名規則を採用
 pub enum TableDataType {
@@ -56,4 +57,26 @@ impl Value for TableDataType {
     fn type_name() -> redb::TypeName {
         TypeName::new("my_crate::TableDataType")
     }
+}
+
+impl From<TableDataType> for JsonValueType {
+    fn from(value: TableDataType) -> Self {
+        match value {
+            TableDataType::Text => JsonValueType::String,
+            TableDataType::Int => JsonValueType::Number,
+            TableDataType::Float => JsonValueType::Number,
+            TableDataType::Boolean => JsonValueType::Bool,
+        }
+    }
+}
+
+#[derive(Debug)]
+///Jsonの値の取りうるパターン
+pub enum JsonValueType {
+    String,
+    Number,
+    Bool,
+    Array,
+    Object,
+    Null,
 }

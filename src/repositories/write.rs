@@ -1,4 +1,4 @@
-use kasane_logic::{FlexId, SingleId};
+use kasane_logic::{FlexId, SingleId, SpatialIdSet};
 use redb::{ReadableTable, WriteTransaction};
 
 use crate::{
@@ -47,6 +47,7 @@ impl SpatialDbWrite {
     }
 
     /// Tableを削除する
+    /// Tableの存在確認は行わない
     pub fn table_remove(&self, name: &str) -> Result<(), AppError> {
         let mut redb_tables = self.write_txn.open_table(TABLES)?;
         let removed = redb_tables.remove(name)?;
@@ -61,7 +62,12 @@ impl SpatialDbWrite {
     /// 時空間IDに対して値を割り当てる
     ///
     /// そこに値がある場合は上書きされる
-    pub fn spatial_insert(&self, table_rank: u64, ids: &[SingleId], value: &[u8]) {
+    pub fn spatial_insert(
+        &self,
+        table_rank: u64,
+        ids: SpatialIdSet,
+        value: &[u8],
+    ) -> Result<(), AppError> {
         for single_id in ids {
             //まず自分の親が値を持つかを調べる
             for parent in single_id.spatial_parents() {}

@@ -5,12 +5,28 @@ use axum::{
 };
 use serde_json::json;
 use std::fmt;
+
+use crate::models::table::data_type::JsonValueType;
 #[derive(Debug)]
 pub enum AppError {
-    TableNotFound { name: String },
-    TableAlreadyExists { name: String },
+    TableNotFound {
+        name: String,
+    },
+    TableAlreadyExists {
+        name: String,
+    },
+    ValueTypeMismatch {
+        actual: JsonValueType,
+        expected: JsonValueType,
+    },
+    NumericValueOutOfRange {
+        actual: String,
+        expected: String,
+    },
     StorageError(redb::Error),
-    InvalidName { reason: String },
+    InvalidName {
+        reason: String,
+    },
     LogicError(kasane_logic::Error),
 }
 
@@ -31,6 +47,20 @@ impl fmt::Display for AppError {
             }
             AppError::LogicError(error) => {
                 write!(f, "Logic Error: {}", error)
+            }
+            AppError::ValueTypeMismatch { actual, expected } => {
+                write!(
+                    f,
+                    "Value type mismatch: expected {:?}, but got {:?}",
+                    expected, actual
+                )
+            }
+            AppError::NumericValueOutOfRange { actual, expected } => {
+                write!(
+                    f,
+                    "Numeric value out of range: expected {}, but got {}",
+                    expected, actual
+                )
             }
         }
     }
@@ -57,6 +87,20 @@ impl IntoResponse for AppError {
             AppError::LogicError(error) => {
                 (StatusCode::BAD_REQUEST, format!("Logic Error: {}", error))
             }
+            AppError::ValueTypeMismatch { actual, expected } => (
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "Value type mismatch: expected {:?}, but got {:?}",
+                    expected, actual
+                ),
+            ),
+            AppError::NumericValueOutOfRange { actual, expected } => (
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "Numeric value out of range: expected {}, but got {}",
+                    expected, actual
+                ),
+            ),
         };
 
         let body = Json(json!({

@@ -7,7 +7,7 @@ use axum::{
 
 use crate::{
     AppState, error::AppError, models::table::CreateTableRequest,
-    services::table::create as table_create_service,
+    services::table::table_create as table_create_service,
 };
 
 pub async fn create(

@@ -6,9 +6,12 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route(
             "/{name}/insert",
-            post(crate::handlers::table::insert::insert),
+            post(crate::handlers::table::value_insert::value_insert),
         )
-        .route("/{name}", get(crate::handlers::table::info::info))
-        .route("/{name}", delete(crate::handlers::table::remove::remove))
-        .route("/", post(crate::handlers::table::create::create))
+        .route("/{name}", get(crate::handlers::table::table_info::info))
+        .route(
+            "/{name}",
+            delete(crate::handlers::table::table_remove::remove),
+        )
+        .route("/", post(crate::handlers::table::table_create::create))
 }

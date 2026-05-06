@@ -7,4 +7,5 @@ use super::TableDataType;
 pub struct InfoTableResponse {
     pub name: String,
     pub r#type: TableDataType,
+    pub max_zoom_level: u8,
 }

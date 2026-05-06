@@ -4,7 +4,8 @@ use crate::{
     AppState, error::AppError, models::table::InfoTableResponse, repositories::read::SpatialDbRead,
 };
 
-pub async fn info(app_state: &AppState, name: &str) -> Result<InfoTableResponse, AppError> {
+/// Services層からTableに関する情報を返す
+pub async fn table_info(app_state: &AppState, name: &str) -> Result<InfoTableResponse, AppError> {
     let read_txn = app_state.redb.begin_read()?;
     let db = SpatialDbRead::new(read_txn);
 
@@ -25,5 +26,6 @@ pub async fn info(app_state: &AppState, name: &str) -> Result<InfoTableResponse,
     Ok(InfoTableResponse {
         name: name.to_string(),
         r#type: table_metadata.r#type,
+        max_zoom_level: table_metadata.max_zoom_level,
     })
 }

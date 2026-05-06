@@ -1,8 +1,6 @@
-use kasane_logic::spatial_id::collection::flex_tree::table;
-
 use crate::{
     AppState, error::AppError, models::table::Query, repositories::write::SpatialDbWrite,
-    services::helpers::name_valid::name_valid,
+    services::helpers::value::interpret_value,
 };
 
 pub async fn insert(
@@ -24,5 +22,13 @@ pub async fn insert(
         }
     };
 
-    todo!()
+    //Valueの解釈
+    let value = interpret_value(table_meta.r#type, value)?;
+
+    //クエリの解釈と取得範囲の決定
+    let ids = query.process(table_meta.max_zoom_level)?;
+
+    //データベースの操作と反映
+    db.spatial_insert(table_meta.rank, ids, &value)?;
+    db.commit()
 }
