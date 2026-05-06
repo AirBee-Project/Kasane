@@ -3,7 +3,7 @@ use crate::{
     services::helpers::value::interpret_value,
 };
 
-pub async fn insert(
+pub async fn value_insert(
     app_state: &AppState,
     table_name: &str,
     query: Query,

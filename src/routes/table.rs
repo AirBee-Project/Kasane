@@ -8,10 +8,17 @@ pub fn routes() -> Router<AppState> {
             "/{name}/insert",
             post(crate::handlers::table::value_insert::value_insert),
         )
-        .route("/{name}", get(crate::handlers::table::table_info::info))
         .route(
             "/{name}",
-            delete(crate::handlers::table::table_remove::remove),
+            get(crate::handlers::table::table_info::table_info),
         )
-        .route("/", post(crate::handlers::table::table_create::create).get(crate::handlers::table::table_list::list))
+        .route(
+            "/{name}",
+            delete(crate::handlers::table::table_remove::table_remove),
+        )
+        .route(
+            "/",
+            post(crate::handlers::table::table_create::table_create)
+                .get(crate::handlers::table::table_list::table_list),
+        )
 }

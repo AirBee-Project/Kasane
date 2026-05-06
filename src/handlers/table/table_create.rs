@@ -21,7 +21,7 @@ use crate::{
     ),
     tag = "tables"
 )]
-pub async fn create(
+pub async fn table_create(
     State(app_state): State<AppState>,
     Json(request): Json<CreateTableRequest>,
 ) -> Result<Response, AppError> {

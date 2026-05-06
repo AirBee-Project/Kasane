@@ -20,7 +20,7 @@ use crate::{
     ),
     tag = "tables"
 )]
-pub async fn info(
+pub async fn table_info(
     State(app_state): State<AppState>,
     Path(name): Path<String>,
 ) -> Result<Json<TableInfoResponse>, AppError> {

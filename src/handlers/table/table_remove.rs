@@ -17,7 +17,7 @@ use crate::{AppState, error::AppError, services::table::table_remove as table_re
     ),
     tag = "tables"
 )]
-pub async fn remove(
+pub async fn table_remove(
     State(app_state): State<AppState>,
     Path(name): Path<String>,
 ) -> Result<StatusCode, AppError> {

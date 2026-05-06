@@ -15,7 +15,9 @@ use crate::{
     ),
     tag = "tables"
 )]
-pub async fn list(State(app_state): State<AppState>) -> Result<Json<TableListResponse>, AppError> {
+pub async fn table_list(
+    State(app_state): State<AppState>,
+) -> Result<Json<TableListResponse>, AppError> {
     let tables = table_list_service::table_list(&app_state).await?;
     let response = TableListResponse(
         tables
