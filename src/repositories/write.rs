@@ -1,4 +1,4 @@
-use kasane_logic::SpatialIdSet;
+use kasane_logic::{IntoSingleIds, SpatialIdSet};
 use redb::{ReadableTable, WriteTransaction};
 
 use crate::{
@@ -49,7 +49,7 @@ impl SpatialDbWrite {
         };
         let mut redb_tables = self.write_txn.open_table(TABLES)?;
         let _ = redb_tables.insert(name, meta)?;
-        
+
         Ok(Table {
             id,
             name: name.to_string(),
@@ -75,10 +75,14 @@ impl SpatialDbWrite {
     /// そこに値がある場合は上書きされる
     pub fn value_insert(
         &self,
-        _table_id: u64,
-        _ids: SpatialIdSet,
-        _value: &[u8],
+        table_id: u64,
+        ids: SpatialIdSet,
+        value: &[u8],
     ) -> Result<(), AppError> {
+        for ele in ids.into_single_ids() {
+            println!("{},", ele,)
+        }
+        println!("Value Insert Request");
         Ok(())
     }
 

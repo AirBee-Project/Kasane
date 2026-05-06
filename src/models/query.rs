@@ -7,12 +7,14 @@ use utoipa::ToSchema;
 #[serde(tag = "type", content = "data")]
 pub enum SpatialId {
     SingleId {
+        #[schema(example = 25, maximum = 30)]
         z: u8,
         f: i32,
         x: u32,
         y: u32,
     },
     RangeId {
+        #[schema(example = 25, maximum = 30)]
         z: u8,
         f: [i32; 2],
         x: [u32; 2],
