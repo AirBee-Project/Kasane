@@ -12,5 +12,9 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 utoipa = { version = "5.0", features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "9", features = ["axum", "vendored"] }
-tower = { version = "0.5.3" }
+tower = { version = "0.5.3", features = ["util"] }
 redb = "4.1.0"
+
+[dev-dependencies]
+http-body-util = "0.1.3"
+tempfile = "3.27.0"
