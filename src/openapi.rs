@@ -4,48 +4,58 @@ use crate::models::query::{
     Geometry, PointCoordinate, Query, SpatialId, TableFilter, TableFilterBoolean, TableFilterFloat,
     TableFilterInt, TableFilterText, TableFilterType,
 };
-use crate::models::table::{
-    CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse,
-};
 use crate::models::table::value::{
     GetValueRequest, GetValueResponse, InsertValueRequest, RemoveValueRequest,
+};
+use crate::models::table::{
+    CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse,
 };
 
 #[derive(OpenApi)]
 #[openapi(
     paths(
-        crate::handlers::table::table_create::table_create,
+        // GET  /layers
         crate::handlers::table::table_list::table_list,
+        // POST /layers
+        crate::handlers::table::table_create::table_create,
+        // GET  /layers/{name}
         crate::handlers::table::table_info::table_info,
+        // DELETE /layers/{name}
         crate::handlers::table::table_remove::table_remove,
+        // PUT    /layers/{name}/data
         crate::handlers::table::value::insert::value_insert,
+        // PATCH  /layers/{name}/data
+        crate::handlers::table::value::upsert::value_upsert,
+        // DELETE /layers/{name}/data
+        crate::handlers::table::value::remove::value_remove,
+        // POST   /layers/{name}/data/search
         crate::handlers::table::value::get::value_get,
-        crate::handlers::table::value::remove::value_remove
-
     ),
     components(schemas(
+        // Layer
         CreateTableRequest,
-        Geometry,
-        GetValueRequest,
-        GetValueResponse,
+        TableDataType,
         TableInfoResponse,
         TableListResponse,
+        // Data
+        GetValueRequest,
+        GetValueResponse,
         InsertValueRequest,
-        PointCoordinate,
-        Query,
         RemoveValueRequest,
+        // Query
+        Query,
         SpatialId,
-        TableDataType,
+        Geometry,
+        PointCoordinate,
         TableFilter,
-        TableFilterBoolean,
-        TableFilterFloat,
-        TableFilterInt,
-        TableFilterText,
         TableFilterType,
-        RemoveValueRequest
+        TableFilterText,
+        TableFilterInt,
+        TableFilterFloat,
+        TableFilterBoolean,
     )),
     tags(
-        (name = "tables", description = "Table operations")
+        (name = "layers", description = "Layer operations")
     )
 )]
 pub struct ApiDoc;

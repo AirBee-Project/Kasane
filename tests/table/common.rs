@@ -1,4 +1,4 @@
-use axum::{
+﻿use axum::{
     body::Body,
     http::{Request, StatusCode},
     Router,
@@ -11,7 +11,7 @@ use tower::ServiceExt;
 
 pub struct TestApp {
     pub app: Router,
-    // temp_fileを保持しておくことで、テスト終了時までDBファイルを維持する
+    // temp_fileを保持しておくことで、テスト終亁E��までDBファイルを維持すめE
     _temp_file: NamedTempFile,
 }
 
@@ -30,7 +30,7 @@ impl TestApp {
         }
     }
 
-    /// テスト用にテーブルを初期作成するヘルパーメソッド
+    /// チE��ト用にチE�Eブルを�E期作�Eするヘルパ�EメソチE��
     pub async fn create_table(&self, name: &str, data_type: &str, max_zoom_level: u8) {
         let create_body = serde_json::json!({
             "name": name,
@@ -40,7 +40,7 @@ impl TestApp {
 
         let req = Request::builder()
             .method("POST")
-            .uri("/tables")
+            .uri("/layers")
             .header("Content-Type", "application/json")
             .body(Body::from(serde_json::to_string(&create_body).unwrap()))
             .unwrap();
@@ -49,3 +49,4 @@ impl TestApp {
         assert_eq!(response.status(), StatusCode::CREATED);
     }
 }
+

@@ -9,11 +9,11 @@ use crate::{
 
 #[utoipa::path(
     get,
-    path = "/tables",
+    path = "/layers",
     responses(
         (status = 200, description = "List of all tables", body = TableListResponse)
     ),
-    tag = "tables"
+    tag = "layers"
 )]
 pub async fn table_list(
     State(app_state): State<AppState>,

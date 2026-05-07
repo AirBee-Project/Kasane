@@ -9,14 +9,14 @@ use crate::{error::AppError, services::table::value::get as value_get_service};
 
 #[utoipa::path(
     post,
-    path = "/tables/{name}/values/search",
+    path = "/layers/{name}/data/search",
     params(
-        ("name" = String, Path, description = "Table name")
+        ("name" = String, Path, description = "Layer name")
     ),
     responses(
-        (status = 404, description = "Table not found")
+        (status = 404, description = "Layer not found")
     ),
-    tag = "tables"
+    tag = "layers"
 )]
 pub async fn value_get(
     State(app_state): State<AppState>,

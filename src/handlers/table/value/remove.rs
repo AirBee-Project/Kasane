@@ -10,15 +10,15 @@ use axum::{
 
 #[utoipa::path(
     delete,
-    path = "/tables/{name}/values",
+    path = "/layers/{name}/data",
     params(
-        ("name" = String, Path, description = "Table name")
+        ("name" = String, Path, description = "Layer name")
     ),
     responses(
         (status = 204, description = "Value Removed"),
-        (status = 404, description = "Table not found")
+        (status = 404, description = "Layer not found")
     ),
-    tag = "tables"
+    tag = "layers"
 )]
 pub async fn value_remove(
     State(app_state): State<AppState>,

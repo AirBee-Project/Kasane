@@ -1,5 +1,5 @@
 mod table;
-mod value;
+mod data;
 
 use crate::AppState;
 use axum::Router;
@@ -7,5 +7,5 @@ use axum::Router;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .merge(table::routes())
-        .merge(value::routes())
+        .merge(data::routes())
 }

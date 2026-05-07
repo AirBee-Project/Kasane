@@ -12,14 +12,14 @@ use crate::{
 
 #[utoipa::path(
     post,
-    path = "/tables",
+    path = "/layers",
     request_body = CreateTableRequest,
     responses(
         (status = 201, description = "Table created"),
         (status = 400, description = "Invalid request"),
         (status = 409, description = "Table already exists")
     ),
-    tag = "tables"
+    tag = "layers"
 )]
 pub async fn table_create(
     State(app_state): State<AppState>,
@@ -34,7 +34,7 @@ pub async fn table_create(
     .await?;
     Ok((
         StatusCode::CREATED,
-        [(LOCATION, format!("/tables/{}", request.name))],
+        [(LOCATION, format!("/layers/{}", request.name))],
     )
         .into_response())
 }

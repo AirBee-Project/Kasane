@@ -7,7 +7,7 @@ use crate::{AppState, error::AppError, services::table::table_remove as table_re
 
 #[utoipa::path(
     delete,
-    path = "/tables/{name}",
+    path = "/layers/{name}",
     params(
         ("name" = String, Path, description = "Table name")
     ),
@@ -15,7 +15,7 @@ use crate::{AppState, error::AppError, services::table::table_remove as table_re
         (status = 204, description = "Table deleted"),
         (status = 404, description = "Table not found")
     ),
-    tag = "tables"
+    tag = "layers"
 )]
 pub async fn table_remove(
     State(app_state): State<AppState>,

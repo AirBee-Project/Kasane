@@ -10,7 +10,7 @@ use crate::{
 
 #[utoipa::path(
     get,
-    path = "/tables/{name}",
+    path = "/layers/{name}",
     params(
         ("name" = String, Path, description = "Table name")
     ),
@@ -18,7 +18,7 @@ use crate::{
         (status = 200, description = "Table information", body = TableInfoResponse),
         (status = 404, description = "Table not found")
     ),
-    tag = "tables"
+    tag = "layers"
 )]
 pub async fn table_info(
     State(app_state): State<AppState>,

@@ -1,4 +1,4 @@
-use axum::{
+﻿use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
@@ -9,25 +9,25 @@ use crate::common::TestApp;
 async fn test_delete_table_success() {
     let test_app = TestApp::new();
 
-    // 事前にテーブルを作成
+    // 事前にチE�Eブルを作�E
     test_app.create_table("table_to_delete", "Int", 25).await;
 
-    // テーブルの削除リクエスト
+    // チE�Eブルの削除リクエスチE
     let req = Request::builder()
         .method("DELETE")
-        .uri("/tables/table_to_delete")
+        .uri("/layers/table_to_delete")
         .body(Body::empty())
         .unwrap();
 
     let response = test_app.app.clone().oneshot(req).await.unwrap();
 
-    // 成功時は 204 No Content が返される
+    // 成功時�E 204 No Content が返される
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-    // 削除後に情報取得リクエストを投げると 404 Not Found になることを確認
+    // 削除後に惁E��取得リクエストを投げると 404 Not Found になることを確誁E
     let get_req = Request::builder()
         .method("GET")
-        .uri("/tables/table_to_delete")
+        .uri("/layers/table_to_delete")
         .body(Body::empty())
         .unwrap();
 
@@ -39,15 +39,16 @@ async fn test_delete_table_success() {
 async fn test_delete_table_not_found() {
     let test_app = TestApp::new();
 
-    // 存在しないテーブルを削除しようとする
+    // 存在しなぁE��ーブルを削除しよぁE��する
     let req = Request::builder()
         .method("DELETE")
-        .uri("/tables/non_existent_table")
+        .uri("/layers/non_existent_table")
         .body(Body::empty())
         .unwrap();
 
     let response = test_app.app.clone().oneshot(req).await.unwrap();
 
-    // 404 Not Found が返されることを確認
+    // 404 Not Found が返されることを確誁E
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
+

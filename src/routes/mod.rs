@@ -7,7 +7,7 @@ mod table;
 
 pub fn create_router(app_state: AppState) -> Router {
     Router::new()
-        .nest("/tables", table::routes())
+        .nest("/layers", table::routes())
         .merge(openapi::routes())
         .with_state(app_state)
 }

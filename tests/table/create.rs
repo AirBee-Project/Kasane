@@ -1,4 +1,4 @@
-use crate::common::TestApp;
+﻿use crate::common::TestApp;
 use axum::{
     body::Body,
     http::{Request, StatusCode},
@@ -17,18 +17,18 @@ async fn test_create_table_success() {
 
     let req = Request::builder()
         .method("POST")
-        .uri("/tables")
+        .uri("/layers")
         .header("Content-Type", "application/json")
         .body(Body::from(serde_json::to_string(&create_body).unwrap()))
         .unwrap();
 
     let response = test_app.app.clone().oneshot(req).await.unwrap();
 
-    // 成功時のステータスコードとLocationヘッダーの確認
+    // 成功時�EスチE�EタスコードとLocationヘッダーの確誁E
     assert_eq!(response.status(), StatusCode::CREATED);
     assert_eq!(
         response.headers().get("Location").unwrap(),
-        "/tables/new_table"
+        "/layers/new_table"
     );
 }
 
@@ -36,10 +36,10 @@ async fn test_create_table_success() {
 async fn test_create_table_conflict() {
     let test_app = TestApp::new();
 
-    // 事前にテーブルを作成
+    // 事前にチE�Eブルを作�E
     test_app.create_table("existing_table", "Int", 25).await;
 
-    // 同じ名前のテーブルを作成しようとする
+    // 同じ名前のチE�Eブルを作�EしよぁE��する
     let create_body = serde_json::json!({
         "name": "existing_table",
         "data_type": "Float",
@@ -48,13 +48,14 @@ async fn test_create_table_conflict() {
 
     let req = Request::builder()
         .method("POST")
-        .uri("/tables")
+        .uri("/layers")
         .header("Content-Type", "application/json")
         .body(Body::from(serde_json::to_string(&create_body).unwrap()))
         .unwrap();
 
     let response = test_app.app.clone().oneshot(req).await.unwrap();
 
-    // 409 Conflict が返されることを確認
+    // 409 Conflict が返されることを確誁E
     assert_eq!(response.status(), StatusCode::CONFLICT);
 }
+

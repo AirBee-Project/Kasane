@@ -1,4 +1,4 @@
-use axum::{
+﻿use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
@@ -10,19 +10,19 @@ use crate::common::TestApp;
 async fn test_table_info_success() {
     let test_app = TestApp::new();
 
-    // 事前にテーブルを作成
+    // 事前にチE�Eブルを作�E
     test_app.create_table("info_target_table", "Float", 15).await;
 
-    // テーブル情報の取得リクエスト
+    // チE�Eブル惁E��の取得リクエスチE
     let req = Request::builder()
         .method("GET")
-        .uri("/tables/info_target_table")
+        .uri("/layers/info_target_table")
         .body(Body::empty())
         .unwrap();
 
     let response = test_app.app.clone().oneshot(req).await.unwrap();
 
-    // 成功時は 200 OK
+    // 成功時�E 200 OK
     assert_eq!(response.status(), StatusCode::OK);
 
     // ボディの検証
@@ -38,15 +38,16 @@ async fn test_table_info_success() {
 async fn test_table_info_not_found() {
     let test_app = TestApp::new();
 
-    // 存在しないテーブルの情報を取得しようとする
+    // 存在しなぁE��ーブルの惁E��を取得しようとする
     let req = Request::builder()
         .method("GET")
-        .uri("/tables/non_existent_table")
+        .uri("/layers/non_existent_table")
         .body(Body::empty())
         .unwrap();
 
     let response = test_app.app.clone().oneshot(req).await.unwrap();
 
-    // 404 Not Found が返されることを確認
+    // 404 Not Found が返されることを確誁E
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
+
