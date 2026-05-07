@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use redb::{ReadableTable, WriteTransaction};
 
 use crate::{
@@ -8,23 +10,41 @@ use crate::{
 
 pub struct SpatialDbWrite {
     write_txn: WriteTransaction,
+    ///[Layer]に関する情報をキャッシュしておくレイヤー
+    ///[layer]の追加や削除があったときに編集する
+    layer_caches: HashMap<String, LayerMetadata>,
 }
 
 impl SpatialDbWrite {
     pub fn new(write_txn: WriteTransaction) -> Self {
-        Self { write_txn }
+        let layer_caches: HashMap<String, LayerMetadata> = HashMap::new();
+        Self {
+            write_txn,
+            layer_caches,
+        }
     }
 
     /// Layerの情報を取得する
-    pub fn layer_info(&self, name: &str) -> Result<Option<Layer>, AppError> {
+    pub fn layer_info(&self, layer_name: &str) -> Result<Option<Layer>, AppError> {
+        //まずはcacheを検索する
+        if let Some(meta_data) = self.layer_caches.get(layer_name) {
+            return Ok(Some(Layer {
+                id: meta_data.id,
+                name: layer_name.to_string(),
+                data_type: meta_data.data_type,
+                max_zoom_level: meta_data.max_zoom_level,
+            }));
+        }
+
+        //キャッシュに存在しなければデータベースを検索する
         let redb_layers = self.write_txn.open_table(LAYERS)?;
-        if let Some(meta_data) = redb_layers.get(name)? {
-            let m = meta_data.value();
+        if let Some(meta_data) = redb_layers.get(layer_name)? {
+            let meta_data = meta_data.value();
             Ok(Some(Layer {
-                id: m.id,
-                name: name.to_string(),
-                data_type: m.data_type,
-                max_zoom_level: m.max_zoom_level,
+                id: meta_data.id,
+                name: layer_name.to_string(),
+                data_type: meta_data.data_type,
+                max_zoom_level: meta_data.max_zoom_level,
             }))
         } else {
             Ok(None)
@@ -33,37 +53,61 @@ impl SpatialDbWrite {
 
     /// Layerを作成する
     pub fn layer_create(
-        &self,
-        name: &str,
+        &mut self,
+        layer_name: &str,
         data_type: LayerDataType,
         max_zoom_level: u8,
     ) -> Result<Layer, AppError> {
+        //同じ名前のLayerがないかを検索する
+        if self.layer_info(layer_name)?.is_some() {
+            return Err(AppError::LayerAlreadyExists {
+                name: layer_name.to_string(),
+            });
+        }
+
+        //IDを取得
         let id = self.increment_layer_id()?;
+
+        //[LayerMetadata]を作成
         let meta = LayerMetadata {
             id,
             data_type: data_type.clone(),
             max_zoom_level,
         };
+
+        //データベースを開いて挿入
         let mut redb_layers = self.write_txn.open_table(LAYERS)?;
-        let _ = redb_layers.insert(name, meta)?;
+        redb_layers.insert(layer_name, meta)?;
+
+        //キャッシュに対して挿入
+        self.layer_caches.insert(layer_name.to_string(), meta);
+
+        //結果を返却
         Ok(Layer {
             id,
-            name: name.to_string(),
+            name: layer_name.to_string(),
             data_type,
             max_zoom_level,
         })
     }
 
     /// Layerを削除する
-    pub fn layer_remove(&self, name: &str) -> Result<(), AppError> {
-        let mut redb_layers = self.write_txn.open_table(LAYERS)?;
-        let removed = redb_layers.remove(name)?;
-        if removed.is_none() {
-            return Err(AppError::LayerNotFound {
-                name: name.to_string(),
+    pub fn layer_remove(&mut self, layer_name: &str) -> Result<(), AppError> {
+        //存在検証
+        if self.layer_info(layer_name)?.is_some() {
+            return Err(AppError::LayerAlreadyExists {
+                name: layer_name.to_string(),
             });
-        }
-        Ok(())
+        };
+
+        //データベースを開いて削除
+        let mut redb_layers = self.write_txn.open_table(LAYERS)?;
+        redb_layers.remove(layer_name)?;
+
+        //キャッシュから削除
+        self.layer_caches.remove(layer_name);
+
+        return Ok(());
     }
 
     /// 次のLayerに対して割り当てるIDを返す
@@ -80,6 +124,12 @@ impl SpatialDbWrite {
     /// 変更の内容を永続化する
     pub fn commit(self) -> Result<(), AppError> {
         self.write_txn.commit()?;
+        Ok(())
+    }
+
+    /// 変更の内容を元に戻す
+    pub fn abort(self) -> Result<(), AppError> {
+        self.write_txn.abort()?;
         Ok(())
     }
 }

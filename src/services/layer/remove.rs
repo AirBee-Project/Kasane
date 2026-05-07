@@ -2,16 +2,13 @@ use crate::{AppState, error::AppError, repositories::layer::write::SpatialDbWrit
 
 /// Services層でLayerを削除する
 pub async fn remove(app_state: &AppState, layer_name: &str) -> Result<(), AppError> {
+    //データベースを開く
     let write_txn = app_state.redb.begin_write()?;
-    let db = SpatialDbWrite::new(write_txn);
+    let mut db = SpatialDbWrite::new(write_txn);
 
-    if db.layer_info(layer_name)?.is_none() {
-        return Err(AppError::LayerNotFound {
-            name: layer_name.to_string(),
-        });
-    }
-
+    //layerの削除と反映
     db.layer_remove(layer_name)?;
     db.commit()?;
+
     Ok(())
 }
