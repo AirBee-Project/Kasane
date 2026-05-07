@@ -6,13 +6,14 @@ use axum::{
 use serde_json::json;
 use std::fmt;
 
-use crate::models::table::data_type::JsonValueType;
+use crate::models::layer::JsonValueType;
+
 #[derive(Debug)]
 pub enum AppError {
-    TableNotFound {
+    LayerNotFound {
         name: String,
     },
-    TableAlreadyExists {
+    LayerAlreadyExists {
         name: String,
     },
     ValueTypeMismatch {
@@ -36,35 +37,21 @@ pub enum AppError {
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AppError::TableNotFound { name } => {
-                write!(f, "Table '{}' not found", name)
-            }
-            AppError::TableAlreadyExists { name } => {
-                write!(f, "Table '{}' already exists", name)
-            }
-            AppError::StorageError(message) => {
-                write!(f, "{}", message)
-            }
-            AppError::InvalidName { reason } => {
-                write!(f, "Invalid name: {}", reason)
-            }
-            AppError::LogicError(error) => {
-                write!(f, "Logic Error: {}", error)
-            }
-            AppError::ValueTypeMismatch { actual, expected } => {
-                write!(
-                    f,
-                    "Value type mismatch: expected {:?}, but got {:?}",
-                    expected, actual
-                )
-            }
-            AppError::NumericValueOutOfRange { actual, expected } => {
-                write!(
-                    f,
-                    "Numeric value out of range: expected {}, but got {}",
-                    expected, actual
-                )
-            }
+            AppError::LayerNotFound { name } => write!(f, "Layer '{}' not found", name),
+            AppError::LayerAlreadyExists { name } => write!(f, "Layer '{}' already exists", name),
+            AppError::StorageError(message) => write!(f, "{}", message),
+            AppError::InvalidName { reason } => write!(f, "Invalid name: {}", reason),
+            AppError::LogicError(error) => write!(f, "Logic Error: {}", error),
+            AppError::ValueTypeMismatch { actual, expected } => write!(
+                f,
+                "Value type mismatch: expected {:?}, but got {:?}",
+                expected, actual
+            ),
+            AppError::NumericValueOutOfRange { actual, expected } => write!(
+                f,
+                "Numeric value out of range: expected {}, but got {}",
+                expected, actual
+            ),
             AppError::InvalidStoredValue { reason } => {
                 write!(f, "Invalid stored value: {}", reason)
             }
@@ -77,12 +64,12 @@ impl std::error::Error for AppError {}
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
-            AppError::TableNotFound { name } => {
-                (StatusCode::NOT_FOUND, format!("Table '{}' not found", name))
+            AppError::LayerNotFound { name } => {
+                (StatusCode::NOT_FOUND, format!("Layer '{}' not found", name))
             }
-            AppError::TableAlreadyExists { name } => (
+            AppError::LayerAlreadyExists { name } => (
                 StatusCode::CONFLICT,
-                format!("Table '{}' already exists", name),
+                format!("Layer '{}' already exists", name),
             ),
             AppError::StorageError(message) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, message.to_string())
@@ -113,70 +100,38 @@ impl IntoResponse for AppError {
             ),
         };
 
-        let body = Json(json!({
-            "error": error_message,
-        }));
-
+        let body = Json(json!({ "error": error_message }));
         (status, body).into_response()
     }
 }
 
 impl From<redb::Error> for AppError {
-    fn from(error: redb::Error) -> Self {
-        AppError::StorageError(error)
-    }
+    fn from(error: redb::Error) -> Self { AppError::StorageError(error) }
 }
-
 impl From<redb::TransactionError> for AppError {
-    fn from(error: redb::TransactionError) -> Self {
-        AppError::StorageError(error.into())
-    }
+    fn from(error: redb::TransactionError) -> Self { AppError::StorageError(error.into()) }
 }
-
 impl From<redb::DatabaseError> for AppError {
-    fn from(error: redb::DatabaseError) -> Self {
-        AppError::StorageError(error.into())
-    }
+    fn from(error: redb::DatabaseError) -> Self { AppError::StorageError(error.into()) }
 }
-
 impl From<redb::TableError> for AppError {
-    fn from(error: redb::TableError) -> Self {
-        AppError::StorageError(error.into())
-    }
+    fn from(error: redb::TableError) -> Self { AppError::StorageError(error.into()) }
 }
-
 impl From<redb::StorageError> for AppError {
-    fn from(error: redb::StorageError) -> Self {
-        AppError::StorageError(error.into())
-    }
+    fn from(error: redb::StorageError) -> Self { AppError::StorageError(error.into()) }
 }
-
 impl From<redb::SavepointError> for AppError {
-    fn from(error: redb::SavepointError) -> Self {
-        AppError::StorageError(error.into())
-    }
+    fn from(error: redb::SavepointError) -> Self { AppError::StorageError(error.into()) }
 }
-
 impl From<redb::CommitError> for AppError {
-    fn from(error: redb::CommitError) -> Self {
-        AppError::StorageError(error.into())
-    }
+    fn from(error: redb::CommitError) -> Self { AppError::StorageError(error.into()) }
 }
-
 impl From<redb::CompactionError> for AppError {
-    fn from(error: redb::CompactionError) -> Self {
-        AppError::StorageError(error.into())
-    }
+    fn from(error: redb::CompactionError) -> Self { AppError::StorageError(error.into()) }
 }
-
 impl From<redb::SetDurabilityError> for AppError {
-    fn from(error: redb::SetDurabilityError) -> Self {
-        AppError::StorageError(error.into())
-    }
+    fn from(error: redb::SetDurabilityError) -> Self { AppError::StorageError(error.into()) }
 }
-
 impl From<kasane_logic::Error> for AppError {
-    fn from(value: kasane_logic::Error) -> Self {
-        AppError::LogicError(value)
-    }
+    fn from(value: kasane_logic::Error) -> Self { AppError::LogicError(value) }
 }

@@ -1,27 +1,27 @@
 use redb::{Database, TableDefinition};
 
-use crate::models::table::TableMetadata;
+use crate::models::layer::LayerMetadata;
 
-/// KasaneのTable情報を管理するための内部Table
+/// KasaneのLayer情報を管理するための内部テーブル
 ///
-/// Key: Tableの名前
-/// Value: Tableの名前以外の情報
-pub const TABLES: TableDefinition<&str, TableMetadata> = TableDefinition::new("1");
+/// Key: Layerの名前
+/// Value: Layerの名前以外の情報
+pub const LAYERS: TableDefinition<&str, LayerMetadata> = TableDefinition::new("1");
 
-/// システム内一意な番号を発行するためのTABLE
+/// システム内一意な番号を発行するためのテーブル
 ///
 /// Key: 対象のエンティティ
 /// Value: 次のID(u64)
-pub const TABLE_IDS: TableDefinition<&str, u64> = TableDefinition::new("2");
+pub const LAYER_IDS: TableDefinition<&str, u64> = TableDefinition::new("2");
 
-///TableのIDを管理するためのKey
-pub const TABLE_IDS_KEY: &str = "t";
+/// LayerのIDを管理するためのKey
+pub const LAYER_IDS_KEY: &str = "t";
 
-/// 空間IDと値の対応を管理するためのTABLE
+/// 空間IDと値の対応を管理するためのテーブル
 ///
-/// Key: (TableのID, 12バイトのID)
+/// Key: (LayerのID, 12バイトのID)
 /// Value: 値のバイト列
-pub const SPAITAL_IDS: TableDefinition<(u64, [u8; 12]), &[u8]> = TableDefinition::new("3");
+pub const SPATIAL_IDS: TableDefinition<(u64, [u8; 12]), &[u8]> = TableDefinition::new("3");
 
 pub fn initialize_database(path: &str) -> Database {
     let database = Database::create(path).unwrap();
@@ -29,9 +29,9 @@ pub fn initialize_database(path: &str) -> Database {
     let write_txn = database.begin_write().unwrap();
 
     {
-        let _ = write_txn.open_table(TABLES).unwrap();
-        let mut ids = write_txn.open_table(TABLE_IDS).unwrap();
-        let _ = ids.insert(TABLE_IDS_KEY, 0u64).unwrap();
+        let _ = write_txn.open_table(LAYERS).unwrap();
+        let mut ids = write_txn.open_table(LAYER_IDS).unwrap();
+        let _ = ids.insert(LAYER_IDS_KEY, 0u64).unwrap();
     }
 
     write_txn.commit().unwrap();

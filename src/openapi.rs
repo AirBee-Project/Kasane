@@ -1,58 +1,58 @@
 use utoipa::OpenApi;
 
 use crate::models::query::{
-    Geometry, PointCoordinate, Query, SpatialId, TableFilter, TableFilterBoolean, TableFilterFloat,
-    TableFilterInt, TableFilterText, TableFilterType,
+    Geometry, LayerFilter, LayerFilterBoolean, LayerFilterFloat, LayerFilterInt, LayerFilterText,
+    LayerFilterType, PointCoordinate, Query, SpatialId,
 };
-use crate::models::table::value::{
-    GetValueRequest, GetValueResponse, InsertValueRequest, RemoveValueRequest,
+use crate::models::layer::data::{
+    GetDataRequest, GetDataResponse, InsertDataRequest, RemoveDataRequest,
 };
-use crate::models::table::{
-    CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse,
+use crate::models::layer::{
+    CreateLayerRequest, LayerDataType, LayerInfoResponse, LayerListResponse,
 };
 
 #[derive(OpenApi)]
 #[openapi(
     paths(
         // GET  /layers
-        crate::handlers::table::table_list::table_list,
+        crate::handlers::layer::list::layer_list,
         // POST /layers
-        crate::handlers::table::table_create::table_create,
+        crate::handlers::layer::create::layer_create,
         // GET  /layers/{name}
-        crate::handlers::table::table_info::table_info,
+        crate::handlers::layer::info::layer_info,
         // DELETE /layers/{name}
-        crate::handlers::table::table_remove::table_remove,
+        crate::handlers::layer::remove::layer_remove,
         // PUT    /layers/{name}/data
-        crate::handlers::table::value::insert::value_insert,
+        crate::handlers::layer::data::insert::data_insert,
         // PATCH  /layers/{name}/data
-        crate::handlers::table::value::upsert::value_upsert,
+        crate::handlers::layer::data::upsert::data_upsert,
         // DELETE /layers/{name}/data
-        crate::handlers::table::value::remove::value_remove,
+        crate::handlers::layer::data::remove::data_remove,
         // POST   /layers/{name}/data/search
-        crate::handlers::table::value::get::value_get,
+        crate::handlers::layer::data::get::data_get,
     ),
     components(schemas(
         // Layer
-        CreateTableRequest,
-        TableDataType,
-        TableInfoResponse,
-        TableListResponse,
+        CreateLayerRequest,
+        LayerDataType,
+        LayerInfoResponse,
+        LayerListResponse,
         // Data
-        GetValueRequest,
-        GetValueResponse,
-        InsertValueRequest,
-        RemoveValueRequest,
+        GetDataRequest,
+        GetDataResponse,
+        InsertDataRequest,
+        RemoveDataRequest,
         // Query
         Query,
         SpatialId,
         Geometry,
         PointCoordinate,
-        TableFilter,
-        TableFilterType,
-        TableFilterText,
-        TableFilterInt,
-        TableFilterFloat,
-        TableFilterBoolean,
+        LayerFilter,
+        LayerFilterType,
+        LayerFilterText,
+        LayerFilterInt,
+        LayerFilterFloat,
+        LayerFilterBoolean,
     )),
     tags(
         (name = "layers", description = "Layer operations")

@@ -44,28 +44,28 @@ pub enum Query {
         subtract: Box<Self>,
     },
     GeometryQuery(Geometry),
-    // TableFilter(TableFilter),
+    // LayerFilter(LayerFilter),
     SpatialIds(Vec<SpatialId>),
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-///Tableを参照して条件を指定する場合
-pub struct TableFilter {
+///Layerを参照して条件を指定する場合
+pub struct LayerFilter {
     pub name: String,
-    pub query: TableFilterType,
+    pub query: LayerFilterType,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(tag = "type", content = "condition")]
-pub enum TableFilterType {
-    Text(TableFilterText),
-    Int(TableFilterInt),
-    Float(TableFilterFloat),
-    Boolean(TableFilterBoolean),
+pub enum LayerFilterType {
+    Text(LayerFilterText),
+    Int(LayerFilterInt),
+    Float(LayerFilterFloat),
+    Boolean(LayerFilterBoolean),
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub enum TableFilterText {
+pub enum LayerFilterText {
     /// 等しい
     Equal(String),
     /// 等しくない
@@ -77,32 +77,19 @@ pub enum TableFilterText {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub enum TableFilterInt {
+pub enum LayerFilterInt {
     Equal(i32),
     NotEqual(i32),
-    // GreaterThan(i32),      // >
-    // GreaterThanEqual(i32), // >=
-    // LessThan(i32),         // <
-    // LessThanEqual(i32),    // <=
-    // /// 範囲指定 [min, max]
-    // Between(i32, i32),
-    // /// 指定したいずれかの値に含まれる
-    // In(Vec<i32>),
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub enum TableFilterFloat {
+pub enum LayerFilterFloat {
     Equal(f32),
     NotEqual(f32),
-    // GreaterThan(f32),
-    // GreaterThanEqual(f32),
-    // LessThan(f32),
-    // LessThanEqual(f32),
-    // Between(f32, f32),
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub enum TableFilterBoolean {
+pub enum LayerFilterBoolean {
     Equal(bool),
 }
 

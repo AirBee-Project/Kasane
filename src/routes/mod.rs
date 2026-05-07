@@ -2,12 +2,12 @@
 use axum::Router;
 
 use crate::AppState;
+mod layer;
 mod openapi;
-mod table;
 
 pub fn create_router(app_state: AppState) -> Router {
     Router::new()
-        .nest("/layers", table::routes())
+        .nest("/layers", layer::routes())
         .merge(openapi::routes())
         .with_state(app_state)
 }
