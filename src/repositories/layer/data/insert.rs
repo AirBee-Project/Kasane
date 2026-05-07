@@ -64,6 +64,9 @@ impl SpatialDbWrite {
             {
                 should_remove.extend(children_single_ids);
             }
+
+            // 一切の重なりがないので普通に挿入する
+            should_insert.push((single_id.clone(), data.to_vec()));
         }
 
         for single_id in should_remove {
@@ -90,11 +93,12 @@ impl SpatialDbWrite {
             return Ok(());
         };
 
+        // すべてのsiblingsが存在し、かつ同じ値を持つかをチェック
         let can_merge = siblings.iter().all(|sibling| {
-            redb_spatial_ids
-                .get((layer_id, sibling.spatial_encode()))
-                .map(|v| v.is_some())
-                .unwrap_or(false)
+            match redb_spatial_ids.get((layer_id, sibling.spatial_encode())) {
+                Ok(Some(access_guard)) => access_guard.value() == value,
+                _ => false,
+            }
         });
 
         if !can_merge {
