@@ -18,6 +18,6 @@ pub async fn remove(
 
     let ids = query.process(layer.max_zoom_level)?;
 
-    crate::repositories::layer::data::write::data_remove(layer.id, ids)?;
+    crate::repositories::layer::data::insert::data_remove(layer.id, ids)?;
     db.commit()
 }

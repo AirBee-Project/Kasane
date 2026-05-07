@@ -9,7 +9,7 @@ use crate::{
 };
 
 pub struct SpatialDbWrite {
-    write_txn: WriteTransaction,
+    pub write_txn: WriteTransaction,
     ///[Layer]に関する情報をキャッシュしておくレイヤー
     ///[layer]の追加や削除があったときに編集する
     layer_caches: HashMap<String, LayerMetadata>,
@@ -95,7 +95,7 @@ impl SpatialDbWrite {
     pub fn layer_remove(&mut self, layer_name: &str) -> Result<(), AppError> {
         //存在検証
         if self.layer_info(layer_name)?.is_some() {
-            return Err(AppError::LayerAlreadyExists {
+            return Err(AppError::LayerNotFound {
                 name: layer_name.to_string(),
             });
         };

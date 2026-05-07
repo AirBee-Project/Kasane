@@ -1,6 +1,5 @@
 use crate::{
-    AppState, error::AppError, models::query::Query,
-    repositories::layer::write::SpatialDbWrite,
+    AppState, error::AppError, models::query::Query, repositories::layer::write::SpatialDbWrite,
     services::helpers::value::interpret_value,
 };
 
@@ -16,12 +15,16 @@ pub async fn upsert(
 
     let layer = match db.layer_info(layer_name)? {
         Some(v) => v,
-        None => return Err(AppError::LayerNotFound { name: layer_name.to_string() }),
+        None => {
+            return Err(AppError::LayerNotFound {
+                name: layer_name.to_string(),
+            });
+        }
     };
 
     let value = interpret_value(layer.data_type, value)?;
     let ids = query.process(layer.max_zoom_level)?;
 
-    crate::repositories::layer::data::write::data_upsert(layer.id, ids, &value)?;
+    crate::repositories::layer::data::insert::data_upsert(layer.id, ids, &value)?;
     db.commit()
 }
