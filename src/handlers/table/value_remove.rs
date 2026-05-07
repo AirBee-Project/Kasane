@@ -10,7 +10,7 @@ use axum::{
 
 #[utoipa::path(
     delete,
-    path = "/tables/{name}/values/remove",
+    path = "/tables/{name}/values",
     params(
         ("name" = String, Path, description = "Table name")
     ),

@@ -1,28 +1,22 @@
 use crate::AppState;
 use axum::Router;
-use axum::routing::{delete, get, post};
+use axum::routing::{get, post};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route(
-            "/{name}/values/remove",
-            delete(crate::handlers::table::value_remove::value_remove),
-        )
-        .route(
-            "/{name}/values/query",
+            "/{name}/values/search",
             post(crate::handlers::table::value_get::value_get),
         )
         .route(
             "/{name}/values",
-            post(crate::handlers::table::value_insert::value_insert),
+            post(crate::handlers::table::value_insert::value_insert)
+                .delete(crate::handlers::table::value_remove::value_remove),
         )
         .route(
             "/{name}",
-            get(crate::handlers::table::table_info::table_info),
-        )
-        .route(
-            "/{name}",
-            delete(crate::handlers::table::table_remove::table_remove),
+            get(crate::handlers::table::table_info::table_info)
+                .delete(crate::handlers::table::table_remove::table_remove),
         )
         .route(
             "/",

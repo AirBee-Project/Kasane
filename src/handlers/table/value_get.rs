@@ -9,7 +9,7 @@ use crate::{error::AppError, services::table::value_get as value_get_service};
 
 #[utoipa::path(
     post,
-    path = "/tables/{name}/values/query",
+    path = "/tables/{name}/values/search",
     params(
         ("name" = String, Path, description = "Table name")
     ),
