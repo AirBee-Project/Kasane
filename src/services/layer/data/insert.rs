@@ -24,6 +24,6 @@ pub async fn insert(
     let value = interpret_value(layer.data_type, value)?;
     let ids = query.process(layer.max_zoom_level)?;
 
-    crate::repositories::layer::data::insert::data_insert(layer.id, ids, &value)?;
+    db.data_insert(layer_name, ids, &value)?;
     db.commit()
 }

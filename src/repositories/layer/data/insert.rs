@@ -24,7 +24,7 @@ impl SpatialDbWrite {
         let redb_spatial_ids = self.write_txn.open_table(SPATIAL_IDS)?;
 
         let mut should_remove: Vec<SingleId> = Vec::new();
-        let mut should_insert: Vec<(SingleId, &[u8])> = Vec::new();
+        let mut should_insert: Vec<(SingleId, Vec<u8>)> = Vec::new();
 
         for single_id in ids.iter_single_ids() {
             //single_idと完全に等しい位置を調べる
@@ -35,7 +35,7 @@ impl SpatialDbWrite {
                     continue;
                 } else {
                     //完全に等しいので上書きだけで良い
-                    should_insert.push((single_id, data));
+                    should_insert.push((single_id, data.to_vec()));
                     continue;
                 }
             };
@@ -45,20 +45,75 @@ impl SpatialDbWrite {
                 Self::overlap_parent(&redb_spatial_ids, layer_meta.id, &single_id)?
             {
                 if access_guard.value() == data {
+                    //値が等しいので何もしなくてよい
                     continue;
                 } else {
+                    let overlap_data = access_guard.value().to_vec();
                     for fragment_single_id in parent_single_id.difference(&single_id) {
-                        should_insert.push((fragment_single_id, access_guard.value()));
-                        should_insert.push((single_id, data));
-                        should_remove.push(parent_single_id);
+                        should_insert.push((fragment_single_id, overlap_data.clone()));
                     }
+                    should_insert.push((single_id.clone(), data.to_vec()));
+                    should_remove.push(parent_single_id.clone());
                     continue;
                 }
             }
 
-            //single_idの子を調べていく
+            //single_idの子を全て削除する
+            if let Some(children_single_ids) =
+                Self::overlap_children(&redb_spatial_ids, layer_meta.id, &single_id)?
+            {
+                should_remove.extend(children_single_ids);
+            }
         }
 
+        Ok(())
+    }
+
+    /// 入力した `SingleId` を挿入する。
+    /// merge 可能な場合は siblings を親IDへ集約する。
+    fn insert_and_merge(
+        redb_spatial_ids: &mut Table<'_, (u64, [u8; 12]), &'static [u8]>,
+        layer_id: u64,
+        target: &SingleId,
+        value: &[u8],
+    ) -> Result<(), AppError> {
+        let Some(siblings) = target.spatial_siblings() else {
+            redb_spatial_ids.insert((layer_id, target.spatial_encode()), value)?;
+            return Ok(());
+        };
+
+        let can_merge = siblings.iter().all(|sibling| {
+            redb_spatial_ids
+                .get((layer_id, sibling.spatial_encode()))
+                .map(|v| v.is_some())
+                .unwrap_or(false)
+        });
+
+        if !can_merge {
+            redb_spatial_ids.insert((layer_id, target.spatial_encode()), value)?;
+            return Ok(());
+        }
+
+        // siblings を削除
+        for sibling in &siblings {
+            Self::remove(redb_spatial_ids, layer_id, sibling)?;
+        }
+
+        // 親へ集約
+        let parent = target.spatial_parent_at_zoom(target.z() - 1)?;
+
+        redb_spatial_ids.insert((layer_id, parent.spatial_encode()), value)?;
+
+        Ok(())
+    }
+
+    ///入力された[SingleId]を削除する
+    fn remove<'a>(
+        redb_spatial_ids: &'a mut Table<'_, (u64, [u8; 12]), &'static [u8]>,
+        layer_id: u64,
+        target: &SingleId,
+    ) -> Result<(), AppError> {
+        redb_spatial_ids.remove((layer_id, target.spatial_encode()))?;
         Ok(())
     }
 
@@ -98,7 +153,7 @@ impl SpatialDbWrite {
     fn overlap_children(
         redb_spatial_ids: &Table<'_, (u64, [u8; 12]), &'static [u8]>,
         layer_id: u64,
-        target: SingleId,
+        target: &SingleId,
     ) -> Result<Option<Vec<SingleId>>, AppError> {
         let mut result: Vec<_> = Vec::new();
 
@@ -109,7 +164,7 @@ impl SpatialDbWrite {
             let (_, single_id_encode) = key.value();
 
             //equalの排除
-            if SingleId::spatial_decode(&single_id_encode)? == target {
+            if SingleId::spatial_decode(&single_id_encode)? == *target {
                 continue;
             }
 
