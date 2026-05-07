@@ -21,7 +21,7 @@ impl SpatialDbWrite {
             }
         };
 
-        let redb_spatial_ids = self.write_txn.open_table(SPATIAL_IDS)?;
+        let mut redb_spatial_ids = self.write_txn.open_table(SPATIAL_IDS)?;
 
         let mut should_remove: Vec<SingleId> = Vec::new();
         let mut should_insert: Vec<(SingleId, Vec<u8>)> = Vec::new();
@@ -64,6 +64,14 @@ impl SpatialDbWrite {
             {
                 should_remove.extend(children_single_ids);
             }
+        }
+
+        for single_id in should_remove {
+            Self::remove(&mut redb_spatial_ids, layer_meta.id, &single_id)?;
+        }
+
+        for (single_id, value) in should_insert {
+            Self::insert_and_merge(&mut redb_spatial_ids, layer_meta.id, &single_id, &value)?;
         }
 
         Ok(())

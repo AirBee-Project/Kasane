@@ -2,4 +2,4 @@ mod request;
 mod response;
 
 pub use request::{GetDataRequest, InsertDataRequest, RemoveDataRequest};
-pub use response::GetDataResponse;
+pub use response::{GetDataResponse, ResponseSpatialId, SpatialData};
