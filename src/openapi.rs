@@ -7,7 +7,7 @@ use crate::models::query::{
 use crate::models::table::{
     CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse,
 };
-use crate::models::value::{
+use crate::models::table::value::{
     GetValueRequest, GetValueResponse, InsertValueRequest, RemoveValueRequest,
 };
 
@@ -18,9 +18,9 @@ use crate::models::value::{
         crate::handlers::table::table_list::table_list,
         crate::handlers::table::table_info::table_info,
         crate::handlers::table::table_remove::table_remove,
-        crate::handlers::table::value_insert::value_insert,
-        crate::handlers::table::value_get::value_get,
-        crate::handlers::table::value_remove::value_remove
+        crate::handlers::table::value::insert::value_insert,
+        crate::handlers::table::value::get::value_get,
+        crate::handlers::table::value::remove::value_remove
 
     ),
     components(schemas(

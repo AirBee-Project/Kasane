@@ -1,4 +1,4 @@
-use crate::{AppState, models::value::InsertValueRequest};
+use crate::{AppState, models::table::value::InsertValueRequest};
 
 use axum::{
     Json,
@@ -6,7 +6,7 @@ use axum::{
     http::StatusCode,
 };
 
-use crate::{error::AppError, services::table::value_insert as value_insert_service};
+use crate::{error::AppError, services::table::value::insert as value_insert_service};
 
 #[utoipa::path(
     post,

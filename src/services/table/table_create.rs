@@ -1,5 +1,5 @@
 use crate::{
-    AppState, error::AppError, models::table::TableDataType, repositories::write::SpatialDbWrite,
+    AppState, error::AppError, models::table::TableDataType, repositories::table::write::SpatialDbWrite,
     services::helpers::name_valid::name_valid,
 };
 

@@ -1,7 +1,7 @@
 use redb::ReadableDatabase;
 
 use crate::{
-    AppState, error::AppError, models::table::Table, repositories::read::SpatialDbRead,
+    AppState, error::AppError, models::table::Table, repositories::table::read::SpatialDbRead,
 };
 
 pub async fn table_list(app_state: &AppState) -> Result<Vec<Table>, AppError> {

@@ -1,6 +1,6 @@
-use crate::{AppState, error::AppError, models::value::RemoveValueRequest};
+use crate::{AppState, error::AppError, models::table::value::RemoveValueRequest};
 
-use crate::services::table::value_remove as value_remove_service;
+use crate::services::table::value::remove as value_remove_service;
 
 use axum::http::StatusCode;
 use axum::{

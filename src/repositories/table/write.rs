@@ -1,4 +1,3 @@
-use kasane_logic::{IntoSingleIds, SpatialIdSet};
 use redb::{ReadableTable, WriteTransaction};
 
 use crate::{
@@ -68,25 +67,6 @@ impl SpatialDbWrite {
                 name: name.to_string(),
             });
         }
-        Ok(())
-    }
-
-    /// 空間IDに対して値を割り当てる
-    /// そこに値がある場合は上書きされる
-    pub fn value_insert(
-        &self,
-        table_id: u64,
-        ids: SpatialIdSet,
-        value: &[u8],
-    ) -> Result<(), AppError> {
-        for ele in ids.into_single_ids() {
-            println!("{},", ele,)
-        }
-        println!("Value Insert Request");
-        Ok(())
-    }
-
-    pub fn value_remove(&self, table_id: u64, ids: SpatialIdSet) -> Result<(), AppError> {
         Ok(())
     }
 

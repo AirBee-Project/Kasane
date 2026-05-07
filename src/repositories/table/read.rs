@@ -1,4 +1,3 @@
-use kasane_logic::{SingleId, SpatialIdSet};
 use redb::{ReadTransaction, ReadableTable};
 
 use crate::{db_init::TABLES, error::AppError, models::table::Table};
@@ -45,14 +44,5 @@ impl SpatialDbRead {
                 })
             })
             .collect()
-    }
-
-    //Todo
-    pub fn value_get(
-        &self,
-        _table_id: u64,
-        _ids: SpatialIdSet,
-    ) -> Result<Vec<(SingleId, &[u8])>, AppError> {
-        Ok(vec![])
     }
 }

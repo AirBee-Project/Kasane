@@ -1,8 +1,8 @@
 use redb::ReadableDatabase;
 
 use crate::{
-    AppState, error::AppError, models::query::Query, models::value::GetValueResponse,
-    repositories::read::SpatialDbRead, services::helpers::value::restore_value,
+    AppState, error::AppError, models::query::Query, models::table::value::GetValueResponse,
+    repositories::table::read::SpatialDbRead, services::helpers::value::restore_value,
 };
 
 pub async fn value_get(
@@ -26,8 +26,9 @@ pub async fn value_get(
     };
 
     let ids = query.process(table.max_zoom_level)?;
+    let value_db = crate::repositories::table::value::read::SpatialDbRead::new(app_state.redb.begin_read()?);
     let mut result = vec![];
-    for (single_id, value) in db.value_get(table.id, ids)? {
+    for (single_id, value) in value_db.value_get(table.id, ids)? {
         result.push((single_id, restore_value(table.data_type, value)?));
     }
 

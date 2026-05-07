@@ -1,4 +1,4 @@
-use crate::{AppState, error::AppError, repositories::write::SpatialDbWrite};
+use crate::{AppState, error::AppError, repositories::table::write::SpatialDbWrite};
 
 /// Services層でTableを削除する
 pub async fn remove(app_state: &AppState, table_name: &str) -> Result<(), AppError> {
