@@ -17,7 +17,7 @@ impl Query {
             Query::Difference { base, subtract } => {
                 Ok(base.process(max_zoom_level)? - subtract.process(max_zoom_level)?)
             }
-            Query::GeometryQuery(geometry) => match geometry {
+            Query::Geometry { geometry } => match geometry {
                 crate::models::query::Geometry::Coordinate {
                     zoomlevel,
                     coordinate,
@@ -78,9 +78,9 @@ impl Query {
                     Ok(result)
                 }
             },
-            Query::SpatialIds(spatial_ids) => {
+            Query::SpatialIds { ids } => {
                 let mut result = SpatialIdSet::new();
-                for spatial_id in spatial_ids {
+                for spatial_id in ids {
                     match spatial_id {
                         crate::models::query::SpatialId::SingleId { z, f, x, y } => {
                             result.insert(SingleId::new(*z, *f, *x, *y)?);
