@@ -5,6 +5,10 @@ use axum::routing::{delete, get, post};
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route(
+            "/{name}/values/remove",
+            delete(crate::handlers::table::value_remove::value_remove),
+        )
+        .route(
             "/{name}/values/query",
             post(crate::handlers::table::value_get::value_get),
         )

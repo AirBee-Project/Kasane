@@ -7,7 +7,9 @@ use crate::models::query::{
 use crate::models::table::{
     CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse,
 };
-use crate::models::value::{GetValueRequest, GetValueResponse, InsertValueRequest, RemoveValueRequest};
+use crate::models::value::{
+    GetValueRequest, GetValueResponse, InsertValueRequest, RemoveValueRequest,
+};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -17,7 +19,9 @@ use crate::models::value::{GetValueRequest, GetValueResponse, InsertValueRequest
         crate::handlers::table::table_info::table_info,
         crate::handlers::table::table_remove::table_remove,
         crate::handlers::table::value_insert::value_insert,
-        crate::handlers::table::value_get::value_get
+        crate::handlers::table::value_get::value_get,
+        crate::handlers::table::value_remove::value_remove
+
     ),
     components(schemas(
         CreateTableRequest,
@@ -38,6 +42,7 @@ use crate::models::value::{GetValueRequest, GetValueResponse, InsertValueRequest
         TableFilterInt,
         TableFilterText,
         TableFilterType,
+        RemoveValueRequest
     )),
     tags(
         (name = "tables", description = "Table operations")

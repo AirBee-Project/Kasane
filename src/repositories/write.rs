@@ -86,6 +86,10 @@ impl SpatialDbWrite {
         Ok(())
     }
 
+    pub fn value_remove(&self, table_id: u64, ids: SpatialIdSet) -> Result<(), AppError> {
+        Ok(())
+    }
+
     ///次のTableに対して割り当てるIDを返す
     fn increment_table_id(&self) -> Result<u64, AppError> {
         let mut redb_ids = self.write_txn.open_table(TABLE_IDS)?;
