@@ -79,7 +79,7 @@ impl SpatialDbWrite {
 
     /// 入力した `SingleId` を挿入する。
     /// merge 可能な場合は siblings を親IDへ集約する。
-    fn insert_and_merge(
+    pub(self) fn insert_and_merge(
         redb_spatial_ids: &mut Table<'_, (u64, [u8; 12]), &'static [u8]>,
         layer_id: u64,
         target: &SingleId,
@@ -116,7 +116,7 @@ impl SpatialDbWrite {
     }
 
     ///入力された[SingleId]を削除する
-    fn remove<'a>(
+    pub(self) fn remove<'a>(
         redb_spatial_ids: &'a mut Table<'_, (u64, [u8; 12]), &'static [u8]>,
         layer_id: u64,
         target: &SingleId,
@@ -128,7 +128,7 @@ impl SpatialDbWrite {
     ///入力された[SingleId]と同じかつ、[SingleId]が存在するかを検証する
     ///
     /// 存在した場合には値の参照を返す
-    fn overlap_equal<'a>(
+    pub(self) fn overlap_equal<'a>(
         redb_spatial_ids: &'a Table<'_, (u64, [u8; 12]), &'static [u8]>,
         layer_id: u64,
         target: &SingleId,
@@ -142,7 +142,7 @@ impl SpatialDbWrite {
     ///入力された[SingleId]の親となる[SingleId]が存在するかを確かめる
     ///
     /// 存在した場合には[SingleId]と値の参照を返す
-    fn overlap_parent<'a>(
+    pub(self) fn overlap_parent<'a>(
         redb_spatial_ids: &'a Table<'_, (u64, [u8; 12]), &'static [u8]>,
         layer_id: u64,
         target: &SingleId,
@@ -158,7 +158,7 @@ impl SpatialDbWrite {
     /// 入力した[SingleId]に含まれる[SingleId]が存在するかを確かめる
     ///
     /// 存在した場合には[SingleId]と値の参照を返す
-    fn overlap_children(
+    pub(self) fn overlap_children(
         redb_spatial_ids: &Table<'_, (u64, [u8; 12]), &'static [u8]>,
         layer_id: u64,
         target: &SingleId,

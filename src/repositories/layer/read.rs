@@ -3,7 +3,7 @@ use redb::{ReadTransaction, ReadableTable};
 use crate::{db_init::LAYERS, error::AppError, models::layer::Layer};
 
 pub struct SpatialDbRead {
-    read_txn: ReadTransaction,
+    pub read_txn: ReadTransaction,
 }
 
 impl SpatialDbRead {
