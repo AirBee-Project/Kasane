@@ -1,5 +1,12 @@
 {
     "chat.tools.terminal.autoApprove": {
         "cargo check": true
+    },
+    "rest-client.environmentVariables": {
+        "$shared": {},
+        "dev": {
+            "baseUrl": "http://localhost:3000",
+            "token": "your_dev_token_here"
+        }
     }
 }

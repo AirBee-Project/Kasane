@@ -1,0 +1,763 @@
+openapi: 3.1.0
+info:
+  title: kasane
+  description: ""
+  license:
+    name: ""
+  version: 0.1.0
+paths:
+  /layers:
+    get:
+      tags:
+        - layers
+      operationId: layer_list
+      responses:
+        "200":
+          description: List of all layers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LayerListResponse"
+    post:
+      tags:
+        - layers
+      operationId: layer_create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLayerRequest"
+        required: true
+      responses:
+        "201":
+          description: Layer created
+        "400":
+          description: Invalid request
+        "409":
+          description: Layer already exists
+  /layers/{name}:
+    get:
+      tags:
+        - layers
+      operationId: layer_info
+      parameters:
+        - name: name
+          in: path
+          description: Layer name
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Layer information
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LayerInfoResponse"
+        "404":
+          description: Layer not found
+    delete:
+      tags:
+        - layers
+      operationId: layer_remove
+      parameters:
+        - name: name
+          in: path
+          description: Layer name
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Layer deleted
+        "404":
+          description: Layer not found
+  /layers/{name}/data:
+    put:
+      tags:
+        - layers
+      operationId: data_insert
+      parameters:
+        - name: name
+          in: path
+          description: Layer name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InsertDataRequest"
+        required: true
+      responses:
+        "201":
+          description: Data Inserted
+        "404":
+          description: Layer not found
+    delete:
+      tags:
+        - layers
+      operationId: data_remove
+      parameters:
+        - name: name
+          in: path
+          description: Layer name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemoveDataRequest"
+        required: true
+      responses:
+        "204":
+          description: Data Removed
+        "404":
+          description: Layer not found
+    patch:
+      tags:
+        - layers
+      operationId: data_upsert
+      parameters:
+        - name: name
+          in: path
+          description: Layer name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InsertDataRequest"
+        required: true
+      responses:
+        "204":
+          description: Data Upserted (written only to empty spatial IDs)
+        "404":
+          description: Layer not found
+  /layers/{name}/data/search:
+    post:
+      tags:
+        - layers
+      operationId: data_get
+      parameters:
+        - name: name
+          in: path
+          description: Layer name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GetDataRequest"
+        required: true
+      responses:
+        "404":
+          description: Layer not found
+components:
+  schemas:
+    CreateLayerRequest:
+      type: object
+      description: 時空間IDと値が対応するLayerを作成する
+      required:
+        - name
+        - data_type
+        - max_zoom_level
+      properties:
+        name:
+          type: string
+          example: example_layer
+        data_type:
+          $ref: "#/components/schemas/LayerDataType"
+        max_zoom_level:
+          type: integer
+          format: int32
+          example: 25
+          maximum: 30
+          minimum: 0
+    Geometry:
+      oneOf:
+        - type: object
+          required:
+            - zoomlevel
+            - coordinate
+            - type
+          properties:
+            zoomlevel:
+              type: integer
+              format: int32
+              minimum: 0
+            coordinate:
+              $ref: "#/components/schemas/PointCoordinate"
+            type:
+              type: string
+              enum:
+                - coordinate
+        - type: object
+          required:
+            - zoomlevel
+            - points
+            - type
+          properties:
+            zoomlevel:
+              type: integer
+              format: int32
+              minimum: 0
+            points:
+              type: array
+              items:
+                $ref: "#/components/schemas/PointCoordinate"
+            type:
+              type: string
+              enum:
+                - line
+        - type: object
+          required:
+            - zoomlevel
+            - points
+            - type
+          properties:
+            zoomlevel:
+              type: integer
+              format: int32
+              minimum: 0
+            points:
+              type: array
+              items:
+                $ref: "#/components/schemas/PointCoordinate"
+            type:
+              type: string
+              enum:
+                - triangle
+        - type: object
+          required:
+            - zoomlevel
+            - radius_m
+            - center
+            - type
+          properties:
+            zoomlevel:
+              type: integer
+              format: int32
+              minimum: 0
+            radius_m:
+              type: number
+              format: double
+            center:
+              $ref: "#/components/schemas/PointCoordinate"
+            type:
+              type: string
+              enum:
+                - sphere
+    GetDataRequest:
+      type: object
+      description: 空間IDの範囲を[Query]で指定して値を取得する
+      required:
+        - query
+      properties:
+        query:
+          $ref: "#/components/schemas/Query"
+        zoom_level_policy:
+          $ref: "#/components/schemas/ZoomLevelPolicy"
+    GetDataResponse:
+      type: object
+      required:
+        - ids
+      properties:
+        ids:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpatialData"
+    InsertDataRequest:
+      type: object
+      description: 空間IDの範囲を指定して値を挿入する
+      required:
+        - value
+        - query
+      properties:
+        value: {}
+        query:
+          $ref: "#/components/schemas/Query"
+        zoom_level_policy:
+          $ref: "#/components/schemas/ZoomLevelPolicy"
+    LayerDataType:
+      type: string
+      description: Layer内の時空間IDに付与する値の型。
+      enum:
+        - Text
+        - Int
+        - Float
+        - Boolean
+    LayerFilter:
+      type: object
+      required:
+        - name
+        - query
+      properties:
+        name:
+          type: string
+        query:
+          $ref: "#/components/schemas/LayerFilterType"
+    LayerFilterBoolean:
+      oneOf:
+        - type: object
+          required:
+            - value
+            - operator
+          properties:
+            value:
+              type: boolean
+            operator:
+              type: string
+              enum:
+                - equal
+    LayerFilterFloat:
+      oneOf:
+        - type: object
+          required:
+            - value
+            - operator
+          properties:
+            value:
+              type: number
+              format: float
+            operator:
+              type: string
+              enum:
+                - equal
+        - type: object
+          required:
+            - value
+            - operator
+          properties:
+            value:
+              type: number
+              format: float
+            operator:
+              type: string
+              enum:
+                - notEqual
+    LayerFilterInt:
+      oneOf:
+        - type: object
+          required:
+            - value
+            - operator
+          properties:
+            value:
+              type: integer
+              format: int32
+            operator:
+              type: string
+              enum:
+                - equal
+        - type: object
+          required:
+            - value
+            - operator
+          properties:
+            value:
+              type: integer
+              format: int32
+            operator:
+              type: string
+              enum:
+                - notEqual
+    LayerFilterText:
+      oneOf:
+        - type: object
+          required:
+            - value
+            - operator
+          properties:
+            value:
+              type: string
+            operator:
+              type: string
+              enum:
+                - equal
+        - type: object
+          required:
+            - value
+            - operator
+          properties:
+            value:
+              type: string
+            operator:
+              type: string
+              enum:
+                - notEqual
+        - type: object
+          required:
+            - value
+            - operator
+          properties:
+            value:
+              type: string
+            operator:
+              type: string
+              enum:
+                - startsWith
+        - type: object
+          required:
+            - value
+            - operator
+          properties:
+            value:
+              type: array
+              items:
+                type: string
+            operator:
+              type: string
+              enum:
+                - in
+    LayerFilterType:
+      oneOf:
+        - $ref: "#/components/schemas/LayerFilterText"
+        - $ref: "#/components/schemas/LayerFilterInt"
+        - $ref: "#/components/schemas/LayerFilterFloat"
+        - $ref: "#/components/schemas/LayerFilterBoolean"
+    LayerInfoResponse:
+      type: object
+      required:
+        - name
+        - data_type
+        - max_zoom_level
+      properties:
+        name:
+          type: string
+          example: example_layer
+        data_type:
+          $ref: "#/components/schemas/LayerDataType"
+        max_zoom_level:
+          type: integer
+          format: int32
+          example: 25
+          minimum: 0
+    LayerListResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/LayerInfoResponse"
+    PointCoordinate:
+      type: object
+      required:
+        - latitude
+        - longitude
+        - altitude
+      properties:
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        altitude:
+          type: number
+          format: double
+    Query:
+      oneOf:
+        - type: object
+          required:
+            - ids
+            - type
+          properties:
+            ids:
+              type: array
+              items:
+                $ref: "#/components/schemas/SpatialId"
+            type:
+              type: string
+              enum:
+                - spatialIds
+        - type: object
+          required:
+            - geometry
+            - type
+          properties:
+            geometry:
+              $ref: "#/components/schemas/Geometry"
+            type:
+              type: string
+              enum:
+                - geometry
+        - type: object
+          required:
+            - left
+            - right
+            - type
+          properties:
+            left:
+              $ref: "#/components/schemas/Query"
+            right:
+              $ref: "#/components/schemas/Query"
+            type:
+              type: string
+              enum:
+                - union
+        - type: object
+          required:
+            - left
+            - right
+            - type
+          properties:
+            left:
+              $ref: "#/components/schemas/Query"
+            right:
+              $ref: "#/components/schemas/Query"
+            type:
+              type: string
+              enum:
+                - intersection
+        - type: object
+          required:
+            - base
+            - subtract
+            - type
+          properties:
+            base:
+              $ref: "#/components/schemas/Query"
+            subtract:
+              $ref: "#/components/schemas/Query"
+            type:
+              type: string
+              enum:
+                - difference
+    RangeId:
+      type: object
+      description: |-
+        RangeIdは空間IDの範囲表現を表す型です。
+
+        各インデックスを範囲で指定することができます。各次元の範囲を表す配列の順序には意味を持ちません。内部的には下記のような構造体で構成されており、各フィールドをプライベートにすることで、ズームレベルに依存するインデックス範囲やその他のバリデーションを適切に適用することができます。
+
+        この型は `PartialOrd` / `Ord` を実装していますが、これは主に`BTreeSet` や `BTreeMap` などの順序付きコレクションでの格納・探索用です。実際の空間的な「大小」を意味するものではありません。
+
+        ```
+        pub struct RangeId {
+            z: u8,
+            f: [i32; 2],
+            x: [u32; 2],
+            y: [u32; 2],
+        }
+        ```
+      required:
+        - z
+        - f
+        - x
+        - y
+        - temporal_id
+      properties:
+        z:
+          type: integer
+          format: int32
+          minimum: 0
+        f:
+          type: array
+          items:
+            type: integer
+            format: int32
+        x:
+          type: array
+          items:
+            type: integer
+            format: int32
+            minimum: 0
+        y:
+          type: array
+          items:
+            type: integer
+            format: int32
+            minimum: 0
+        temporal_id:
+          $ref: "#/components/schemas/TemporalId"
+    RemoveDataRequest:
+      type: object
+      description: 空間IDの範囲を指定して値を削除する
+      required:
+        - query
+      properties:
+        query:
+          $ref: "#/components/schemas/Query"
+        zoom_level_policy:
+          $ref: "#/components/schemas/ZoomLevelPolicy"
+    ResponseSpatialId:
+      oneOf:
+        - allOf:
+            - $ref: "#/components/schemas/SingleId"
+            - type: object
+              required:
+                - type
+              properties:
+                type:
+                  type: string
+                  enum:
+                    - singleId
+        - allOf:
+            - $ref: "#/components/schemas/RangeId"
+            - type: object
+              required:
+                - type
+              properties:
+                type:
+                  type: string
+                  enum:
+                    - rangeId
+    SingleId:
+      type: object
+      description: >-
+        SingleIdは標準的な時空間 ID を表す型。
+
+
+        内部的には下記のような構造体で構成されている。
+
+
+        この型は `PartialOrd` / `Ord` を実装していますが、これは主に`BTreeSet` や `BTreeMap`
+        などの順序付きコレクションでの格納・探索用であり、実際の空間的な「大小」を意味するものではない。
+
+
+        ```
+
+        # use kasane_logic::TemporalId;
+
+        pub struct SingleId {
+            z: u8,
+            f: i32,
+            x: u32,
+            y: u32,
+            temporal_id: TemporalId,
+        }
+
+        ```
+      required:
+        - z
+        - f
+        - x
+        - y
+        - temporal_id
+      properties:
+        z:
+          type: integer
+          format: int32
+          minimum: 0
+        f:
+          type: integer
+          format: int32
+        x:
+          type: integer
+          format: int32
+          minimum: 0
+        y:
+          type: integer
+          format: int32
+          minimum: 0
+        temporal_id:
+          $ref: "#/components/schemas/TemporalId"
+    SpatialData:
+      type: object
+      required:
+        - id
+        - data
+      properties:
+        id:
+          $ref: "#/components/schemas/ResponseSpatialId"
+        data: {}
+    SpatialId:
+      oneOf:
+        - type: object
+          required:
+            - z
+            - f
+            - x
+            - y
+            - type
+          properties:
+            z:
+              type: integer
+              format: int32
+              example: 20
+              maximum: 30
+              minimum: 0
+            f:
+              type: integer
+              format: int32
+              example: 0
+            x:
+              type: integer
+              format: int32
+              example: 931386
+              minimum: 0
+            y:
+              type: integer
+              format: int32
+              example: 412905
+              minimum: 0
+            type:
+              type: string
+              enum:
+                - singleId
+        - type: object
+          required:
+            - z
+            - f
+            - x
+            - y
+            - type
+          properties:
+            z:
+              type: integer
+              format: int32
+              example: 20
+              maximum: 30
+              minimum: 0
+            f:
+              type: array
+              items:
+                type: integer
+                format: int32
+              example:
+                - 0
+                - 0
+            x:
+              type: array
+              items:
+                type: integer
+                format: int32
+                minimum: 0
+              example:
+                - 931388
+                - 931390
+            y:
+              type: array
+              items:
+                type: integer
+                format: int32
+                minimum: 0
+              example:
+                - 412900
+                - 412907
+            type:
+              type: string
+              enum:
+                - rangeId
+    TemporalId:
+      description: |-
+        時間IDの区間表現を表す型である（temporal_id feature無効時のスタブ）。
+
+        `temporal_id` feature が無効な場合、[`TemporalId`] は常に全時間を表す
+        スタブ実装となる。すべてのメソッドは全時間を表す状態を返す。
+      default: null
+    ZoomLevelPolicy:
+      type: string
+      description: 各Layerのmax_zoom_levelよりも小さなIDが入力された場合の挙動を設定できる
+      enum:
+        - Error
+        - Ignore
+        - Normalize
+tags:
+  - name: layers
+    description: Layer operations
