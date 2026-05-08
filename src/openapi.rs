@@ -8,8 +8,9 @@ use crate::models::layer::{
 };
 use crate::models::query::{
     Geometry, LayerFilter, LayerFilterBoolean, LayerFilterFloat, LayerFilterInt, LayerFilterText,
-    LayerFilterType, PointCoordinate, Query, SpatialId,
+    LayerFilterType, PointCoordinate, Query,
 };
+use crate::models::spatial_id::SpatialId;
 
 #[derive(OpenApi)]
 #[openapi(

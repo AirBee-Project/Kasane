@@ -82,10 +82,10 @@ impl Query {
                 let mut result = SpatialIdSet::new();
                 for spatial_id in ids {
                     match spatial_id {
-                        crate::models::query::SpatialId::SingleId { z, f, x, y } => {
+                        crate::models::spatial_id::SpatialId::SingleId { z, f, x, y } => {
                             result.insert(SingleId::new(*z, *f, *x, *y)?);
                         }
-                        crate::models::query::SpatialId::RangeId { z, f, x, y } => {
+                        crate::models::spatial_id::SpatialId::RangeId { z, f, x, y } => {
                             result.insert(RangeId::new(*z, *f, *x, *y)?);
                         }
                     }
