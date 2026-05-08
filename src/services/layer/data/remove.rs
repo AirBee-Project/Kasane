@@ -15,10 +15,10 @@ pub async fn remove(app_state: &AppState, layer_name: &str, query: Query) -> Res
         }
     };
 
-    let ids = query.process(layer.max_zoom_level)?;
+    let _ids = query.process(layer.max_zoom_level)?;
 
     // db.data
     todo!();
 
-    db.commit()
+    // db.commit()
 }

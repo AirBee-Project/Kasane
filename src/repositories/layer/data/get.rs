@@ -1,5 +1,5 @@
 use kasane_logic::{IterSingleIds, SingleId, SpatialIdSet};
-use redb::{AccessGuard, ReadOnlyTable, ReadableTable, Table};
+use redb::{AccessGuard, ReadOnlyTable};
 
 use crate::{
     db_init::SPATIAL_IDS,

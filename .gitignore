@@ -33,3 +33,4 @@ default.kasane
 kasane.toml
 default.kasane
 /core/bindings
+.env
