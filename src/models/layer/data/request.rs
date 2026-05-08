@@ -11,16 +11,16 @@ pub struct GetDataRequest {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-/// 空間IDの範囲を[Query]で指定して値を挿入する
+/// 空間IDの範囲を指定して値を挿入する
 pub struct InsertDataRequest {
-    pub query: Query,
     pub value: serde_json::Value,
+    pub query: Query,
     #[serde(default)]
     pub zoom_level_policy: ZoomLevelPolicy,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-/// 空間IDの範囲を[Query]で指定して値を削除する
+/// 空間IDの範囲を指定して値を削除する
 pub struct RemoveDataRequest {
     pub query: Query,
     #[serde(default)]

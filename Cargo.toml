@@ -6,7 +6,7 @@ edition = "2024"
 
 [dependencies]
 axum = { version = "0.8.9", features = ["macros"] }
-kasane-logic = { path = "../kasane-logic", features = ["serde","openapi"] }
+kasane-logic = { git = "https://github.com/AirBee-Project/Kasane-Logic.git", branch = "main" ,features = ["openapi","serde"]}
 tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

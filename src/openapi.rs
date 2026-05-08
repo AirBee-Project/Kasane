@@ -1,18 +1,19 @@
 use utoipa::OpenApi;
 
-use crate::models::query::{
-    Geometry, LayerFilter, LayerFilterBoolean, LayerFilterFloat, LayerFilterInt, LayerFilterText,
-    LayerFilterType, PointCoordinate, Query, SpatialId,
-};
 use crate::models::layer::data::{
     GetDataRequest, GetDataResponse, InsertDataRequest, RemoveDataRequest,
 };
 use crate::models::layer::{
     CreateLayerRequest, LayerDataType, LayerInfoResponse, LayerListResponse,
 };
+use crate::models::query::{
+    Geometry, LayerFilter, LayerFilterBoolean, LayerFilterFloat, LayerFilterInt, LayerFilterText,
+    LayerFilterType, PointCoordinate, Query, SpatialId,
+};
 
 #[derive(OpenApi)]
 #[openapi(
+    servers(),
     paths(
         // GET  /layers
         crate::handlers::layer::list::layer_list,

@@ -1,0 +1,98 @@
+meta {
+  name: data_insert
+  type: http
+  seq: 5
+  tags: [
+    layers
+  ]
+}
+
+put {
+  url: {{baseUrl}}/layers/:name/data
+  body: json
+  auth: inherit
+}
+
+params:path {
+  name: 
+}
+
+body:json {
+  {
+    "value": "",
+    "query": "",
+    "zoom_level_policy": "Error"
+  }
+}
+
+example {
+  name: 201 Response
+  description: Data Inserted
+  
+  request: {
+    url: {{baseUrl}}/layers/:name/data
+    method: PUT
+    mode: json
+    params:path: {
+      name: 
+    }
+  
+    body:json: {
+      {
+        "value": "",
+        "query": "",
+        "zoom_level_policy": "Error"
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 201
+      text: Created
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Layer not found
+  
+  request: {
+    url: {{baseUrl}}/layers/:name/data
+    method: PUT
+    mode: json
+    params:path: {
+      name: 
+    }
+  
+    body:json: {
+      {
+        "value": "",
+        "query": "",
+        "zoom_level_policy": "Error"
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 404
+      text: Not Found
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

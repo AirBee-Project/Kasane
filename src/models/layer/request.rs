@@ -1,11 +1,11 @@
+use super::LayerDataType;
 use serde::Deserialize;
 use utoipa::ToSchema;
-use super::LayerDataType;
 
 #[derive(Debug, Deserialize, ToSchema)]
 /// 時空間IDと値が対応するLayerを作成する
 pub struct CreateLayerRequest {
-    #[schema(example = "my_layer")]
+    #[schema(example = "example_layer")]
     pub name: String,
     #[schema(example = LayerDataType::Int)]
     pub data_type: LayerDataType,

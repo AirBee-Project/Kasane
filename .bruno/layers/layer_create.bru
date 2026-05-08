@@ -1,0 +1,118 @@
+meta {
+  name: layer_create
+  type: http
+  seq: 2
+  tags: [
+    layers
+  ]
+}
+
+post {
+  url: {{baseUrl}}/layers
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "example_layer",
+    "data_type": "Text",
+    "max_zoom_level": 25
+  }
+}
+
+example {
+  name: 201 Response
+  description: Layer created
+  
+  request: {
+    url: {{baseUrl}}/layers
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "name": "example_layer",
+        "data_type": "Text",
+        "max_zoom_level": 25
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 201
+      text: Created
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Invalid request
+  
+  request: {
+    url: {{baseUrl}}/layers
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "name": "example_layer",
+        "data_type": "Text",
+        "max_zoom_level": 25
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 409 Response
+  description: Layer already exists
+  
+  request: {
+    url: {{baseUrl}}/layers
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "name": "example_layer",
+        "data_type": "Text",
+        "max_zoom_level": 25
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 409
+      text: Conflict
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

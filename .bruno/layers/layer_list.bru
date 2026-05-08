@@ -1,0 +1,49 @@
+meta {
+  name: layer_list
+  type: http
+  seq: 1
+  tags: [
+    layers
+  ]
+}
+
+get {
+  url: {{baseUrl}}/layers
+  body: none
+  auth: inherit
+}
+
+example {
+  name: 200 Response
+  description: List of all layers
+  
+  request: {
+    url: {{baseUrl}}/layers
+    method: GET
+    mode: none
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        [
+          {
+            "name": "example_layer",
+            "data_type": "Text",
+            "max_zoom_level": 25
+          }
+        ]
+      '''
+    }
+  }
+}

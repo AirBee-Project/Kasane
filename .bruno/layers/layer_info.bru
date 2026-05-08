@@ -1,0 +1,82 @@
+meta {
+  name: layer_info
+  type: http
+  seq: 3
+  tags: [
+    layers
+  ]
+}
+
+get {
+  url: {{baseUrl}}/layers/:name
+  body: none
+  auth: inherit
+}
+
+params:path {
+  name: example_layer
+}
+
+example {
+  name: 200 Response
+  description: Layer information
+  
+  request: {
+    url: {{baseUrl}}/layers/:name
+    method: GET
+    mode: none
+    params:path: {
+      name: 
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "name": "example_layer",
+          "data_type": "Text",
+          "max_zoom_level": 25
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Layer not found
+  
+  request: {
+    url: {{baseUrl}}/layers/:name
+    method: GET
+    mode: none
+    params:path: {
+      name: 
+    }
+  }
+  
+  response: {
+    status: {
+      code: 404
+      text: Not Found
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

@@ -1,0 +1,95 @@
+meta {
+  name: data_remove
+  type: http
+  seq: 6
+  tags: [
+    layers
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/layers/:name/data
+  body: json
+  auth: inherit
+}
+
+params:path {
+  name: 
+}
+
+body:json {
+  {
+    "query": "",
+    "zoom_level_policy": "Error"
+  }
+}
+
+example {
+  name: 204 Response
+  description: Data Removed
+  
+  request: {
+    url: {{baseUrl}}/layers/:name/data
+    method: DELETE
+    mode: json
+    params:path: {
+      name: 
+    }
+  
+    body:json: {
+      {
+        "query": "",
+        "zoom_level_policy": "Error"
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 204
+      text: No Content
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Layer not found
+  
+  request: {
+    url: {{baseUrl}}/layers/:name/data
+    method: DELETE
+    mode: json
+    params:path: {
+      name: 
+    }
+  
+    body:json: {
+      {
+        "query": "",
+        "zoom_level_policy": "Error"
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 404
+      text: Not Found
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
