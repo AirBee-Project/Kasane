@@ -1,4 +1,4 @@
-use redb::{Database, TableDefinition};
+use redb::{Database, TableDefinition, TableHandle};
 
 use crate::models::layer::LayerMetadata;
 
@@ -19,9 +19,23 @@ pub const LAYER_IDS_KEY: &str = "t";
 
 /// 空間IDと値の対応を管理するためのテーブル
 ///
-/// Key: (LayerのID, 12バイトのID)
+/// Key: (LayerのID, 空間IDのエンコードバイト)
 /// Value: 値のバイト列
 pub const SPATIAL_IDS: TableDefinition<(u64, [u8; 12]), &[u8]> = TableDefinition::new("3");
+
+/// 空間IDに対して割り当てられた値を管理するためのテーブル
+/// ID > Valueの紐づけを行う。
+///
+/// Key:(LayerのID,ValueのID)
+/// Value: Valueのバイト列
+pub const ID_TO_VALUE: TableDefinition<(u64, u64), &[u8]> = TableDefinition::new("4");
+
+//// 空間IDに対して割り当てられた値を管理するためのテーブル
+/// Value > IDの紐づけを行う。
+///
+/// Key:(LayerのID,Valueのバイト列)
+/// Value: VlaueのID
+pub const VALUE_TO_ID: TableDefinition<(u64, &[u8]), u64> = TableDefinition::new("5");
 
 pub fn initialize_database(path: &str) -> Database {
     let database = Database::create(path).unwrap();
