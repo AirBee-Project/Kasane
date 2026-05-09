@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use redb::{ReadableTable, WriteTransaction};
 
 use crate::{
-    db_init::{LAYER_ID_INDEX, LAYERS},
+    db_init::{LAYER_ID_INDEX, LAYERS, SPATIALID_TO_VALUE, VALUE_TO_SPATIALID},
     error::AppError,
     models::layer::{Layer, LayerDataType, LayerMetadata},
 };
@@ -119,6 +119,61 @@ impl SpatialDbWrite {
         //IDインデックスからも削除
         let mut redb_layer_ids = self.write_txn.open_table(LAYER_ID_INDEX)?;
         redb_layer_ids.remove(layer_meta.id.into_bytes())?;
+
+        //空間データからも削除
+        let layer_id_bytes = layer_meta.id.into_bytes();
+
+        loop {
+            let key_to_delete = {
+                let redb_spatialid_to_value = self.write_txn.open_table(SPATIALID_TO_VALUE)?;
+                redb_spatialid_to_value
+                    .range((layer_id_bytes, [0u8; 12])..=(layer_id_bytes, [255u8; 12]))?
+                    .next()
+                    .transpose()?
+                    .map(|(key_guard, _)| key_guard.value().clone())
+            };
+
+            match key_to_delete {
+                Some(key) => {
+                    let mut redb_spatialid_to_value =
+                        self.write_txn.open_table(SPATIALID_TO_VALUE)?;
+                    redb_spatialid_to_value.remove(&key)?;
+                }
+                None => break,
+            }
+        }
+
+        //値データからも削除
+        loop {
+            let key_to_delete = {
+                let redb_value_to_spatialid = self.write_txn.open_table(VALUE_TO_SPATIALID)?;
+                let mut result: Option<([u8; 16], Vec<u8>, [u8; 12])> = None;
+
+                if let Some(entry) = redb_value_to_spatialid
+                    .range((layer_id_bytes, &[] as &[u8], [0u8; 12])..)?
+                    .next()
+                    .transpose()?
+                {
+                    let (key_guard, _) = entry;
+                    let (id, bytes_ref, spatial_id) = key_guard.value();
+                    // 別のレイヤーに到達したら終了
+                    if id[..] != layer_id_bytes[..] {
+                        return Ok(());
+                    }
+                    result = Some((id.clone(), bytes_ref.to_vec(), spatial_id.clone()));
+                }
+                result
+            };
+
+            match key_to_delete {
+                Some((id, bytes, spatial_id)) => {
+                    let mut redb_value_to_spatialid =
+                        self.write_txn.open_table(VALUE_TO_SPATIALID)?;
+                    redb_value_to_spatialid.remove(&(id, bytes.as_slice(), spatial_id))?;
+                }
+                None => break,
+            }
+        }
 
         //キャッシュから削除
         self.layer_caches.remove(layer_name);
