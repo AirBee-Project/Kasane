@@ -57,6 +57,23 @@ jobs:
             cargo test --locked --lib --bins --tests --no-default-features
           fi
 
+      - name: Verify OpenAPI spec matches generated
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Generate OpenAPI spec
+          cargo test generate_openapi_spec --no-fail-fast
+          # Compare generated files with committed files
+          git diff -- openapi.json openapi.yaml || true
+          # Check if there are uncommitted changes
+          if git diff --quiet openapi.json openapi.yaml; then
+            echo "✓ OpenAPI specs are up to date"
+          else
+            echo "✗ OpenAPI specs are out of date. Please run 'cargo test' and commit the updated files."
+            git diff openapi.json openapi.yaml
+            exit 1
+          fi
+
       - name: Clippy
         shell: bash
         run: |
