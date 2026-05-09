@@ -7,6 +7,7 @@ use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 #[tokio::test]
+/// 正しく情報を取得できているかを検証する
 async fn test_layer_info_success() {
     let test_app = TestApp::new();
 
@@ -24,10 +25,8 @@ async fn test_layer_info_success() {
 
     let response = test_app.app.clone().oneshot(req).await.unwrap();
 
-    // 成功時は 200 OK
     assert_eq!(response.status(), StatusCode::OK);
 
-    // ボディの検証
     let body_bytes = response.into_body().collect().await.unwrap().to_bytes();
     let body_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
@@ -37,8 +36,12 @@ async fn test_layer_info_success() {
 }
 
 #[tokio::test]
+/// 存在しないレイヤーの情報が取得できないことを確認する
 async fn test_layer_info_not_found() {
     let test_app = TestApp::new();
+
+    // ダミーのレイヤーを作成
+    test_app.create_layer("example_layer", "Int", 25).await;
 
     // 存在しないレイヤーの情報を取得しようとする
     let req = Request::builder()

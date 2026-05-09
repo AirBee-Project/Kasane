@@ -6,6 +6,7 @@ use axum::{
 use tower::ServiceExt;
 
 #[tokio::test]
+/// layerが正しく削除できることを確認する
 async fn test_delete_layer_success() {
     let test_app = TestApp::new();
 
@@ -20,11 +21,9 @@ async fn test_delete_layer_success() {
         .unwrap();
 
     let response = test_app.app.clone().oneshot(req).await.unwrap();
-
-    // 成功時は 204 No Content が返される
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-    // 削除後に情報取得リクエストを投げると 404 Not Found になることを確認
+    // 削除できていることを確認
     let get_req = Request::builder()
         .method("GET")
         .uri("/layers/layer_to_delete")
@@ -36,8 +35,12 @@ async fn test_delete_layer_success() {
 }
 
 #[tokio::test]
+/// 存在しないLayerを削除できていることを検証する
 async fn test_delete_layer_not_found() {
     let test_app = TestApp::new();
+
+    // ダミーのレイヤーを作成
+    test_app.create_layer("example_layer", "Int", 25).await;
 
     // 存在しないレイヤーを削除しようとする
     let req = Request::builder()
