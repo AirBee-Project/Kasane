@@ -22,11 +22,9 @@ pub async fn upsert(
         }
     };
 
-    let _value = interpret_value(layer.data_type, value)?;
-    let _ids = query.process(layer.max_zoom_level)?;
+    let value = interpret_value(layer.data_type, value)?;
+    let ids = query.process(layer.max_zoom_level)?;
 
-    // crate::repositories::layer::data::insert::data_upsert(layer.id, ids, &value)?;
-    todo!();
-
-    // db.commit()
+    db.data_upsert(layer_name, ids, &value)?;
+    db.commit()
 }

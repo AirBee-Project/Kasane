@@ -1,4 +1,4 @@
-use kasane_logic::{IterSingleIds, SingleId, SpatialIdSet};
+use kasane_logic::{IntoSingleIds, IterSingleIds, SingleId, SpatialIdSet};
 use redb::{AccessGuard, ReadableTable, Table};
 
 use crate::{
@@ -83,6 +83,89 @@ impl SpatialDbWrite {
                 &single_id,
             )?;
         }
+
+        for (single_id, value) in should_insert {
+            Self::insert_and_merge(
+                &mut redb_sppatialid_to_value,
+                &mut redb_value_to_spatialid,
+                layer_meta.id,
+                &single_id,
+                &value,
+            )?;
+        }
+
+        Ok(())
+    }
+
+    pub fn data_upsert(
+        &self,
+        layer_name: &str,
+        ids: SpatialIdSet,
+        data: &[u8],
+    ) -> Result<(), AppError> {
+        //存在検証
+        let layer_meta = match self.layer_info(layer_name)? {
+            Some(v) => v,
+            None => {
+                return Err(AppError::LayerNotFound {
+                    name: layer_name.to_string(),
+                });
+            }
+        };
+
+        let mut redb_sppatialid_to_value = self.write_txn.open_table(SPATIALID_TO_VALUE)?;
+
+        let mut should_insert: Vec<(SingleId, Vec<u8>)> = Vec::new();
+
+        for single_id in ids.iter_single_ids() {
+            //single_idと完全に等しい位置を調べる
+            if let Some(access_guard) =
+                Self::overlap_equal(&redb_sppatialid_to_value, layer_meta.id, &single_id)?
+            {
+                if access_guard.value() == data {
+                    continue;
+                } else {
+                    continue;
+                }
+            };
+
+            //single_idの親を調べていく
+            if let Some((_, _)) =
+                Self::overlap_parent(&redb_sppatialid_to_value, layer_meta.id, &single_id)?
+            {
+                //親が一つでもあれば挿入する必要はない
+                continue;
+            }
+
+            //single_idの子を調べる
+            if let Some(children_single_ids) =
+                Self::overlap_children(&redb_sppatialid_to_value, layer_meta.id, &single_id)?
+            {
+                let mut children_set = SpatialIdSet::new();
+                let mut parent_set = SpatialIdSet::new();
+
+                for single_id in children_single_ids {
+                    children_set.insert(single_id);
+                }
+
+                parent_set.insert(single_id);
+
+                let insert_set = parent_set - children_set;
+
+                should_insert.extend(
+                    insert_set
+                        .into_single_ids()
+                        .map(|single_id| (single_id, data.to_vec())),
+                );
+
+                continue;
+            }
+
+            // 一切の重なりがないので普通に挿入する
+            should_insert.push((single_id.clone(), data.to_vec()));
+        }
+
+        let mut redb_value_to_spatialid = self.write_txn.open_table(VALUE_TO_SPATIALID)?;
 
         for (single_id, value) in should_insert {
             Self::insert_and_merge(
