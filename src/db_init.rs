@@ -37,6 +37,8 @@ pub fn initialize_database(path: &str) -> Database {
     {
         let _ = write_txn.open_table(LAYERS).unwrap();
         let _ = write_txn.open_table(LAYER_ID_INDEX).unwrap();
+        let _ = write_txn.open_table(SPATIALID_TO_VALUE).unwrap();
+        let _ = write_txn.open_table(VALUE_TO_SPATIALID).unwrap();
     }
 
     write_txn.commit().unwrap();
