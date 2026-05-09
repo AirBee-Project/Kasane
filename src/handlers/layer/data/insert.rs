@@ -30,5 +30,5 @@ pub async fn data_insert(
         &payload.zoom_level_policy,
     )
     .await?;
-    Ok(StatusCode::CREATED)
+    Ok(StatusCode::OK)
 }

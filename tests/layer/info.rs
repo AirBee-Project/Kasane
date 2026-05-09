@@ -1,10 +1,11 @@
-use crate::common::TestApp;
 use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
 use tower::ServiceExt;
+
+use crate::layer::common::TestApp;
 
 #[tokio::test]
 /// 正しく情報を取得できているかを検証する
