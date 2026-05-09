@@ -2,7 +2,7 @@ use kasane_logic::{IterSingleIds, SingleId, SpatialIdSet};
 use redb::{AccessGuard, ReadOnlyTable};
 
 use crate::{
-    db_init::SPATIAL_IDS,
+    db_init::SPATIALID_TO_VALUE,
     error::AppError,
     repositories::layer::{read::SpatialDbRead, write::SpatialDbWrite},
 };
@@ -26,7 +26,7 @@ impl SpatialDbRead {
 
         let mut result = Vec::new();
 
-        let redb_spatial_ids = self.read_txn.open_table(SPATIAL_IDS)?;
+        let redb_spatial_ids = self.read_txn.open_table(SPATIALID_TO_VALUE)?;
 
         for single_id in ids.iter_single_ids() {
             //single_idと完全に等しい位置を調べる
@@ -66,7 +66,9 @@ impl SpatialDbRead {
         layer_id: uuid::Uuid,
         target: &SingleId,
     ) -> Result<Option<AccessGuard<'a, &'static [u8]>>, AppError> {
-        if let Some(access_guard) = redb_spatial_ids.get((layer_id.into_bytes(), target.spatial_encode()))? {
+        if let Some(access_guard) =
+            redb_spatial_ids.get((layer_id.into_bytes(), target.spatial_encode()))?
+        {
             return Ok(Some(access_guard));
         }
         Ok(None)
@@ -81,7 +83,9 @@ impl SpatialDbRead {
         target: &SingleId,
     ) -> Result<Option<(SingleId, AccessGuard<'a, &'static [u8]>)>, AppError> {
         for parent in target.spatial_parents() {
-            if let Some(access_guard) = redb_spatial_ids.get((layer_id.into_bytes(), parent.spatial_encode()))? {
+            if let Some(access_guard) =
+                redb_spatial_ids.get((layer_id.into_bytes(), parent.spatial_encode()))?
+            {
                 return Ok(Some((parent, access_guard)));
             }
         }
@@ -99,7 +103,8 @@ impl SpatialDbRead {
         let mut result: Vec<_> = Vec::new();
 
         for ele in redb_spatial_ids.range(
-            (layer_id.into_bytes(), target.spatial_encode())..=(layer_id.into_bytes(), target.spatial_encode_prefix_max()),
+            (layer_id.into_bytes(), target.spatial_encode())
+                ..=(layer_id.into_bytes(), target.spatial_encode_prefix_max()),
         )? {
             let (key, value) = ele?;
             let (_, single_id_encode) = key.value();
