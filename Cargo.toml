@@ -14,6 +14,7 @@ utoipa = { version = "5.0", features = ["axum_extras","preserve_order"] }
 utoipa-swagger-ui = { version = "9", features = ["axum", "vendored"] }
 tower = { version = "0.5.3", features = ["util"] }
 redb = "4.1.0"
+uuid = { version = "1.23.1", features = ["v7", "fast-rng", "serde"] }
 
 [dev-dependencies]
 http-body-util = "0.1.3"

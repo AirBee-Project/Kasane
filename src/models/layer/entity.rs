@@ -1,29 +1,30 @@
 use super::LayerDataType;
 use redb::Value;
 use serde::Deserialize;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Copy)]
 pub struct LayerMetadata {
-    pub id: u64,
+    pub id: Uuid,
     pub data_type: LayerDataType,
     pub max_zoom_level: u8,
 }
 
 impl Value for LayerMetadata {
     type SelfType<'a> = LayerMetadata;
-    type AsBytes<'a> = [u8; 10];
+    type AsBytes<'a> = [u8; 18];
 
     fn fixed_width() -> Option<usize> {
-        Some(10)
+        Some(18)
     }
 
     fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
     where
         Self: 'a,
     {
-        let id = u64::from_le_bytes(data[0..8].try_into().expect("invalid u64 bytes"));
-        let data_type = LayerDataType::from_bytes(&data[8..9]);
-        let max_zoom_level = data[9..10].first().unwrap().clone();
+        let id = Uuid::from_slice(&data[0..16]).expect("invalid uuid bytes");
+        let data_type = LayerDataType::from_bytes(&data[16..17]);
+        let max_zoom_level = data[17..18].first().unwrap().clone();
         LayerMetadata {
             id,
             data_type,
@@ -35,10 +36,10 @@ impl Value for LayerMetadata {
     where
         Self: 'b,
     {
-        let mut bytes = [0u8; 10];
-        bytes[0..8].copy_from_slice(&value.id.to_le_bytes());
-        bytes[8] = value.data_type.clone() as u8;
-        bytes[9] = value.max_zoom_level;
+        let mut bytes = [0u8; 18];
+        bytes[0..16].copy_from_slice(value.id.as_bytes());
+        bytes[16] = value.data_type.clone() as u8;
+        bytes[17] = value.max_zoom_level;
         bytes
     }
 

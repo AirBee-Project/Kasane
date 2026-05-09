@@ -62,11 +62,11 @@ impl SpatialDbRead {
     ///
     /// 存在した場合には値の参照を返す
     pub(self) fn overlap_equal<'a>(
-        redb_spatial_ids: &ReadOnlyTable<(u64, [u8; 12]), &'static [u8]>,
-        layer_id: u64,
+        redb_spatial_ids: &ReadOnlyTable<([u8; 16], [u8; 12]), &'static [u8]>,
+        layer_id: uuid::Uuid,
         target: &SingleId,
     ) -> Result<Option<AccessGuard<'a, &'static [u8]>>, AppError> {
-        if let Some(access_guard) = redb_spatial_ids.get((layer_id, target.spatial_encode()))? {
+        if let Some(access_guard) = redb_spatial_ids.get((layer_id.into_bytes(), target.spatial_encode()))? {
             return Ok(Some(access_guard));
         }
         Ok(None)
@@ -76,12 +76,12 @@ impl SpatialDbRead {
     ///
     /// 存在した場合には[SingleId]と値の参照を返す
     pub(self) fn overlap_parent<'a>(
-        redb_spatial_ids: &ReadOnlyTable<(u64, [u8; 12]), &'static [u8]>,
-        layer_id: u64,
+        redb_spatial_ids: &ReadOnlyTable<([u8; 16], [u8; 12]), &'static [u8]>,
+        layer_id: uuid::Uuid,
         target: &SingleId,
     ) -> Result<Option<(SingleId, AccessGuard<'a, &'static [u8]>)>, AppError> {
         for parent in target.spatial_parents() {
-            if let Some(access_guard) = redb_spatial_ids.get((layer_id, parent.spatial_encode()))? {
+            if let Some(access_guard) = redb_spatial_ids.get((layer_id.into_bytes(), parent.spatial_encode()))? {
                 return Ok(Some((parent, access_guard)));
             }
         }
@@ -92,14 +92,14 @@ impl SpatialDbRead {
     ///
     /// 存在した場合には[SingleId]と値の参照を返す
     pub(self) fn overlap_children<'a>(
-        redb_spatial_ids: &ReadOnlyTable<(u64, [u8; 12]), &'static [u8]>,
-        layer_id: u64,
+        redb_spatial_ids: &ReadOnlyTable<([u8; 16], [u8; 12]), &'static [u8]>,
+        layer_id: uuid::Uuid,
         target: &SingleId,
     ) -> Result<Option<Vec<(SingleId, AccessGuard<'a, &'static [u8]>)>>, AppError> {
         let mut result: Vec<_> = Vec::new();
 
         for ele in redb_spatial_ids.range(
-            (layer_id, target.spatial_encode())..=(layer_id, target.spatial_encode_prefix_max()),
+            (layer_id.into_bytes(), target.spatial_encode())..=(layer_id.into_bytes(), target.spatial_encode_prefix_max()),
         )? {
             let (key, value) = ele?;
             let (_, single_id_encode) = key.value();

@@ -3,10 +3,11 @@ use std::collections::HashMap;
 use redb::{ReadableTable, WriteTransaction};
 
 use crate::{
-    db_init::{LAYER_IDS, LAYER_IDS_KEY, LAYERS},
+    db_init::{LAYER_ID_INDEX, LAYERS},
     error::AppError,
     models::layer::{Layer, LayerDataType, LayerMetadata},
 };
+use uuid::Uuid;
 
 pub struct SpatialDbWrite {
     pub write_txn: WriteTransaction,
@@ -65,8 +66,16 @@ impl SpatialDbWrite {
             });
         }
 
-        //IDを取得
-        let id = self.increment_layer_id()?;
+        let mut redb_layer_ids = self.write_txn.open_table(LAYER_ID_INDEX)?;
+
+        // UUIDv7の生成と衝突フォールバック
+        let mut id = Uuid::now_v7();
+        loop {
+            if redb_layer_ids.get(id.into_bytes())?.is_none() {
+                break;
+            }
+            id = Uuid::now_v7();
+        }
 
         //[LayerMetadata]を作成
         let meta = LayerMetadata {
@@ -78,6 +87,7 @@ impl SpatialDbWrite {
         //データベースを開いて挿入
         let mut redb_layers = self.write_txn.open_table(LAYERS)?;
         redb_layers.insert(layer_name, meta)?;
+        redb_layer_ids.insert(id.into_bytes(), ())?;
 
         //キャッシュに対して挿入
         self.layer_caches.insert(layer_name.to_string(), meta);
@@ -94,7 +104,9 @@ impl SpatialDbWrite {
     /// Layerを削除する
     pub fn layer_remove(&mut self, layer_name: &str) -> Result<(), AppError> {
         //存在検証
-        if self.layer_info(layer_name)?.is_some() {
+        let layer_meta = if let Some(meta) = self.layer_info(layer_name)? {
+            meta
+        } else {
             return Err(AppError::LayerNotFound {
                 name: layer_name.to_string(),
             });
@@ -104,21 +116,14 @@ impl SpatialDbWrite {
         let mut redb_layers = self.write_txn.open_table(LAYERS)?;
         redb_layers.remove(layer_name)?;
 
+        //IDインデックスからも削除
+        let mut redb_layer_ids = self.write_txn.open_table(LAYER_ID_INDEX)?;
+        redb_layer_ids.remove(layer_meta.id.into_bytes())?;
+
         //キャッシュから削除
         self.layer_caches.remove(layer_name);
 
         return Ok(());
-    }
-
-    /// 次のLayerに対して割り当てるIDを返す
-    fn increment_layer_id(&self) -> Result<u64, AppError> {
-        let mut redb_ids = self.write_txn.open_table(LAYER_IDS)?;
-        let current_id = match redb_ids.get(LAYER_IDS_KEY)? {
-            Some(id) => id.value(),
-            None => 0,
-        };
-        let _ = redb_ids.insert(LAYER_IDS_KEY, current_id + 1)?;
-        Ok(current_id)
     }
 
     /// 変更の内容を永続化する

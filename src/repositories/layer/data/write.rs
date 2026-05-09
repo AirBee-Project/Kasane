@@ -83,26 +83,26 @@ impl SpatialDbWrite {
     /// 入力した `SingleId` を挿入する。
     /// merge 可能な場合は siblings を親IDへ集約する。
     pub(self) fn insert_and_merge(
-        redb_spatial_ids: &mut Table<'_, (u64, [u8; 12]), &'static [u8]>,
-        layer_id: u64,
+        redb_spatial_ids: &mut Table<'_, ([u8; 16], [u8; 12]), &'static [u8]>,
+        layer_id: uuid::Uuid,
         target: &SingleId,
         value: &[u8],
     ) -> Result<(), AppError> {
         let Some(siblings) = target.spatial_siblings() else {
-            redb_spatial_ids.insert((layer_id, target.spatial_encode()), value)?;
+            redb_spatial_ids.insert((layer_id.into_bytes(), target.spatial_encode()), value)?;
             return Ok(());
         };
 
         // すべてのsiblingsが存在し、かつ同じ値を持つかをチェック
         let can_merge = siblings.iter().all(|sibling| {
-            match redb_spatial_ids.get((layer_id, sibling.spatial_encode())) {
+            match redb_spatial_ids.get((layer_id.into_bytes(), sibling.spatial_encode())) {
                 Ok(Some(access_guard)) => access_guard.value() == value,
                 _ => false,
             }
         });
 
         if !can_merge {
-            redb_spatial_ids.insert((layer_id, target.spatial_encode()), value)?;
+            redb_spatial_ids.insert((layer_id.into_bytes(), target.spatial_encode()), value)?;
             return Ok(());
         }
 
@@ -114,18 +114,18 @@ impl SpatialDbWrite {
         // 親へ集約
         let parent = target.spatial_parent_at_zoom(target.z() - 1)?;
 
-        redb_spatial_ids.insert((layer_id, parent.spatial_encode()), value)?;
+        redb_spatial_ids.insert((layer_id.into_bytes(), parent.spatial_encode()), value)?;
 
         Ok(())
     }
 
     ///入力された[SingleId]を削除する
     pub(self) fn remove<'a>(
-        redb_spatial_ids: &'a mut Table<'_, (u64, [u8; 12]), &'static [u8]>,
-        layer_id: u64,
+        redb_spatial_ids: &'a mut Table<'_, ([u8; 16], [u8; 12]), &'static [u8]>,
+        layer_id: uuid::Uuid,
         target: &SingleId,
     ) -> Result<(), AppError> {
-        redb_spatial_ids.remove((layer_id, target.spatial_encode()))?;
+        redb_spatial_ids.remove((layer_id.into_bytes(), target.spatial_encode()))?;
         Ok(())
     }
 
@@ -133,11 +133,11 @@ impl SpatialDbWrite {
     ///
     /// 存在した場合には値の参照を返す
     pub(self) fn overlap_equal<'a>(
-        redb_spatial_ids: &'a Table<'_, (u64, [u8; 12]), &'static [u8]>,
-        layer_id: u64,
+        redb_spatial_ids: &'a Table<'_, ([u8; 16], [u8; 12]), &'static [u8]>,
+        layer_id: uuid::Uuid,
         target: &SingleId,
     ) -> Result<Option<AccessGuard<'a, &'static [u8]>>, AppError> {
-        if let Some(access_guard) = redb_spatial_ids.get((layer_id, target.spatial_encode()))? {
+        if let Some(access_guard) = redb_spatial_ids.get((layer_id.into_bytes(), target.spatial_encode()))? {
             return Ok(Some(access_guard));
         }
         Ok(None)
@@ -147,12 +147,12 @@ impl SpatialDbWrite {
     ///
     /// 存在した場合には[SingleId]と値の参照を返す
     pub(self) fn overlap_parent<'a>(
-        redb_spatial_ids: &'a Table<'_, (u64, [u8; 12]), &'static [u8]>,
-        layer_id: u64,
+        redb_spatial_ids: &'a Table<'_, ([u8; 16], [u8; 12]), &'static [u8]>,
+        layer_id: uuid::Uuid,
         target: &SingleId,
     ) -> Result<Option<(SingleId, AccessGuard<'a, &'static [u8]>)>, AppError> {
         for parent in target.spatial_parents() {
-            if let Some(access_guard) = redb_spatial_ids.get((layer_id, parent.spatial_encode()))? {
+            if let Some(access_guard) = redb_spatial_ids.get((layer_id.into_bytes(), parent.spatial_encode()))? {
                 return Ok(Some((parent, access_guard)));
             }
         }
@@ -163,14 +163,14 @@ impl SpatialDbWrite {
     ///
     /// 存在した場合には[SingleId]と値の参照を返す
     pub(self) fn overlap_children(
-        redb_spatial_ids: &Table<'_, (u64, [u8; 12]), &'static [u8]>,
-        layer_id: u64,
+        redb_spatial_ids: &Table<'_, ([u8; 16], [u8; 12]), &'static [u8]>,
+        layer_id: uuid::Uuid,
         target: &SingleId,
     ) -> Result<Option<Vec<SingleId>>, AppError> {
         let mut result: Vec<_> = Vec::new();
 
         for ele in redb_spatial_ids.range(
-            (layer_id, target.spatial_encode())..=(layer_id, target.spatial_encode_prefix_max()),
+            (layer_id.into_bytes(), target.spatial_encode())..=(layer_id.into_bytes(), target.spatial_encode_prefix_max()),
         )? {
             let (key, _) = ele?;
             let (_, single_id_encode) = key.value();
