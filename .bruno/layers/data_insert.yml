@@ -1,0 +1,80 @@
+info:
+  name: data_insert
+  type: http
+  seq: 5
+  tags:
+    - layers
+
+http:
+  method: PUT
+  url: "{{baseUrl}}/layers/:name/data"
+  params:
+    - name: name
+      value: ""
+      type: path
+      description: Layer name
+  body:
+    type: json
+    data: |-
+      {
+        "value": "",
+        "query": "",
+        "zoom_level_policy": "Error"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 201 Response
+    description: Data Inserted
+    request:
+      url: "{{baseUrl}}/layers/:name/data"
+      method: PUT
+      params:
+        - name: name
+          value: ""
+          type: path
+          description: Layer name
+      body:
+        type: json
+        data: |-
+          {
+            "value": "",
+            "query": "",
+            "zoom_level_policy": "Error"
+          }
+    response:
+      status: 201
+      statusText: Created
+      body:
+        type: text
+        data: ""
+  - name: 404 Response
+    description: Layer not found
+    request:
+      url: "{{baseUrl}}/layers/:name/data"
+      method: PUT
+      params:
+        - name: name
+          value: ""
+          type: path
+          description: Layer name
+      body:
+        type: json
+        data: |-
+          {
+            "value": "",
+            "query": "",
+            "zoom_level_policy": "Error"
+          }
+    response:
+      status: 404
+      statusText: Not Found
+      body:
+        type: text
+        data: ""

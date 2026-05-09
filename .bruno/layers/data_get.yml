@@ -1,0 +1,54 @@
+info:
+  name: data_get
+  type: http
+  seq: 8
+  tags:
+    - layers
+
+http:
+  method: POST
+  url: "{{baseUrl}}/layers/:name/data/search"
+  params:
+    - name: name
+      value: ""
+      type: path
+      description: Layer name
+  body:
+    type: json
+    data: |-
+      {
+        "query": "",
+        "zoom_level_policy": "Error"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 404 Response
+    description: Layer not found
+    request:
+      url: "{{baseUrl}}/layers/:name/data/search"
+      method: POST
+      params:
+        - name: name
+          value: ""
+          type: path
+          description: Layer name
+      body:
+        type: json
+        data: |-
+          {
+            "query": "",
+            "zoom_level_policy": "Error"
+          }
+    response:
+      status: 404
+      statusText: Not Found
+      body:
+        type: text
+        data: ""

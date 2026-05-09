@@ -1,0 +1,56 @@
+info:
+  name: layer_remove
+  type: http
+  seq: 4
+  tags:
+    - layers
+
+http:
+  method: DELETE
+  url: "{{baseUrl}}/layers/:name"
+  params:
+    - name: name
+      value: ""
+      type: path
+      description: Layer name
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 204 Response
+    description: Layer deleted
+    request:
+      url: "{{baseUrl}}/layers/:name"
+      method: DELETE
+      params:
+        - name: name
+          value: ""
+          type: path
+          description: Layer name
+    response:
+      status: 204
+      statusText: No Content
+      body:
+        type: text
+        data: ""
+  - name: 404 Response
+    description: Layer not found
+    request:
+      url: "{{baseUrl}}/layers/:name"
+      method: DELETE
+      params:
+        - name: name
+          value: ""
+          type: path
+          description: Layer name
+    response:
+      status: 404
+      statusText: Not Found
+      body:
+        type: text
+        data: ""

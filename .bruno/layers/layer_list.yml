@@ -1,0 +1,40 @@
+info:
+  name: layer_list
+  type: http
+  seq: 1
+  tags:
+    - layers
+
+http:
+  method: GET
+  url: "{{baseUrl}}/layers"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 200 Response
+    description: List of all layers
+    request:
+      url: "{{baseUrl}}/layers"
+      method: GET
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          [
+            {
+              "name": "example_layer",
+              "data_type": "Text",
+              "max_zoom_level": 25
+            }
+          ]

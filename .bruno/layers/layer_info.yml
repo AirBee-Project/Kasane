@@ -1,0 +1,64 @@
+info:
+  name: layer_info
+  type: http
+  seq: 3
+  tags:
+    - layers
+
+http:
+  method: GET
+  url: "{{baseUrl}}/layers/:name"
+  params:
+    - name: name
+      value: ""
+      type: path
+      description: Layer name
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 200 Response
+    description: Layer information
+    request:
+      url: "{{baseUrl}}/layers/:name"
+      method: GET
+      params:
+        - name: name
+          value: ""
+          type: path
+          description: Layer name
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "name": "example_layer",
+            "data_type": "Text",
+            "max_zoom_level": 25
+          }
+  - name: 404 Response
+    description: Layer not found
+    request:
+      url: "{{baseUrl}}/layers/:name"
+      method: GET
+      params:
+        - name: name
+          value: ""
+          type: path
+          description: Layer name
+    response:
+      status: 404
+      statusText: Not Found
+      body:
+        type: text
+        data: ""
