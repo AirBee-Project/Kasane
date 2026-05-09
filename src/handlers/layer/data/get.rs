@@ -1,6 +1,9 @@
 use crate::AppState;
-use axum::{Json, extract::{Path, State}};
 use crate::{error::AppError, services::layer::data::get as data_get_service};
+use axum::{
+    Json,
+    extract::{Path, State},
+};
 
 #[utoipa::path(
     post,
@@ -14,6 +17,7 @@ pub async fn data_get(
     Path(name): Path<String>,
     Json(payload): Json<crate::models::layer::data::GetDataRequest>,
 ) -> Result<Json<crate::models::layer::data::GetDataResponse>, AppError> {
-    let response = data_get_service::get(&app_state, &name, payload.query).await?;
+    let response =
+        data_get_service::get(&app_state, &name, payload.query, &payload.zoom_level_policy).await?;
     Ok(Json(response))
 }

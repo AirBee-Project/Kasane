@@ -1,7 +1,10 @@
-use crate::{AppState, error::AppError, models::layer::data::RemoveDataRequest};
 use crate::services::layer::data::remove as data_remove_service;
+use crate::{AppState, error::AppError, models::layer::data::RemoveDataRequest};
 use axum::http::StatusCode;
-use axum::{Json, extract::{Path, State}};
+use axum::{
+    Json,
+    extract::{Path, State},
+};
 
 #[utoipa::path(
     delete,
@@ -18,6 +21,7 @@ pub async fn data_remove(
     Path(name): Path<String>,
     Json(payload): Json<RemoveDataRequest>,
 ) -> Result<StatusCode, AppError> {
-    data_remove_service::remove(&app_state, &name, payload.query).await?;
+    data_remove_service::remove(&app_state, &name, payload.query, &payload.zoom_level_policy)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }

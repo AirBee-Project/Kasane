@@ -32,6 +32,10 @@ pub enum AppError {
         reason: String,
     },
     LogicError(kasane_logic::Error),
+    ZoomLevelPolicy {
+        max_zoom_level: u8,
+        input_zoom_level: u8,
+    },
 }
 
 impl fmt::Display for AppError {
@@ -55,6 +59,14 @@ impl fmt::Display for AppError {
             AppError::InvalidStoredValue { reason } => {
                 write!(f, "Invalid stored value: {}", reason)
             }
+            AppError::ZoomLevelPolicy {
+                max_zoom_level,
+                input_zoom_level,
+            } => write!(
+                f,
+                "Zoom level must be <= {}, but got {}",
+                max_zoom_level, input_zoom_level
+            ),
         }
     }
 }
@@ -98,6 +110,16 @@ impl IntoResponse for AppError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Invalid stored value: {}", reason),
             ),
+            AppError::ZoomLevelPolicy {
+                max_zoom_level,
+                input_zoom_level,
+            } => (
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "Zoom level must be <= {}, but got {}",
+                    max_zoom_level, input_zoom_level
+                ),
+            ),
         };
 
         let body = Json(json!({ "error": error_message }));
@@ -106,32 +128,52 @@ impl IntoResponse for AppError {
 }
 
 impl From<redb::Error> for AppError {
-    fn from(error: redb::Error) -> Self { AppError::StorageError(error) }
+    fn from(error: redb::Error) -> Self {
+        AppError::StorageError(error)
+    }
 }
 impl From<redb::TransactionError> for AppError {
-    fn from(error: redb::TransactionError) -> Self { AppError::StorageError(error.into()) }
+    fn from(error: redb::TransactionError) -> Self {
+        AppError::StorageError(error.into())
+    }
 }
 impl From<redb::DatabaseError> for AppError {
-    fn from(error: redb::DatabaseError) -> Self { AppError::StorageError(error.into()) }
+    fn from(error: redb::DatabaseError) -> Self {
+        AppError::StorageError(error.into())
+    }
 }
 impl From<redb::TableError> for AppError {
-    fn from(error: redb::TableError) -> Self { AppError::StorageError(error.into()) }
+    fn from(error: redb::TableError) -> Self {
+        AppError::StorageError(error.into())
+    }
 }
 impl From<redb::StorageError> for AppError {
-    fn from(error: redb::StorageError) -> Self { AppError::StorageError(error.into()) }
+    fn from(error: redb::StorageError) -> Self {
+        AppError::StorageError(error.into())
+    }
 }
 impl From<redb::SavepointError> for AppError {
-    fn from(error: redb::SavepointError) -> Self { AppError::StorageError(error.into()) }
+    fn from(error: redb::SavepointError) -> Self {
+        AppError::StorageError(error.into())
+    }
 }
 impl From<redb::CommitError> for AppError {
-    fn from(error: redb::CommitError) -> Self { AppError::StorageError(error.into()) }
+    fn from(error: redb::CommitError) -> Self {
+        AppError::StorageError(error.into())
+    }
 }
 impl From<redb::CompactionError> for AppError {
-    fn from(error: redb::CompactionError) -> Self { AppError::StorageError(error.into()) }
+    fn from(error: redb::CompactionError) -> Self {
+        AppError::StorageError(error.into())
+    }
 }
 impl From<redb::SetDurabilityError> for AppError {
-    fn from(error: redb::SetDurabilityError) -> Self { AppError::StorageError(error.into()) }
+    fn from(error: redb::SetDurabilityError) -> Self {
+        AppError::StorageError(error.into())
+    }
 }
 impl From<kasane_logic::Error> for AppError {
-    fn from(value: kasane_logic::Error) -> Self { AppError::LogicError(value) }
+    fn from(value: kasane_logic::Error) -> Self {
+        AppError::LogicError(value)
+    }
 }

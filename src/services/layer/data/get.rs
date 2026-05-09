@@ -4,7 +4,7 @@ use crate::{
     AppState,
     error::AppError,
     models::{
-        layer::data::{GetDataResponse, SpatialData},
+        layer::data::{GetDataResponse, SpatialData, ZoomLevelPolicy},
         query::Query,
     },
     repositories::layer::read::SpatialDbRead,
@@ -15,6 +15,7 @@ pub async fn get(
     app_state: &AppState,
     layer_name: &str,
     query: Query,
+    zoom_level_policy: &ZoomLevelPolicy,
 ) -> Result<GetDataResponse, AppError> {
     let read_txn = app_state.redb.begin_read()?;
     let db = SpatialDbRead::new(read_txn);
@@ -27,7 +28,7 @@ pub async fn get(
         }
         Err(e) => return Err(e),
     };
-    let ids = query.process(layer.max_zoom_level)?;
+    let ids = query.process(layer.max_zoom_level, zoom_level_policy)?;
     let mut result = Vec::new();
     for (single_id, value) in db.data_get(layer_name, ids)? {
         let json_value = restore_value(layer.data_type, &value)?;
