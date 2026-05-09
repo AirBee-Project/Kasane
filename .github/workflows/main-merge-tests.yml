@@ -4,11 +4,25 @@ on:
   pull_request:
     branches:
       - main
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "build.rs"
+      - ".github/workflows/**"
+      - "openapi.json"
+      - "openapi.yaml"
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   fmt:
     name: cargo fmt
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,13 +42,14 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     needs: fmt
+
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: "features: none"
             features: ""
-  
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,26 +66,41 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           if [ -n "${{ matrix.features }}" ]; then
-            cargo test --locked --lib --bins --tests --no-default-features --features "${{ matrix.features }}"
+            cargo test \
+              --locked \
+              --lib \
+              --bins \
+              --tests \
+              --no-default-features \
+              --features "${{ matrix.features }}"
           else
-            cargo test --locked --lib --bins --tests --no-default-features
+            cargo test \
+              --locked \
+              --lib \
+              --bins \
+              --tests \
+              --no-default-features
           fi
 
       - name: Verify OpenAPI spec matches generated
         shell: bash
         run: |
           set -euo pipefail
+
           # Generate OpenAPI spec
           cargo test generate_openapi_spec --no-fail-fast
-          # Compare generated files with committed files
+
+          # Show diff if changed
           git diff -- openapi.json openapi.yaml || true
-          # Check if there are uncommitted changes
+
+          # Fail if generated specs differ
           if git diff --quiet openapi.json openapi.yaml; then
             echo "✓ OpenAPI specs are up to date"
           else
-            echo "✗ OpenAPI specs are out of date. Please run 'cargo test' and commit the updated files."
-            git diff openapi.json openapi.yaml
+            echo "✗ OpenAPI specs are out of date."
+            echo "Run 'cargo test generate_openapi_spec' and commit the results."
             exit 1
           fi
 
@@ -78,8 +108,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           if [ -n "${{ matrix.features }}" ]; then
-            cargo clippy --locked --lib --bins --tests --no-default-features --features "${{ matrix.features }}" -- -D warnings
+            cargo clippy \
+              --locked \
+              --lib \
+              --bins \
+              --tests \
+              --no-default-features \
+              --features "${{ matrix.features }}" \
+              -- -D warnings
           else
-            cargo clippy --locked --lib --bins --tests --no-default-features -- -D warnings
+            cargo clippy \
+              --locked \
+              --lib \
+              --bins \
+              --tests \
+              --no-default-features \
+              -- -D warnings
           fi
