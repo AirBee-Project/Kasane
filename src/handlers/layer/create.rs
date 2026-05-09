@@ -28,7 +28,7 @@ pub async fn layer_create(
     layer_create_service::create(
         &app_state,
         &request.name,
-        request.data_type.clone(),
+        request.data_type,
         request.max_zoom_level,
     )
     .await?;

@@ -1,6 +1,9 @@
 {
+  "rust-analyzer.check.command": "clippy",
     "chat.tools.terminal.autoApprove": {
         "cargo check": true,
-        "cargo test": true
+        "cargo test": true,
+        "cargo clippy":true,
+        "cargo fmt":true
     }
 }

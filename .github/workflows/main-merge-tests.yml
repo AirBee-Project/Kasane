@@ -1,0 +1,68 @@
+name: main merge tests
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  fmt:
+    name: cargo fmt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  verify:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    needs: fmt
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "features: none"
+            features: ""
+  
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Test
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${{ matrix.features }}" ]; then
+            cargo test --locked --lib --bins --tests --no-default-features --features "${{ matrix.features }}"
+          else
+            cargo test --locked --lib --bins --tests --no-default-features
+          fi
+
+      - name: Clippy
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${{ matrix.features }}" ]; then
+            cargo clippy --locked --lib --bins --tests --no-default-features --features "${{ matrix.features }}" -- -D warnings
+          else
+            cargo clippy --locked --lib --bins --tests --no-default-features -- -D warnings
+          fi

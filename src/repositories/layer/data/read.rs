@@ -7,6 +7,10 @@ use crate::{
     repositories::layer::{read::SpatialDbRead, write::SpatialDbWrite},
 };
 
+type SpatialDataResult<'a> = Result<Option<(SingleId, AccessGuard<'a, &'static [u8]>)>, AppError>;
+type SpatialDataListResult<'a> =
+    Result<Option<Vec<(SingleId, AccessGuard<'a, &'static [u8]>)>>, AppError>;
+
 impl SpatialDbRead {
     ///データを取得する
     pub fn data_get(
@@ -81,7 +85,7 @@ impl SpatialDbRead {
         redb_spatial_ids: &ReadOnlyTable<([u8; 16], [u8; 12]), &'static [u8]>,
         layer_id: uuid::Uuid,
         target: &SingleId,
-    ) -> Result<Option<(SingleId, AccessGuard<'a, &'static [u8]>)>, AppError> {
+    ) -> SpatialDataResult<'a> {
         for parent in target.spatial_parents() {
             if let Some(access_guard) =
                 redb_spatial_ids.get((layer_id.into_bytes(), parent.spatial_encode()))?
@@ -99,7 +103,7 @@ impl SpatialDbRead {
         redb_spatial_ids: &ReadOnlyTable<([u8; 16], [u8; 12]), &'static [u8]>,
         layer_id: uuid::Uuid,
         target: &SingleId,
-    ) -> Result<Option<Vec<(SingleId, AccessGuard<'a, &'static [u8]>)>>, AppError> {
+    ) -> SpatialDataListResult<'a> {
         let mut result: Vec<_> = Vec::new();
 
         for ele in redb_spatial_ids.range(

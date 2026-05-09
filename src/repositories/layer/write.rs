@@ -80,7 +80,7 @@ impl SpatialDbWrite {
         //[LayerMetadata]を作成
         let meta = LayerMetadata {
             id,
-            data_type: data_type.clone(),
+            data_type,
             max_zoom_level,
         };
 
@@ -130,7 +130,7 @@ impl SpatialDbWrite {
                     .range((layer_id_bytes, [0u8; 12])..=(layer_id_bytes, [255u8; 12]))?
                     .next()
                     .transpose()?
-                    .map(|(key_guard, _)| key_guard.value().clone())
+                    .map(|(key_guard, _)| key_guard.value())
             };
 
             match key_to_delete {
@@ -160,7 +160,7 @@ impl SpatialDbWrite {
                     if id[..] != layer_id_bytes[..] {
                         return Ok(());
                     }
-                    result = Some((id.clone(), bytes_ref.to_vec(), spatial_id.clone()));
+                    result = Some((id, bytes_ref.to_vec(), spatial_id));
                 }
                 result
             };
@@ -178,7 +178,7 @@ impl SpatialDbWrite {
         //キャッシュから削除
         self.layer_caches.remove(layer_name);
 
-        return Ok(());
+        Ok(())
     }
 
     /// 変更の内容を永続化する

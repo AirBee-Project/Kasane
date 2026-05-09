@@ -15,7 +15,7 @@ pub async fn create(
     let mut db = SpatialDbWrite::new(write_txn);
 
     //名前の検証
-    let _ = name_valid(layer_name)?;
+    name_valid(layer_name)?;
 
     //layerの作成と反映
     db.layer_create(layer_name, data_type, max_zoom_level)?;

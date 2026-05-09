@@ -7,6 +7,8 @@ use crate::{
     repositories::layer::write::SpatialDbWrite,
 };
 
+type SpatialDataResult<'a> = Result<Option<(SingleId, AccessGuard<'a, &'static [u8]>)>, AppError>;
+
 impl SpatialDbWrite {
     /// 空間IDに対して値を割り当てる
     pub fn data_insert(
@@ -117,6 +119,7 @@ impl SpatialDbWrite {
 
         let mut should_insert: Vec<(SingleId, Vec<u8>)> = Vec::new();
 
+        #[allow(clippy::collapsible_if)]
         for single_id in ids.iter_single_ids() {
             //single_idと完全に等しい位置を調べる
             if let Some(access_guard) =
@@ -124,20 +127,10 @@ impl SpatialDbWrite {
             {
                 if access_guard.value() == data {
                     continue;
-                } else {
-                    continue;
                 }
-            };
-
-            //single_idの親を調べていく
-            if let Some((_, _)) =
-                Self::overlap_parent(&redb_sppatialid_to_value, layer_meta.id, &single_id)?
-            {
-                //親が一つでもあれば挿入する必要はない
-                continue;
             }
 
-            //single_idの子を調べる
+            //single_idの親を調べていく
             if let Some(children_single_ids) =
                 Self::overlap_children(&redb_sppatialid_to_value, layer_meta.id, &single_id)?
             {
@@ -184,6 +177,7 @@ impl SpatialDbWrite {
     /// merge 可能な場合は siblings を親IDへ集約する。
     ///
     /// SingleIdの情報のKey-Value Storeへの実際の挿入はこの関数で一元管理する。
+    #[allow(clippy::type_complexity)]
     pub(self) fn insert_and_merge(
         redb_sppatialid_to_value: &mut Table<'_, ([u8; 16], [u8; 12]), &'static [u8]>,
         redb_value_to_spatialid: &mut Table<'_, ([u8; 16], &[u8], [u8; 12]), ()>,
@@ -232,6 +226,7 @@ impl SpatialDbWrite {
     ///入力された[SingleId]を削除する
     ///
     /// SingleIdの情報のKey－Value Storeからの削除はこの関数で一元管理する。
+    #[allow(clippy::type_complexity)]
     pub(self) fn remove<'a>(
         redb_sppatialid_to_value: &'a mut Table<'_, ([u8; 16], [u8; 12]), &'static [u8]>,
         redb_value_to_spatialid: &'a mut Table<'_, ([u8; 16], &[u8], [u8; 12]), ()>,
@@ -243,7 +238,7 @@ impl SpatialDbWrite {
         {
             let value = access_guard.value();
             redb_value_to_spatialid.remove((
-                layer_id.as_bytes().clone(),
+                *layer_id.as_bytes(),
                 value,
                 target.spatial_encode(),
             ))?;
@@ -276,7 +271,7 @@ impl SpatialDbWrite {
         redb_sppatialid_to_value: &'a Table<'_, ([u8; 16], [u8; 12]), &'static [u8]>,
         layer_id: uuid::Uuid,
         target: &SingleId,
-    ) -> Result<Option<(SingleId, AccessGuard<'a, &'static [u8]>)>, AppError> {
+    ) -> SpatialDataResult<'a> {
         for parent in target.spatial_parents() {
             if let Some(access_guard) =
                 redb_sppatialid_to_value.get((layer_id.into_bytes(), parent.spatial_encode()))?

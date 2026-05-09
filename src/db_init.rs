@@ -25,6 +25,7 @@ pub const SPATIALID_TO_VALUE: TableDefinition<([u8; 16], [u8; 12]), &[u8]> =
 ///
 /// Key:(LayerのID,値のバイト列、空間IDのエンコードバイト列)
 /// Value: 空
+#[allow(clippy::type_complexity)]
 pub const VALUE_TO_SPATIALID: TableDefinition<([u8; 16], &[u8], [u8; 12]), ()> =
     TableDefinition::new("4");
 

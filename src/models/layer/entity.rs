@@ -24,7 +24,7 @@ impl Value for LayerMetadata {
     {
         let id = Uuid::from_slice(&data[0..16]).expect("invalid uuid bytes");
         let data_type = LayerDataType::from_bytes(&data[16..17]);
-        let max_zoom_level = data[17..18].first().unwrap().clone();
+        let max_zoom_level = *data[17..18].first().unwrap();
         LayerMetadata {
             id,
             data_type,
@@ -38,7 +38,7 @@ impl Value for LayerMetadata {
     {
         let mut bytes = [0u8; 18];
         bytes[0..16].copy_from_slice(value.id.as_bytes());
-        bytes[16] = value.data_type.clone() as u8;
+        bytes[16] = value.data_type as u8;
         bytes[17] = value.max_zoom_level;
         bytes
     }
