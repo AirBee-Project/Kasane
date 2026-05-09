@@ -1,10 +1,10 @@
 use axum::{
+    Router,
     body::Body,
     http::{Request, StatusCode},
-    Router,
 };
 
-use kasane::{db_init, kasane, AppState};
+use kasane::{AppState, db_init, kasane};
 use std::sync::Arc;
 use tempfile::NamedTempFile;
 use tower::ServiceExt;
@@ -19,9 +19,7 @@ impl TestApp {
     pub fn new() -> Self {
         let temp_file = NamedTempFile::new().unwrap();
         let db = db_init::initialize_database(temp_file.path().to_str().unwrap());
-        let app_state = AppState {
-            redb: Arc::new(db),
-        };
+        let app_state = AppState { redb: Arc::new(db) };
         let app = kasane(app_state);
 
         Self {

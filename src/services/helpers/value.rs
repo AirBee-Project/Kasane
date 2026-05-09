@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 
 use crate::{
     error::AppError,
-    models::layer::{LayerDataType, JsonValueType},
+    models::layer::{JsonValueType, LayerDataType},
 };
 
 /// JSONの値を、レイヤーのデータ型に基づいて解釈し、バイト列に変換する関数
@@ -122,12 +122,11 @@ pub fn restore_value(
                 reason: "float value has invalid byte length".to_string(),
             })?;
             let number = f32::from_be_bytes(bytes);
-            let json_number =
-                serde_json::Number::from_f64(number as f64).ok_or_else(|| {
-                    AppError::InvalidStoredValue {
-                        reason: "float value cannot be represented as JSON number".to_string(),
-                    }
-                })?;
+            let json_number = serde_json::Number::from_f64(number as f64).ok_or_else(|| {
+                AppError::InvalidStoredValue {
+                    reason: "float value cannot be represented as JSON number".to_string(),
+                }
+            })?;
             Ok(serde_json::Value::Number(json_number))
         }
         LayerDataType::Boolean => {

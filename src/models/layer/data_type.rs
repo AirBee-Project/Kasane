@@ -16,9 +16,14 @@ impl Value for LayerDataType {
     type SelfType<'a> = LayerDataType;
     type AsBytes<'a> = [u8; 1];
 
-    fn fixed_width() -> Option<usize> { Some(1) }
+    fn fixed_width() -> Option<usize> {
+        Some(1)
+    }
 
-    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a> where Self: 'a {
+    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
+    where
+        Self: 'a,
+    {
         match data[0] {
             0 => LayerDataType::Text,
             1 => LayerDataType::Int,
@@ -28,7 +33,10 @@ impl Value for LayerDataType {
         }
     }
 
-    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a> where Self: 'b {
+    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
+    where
+        Self: 'b,
+    {
         [match value {
             LayerDataType::Text => 0,
             LayerDataType::Int => 1,
@@ -37,7 +45,9 @@ impl Value for LayerDataType {
         }]
     }
 
-    fn type_name() -> redb::TypeName { TypeName::new("my_crate::LayerDataType") }
+    fn type_name() -> redb::TypeName {
+        TypeName::new("my_crate::LayerDataType")
+    }
 }
 
 impl From<LayerDataType> for JsonValueType {
@@ -51,4 +61,11 @@ impl From<LayerDataType> for JsonValueType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum JsonValueType { String, Number, Bool, Array, Object, Null }
+pub enum JsonValueType {
+    String,
+    Number,
+    Bool,
+    Array,
+    Object,
+    Null,
+}

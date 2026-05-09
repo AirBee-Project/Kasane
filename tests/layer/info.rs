@@ -1,17 +1,19 @@
+use crate::common::TestApp;
 use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
 use tower::ServiceExt;
-use crate::common::TestApp;
 
 #[tokio::test]
 async fn test_layer_info_success() {
     let test_app = TestApp::new();
 
     // 事前にレイヤーを作成
-    test_app.create_layer("info_target_layer", "Float", 15).await;
+    test_app
+        .create_layer("info_target_layer", "Float", 15)
+        .await;
 
     // レイヤー情報の取得リクエスト
     let req = Request::builder()

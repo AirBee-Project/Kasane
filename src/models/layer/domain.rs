@@ -1,5 +1,5 @@
-use serde::Deserialize;
 use crate::models::layer::LayerDataType;
+use serde::Deserialize;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]

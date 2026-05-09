@@ -1,4 +1,4 @@
-use redb::{Database, TableDefinition, TableHandle};
+use redb::{Database, TableDefinition};
 
 use crate::models::layer::LayerMetadata;
 

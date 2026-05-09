@@ -1,8 +1,7 @@
 use redb::ReadableDatabase;
 
 use crate::{
-    AppState, error::AppError, models::layer::Layer,
-    repositories::layer::read::SpatialDbRead,
+    AppState, error::AppError, models::layer::Layer, repositories::layer::read::SpatialDbRead,
 };
 
 pub async fn list(app_state: &AppState) -> Result<Vec<Layer>, AppError> {
