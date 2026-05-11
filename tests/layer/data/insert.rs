@@ -68,6 +68,35 @@ async fn test_layer_data_insert_single_id_error() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
+/// 間違ったSingleIdを入力したときにエラーが帰ってくることを確認する
+#[tokio::test]
+async fn test_layer_data_insert_single_id_logic_error() {
+    let test_app = TestApp::new();
+    test_app.create_layer("test_layer", "Text", 25).await;
+
+    let single_id_query = serde_json::json!({
+        "ids": [{ "z": 3, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }],
+        "type": "spatialIds"
+    });
+
+    let req = Request::builder()
+        .method("PUT")
+        .uri(format!("/layers/{}/data", "test_layer"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            serde_json::to_string(
+                &serde_json::json!({ "value": "SampleText", "query": single_id_query }),
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+
+    //エラーが帰ってくる
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
 /// 2つのSingleIdを挿入したときに正しく挿入できることを検証する
 #[tokio::test]
 async fn test_layer_data_insert_two_single_id() {
