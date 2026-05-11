@@ -10,7 +10,7 @@ http:
   url: "{{baseUrl}}/layers/:name"
   params:
     - name: name
-      value: ""
+      value: example_layer
       type: path
       description: Layer name
   auth: inherit

@@ -42,7 +42,7 @@ async fn test_layer_data_insert_single_id() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    //値を取得する
+    //同じ場所の値を取得する
     let get_body = serde_json::json!({
     "query": {
         "ids": [
@@ -73,9 +73,45 @@ async fn test_layer_data_insert_single_id() {
     let body_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     assert_eq!(body_json["ids"][0]["data"], 3);
-    assert_eq!(body_json["ids"][0]["id"]["type"], "singleId");
     assert_eq!(body_json["ids"][0]["id"]["z"], 20);
     assert_eq!(body_json["ids"][0]["id"]["f"], 0);
     assert_eq!(body_json["ids"][0]["id"]["x"], 931386);
     assert_eq!(body_json["ids"][0]["id"]["y"], 412905);
+}
+
+#[tokio::test]
+/// layerを作成して、空間IDと値が正しく挿入できているかどうかを検証する
+async fn test_layer_data_insert_range_id() {
+    let test_app = TestApp::new();
+
+    // layerを作成する
+    test_app.create_layer("test_layer", "Int", 25).await;
+
+    //空間IDと値を挿入する
+    let insert_body = serde_json::json!({
+    "value": 3,
+    "query": {
+        "ids": [
+            {
+            "z": 20,
+            "f": [0,100],
+            "x": [931380,931386],
+            "y": [412900,412905],
+            "type": "rangeId"
+            },
+        ],
+        "type": "spatialIds"
+        }
+    });
+
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/layers/test_layer/data")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_string(&insert_body).unwrap()))
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
 }

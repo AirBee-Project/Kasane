@@ -151,28 +151,28 @@ impl Query {
 
         for spatial_id in ids {
             match spatial_id {
-                crate::models::spatial_id::SpatialId::SingleId { z, f, x, y } => {
-                    let Some(zoom) = Self::resolve_zoom(*z, max_zoom_level, policy)? else {
+                crate::models::spatial_id::SpatialId::SingleId(single_id) => {
+                    let Some(zoom) = Self::resolve_zoom(single_id.z, max_zoom_level, policy)?
+                    else {
                         continue;
                     };
 
-                    let id = SingleId::new(*z, *f, *x, *y)?;
+                    let id = SingleId::new(single_id.z, single_id.f, single_id.x, single_id.y)?;
 
-                    if zoom == *z {
+                    if zoom == single_id.z {
                         result.insert(id);
                     } else {
                         result.insert(id.spatial_parent_at_zoom(zoom)?);
                     }
                 }
-
-                crate::models::spatial_id::SpatialId::RangeId { z, f, x, y } => {
-                    let Some(zoom) = Self::resolve_zoom(*z, max_zoom_level, policy)? else {
+                crate::models::spatial_id::SpatialId::RangeId(range_id) => {
+                    let Some(zoom) = Self::resolve_zoom(range_id.z, max_zoom_level, policy)? else {
                         continue;
                     };
 
-                    let id = RangeId::new(*z, *f, *x, *y)?;
+                    let id = RangeId::new(range_id.z, range_id.f, range_id.x, range_id.y)?;
 
-                    if zoom == *z {
+                    if zoom == range_id.z {
                         result.insert(id);
                     } else {
                         result.insert(id.spatial_parent_at_zoom(zoom)?);

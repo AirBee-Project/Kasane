@@ -1,10 +1,12 @@
 {
-  "rust-analyzer.check.command": "clippy",
-  "rust-analyzer.cargo.allTargets": true,
-  "chat.tools.terminal.autoApprove": {
-        "cargo check": true,
-        "cargo test": true,
-        "cargo clippy":true,
-        "cargo fmt":true
-    }
+	"rust-analyzer.cargo.targetDir": true,
+	"rust-analyzer.procMacro.enable": false,
+	"rust-analyzer.check.command": "clippy",
+	"rust-analyzer.cargo.allTargets": true,
+	"chat.tools.terminal.autoApprove": {
+		"cargo check": true,
+		"cargo test": true,
+		"cargo clippy": true,
+		"cargo fmt": true
+	}
 }

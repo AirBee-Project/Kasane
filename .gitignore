@@ -34,3 +34,4 @@ kasane.toml
 default.kasane
 /core/bindings
 .env
+profile.json.gz

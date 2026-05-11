@@ -528,6 +528,46 @@ components:
             type: string
             enum:
             - difference
+    RangeId:
+      type: object
+      required:
+      - z
+      - f
+      - x
+      - y
+      properties:
+        z:
+          type: integer
+          format: int32
+          example: 20
+          maximum: 30
+          minimum: 0
+        f:
+          type: array
+          items:
+            type: integer
+            format: int32
+          example:
+          - 0
+          - 0
+        x:
+          type: array
+          items:
+            type: integer
+            format: int32
+            minimum: 0
+          example:
+          - 931388
+          - 931390
+        y:
+          type: array
+          items:
+            type: integer
+            format: int32
+            minimum: 0
+          example:
+          - 412900
+          - 412907
     RemoveDataRequest:
       type: object
       description: 空間IDの範囲を指定して値を削除する
@@ -538,6 +578,34 @@ components:
           $ref: '#/components/schemas/Query'
         zoom_level_policy:
           $ref: '#/components/schemas/ZoomLevelPolicy'
+    SingleId:
+      type: object
+      required:
+      - z
+      - f
+      - x
+      - y
+      properties:
+        z:
+          type: integer
+          format: int32
+          example: 20
+          maximum: 30
+          minimum: 0
+        f:
+          type: integer
+          format: int32
+          example: 0
+        x:
+          type: integer
+          format: int32
+          example: 931386
+          minimum: 0
+        y:
+          type: integer
+          format: int32
+          example: 412905
+          minimum: 0
     SpatialData:
       type: object
       required:
@@ -545,86 +613,30 @@ components:
       - data
       properties:
         id:
-          $ref: '#/components/schemas/SpatialId'
+          $ref: '#/components/schemas/SingleId'
         data: {}
     SpatialId:
       oneOf:
-      - type: object
-        required:
-        - z
-        - f
-        - x
-        - y
-        - type
-        properties:
-          z:
-            type: integer
-            format: int32
-            example: 20
-            maximum: 30
-            minimum: 0
-          f:
-            type: integer
-            format: int32
-            example: 0
-          x:
-            type: integer
-            format: int32
-            example: 931386
-            minimum: 0
-          y:
-            type: integer
-            format: int32
-            example: 412905
-            minimum: 0
-          type:
-            type: string
-            enum:
-            - singleId
-      - type: object
-        required:
-        - z
-        - f
-        - x
-        - y
-        - type
-        properties:
-          z:
-            type: integer
-            format: int32
-            example: 20
-            maximum: 30
-            minimum: 0
-          f:
-            type: array
-            items:
-              type: integer
-              format: int32
-            example:
-            - 0
-            - 0
-          x:
-            type: array
-            items:
-              type: integer
-              format: int32
-              minimum: 0
-            example:
-            - 931388
-            - 931390
-          y:
-            type: array
-            items:
-              type: integer
-              format: int32
-              minimum: 0
-            example:
-            - 412900
-            - 412907
-          type:
-            type: string
-            enum:
-            - rangeId
+      - allOf:
+        - $ref: '#/components/schemas/SingleId'
+        - type: object
+          required:
+          - type
+          properties:
+            type:
+              type: string
+              enum:
+              - singleId
+      - allOf:
+        - $ref: '#/components/schemas/RangeId'
+        - type: object
+          required:
+          - type
+          properties:
+            type:
+              type: string
+              enum:
+              - rangeId
     ZoomLevelPolicy:
       type: string
       description: 各Layerのmax_zoom_levelよりも小さなIDが入力された場合の挙動を設定できる

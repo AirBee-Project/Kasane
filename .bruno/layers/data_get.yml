@@ -1,7 +1,7 @@
 info:
   name: data_get
   type: http
-  seq: 8
+  seq: 6
   tags:
     - layers
 
@@ -17,8 +17,19 @@ http:
     type: json
     data: |-
       {
-        "query": "",
-        "zoom_level_policy": "Error"
+         "value":3,
+         "query":{
+            "ids":[
+               {
+                  "z":20,
+                  "f":0,
+                  "x":931386,
+                  "y":412905,
+                  "type":"singleId"
+               }
+            ],
+            "type":"spatialIds"
+         }
       }
   auth: inherit
 

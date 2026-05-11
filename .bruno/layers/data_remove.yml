@@ -1,7 +1,7 @@
 info:
   name: data_remove
   type: http
-  seq: 6
+  seq: 7
   tags:
     - layers
 

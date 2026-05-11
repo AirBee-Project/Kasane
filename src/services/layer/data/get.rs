@@ -6,6 +6,7 @@ use crate::{
     models::{
         layer::data::{GetDataResponse, SpatialData, ZoomLevelPolicy},
         query::Query,
+        spatial_id::SingleId,
     },
     repositories::layer::read::SpatialDbRead,
     services::helpers::value::restore_value,
@@ -33,7 +34,7 @@ pub async fn get(
     for (single_id, value) in db.data_get(layer_name, ids)? {
         let json_value = restore_value(layer.data_type, &value)?;
         result.push(SpatialData {
-            id: crate::models::spatial_id::SpatialId::SingleId {
+            id: SingleId {
                 z: single_id.z(),
                 f: single_id.f(),
                 x: single_id.x(),
