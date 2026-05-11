@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Clone, Hash, Eq)]
 pub struct SingleId {
     #[schema(example = 20, maximum = 30)]
     pub z: u8,

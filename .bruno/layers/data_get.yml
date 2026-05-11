@@ -10,27 +10,27 @@ http:
   url: "{{baseUrl}}/layers/:name/data/search"
   params:
     - name: name
-      value: ""
+      value: example_layer
       type: path
       description: Layer name
   body:
     type: json
     data: |-
       {
-         "value":3,
-         "query":{
-            "ids":[
-               {
-                  "z":20,
-                  "f":0,
-                  "x":931386,
-                  "y":412905,
-                  "type":"singleId"
-               }
-            ],
-            "type":"spatialIds"
-         }
-      }
+          "value": 3,
+          "query": {
+              "ids": [
+                  {
+                  "z": 20,
+                  "f": [0,100],
+                  "x": [931380,931386],
+                  "y": [412900,412905],
+                  "type": "rangeId"
+                  }
+              ],
+              "type": "spatialIds"
+              }
+          }
   auth: inherit
 
 settings:

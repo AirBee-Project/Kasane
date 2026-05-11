@@ -10,17 +10,27 @@ http:
   url: "{{baseUrl}}/layers/:name/data"
   params:
     - name: name
-      value: ""
+      value: example_layer
       type: path
       description: Layer name
   body:
     type: json
     data: |-
       {
-        "value": "",
-        "query": "",
-        "zoom_level_policy": "Error"
-      }
+          "value": 3,
+          "query": {
+              "ids": [
+                  {
+                  "z": 20,
+                  "f": [0,100],
+                  "x": [931380,931386],
+                  "y": [412900,412905],
+                  "type": "rangeId"
+                  }
+              ],
+              "type": "spatialIds"
+              }
+          }
   auth: inherit
 
 settings:

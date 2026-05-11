@@ -45,3 +45,9 @@ impl TestApp {
         assert_eq!(response.status(), StatusCode::CREATED);
     }
 }
+
+impl Default for TestApp {
+    fn default() -> Self {
+        Self::new()
+    }
+}
