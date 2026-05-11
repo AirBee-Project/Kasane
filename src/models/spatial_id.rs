@@ -3,7 +3,8 @@ use std::fmt::Debug;
 use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Clone, Hash, Eq)]
-pub struct SingleId {
+#[schema(as = SingleId)]
+pub struct RawSingleId {
     #[schema(example = 20, maximum = 30)]
     pub z: u8,
     #[schema(example = 0)]
@@ -15,7 +16,8 @@ pub struct SingleId {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Clone)]
-pub struct RangeId {
+#[schema(as = RangeId)]
+pub struct RawRangeId {
     #[schema(example = 20, maximum = 30)]
     pub z: u8,
     #[schema(example = json!([0,0]))]
@@ -29,6 +31,8 @@ pub struct RangeId {
 #[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum SpatialId {
-    SingleId(SingleId),
-    RangeId(RangeId),
+    #[serde(rename = "singleId")]
+    SingleId(RawSingleId),
+    #[serde(rename = "rangeId")]
+    RangeId(RawRangeId),
 }

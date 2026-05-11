@@ -6,7 +6,8 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use kasane::models::spatial_id::SingleId;
+use kasane::models::spatial_id::RawSingleId;
+use kasane_logic::{IntoSingleIds, RangeId, SingleId};
 use tower::ServiceExt;
 
 #[tokio::test]
@@ -194,10 +195,41 @@ async fn test_layer_data_insert_range_id() {
             let x = id["x"].as_u64().unwrap() as u32;
             let y = id["y"].as_u64().unwrap() as u32;
             let data = item["data"].as_i64().unwrap() as i32;
-            result_map.insert(SingleId { z, f, x, y }, data);
+            result_map.insert(RawSingleId { z, f, x, y }, data);
         }
     }
 
     // 最適配置のSingleIdに分解すれば917個になるはず
     assert_eq!(result_map.len(), 917);
+
+    //出力された結果が元のIDと一致しているか確認
+    let mut answer: Vec<SingleId> = RangeId::new(20, [0, 100], [931380, 931386], [412900, 412905])
+        .unwrap()
+        .into_single_ids()
+        .collect();
+
+    let mut result: Vec<SingleId> = result_map
+        .iter()
+        .flat_map(|(raw_single_id, value)| {
+            let single_id = SingleId::new(
+                raw_single_id.z,
+                raw_single_id.f,
+                raw_single_id.x,
+                raw_single_id.y,
+            )
+            .unwrap();
+
+            assert_eq!(*value, 3);
+
+            single_id
+                .spatial_children_at_zoom(20)
+                .unwrap()
+                .collect::<Vec<_>>()
+        })
+        .collect();
+
+    answer.sort();
+    result.sort();
+
+    assert_eq!(answer, result)
 }
