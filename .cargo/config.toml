@@ -1,9 +1,0 @@
-[target.x86_64-pc-windows-msvc]
-linker = "rust-lld.exe"
-
-[target.aarch64-apple-darwin]
-rustflags = ["-C", "link-arg=-fuse-ld=lld"]
-
-[build]
-jobs = 20
-rustc-wrapper = "sccache"
