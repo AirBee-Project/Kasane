@@ -452,3 +452,149 @@ async fn test_layer_data_recursive_merge() {
     assert_eq!(raw_id.y, 0);
     assert_eq!(value, 7);
 }
+
+#[tokio::test]
+/// 異なるレイヤー間で同じ座標にデータを挿入しても、互いに干渉しないことを検証する
+async fn test_layer_data_isolation() {
+    let test_app = TestApp::new();
+    let layer1 = "layer1";
+    let layer2 = "layer2";
+    test_app.create_layer(layer1, "Int", 25).await;
+    test_app.create_layer(layer2, "Int", 25).await;
+
+    let query = serde_json::json!({
+        "ids": [{ "z": 20, "f": 0, "x": 100, "y": 100, "type": "singleId" }],
+        "type": "spatialIds"
+    });
+
+    // Layer 1 に挿入
+    put_data(
+        &test_app,
+        layer1,
+        &serde_json::json!({ "value": 1, "query": query }),
+    )
+    .await;
+    // Layer 2 には別の値を挿入
+    put_data(
+        &test_app,
+        layer2,
+        &serde_json::json!({ "value": 2, "query": query }),
+    )
+    .await;
+
+    // それぞれ正しく取得できるか
+    let res1 = search_data(&test_app, layer1, &query).await;
+    assert_first_entry(
+        &res1,
+        1i64,
+        RawSingleId {
+            z: 20,
+            f: 0,
+            x: 100,
+            y: 100,
+        },
+    );
+
+    let res2 = search_data(&test_app, layer2, &query).await;
+    assert_first_entry(
+        &res2,
+        2i64,
+        RawSingleId {
+            z: 20,
+            f: 0,
+            x: 100,
+            y: 100,
+        },
+    );
+}
+
+#[tokio::test]
+/// max_zoom_level を超えるズームレベルでの挿入がエラーになることを検証する
+async fn test_layer_data_max_zoom_enforcement() {
+    let test_app = TestApp::new();
+    let layer_name = "low_zoom_layer";
+    // max_zoom_level を 10 に設定
+    test_app.create_layer(layer_name, "Int", 10).await;
+
+    let high_zoom_query = serde_json::json!({
+        "ids": [{ "z": 11, "f": 0, "x": 0, "y": 0, "type": "singleId" }],
+        "type": "spatialIds"
+    });
+
+    let req = Request::builder()
+        .method("PUT")
+        .uri(format!("/layers/{}/data", layer_name))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            serde_json::to_string(&serde_json::json!({ "value": 100, "query": high_zoom_query }))
+                .unwrap(),
+        ))
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    // ズームレベル制限違反で 400 Bad Request を期待
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+/// 広範な親ノード(Z=18)の中に、ピンポイントな子ノード(Z=20)を挿入した際、
+/// 親が適切に分割され、かつ値の整合性が保たれることを検証する
+async fn test_layer_data_deep_split() {
+    let test_app = TestApp::new();
+    let layer_name = "split_layer";
+    test_app.create_layer(layer_name, "Int", 25).await;
+
+    // 1. Z=18 の広範な領域を値 100 で埋める
+    let parent_query = serde_json::json!({
+        "ids": [{ "z": 18, "f": 0, "x": 0, "y": 0, "type": "singleId" }],
+        "type": "spatialIds"
+    });
+    put_data(
+        &test_app,
+        layer_name,
+        &serde_json::json!({ "value": 100, "query": parent_query }),
+    )
+    .await;
+
+    // 2. その中の 1 点 (Z=20) だけを値 200 で上書き
+    let child_query = serde_json::json!({
+        "ids": [{ "z": 20, "f": 0, "x": 0, "y": 0, "type": "singleId" }],
+        "type": "spatialIds"
+    });
+    put_data(
+        &test_app,
+        layer_name,
+        &serde_json::json!({ "value": 200, "query": child_query }),
+    )
+    .await;
+
+    // 3. 上書きした点が 200 になっているか
+    let res_child = search_data(&test_app, layer_name, &child_query).await;
+    assert_first_entry(
+        &res_child,
+        200i64,
+        RawSingleId {
+            z: 20,
+            f: 0,
+            x: 0,
+            y: 0,
+        },
+    );
+
+    // 4. 隣の点 (Z=20) は元の値 100 を維持しているか
+    let sibling_query = serde_json::json!({
+        "ids": [{ "z": 20, "f": 0, "x": 1, "y": 0, "type": "singleId" }],
+        "type": "spatialIds"
+    });
+    let res_sibling = search_data(&test_app, layer_name, &sibling_query).await;
+    assert_first_entry(
+        &res_sibling,
+        100i64,
+        RawSingleId {
+            z: 20,
+            f: 0,
+            x: 1,
+            y: 0,
+        },
+    );
+}

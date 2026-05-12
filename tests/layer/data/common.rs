@@ -58,6 +58,19 @@ pub async fn put_data(
     response
 }
 
+/// `PATCH /layers/{layer_name}/data` でデータを upsert し、200 OKを検証する。
+pub async fn patch_data(test_app: &TestApp, layer_name: &str, body: &serde_json::Value) {
+    let req = Request::builder()
+        .method("PATCH")
+        .uri(format!("/layers/{}/data", layer_name))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_string(body).unwrap()))
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+}
+
 /// `POST /layers/{layer_name}/data/search` でデータを検索し、レスポンスボディを JSON で返す。
 ///
 /// `query` には空間ID指定部分のみを渡せばよく、`{ "query": ... }` へのラップはこの関数内で行う。

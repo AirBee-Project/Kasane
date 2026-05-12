@@ -124,3 +124,69 @@ async fn test_layer_data_remove_logical_bug() {
         result_map
     );
 }
+
+#[tokio::test]
+/// 存在するデータの一部のみが削除クエリの範囲に含まれる場合、
+/// 重なっている部分だけが削除され、残りのデータは維持されることを検証する
+async fn test_layer_data_remove_partial_overlap() {
+    let test_app = TestApp::new();
+    let layer_name = "partial_remove_layer";
+    test_app.create_layer(layer_name, "Int", 25).await;
+
+    // 1. Z=20 の隣接する 2 つの点を挿入
+    let id1 = serde_json::json!({ "z": 20, "f": 0, "x": 10, "y": 10, "type": "singleId" });
+    let id2 = serde_json::json!({ "z": 20, "f": 0, "x": 11, "y": 10, "type": "singleId" });
+
+    let insert_query = serde_json::json!({
+        "ids": [id1, id2],
+        "type": "spatialIds"
+    });
+    put_data(
+        &test_app,
+        layer_name,
+        &serde_json::json!({ "value": 500, "query": insert_query }),
+    )
+    .await;
+
+    // 2. 片方 (id1) だけを削除
+    let req = Request::builder()
+        .method("DELETE")
+        .uri(format!("/layers/{}/data", layer_name))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            serde_json::to_string(&serde_json::json!({
+                "query": { "ids": [id1], "type": "spatialIds" }
+            }))
+            .unwrap(),
+        ))
+        .unwrap();
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    // 3. 削除した点 (id1) が消えているか確認
+    let res1 = search_data(
+        &test_app,
+        layer_name,
+        &serde_json::json!({ "ids": [id1], "type": "spatialIds" }),
+    )
+    .await;
+    assert!(to_result_map::<i64>(&res1).is_empty());
+
+    // 4. 削除していない点 (id2) が残っているか確認
+    let res2 = search_data(
+        &test_app,
+        layer_name,
+        &serde_json::json!({ "ids": [id2], "type": "spatialIds" }),
+    )
+    .await;
+    assert_first_entry(
+        &res2,
+        500i64,
+        RawSingleId {
+            z: 20,
+            f: 0,
+            x: 11,
+            y: 10,
+        },
+    );
+}
