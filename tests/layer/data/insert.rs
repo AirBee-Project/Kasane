@@ -349,3 +349,56 @@ async fn test_layer_data_insert_range_id() {
     result.sort();
     assert_eq!(answer, result);
 }
+
+/// Insertを用いて一部の値の上書きを行ったときに、新しい値と元の値が正しい状態を保つことを検証する
+#[tokio::test]
+async fn test_layer_data_overload_insert() {
+    let test_app = TestApp::new();
+    test_app.create_layer("test_layer", "Text", 30).await;
+
+    let query1 = serde_json::json!({
+        "ids": [{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }],
+        "type": "spatialIds"
+    });
+
+    put_data(
+        &test_app,
+        "test_layer",
+        &serde_json::json!({ "value": "A", "query": query1 }),
+    )
+    .await;
+
+    let query2 = serde_json::json!({
+        "ids": [{ "z": 21, "f": 0, "x": 1862772, "y": 825810, "type": "singleId" }],
+        "type": "spatialIds"
+    });
+
+    put_data(
+        &test_app,
+        "test_layer",
+        &serde_json::json!({ "value": "B", "query": query2 }),
+    )
+    .await;
+
+    let result_json = search_data(&test_app, "test_layer", &query1).await;
+    let result_map = to_result_map::<String>(&result_json);
+
+    //SingleIdの個数は8個なはず
+    assert_eq!(result_map.len(), 8);
+
+    //上書きした部分
+    let overload_single_id = RawSingleId {
+        z: 21,
+        f: 0,
+        x: 1862772,
+        y: 825810,
+    };
+
+    for (raw_single_id, value) in result_map {
+        if raw_single_id == overload_single_id {
+            assert_eq!(value, "B".to_string());
+        } else {
+            assert_eq!(value, "A".to_string());
+        }
+    }
+}
