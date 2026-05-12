@@ -123,56 +123,32 @@ impl SpatialDbWrite {
         //空間データからも削除
         let layer_id_bytes = layer_meta.id.into_bytes();
 
-        loop {
-            let key_to_delete = {
-                let redb_spatialid_to_value = self.write_txn.open_table(SPATIALID_TO_VALUE)?;
-                redb_spatialid_to_value
-                    .range((layer_id_bytes, [0u8; 12])..=(layer_id_bytes, [255u8; 12]))?
-                    .next()
-                    .transpose()?
-                    .map(|(key_guard, _)| key_guard.value())
-            };
-
-            match key_to_delete {
-                Some(key) => {
-                    let mut redb_spatialid_to_value =
-                        self.write_txn.open_table(SPATIALID_TO_VALUE)?;
-                    redb_spatialid_to_value.remove(&key)?;
-                }
-                None => break,
-            }
+        let mut redb_spatialid_to_value = self.write_txn.open_table(SPATIALID_TO_VALUE)?;
+        let keys: Vec<_> = redb_spatialid_to_value
+            .range((layer_id_bytes, [0u8; 12])..=(layer_id_bytes, [255u8; 12]))?
+            .map(|res| res.map(|(k, _)| k.value()))
+            .collect::<Result<Vec<_>, _>>()?;
+        for key in keys {
+            redb_spatialid_to_value.remove(&key)?;
         }
 
         //値データからも削除
-        loop {
-            let key_to_delete = {
-                let redb_value_to_spatialid = self.write_txn.open_table(VALUE_TO_SPATIALID)?;
-                let mut result: Option<([u8; 16], Vec<u8>, [u8; 12])> = None;
-
-                if let Some(entry) = redb_value_to_spatialid
-                    .range((layer_id_bytes, &[] as &[u8], [0u8; 12])..)?
-                    .next()
-                    .transpose()?
-                {
-                    let (key_guard, _) = entry;
-                    let (id, bytes_ref, spatial_id) = key_guard.value();
-                    // 別のレイヤーに到達したら終了
-                    if id[..] != layer_id_bytes[..] {
-                        return Ok(());
-                    }
-                    result = Some((id, bytes_ref.to_vec(), spatial_id));
-                }
-                result
-            };
-
-            match key_to_delete {
-                Some((id, bytes, spatial_id)) => {
-                    let mut redb_value_to_spatialid =
-                        self.write_txn.open_table(VALUE_TO_SPATIALID)?;
-                    redb_value_to_spatialid.remove(&(id, bytes.as_slice(), spatial_id))?;
-                }
-                None => break,
-            }
+        let mut redb_value_to_spatialid = self.write_txn.open_table(VALUE_TO_SPATIALID)?;
+        let keys: Vec<([u8; 16], Vec<u8>, [u8; 12])> = redb_value_to_spatialid
+            .range((layer_id_bytes, &[] as &[u8], [0u8; 12])..)?
+            .map(|res| {
+                res.map(|(k, _)| {
+                    let (id, val, spatial) = k.value();
+                    (id, val.to_vec(), spatial)
+                })
+            })
+            .take_while(|res| match res {
+                Ok((id, _, _)) => id[..] == layer_id_bytes[..],
+                Err(_) => true,
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        for (id, val, spatial) in keys {
+            redb_value_to_spatialid.remove(&(id, val.as_slice(), spatial))?;
         }
 
         //キャッシュから削除

@@ -69,3 +69,58 @@ async fn test_layer_data_remove_single_id() {
     //値は空になっている
     assert!(result_map.is_empty());
 }
+
+#[tokio::test]
+/// 親ノードが存在する領域の一部を削除したとき、その部分が正しく削除されることを検証する (Bug 3 の検証)
+async fn test_layer_data_remove_logical_bug() {
+    let test_app = TestApp::new();
+    let layer_name = "bug3_layer";
+    test_app.create_layer(layer_name, "Int", 25).await;
+
+    // 1. Zoom 10 の広範な領域にデータを挿入 (これにより親ノードが作成される)
+    let parent_id_query = serde_json::json!({
+        "ids": [{ "z": 10, "f": 0, "x": 909, "y": 403, "type": "singleId" }],
+        "type": "spatialIds"
+    });
+    put_data(
+        &test_app,
+        layer_name,
+        &serde_json::json!({ "value": 100, "query": parent_id_query }),
+    )
+    .await;
+
+    // 挿入されたことを確認
+    let result = search_data(&test_app, layer_name, &parent_id_query).await;
+    assert!(!to_result_map::<i64>(&result).is_empty());
+
+    // 2. その領域内の Zoom 11 の子ノード部分を削除
+    // (親ノード 10/0/909/403 の子は 11/0/1818/806, 11/0/1819/806, 11/0/1818/807, 11/0/1819/807)
+    let child_id_query = serde_json::json!({
+        "ids": [{ "z": 11, "f": 0, "x": 1818, "y": 806, "type": "singleId" }],
+        "type": "spatialIds"
+    });
+
+    let req = Request::builder()
+        .method("DELETE")
+        .uri(format!("/layers/{}/data", layer_name))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            serde_json::to_string(&serde_json::json!({ "query": child_id_query })).unwrap(),
+        ))
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    // 3. 削除した子ノード部分を検索
+    // バグがある場合、削除したはずの領域にデータが再挿入されて残っている
+    let result_json = search_data(&test_app, layer_name, &child_id_query).await;
+    let result_map: HashMap<RawSingleId, i64> = to_result_map(&result_json);
+
+    // 期待値は空だが、バグがあるとデータが残っている
+    assert!(
+        result_map.is_empty(),
+        "Removed sub-area should be empty, but found: {:?}",
+        result_map
+    );
+}

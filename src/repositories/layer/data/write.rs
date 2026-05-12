@@ -205,7 +205,6 @@ impl SpatialDbWrite {
                 for fragment_single_id in parent_single_id.difference(&single_id) {
                     should_insert.push((fragment_single_id, overlap_data.clone()));
                 }
-                should_insert.push((single_id.clone(), overlap_data.to_vec()));
                 should_remove.push(parent_single_id.clone());
                 continue;
             }
@@ -254,42 +253,68 @@ impl SpatialDbWrite {
         target: &SingleId,
         value: &[u8],
     ) -> Result<(), AppError> {
-        let Some(siblings) = target.spatial_siblings() else {
-            redb_sppatialid_to_value
-                .insert((layer_id.into_bytes(), target.spatial_encode()), value)?;
-            return Ok(());
-        };
+        let mut current_target = target.clone();
 
-        // すべてのsiblingsが存在し、かつ同じ値を持つかをチェック
-        let can_merge = siblings.iter().all(|sibling| {
-            match redb_sppatialid_to_value.get((layer_id.into_bytes(), sibling.spatial_encode())) {
-                Ok(Some(access_guard)) => access_guard.value() == value,
-                _ => false,
+        loop {
+            let Some(siblings) = current_target.spatial_siblings() else {
+                // 最上位レベルに到達、これ以上マージ不可
+                redb_sppatialid_to_value.insert(
+                    (layer_id.into_bytes(), current_target.spatial_encode()),
+                    value,
+                )?;
+                redb_value_to_spatialid.insert(
+                    (
+                        layer_id.into_bytes(),
+                        value,
+                        current_target.spatial_encode(),
+                    ),
+                    (),
+                )?;
+                return Ok(());
+            };
+
+            // すべてのsiblingsが存在し、かつ同じ値を持つかをチェック
+            let can_merge = siblings.iter().all(|sibling| {
+                if sibling == &current_target {
+                    return true;
+                }
+                match redb_sppatialid_to_value
+                    .get((layer_id.into_bytes(), sibling.spatial_encode()))
+                {
+                    Ok(Some(access_guard)) => access_guard.value() == value,
+                    _ => false,
+                }
+            });
+
+            if !can_merge {
+                redb_sppatialid_to_value.insert(
+                    (layer_id.into_bytes(), current_target.spatial_encode()),
+                    value,
+                )?;
+                redb_value_to_spatialid.insert(
+                    (
+                        layer_id.into_bytes(),
+                        value,
+                        current_target.spatial_encode(),
+                    ),
+                    (),
+                )?;
+                return Ok(());
             }
-        });
 
-        if !can_merge {
-            redb_sppatialid_to_value
-                .insert((layer_id.into_bytes(), target.spatial_encode()), value)?;
-            return Ok(());
+            // siblings を削除
+            for sibling in &siblings {
+                Self::remove(
+                    redb_sppatialid_to_value,
+                    redb_value_to_spatialid,
+                    layer_id,
+                    sibling,
+                )?;
+            }
+
+            // 親へターゲットを移して次のループでマージを継続
+            current_target = current_target.spatial_parent_at_zoom(current_target.z() - 1)?;
         }
-
-        // siblings を削除
-        for sibling in &siblings {
-            Self::remove(
-                redb_sppatialid_to_value,
-                redb_value_to_spatialid,
-                layer_id,
-                sibling,
-            )?;
-        }
-
-        // 親へ集約
-        let parent = target.spatial_parent_at_zoom(target.z() - 1)?;
-
-        redb_sppatialid_to_value.insert((layer_id.into_bytes(), parent.spatial_encode()), value)?;
-
-        Ok(())
     }
 
     ///入力された[SingleId]を削除する

@@ -402,3 +402,53 @@ async fn test_layer_data_overload_insert() {
         }
     }
 }
+
+#[tokio::test]
+/// 64個のノード（Zoom 20）を順次挿入したとき、再帰的にマージされて1つのZoom 18ノードになることを検証する (Bug 5 の検証)
+async fn test_layer_data_recursive_merge() {
+    let test_app = TestApp::new();
+    let layer_name = "merge_layer";
+    test_app.create_layer(layer_name, "Int", 25).await;
+
+    // Zoom 20 の (f:0..4, x:0..4, y:0..4) の計 64 個のノードを挿入
+    // Octree なので 2x2x2 = 8 個で 1 段上がり、4x4x4 = 64 個で 2 段上がるはず
+    for f in 0..4 {
+        for y in 0..4 {
+            for x in 0..4 {
+                let single_id_query = serde_json::json!({
+                    "ids": [{ "z": 20, "f": f, "x": x, "y": y, "type": "singleId" }],
+                    "type": "spatialIds"
+                });
+                put_data(
+                    &test_app,
+                    layer_name,
+                    &serde_json::json!({ "value": 7, "query": single_id_query }),
+                )
+                .await;
+            }
+        }
+    }
+
+    // 検索して、結果が1つの Zoom 18 ノードになっているか確認
+    let search_query = serde_json::json!({
+        "ids": [{ "z": 18, "f": 0, "x": 0, "y": 0, "type": "singleId" }],
+        "type": "spatialIds"
+    });
+    let result_json = search_data(&test_app, layer_name, &search_query).await;
+    let result_map = to_result_map::<i64>(&result_json);
+
+    // 再帰的マージが機能していれば、1つの Z=18 ノードになっているはず
+    assert_eq!(
+        result_map.len(),
+        1,
+        "Should be merged into a single node, but found: {:?}",
+        result_map
+    );
+
+    let (raw_id, &value) = result_map.iter().next().unwrap();
+    assert_eq!(raw_id.z, 18);
+    assert_eq!(raw_id.f, 0);
+    assert_eq!(raw_id.x, 0);
+    assert_eq!(raw_id.y, 0);
+    assert_eq!(value, 7);
+}
