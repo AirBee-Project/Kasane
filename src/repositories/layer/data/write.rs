@@ -173,6 +173,75 @@ impl SpatialDbWrite {
         Ok(())
     }
 
+    pub fn data_remove(&self, layer_name: &str, ids: SpatialIdSet) -> Result<(), AppError> {
+        //存在検証
+        let layer_meta = match self.layer_info(layer_name)? {
+            Some(v) => v,
+            None => {
+                return Err(AppError::LayerNotFound {
+                    name: layer_name.to_string(),
+                });
+            }
+        };
+
+        let mut redb_sppatialid_to_value = self.write_txn.open_table(SPATIALID_TO_VALUE)?;
+
+        let mut should_remove: Vec<SingleId> = Vec::new();
+        let mut should_insert: Vec<(SingleId, Vec<u8>)> = Vec::new();
+
+        for single_id in ids.iter_single_ids() {
+            //single_idと完全に等しい位置を調べる
+            if Self::overlap_equal(&redb_sppatialid_to_value, layer_meta.id, &single_id)?.is_some()
+            {
+                should_remove.push(single_id);
+                continue;
+            };
+
+            //single_idの親を調べていく
+            if let Some((parent_single_id, access_guard)) =
+                Self::overlap_parent(&redb_sppatialid_to_value, layer_meta.id, &single_id)?
+            {
+                let overlap_data = access_guard.value().to_vec();
+                for fragment_single_id in parent_single_id.difference(&single_id) {
+                    should_insert.push((fragment_single_id, overlap_data.clone()));
+                }
+                should_insert.push((single_id.clone(), overlap_data.to_vec()));
+                should_remove.push(parent_single_id.clone());
+                continue;
+            }
+
+            //single_idの子を全て削除する
+            if let Some(children_single_ids) =
+                Self::overlap_children(&redb_sppatialid_to_value, layer_meta.id, &single_id)?
+            {
+                should_remove.extend(children_single_ids);
+            }
+        }
+
+        let mut redb_value_to_spatialid = self.write_txn.open_table(VALUE_TO_SPATIALID)?;
+
+        for single_id in should_remove {
+            Self::remove(
+                &mut redb_sppatialid_to_value,
+                &mut redb_value_to_spatialid,
+                layer_meta.id,
+                &single_id,
+            )?;
+        }
+
+        for (single_id, value) in should_insert {
+            Self::insert_and_merge(
+                &mut redb_sppatialid_to_value,
+                &mut redb_value_to_spatialid,
+                layer_meta.id,
+                &single_id,
+                &value,
+            )?;
+        }
+
+        Ok(())
+    }
+
     /// 入力した `SingleId` を挿入する。
     /// merge 可能な場合は siblings を親IDへ集約する。
     ///

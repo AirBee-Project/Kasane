@@ -23,10 +23,7 @@ pub async fn remove(
         }
     };
 
-    let _ids = query.process(layer.max_zoom_level, zoom_level_policy)?;
-
-    // db.data
-    todo!();
-
-    // db.commit()
+    let ids = query.process(layer.max_zoom_level, zoom_level_policy)?;
+    db.data_remove(layer_name, ids)?;
+    db.commit()
 }
