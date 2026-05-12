@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use axum::{
-    body::Body,
+    body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
@@ -45,7 +45,16 @@ pub async fn put_data(
         .unwrap();
 
     let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    let status = response.status();
+    if status != StatusCode::OK {
+        let (_, body) = response.into_parts();
+        let bytes = to_bytes(body, usize::MAX).await.unwrap();
+        let text = String::from_utf8_lossy(&bytes);
+        panic!(
+            "PUT /layers/{}/data failed.\nstatus: {}\nbody: {}",
+            layer_name, status, text,
+        );
+    }
     response
 }
 
@@ -88,8 +97,6 @@ pub async fn search_data(
     let body_bytes = response.into_body().collect().await.unwrap().to_bytes();
     serde_json::from_slice(&body_bytes).unwrap()
 }
-
-/// ```
 
 /// `search_data` の結果JSONの先頭エントリ（`ids[0]`）のデータ値と空間IDを検証する。
 ///

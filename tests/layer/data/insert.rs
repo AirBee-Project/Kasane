@@ -1,7 +1,7 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use kasane::models::spatial_id::RawSingleId;
-use kasane_logic::{IntoSingleIds, RangeId, SingleId};
+use kasane_logic::{IntoSingleIds, IterSingleIds, RangeId, SingleId};
 use tower::ServiceExt;
 
 use crate::layer::common::TestApp;
@@ -155,7 +155,7 @@ async fn test_layer_data_insert_two_single_id() {
     );
 }
 
-/// 同じ位置に値を挿入して上書きできていることを検証する
+/// 同じSingleIdに値を挿入して上書きできていることを検証する
 #[tokio::test]
 async fn test_layer_data_insert_single_id_overwrite() {
     let test_app = TestApp::new();
@@ -174,6 +174,21 @@ async fn test_layer_data_insert_single_id_overwrite() {
     )
     .await;
 
+    //1つ目のSingleIdが正しく入力されていることを検証する
+    let result_json = search_data(&test_app, "test_layer", &single_id_query).await;
+
+    assert_first_entry(
+        &result_json,
+        3i64,
+        RawSingleId {
+            z: 20,
+            f: 0,
+            x: 931386,
+            y: 412905,
+        },
+    );
+
+    //2つ目のSingleIdを挿入する
     put_data(
         &test_app,
         "test_layer",
@@ -181,6 +196,7 @@ async fn test_layer_data_insert_single_id_overwrite() {
     )
     .await;
 
+    //2つ目のSingleIdが正しく入力されていることを検証する
     let result_json = search_data(&test_app, "test_layer", &single_id_query).await;
 
     assert_first_entry(
@@ -193,6 +209,79 @@ async fn test_layer_data_insert_single_id_overwrite() {
             y: 412905,
         },
     );
+}
+
+/// 同じRangeIdに値を挿入して上書きできていることを検証する
+#[tokio::test]
+async fn test_layer_data_insert_range_id_overwrite() {
+    let test_app = TestApp::new();
+    test_app.create_layer("test_layer_text", "Text", 25).await;
+
+    //1つ目のRangeIdを挿入する
+    let range_id_query = serde_json::json!({
+        "ids": [{ "z": 18, "f": [0,0], "x": [232846,232850], "y": [103226,103240], "type": "rangeId" }],
+        "type": "spatialIds"
+    });
+
+    put_data(
+        &test_app,
+        "test_layer_text",
+        &serde_json::json!({ "value": "猫(Cat)", "query": range_id_query }),
+    )
+    .await;
+
+    //1つ目のRangeIdに値が挿入できていることを確認する
+    let result_json = search_data(&test_app, "test_layer_text", &range_id_query).await;
+    let result_map: std::collections::HashMap<RawSingleId, String> = to_result_map(&result_json);
+
+    let mut result: Vec<SingleId> = result_map
+        .iter()
+        .flat_map(|(raw_id, value)| {
+            assert_eq!(value, "猫(Cat)");
+            SingleId::new(raw_id.z, raw_id.f, raw_id.x, raw_id.y)
+                .unwrap()
+                .spatial_children_at_zoom(18)
+                .unwrap()
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    let binding = RangeId::new(18, [0, 0], [232846, 232850], [103226, 103240]).unwrap();
+    let mut answer: Vec<SingleId> = binding.iter_single_ids().collect();
+
+    answer.sort();
+    result.sort();
+
+    assert_eq!(answer, result);
+
+    //2つ目のRangeIdを挿入する
+    put_data(
+        &test_app,
+        "test_layer_text",
+        &serde_json::json!({ "value": "犬(Dog)", "query": range_id_query }),
+    )
+    .await;
+
+    let result_json = search_data(&test_app, "test_layer_text", &range_id_query).await;
+    let result_map: std::collections::HashMap<RawSingleId, String> = to_result_map(&result_json);
+
+    let mut result: Vec<SingleId> = result_map
+        .iter()
+        .flat_map(|(raw_id, value)| {
+            assert_eq!(value, "犬(Dog)");
+            SingleId::new(raw_id.z, raw_id.f, raw_id.x, raw_id.y)
+                .unwrap()
+                .spatial_children_at_zoom(18)
+                .unwrap()
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    let binding = RangeId::new(18, [0, 0], [232846, 232850], [103226, 103240]).unwrap();
+    let mut answer: Vec<SingleId> = binding.iter_single_ids().collect();
+
+    answer.sort();
+    result.sort();
+
+    assert_eq!(answer, result);
 }
 
 /// rangeIdで指定した範囲にデータを挿入し、一部・全体それぞれが正しく取得できるか検証する
