@@ -719,7 +719,7 @@ dependencies = [
 [[package]]
 name = "kasane-logic"
 version = "0.1.4"
-source = "git+https://github.com/AirBee-Project/Kasane-Logic.git?branch=main#7a286fbfe04b9c272e9bffe09bc21d9b54170e13"
+source = "git+https://github.com/AirBee-Project/Kasane-Logic.git?branch=main#05f3bb6a67bd7516ec06472ea875f669eb11a788"
 dependencies = [
  "rand 0.9.4",
  "serde",

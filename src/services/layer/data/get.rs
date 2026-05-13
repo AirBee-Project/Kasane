@@ -33,7 +33,7 @@ pub async fn get(
         }
     };
     let ids = query.process(layer.max_zoom_level, zoom_level_policy)?;
-    tracing::debug!("Searching {} spatial IDs", ids.count());
+    tracing::debug!("Searching {} spatial IDs", ids.len());
 
     let mut result = Vec::new();
     for (single_id, value) in db.data_get(layer_name, ids)? {

@@ -107,7 +107,6 @@ impl SpatialDbWrite {
         let layer_meta = if let Some(meta) = self.layer_info(layer_name)? {
             meta
         } else {
-            tracing::warn!("Layer not found during removal: {}", layer_name);
             return Err(AppError::LayerNotFound {
                 name: layer_name.to_string(),
             });
