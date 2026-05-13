@@ -29,12 +29,18 @@ pub const SPATIALID_TO_VALUE: TableDefinition<([u8; 16], [u8; 12]), &[u8]> =
 pub const VALUE_TO_SPATIALID: TableDefinition<([u8; 16], &[u8], [u8; 12]), ()> =
     TableDefinition::new("4");
 
+#[tracing::instrument]
 pub fn initialize_database(path: &str) -> Database {
-    let database = Database::create(path).unwrap();
+    tracing::info!("Initializing database at: {}", path);
+    let database = Database::create(path).unwrap_or_else(|e| {
+        tracing::error!("Failed to create database at {}: {}", path, e);
+        panic!("Failed to create database: {}", e);
+    });
 
     let write_txn = database.begin_write().unwrap();
 
     {
+        tracing::debug!("Opening internal tables...");
         let _ = write_txn.open_table(LAYERS).unwrap();
         let _ = write_txn.open_table(LAYER_ID_INDEX).unwrap();
         let _ = write_txn.open_table(SPATIALID_TO_VALUE).unwrap();
@@ -42,6 +48,7 @@ pub fn initialize_database(path: &str) -> Database {
     }
 
     write_txn.commit().unwrap();
+    tracing::info!("Database initialized successfully");
 
     database
 }

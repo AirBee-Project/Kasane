@@ -26,7 +26,16 @@ fn default_port() -> u16 {
 
 #[tokio::main]
 async fn main() {
+    // 環境変数の読み込み
     dotenvy::dotenv().ok();
+
+    // ログの初期化
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "kasane=debug,tower_http=debug".into()),
+        )
+        .init();
 
     let args = Args::parse();
     let redb = db_init::initialize_database(&args.database_path);
@@ -37,8 +46,8 @@ async fn main() {
 
     let address = SocketAddr::from(([0, 0, 0, 0], args.port));
     let listener = tokio::net::TcpListener::bind(address).await.unwrap();
-    println!(
-        "Kasane is running on http://{} (save on: {})",
+    tracing::info!(
+        "Kasane is running on http://{} (database: {})",
         listener.local_addr().unwrap(),
         args.database_path,
     );

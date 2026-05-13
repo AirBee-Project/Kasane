@@ -20,6 +20,5 @@ pub async fn create(
     //layerの作成と反映
     db.layer_create(layer_name, data_type, max_zoom_level)?;
     db.commit()?;
-
     Ok(())
 }

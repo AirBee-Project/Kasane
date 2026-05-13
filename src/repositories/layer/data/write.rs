@@ -98,7 +98,6 @@ impl SpatialDbWrite {
 
         Ok(())
     }
-
     pub fn data_upsert(
         &self,
         layer_name: &str,
@@ -172,7 +171,6 @@ impl SpatialDbWrite {
 
         Ok(())
     }
-
     pub fn data_remove(&self, layer_name: &str, ids: SpatialIdSet) -> Result<(), AppError> {
         //存在検証
         let layer_meta = match self.layer_info(layer_name)? {
