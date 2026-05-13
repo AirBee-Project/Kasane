@@ -16,7 +16,7 @@ pub async fn remove(
     let layer = match db.layer_info(layer_name)? {
         Some(v) => v,
         None => {
-            tracing::warn!("Layer not found: {}", layer_name);
+            tracing::debug!("Layer not found: {}", layer_name);
             return Err(AppError::LayerNotFound {
                 name: layer_name.to_string(),
             });

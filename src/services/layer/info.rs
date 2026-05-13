@@ -12,7 +12,7 @@ pub async fn info(app_state: &AppState, layer_name: &str) -> Result<Layer, AppEr
     match db.layer_info(layer_name) {
         Ok(Some(layer)) => Ok(layer),
         Ok(None) => {
-            tracing::warn!("Layer not found: {}", layer_name);
+            tracing::debug!("Layer not found: {}", layer_name);
             Err(AppError::LayerNotFound {
                 name: layer_name.to_string(),
             })
