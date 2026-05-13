@@ -24,6 +24,10 @@ fn default_port() -> u16 {
         .unwrap_or(5173)
 }
 
+fn log_filter() -> String {
+    std::env::var("LOG_MODE").unwrap_or_else(|_| "kasane=info,tower_http=info".to_string())
+}
+
 #[tokio::main]
 async fn main() {
     // 環境変数の読み込み
@@ -31,10 +35,7 @@ async fn main() {
 
     // ログの初期化
     tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "kasane=info,tower_http=info".into()),
-        )
+        .with_env_filter(tracing_subscriber::EnvFilter::new(log_filter()))
         .init();
 
     let args = Args::parse();
