@@ -5,7 +5,6 @@ use crate::{
     repositories::layer::write::SpatialDbWrite,
     services::helpers::value::interpret_value,
 };
-
 pub async fn insert(
     app_state: &AppState,
     layer_name: &str,
@@ -19,6 +18,7 @@ pub async fn insert(
     let layer = match db.layer_info(layer_name)? {
         Some(v) => v,
         None => {
+            tracing::debug!("Layer not found: {}", layer_name);
             return Err(AppError::LayerNotFound {
                 name: layer_name.to_string(),
             });
@@ -28,6 +28,8 @@ pub async fn insert(
     let value = interpret_value(layer.data_type, value)?;
     let ids = query.process(layer.max_zoom_level, zoom_level_policy)?;
 
+    tracing::debug!("Inserting {} spatial IDs", ids.len());
     db.data_insert(layer_name, ids, &value)?;
-    db.commit()
+    db.commit()?;
+    Ok(())
 }

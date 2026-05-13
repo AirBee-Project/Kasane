@@ -11,7 +11,6 @@ use crate::{
     repositories::layer::read::SpatialDbRead,
     services::helpers::value::restore_value,
 };
-
 pub async fn get(
     app_state: &AppState,
     layer_name: &str,
@@ -23,13 +22,19 @@ pub async fn get(
     let layer = match db.layer_info(layer_name) {
         Ok(Some(v)) => v,
         Ok(None) => {
+            tracing::debug!("Layer not found: {}", layer_name);
             return Err(AppError::LayerNotFound {
                 name: layer_name.to_string(),
             });
         }
-        Err(e) => return Err(e),
+        Err(e) => {
+            tracing::error!("Failed to get layer info for '{}': {}", layer_name, e);
+            return Err(e);
+        }
     };
     let ids = query.process(layer.max_zoom_level, zoom_level_policy)?;
+    tracing::debug!("Searching {} spatial IDs", ids.len());
+
     let mut result = Vec::new();
     for (single_id, value) in db.data_get(layer_name, ids)? {
         let json_value = restore_value(layer.data_type, &value)?;

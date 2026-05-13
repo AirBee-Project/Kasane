@@ -4,7 +4,6 @@ use crate::{
     models::{layer::data::ZoomLevelPolicy, query::Query},
     repositories::layer::write::SpatialDbWrite,
 };
-
 pub async fn remove(
     app_state: &AppState,
     layer_name: &str,
@@ -17,6 +16,7 @@ pub async fn remove(
     let layer = match db.layer_info(layer_name)? {
         Some(v) => v,
         None => {
+            tracing::debug!("Layer not found: {}", layer_name);
             return Err(AppError::LayerNotFound {
                 name: layer_name.to_string(),
             });
@@ -24,6 +24,8 @@ pub async fn remove(
     };
 
     let ids = query.process(layer.max_zoom_level, zoom_level_policy)?;
+    tracing::debug!("Removing {} spatial IDs", ids.len());
     db.data_remove(layer_name, ids)?;
-    db.commit()
+    db.commit()?;
+    Ok(())
 }

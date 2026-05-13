@@ -9,6 +9,5 @@ pub async fn remove(app_state: &AppState, layer_name: &str) -> Result<(), AppErr
     //layerの削除と反映
     db.layer_remove(layer_name)?;
     db.commit()?;
-
     Ok(())
 }

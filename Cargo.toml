@@ -17,6 +17,9 @@ utoipa-swagger-ui = { version = "9", features = ["axum", "vendored"] }
 tower = { version = "0.5.3", features = ["util"] }
 redb = "4.1.0"
 uuid = { version = "1.23.1", features = ["v7", "fast-rng", "serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tower-http = { version = "0.6.1", features = ["trace"] }
 
 [dev-dependencies]
 http-body-util = "0.1.3"

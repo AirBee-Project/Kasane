@@ -10,8 +10,18 @@ async fn test_layer_data_get_multiple() {
     test_app.create_layer(layer_name, "Int", 25).await;
 
     // 2つの異なる場所にデータを挿入
-    let id1 = RawSingleId { z: 20, f: 0, x: 10, y: 10 };
-    let id2 = RawSingleId { z: 20, f: 0, x: 20, y: 20 };
+    let id1 = RawSingleId {
+        z: 20,
+        f: 0,
+        x: 10,
+        y: 10,
+    };
+    let id2 = RawSingleId {
+        z: 20,
+        f: 0,
+        x: 20,
+        y: 20,
+    };
 
     put_data(
         &test_app,
