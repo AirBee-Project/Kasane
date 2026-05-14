@@ -29,7 +29,7 @@ serde_yaml = "0.9"
 [dev-dependencies.cargo-husky]
 version = "1"
 default-features = false
-features = ["run-cargo-test", "run-cargo-clippy","run-cargo-fmt","run-cargo-check"]
+features = ["precommit-hook","run-cargo-test", "run-cargo-clippy","run-cargo-fmt"]
 
 [profile.dev]
 opt-level = 1
