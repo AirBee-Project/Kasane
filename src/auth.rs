@@ -20,7 +20,10 @@ fn get_provided_key(parts: &Parts) -> Option<&str> {
         .headers
         .get("Authorization")
         .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "));
+        .and_then(|value| {
+            let (scheme, credentials) = value.split_once(' ')?;
+            scheme.eq_ignore_ascii_case("Bearer").then_some(credentials)
+        });
 
     let x_api_key = parts
         .headers
