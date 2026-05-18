@@ -1,5 +1,5 @@
 use crate::AppState;
-use crate::{error::AppError, services::layer::data::get as data_get_service};
+use crate::{auth::RequireRead, error::AppError, services::layer::data::get as data_get_service};
 use axum::{
     Json,
     extract::{Path, State},
@@ -13,6 +13,7 @@ use axum::{
     tag = "layers"
 )]
 pub async fn data_get(
+    _auth: RequireRead,
     State(app_state): State<AppState>,
     Path(name): Path<String>,
     Json(payload): Json<crate::models::layer::data::GetDataRequest>,

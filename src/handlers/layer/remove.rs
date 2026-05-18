@@ -3,7 +3,7 @@ use axum::{
     http::StatusCode,
 };
 
-use crate::{AppState, error::AppError, services::layer::remove as layer_remove_service};
+use crate::{AppState, auth::RequireWrite, error::AppError, services::layer::remove as layer_remove_service};
 
 #[utoipa::path(
     delete,
@@ -18,6 +18,7 @@ use crate::{AppState, error::AppError, services::layer::remove as layer_remove_s
     tag = "layers"
 )]
 pub async fn layer_remove(
+    _auth: RequireWrite,
     State(app_state): State<AppState>,
     Path(name): Path<String>,
 ) -> Result<StatusCode, AppError> {
