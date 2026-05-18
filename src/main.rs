@@ -41,12 +41,12 @@ async fn main() {
     let args = Args::parse();
     let redb = db_init::initialize_database(&args.database_path);
 
-    let readonly_key = std::env::var("READONLY_KEY").ok();
+    let read_key = std::env::var("READ_KEY").ok();
     let write_key = std::env::var("WRITE_KEY").ok();
 
     let app = kasane(AppState {
         redb: Arc::new(redb),
-        readonly_key,
+        read_key,
         write_key,
     });
 

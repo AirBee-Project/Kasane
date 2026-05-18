@@ -19,5 +19,5 @@ APIリクエスト時には `Authorization: Bearer <API_KEY>` もしくは `x-ap
 
 | 変数名 | デフォルト値 | 説明 |
 | :--- | :--- | :--- |
-| `READONLY_KEY` | (設定なし) | `GET`, `HEAD`, `OPTIONS` などの読み取り専用リクエストを保護するAPIキーです。設定した場合、このキーか `WRITE_KEY` を渡す必要があります。 |
+| `READ_KEY` | (設定なし) | `GET`, `HEAD`, `OPTIONS` などの読み取りリクエストを保護するAPIキーです。設定した場合、このキーか `WRITE_KEY` を渡す必要があります。 |
 | `WRITE_KEY` | (設定なし) | `POST`, `PUT`, `DELETE` などの書き込みリクエストを保護するAPIキーです。設定した場合、対象リクエストにこのキーが必須になります。 |

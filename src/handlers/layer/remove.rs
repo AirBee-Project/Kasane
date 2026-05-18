@@ -3,7 +3,9 @@ use axum::{
     http::StatusCode,
 };
 
-use crate::{AppState, auth::RequireWrite, error::AppError, services::layer::remove as layer_remove_service};
+use crate::{
+    AppState, auth::RequireWrite, error::AppError, services::layer::remove as layer_remove_service,
+};
 
 #[utoipa::path(
     delete,

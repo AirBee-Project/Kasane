@@ -1,5 +1,7 @@
 use crate::services::layer::data::remove as data_remove_service;
-use crate::{AppState, auth::RequireWrite, error::AppError, models::layer::data::RemoveDataRequest};
+use crate::{
+    AppState, auth::RequireWrite, error::AppError, models::layer::data::RemoveDataRequest,
+};
 use axum::http::StatusCode;
 use axum::{
     Json,

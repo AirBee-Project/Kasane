@@ -17,7 +17,7 @@ pub mod services;
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub redb: Arc<Database>,
-    pub readonly_key: Option<String>,
+    pub read_key: Option<String>,
     pub write_key: Option<String>,
 }
 
