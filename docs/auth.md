@@ -67,7 +67,7 @@ curl -X POST http://localhost:5173/layers \
 ## 3. 実装の仕組み (開発者向け)
 
 認証は Rust の Web フレームワークである **Axum の Extractor 機能** を利用して実現されています。
-認証処理ロジック of 本体は `src/auth.rs` に定義されており、以下の2つのガード構造体が提供されています。
+認証処理ロジックの本体は `src/auth.rs` に定義されており、以下の2つのガード構造体が提供されています。
 
 * `RequireRead` (読み取りガード)
 * `RequireWrite` (書き込みガード)
