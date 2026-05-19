@@ -177,6 +177,22 @@ async fn test_auth_both_keys_set() {
         Some("write_secret".to_string()),
     );
 
+    // 読み取り：READ_KEY を提示した場合でも成功すること
+    let response = test_app
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/layers")
+                .header("Authorization", "Bearer read_secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
     // 読み取り：より強い権限の WRITE_KEY を提示した場合でも成功すること
     let response = test_app
         .app
