@@ -4,6 +4,7 @@ use redb::Database;
 
 use crate::routes::create_router;
 
+pub mod auth;
 pub mod db_init;
 pub mod error;
 pub mod handlers;
@@ -16,6 +17,8 @@ pub mod services;
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub redb: Arc<Database>,
+    pub read_key: Option<String>,
+    pub write_key: Option<String>,
 }
 
 pub fn kasane(app_state: AppState) -> axum::Router {

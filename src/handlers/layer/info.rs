@@ -4,7 +4,7 @@ use axum::{
 };
 
 use crate::{
-    AppState, error::AppError, models::layer::LayerInfoResponse,
+    AppState, auth::RequireRead, error::AppError, models::layer::LayerInfoResponse,
     services::layer::info as layer_info_service,
 };
 
@@ -21,6 +21,7 @@ use crate::{
     tag = "layers"
 )]
 pub async fn layer_info(
+    _auth: RequireRead,
     State(app_state): State<AppState>,
     Path(name): Path<String>,
 ) -> Result<Json<LayerInfoResponse>, AppError> {

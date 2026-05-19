@@ -2,6 +2,7 @@ use axum::{Json, extract::State};
 
 use crate::{
     AppState,
+    auth::RequireRead,
     error::AppError,
     models::layer::{LayerInfoResponse, LayerListResponse},
     services::layer::list as layer_list_service,
@@ -16,6 +17,7 @@ use crate::{
     tag = "layers"
 )]
 pub async fn layer_list(
+    _auth: RequireRead,
     State(app_state): State<AppState>,
 ) -> Result<Json<LayerListResponse>, AppError> {
     let layers = layer_list_service::list(&app_state).await?;

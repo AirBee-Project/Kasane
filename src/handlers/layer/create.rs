@@ -6,7 +6,7 @@ use axum::{
 };
 
 use crate::{
-    AppState, error::AppError, models::layer::CreateLayerRequest,
+    AppState, auth::RequireWrite, error::AppError, models::layer::CreateLayerRequest,
     services::layer::create as layer_create_service,
 };
 
@@ -22,6 +22,7 @@ use crate::{
     tag = "layers"
 )]
 pub async fn layer_create(
+    _auth: RequireWrite,
     State(app_state): State<AppState>,
     Json(request): Json<CreateLayerRequest>,
 ) -> Result<Response, AppError> {

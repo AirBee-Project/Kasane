@@ -1,4 +1,4 @@
-use crate::{AppState, models::layer::data::InsertDataRequest};
+use crate::{AppState, auth::RequireWrite, models::layer::data::InsertDataRequest};
 use crate::{error::AppError, services::layer::data::upsert as data_upsert_service};
 use axum::{
     Json,
@@ -18,6 +18,7 @@ use axum::{
     tag = "layers"
 )]
 pub async fn data_upsert(
+    _auth: RequireWrite,
     State(app_state): State<AppState>,
     Path(name): Path<String>,
     Json(payload): Json<InsertDataRequest>,

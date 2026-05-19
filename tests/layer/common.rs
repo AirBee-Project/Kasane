@@ -16,9 +16,17 @@ pub struct TestApp {
 
 impl TestApp {
     pub fn new() -> Self {
+        Self::with_keys(None, None)
+    }
+
+    pub fn with_keys(read_key: Option<String>, write_key: Option<String>) -> Self {
         let temp_file = NamedTempFile::new().unwrap();
         let db = db_init::initialize_database(temp_file.path().to_str().unwrap());
-        let app_state = AppState { redb: Arc::new(db) };
+        let app_state = AppState {
+            redb: Arc::new(db),
+            read_key,
+            write_key,
+        };
         let app = kasane(app_state);
         Self {
             app,

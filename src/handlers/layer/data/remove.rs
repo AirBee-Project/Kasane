@@ -1,5 +1,7 @@
 use crate::services::layer::data::remove as data_remove_service;
-use crate::{AppState, error::AppError, models::layer::data::RemoveDataRequest};
+use crate::{
+    AppState, auth::RequireWrite, error::AppError, models::layer::data::RemoveDataRequest,
+};
 use axum::http::StatusCode;
 use axum::{
     Json,
@@ -17,6 +19,7 @@ use axum::{
     tag = "layers"
 )]
 pub async fn data_remove(
+    _auth: RequireWrite,
     State(app_state): State<AppState>,
     Path(name): Path<String>,
     Json(payload): Json<RemoveDataRequest>,
