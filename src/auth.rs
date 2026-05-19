@@ -11,6 +11,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde_json::json;
+use tracing::warn;
 
 use crate::AppState;
 
@@ -62,6 +63,7 @@ impl FromRequestParts<AppState> for RequireRead {
             {
                 return Ok(RequireRead);
             }
+            warn!("READ authentication failed: invalid or missing API key");
             return Err(unauthorized_response());
         }
         Ok(RequireRead)
@@ -89,6 +91,7 @@ impl FromRequestParts<AppState> for RequireWrite {
             {
                 return Ok(RequireWrite);
             }
+            warn!("WRITE authentication failed: invalid or missing API key");
             return Err(unauthorized_response());
         }
         Ok(RequireWrite)
