@@ -24,7 +24,7 @@ pub async fn remove(
     };
 
     let ids = query.process(layer.max_zoom_level, zoom_level_policy)?;
-    tracing::debug!("Removing {} spatial IDs", ids.len());
+    tracing::debug!("Removing {} spatial IDs", ids.count());
     db.data_remove(layer_name, ids)?;
     db.commit()?;
     Ok(())

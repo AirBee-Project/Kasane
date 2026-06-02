@@ -30,7 +30,7 @@ pub async fn upsert(
     let value = interpret_value(layer.data_type, value)?;
     let ids = query.process(layer.max_zoom_level, zoom_level_policy)?;
 
-    tracing::debug!("Upserting {} spatial IDs", ids.len());
+    tracing::debug!("Upserting {} spatial IDs", ids.count());
     db.data_upsert(layer_name, ids, &value)?;
     db.commit()?;
     Ok(())
