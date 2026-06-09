@@ -11,7 +11,7 @@ use axum::{
     path = "/databases/{db_name}/tables/{table_name}/data",
     request_body = RemoveDataRequest,
     responses(
-        (status = 200, description = "Data removed"),
+        (status = 204, description = "Data removed"),
         (status = 404, description = "Table not found")
     ),
     tag = "tables"
