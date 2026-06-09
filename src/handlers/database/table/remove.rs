@@ -9,7 +9,7 @@ use crate::{AppState, error::AppError, services::database::table::remove as tabl
     delete,
     path = "/databases/{db_name}/tables/{table_name}",
     responses(
-        (status = 200, description = "Table removed"),
+        (status = 204, description = "Table removed"),
         (status = 404, description = "Table not found")
     ),
     tag = "tables"
