@@ -34,7 +34,8 @@ impl AuthCache {
             // First try to remove expired entries
             let now = Instant::now();
             let ttl = self.ttl;
-            self.users.retain(|_, (time, _)| now.duration_since(*time) < ttl);
+            self.users
+                .retain(|_, (time, _)| now.duration_since(*time) < ttl);
 
             // If still at or over capacity, clear the cache as a fallback to prevent OOM
             if self.users.len() >= self.max_capacity {

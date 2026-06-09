@@ -1,5 +1,6 @@
 use utoipa::OpenApi;
 
+use crate::models::auth::{LoginRequest, LoginResponse};
 use crate::models::database::table::data::{
     GetDataRequest, GetDataResponse, InsertDataRequest, RemoveDataRequest,
 };
@@ -12,7 +13,6 @@ use crate::models::query::{
     TableFilterInt, TableFilterText, TableFilterType,
 };
 use crate::models::spatial_id::SpatialId;
-use crate::models::auth::{LoginRequest, LoginResponse};
 use crate::models::users::{
     CreateUserRequest, PrivilegeInfoResponse, UpdatePasswordRequest, UpdatePrivilegeRequest,
     UserInfoResponse, UserRole,

@@ -6,6 +6,26 @@ info:
     name: ''
   version: 0.1.0
 paths:
+  /auth/login:
+    post:
+      tags:
+      - Auth
+      operationId: login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Unauthorized
   /databases:
     get:
       tags:
@@ -264,6 +284,163 @@ paths:
       responses:
         '204':
           description: Removed successfully
+  /users:
+    get:
+      tags:
+      - Users
+      operationId: list_users
+      responses:
+        '200':
+          description: List users successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserInfoResponse'
+      security:
+      - bearer_auth: []
+    post:
+      tags:
+      - Users
+      operationId: create_user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+        required: true
+      responses:
+        '201':
+          description: User created successfully
+        '409':
+          description: User already exists
+      security:
+      - bearer_auth: []
+  /users/{username}:
+    delete:
+      tags:
+      - Users
+      operationId: delete_user
+      parameters:
+      - name: username
+        in: path
+        description: Username
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: User deleted successfully
+        '404':
+          description: User not found
+      security:
+      - bearer_auth: []
+  /users/{username}/password:
+    put:
+      tags:
+      - Users
+      operationId: update_password
+      parameters:
+      - name: username
+        in: path
+        description: Username
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePasswordRequest'
+        required: true
+      responses:
+        '204':
+          description: Password updated successfully
+        '404':
+          description: User not found
+      security:
+      - bearer_auth: []
+  /users/{username}/privileges:
+    get:
+      tags:
+      - Users
+      operationId: get_privileges
+      parameters:
+      - name: username
+        in: path
+        description: Username
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Get privileges successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PrivilegeInfoResponse'
+        '404':
+          description: User not found
+      security:
+      - bearer_auth: []
+  /users/{username}/privileges/{db_name}:
+    put:
+      tags:
+      - Users
+      operationId: set_privilege
+      parameters:
+      - name: username
+        in: path
+        description: Username
+        required: true
+        schema:
+          type: string
+      - name: db_name
+        in: path
+        description: Database name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePrivilegeRequest'
+        required: true
+      responses:
+        '204':
+          description: Privilege updated successfully
+        '404':
+          description: User or database not found
+      security:
+      - bearer_auth: []
+    delete:
+      tags:
+      - Users
+      operationId: delete_privilege
+      parameters:
+      - name: username
+        in: path
+        description: Username
+        required: true
+        schema:
+          type: string
+      - name: db_name
+        in: path
+        description: Database name
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Privilege deleted successfully
+        '404':
+          description: User or database not found
+      security:
+      - bearer_auth: []
 components:
   schemas:
     CreateDatabaseRequest:
@@ -292,6 +469,22 @@ components:
           example: 25
           maximum: 30
           minimum: 0
+    CreateUserRequest:
+      type: object
+      required:
+      - username
+      - password
+      - is_global_admin
+      properties:
+        username:
+          type: string
+          example: alice
+        password:
+          type: string
+          example: secret123
+        is_global_admin:
+          type: boolean
+          example: false
     DatabaseInfoResponse:
       type: object
       required:
@@ -404,6 +597,25 @@ components:
           $ref: '#/components/schemas/Query'
         zoom_level_policy:
           $ref: '#/components/schemas/ZoomLevelPolicy'
+    LoginRequest:
+      type: object
+      required:
+      - username
+      - password
+      properties:
+        username:
+          type: string
+          example: root
+        password:
+          type: string
+          example: password
+    LoginResponse:
+      type: object
+      required:
+      - token
+      properties:
+        token:
+          type: string
     PointCoordinate:
       type: object
       required:
@@ -420,6 +632,16 @@ components:
         altitude:
           type: number
           format: double
+    PrivilegeInfoResponse:
+      type: object
+      required:
+      - db_name
+      - role
+      properties:
+        db_name:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
     Query:
       oneOf:
       - type: object
@@ -755,6 +977,37 @@ components:
       type: array
       items:
         $ref: '#/components/schemas/TableInfoResponse'
+    UpdatePasswordRequest:
+      type: object
+      required:
+      - password
+      properties:
+        password:
+          type: string
+          example: newsecret123
+    UpdatePrivilegeRequest:
+      type: object
+      required:
+      - role
+      properties:
+        role:
+          $ref: '#/components/schemas/UserRole'
+    UserInfoResponse:
+      type: object
+      required:
+      - username
+      - is_global_admin
+      properties:
+        username:
+          type: string
+        is_global_admin:
+          type: boolean
+    UserRole:
+      type: string
+      enum:
+      - Read
+      - Write
+      - Manage
     ZoomLevelPolicy:
       type: string
       description: 各Tableのmax_zoom_levelよりも小さなIDが入力された場合の挙動を設定できる
@@ -763,6 +1016,10 @@ components:
       - Ignore
       - Normalize
 tags:
+- name: Auth
+  description: Authentication endpoints
+- name: Users
+  description: User management operations
 - name: databases
   description: Database operations
 - name: tables
