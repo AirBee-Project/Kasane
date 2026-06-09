@@ -1,0 +1,24 @@
+use crate::AppState;
+use axum::Router;
+use axum::routing::{get, post};
+
+pub fn routes() -> Router<AppState> {
+    let db_routes = Router::new()
+        .route(
+            "/{db_name}",
+            get(crate::handlers::database::database_info)
+                .delete(crate::handlers::database::database_remove),
+        )
+        .route(
+            "/",
+            post(crate::handlers::database::database_create)
+                .get(crate::handlers::database::database_list),
+        );
+
+    Router::new().merge(db_routes).nest(
+        "/{db_name}/tables",
+        crate::routes::database::table::routes(),
+    )
+}
+
+pub mod table;

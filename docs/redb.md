@@ -6,6 +6,6 @@
 
 # Repositories層のレイヤールール
 
-- 公開関数の受付はlayer_nameで受け取る
-- 内部関数はlayer_idを受け取ってもよい
+- 公開関数の受付はtable_nameで受け取る
+- 内部関数はtable_idを受け取ってもよい
 

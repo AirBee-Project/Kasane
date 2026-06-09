@@ -41,17 +41,8 @@ async fn main() {
     let args = Args::parse();
     let redb = db_init::initialize_database(&args.database_path);
 
-    let read_key = std::env::var("READ_KEY")
-        .ok()
-        .filter(|value| !value.is_empty());
-    let write_key = std::env::var("WRITE_KEY")
-        .ok()
-        .filter(|value| !value.is_empty());
-
     let app = kasane(AppState {
         redb: Arc::new(redb),
-        read_key,
-        write_key,
     });
 
     let address = SocketAddr::from(([0, 0, 0, 0], args.port));

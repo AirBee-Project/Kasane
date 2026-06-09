@@ -13,8 +13,8 @@ pub enum Query {
     Geometry {
         geometry: Geometry,
     },
-    // LayerFilter {
-    //     filter: LayerFilter,
+    // TableFilter {
+    //     filter: TableFilter,
     // },
     Union {
         #[schema(no_recursion)]
@@ -66,23 +66,23 @@ pub struct PointCoordinate {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct LayerFilter {
+pub struct TableFilter {
     pub name: String,
-    pub query: LayerFilterType,
+    pub query: TableFilterType,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(untagged)]
-pub enum LayerFilterType {
-    Text(LayerFilterText),
-    Int(LayerFilterInt),
-    Float(LayerFilterFloat),
-    Boolean(LayerFilterBoolean),
+pub enum TableFilterType {
+    Text(TableFilterText),
+    Int(TableFilterInt),
+    Float(TableFilterFloat),
+    Boolean(TableFilterBoolean),
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "operator", content = "value", rename_all = "camelCase")]
-pub enum LayerFilterText {
+pub enum TableFilterText {
     Equal(String),
     NotEqual(String),
     StartsWith(String),
@@ -91,20 +91,20 @@ pub enum LayerFilterText {
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "operator", content = "value", rename_all = "camelCase")]
-pub enum LayerFilterInt {
+pub enum TableFilterInt {
     Equal(i32),
     NotEqual(i32),
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "operator", content = "value", rename_all = "camelCase")]
-pub enum LayerFilterFloat {
+pub enum TableFilterFloat {
     Equal(f32),
     NotEqual(f32),
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "operator", content = "value", rename_all = "camelCase")]
-pub enum LayerFilterBoolean {
+pub enum TableFilterBoolean {
     Equal(bool),
 }

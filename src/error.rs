@@ -6,16 +6,26 @@ use axum::{
 use serde_json::json;
 use std::fmt;
 
-use crate::models::layer::JsonValueType;
+use crate::models::database::table::JsonValueType;
 
 #[derive(Debug)]
 pub enum AppError {
-    LayerNotFound {
+    DatabaseNotFound {
         name: String,
     },
-    LayerAlreadyExists {
+
+    DatabaseAlreadyExists {
         name: String,
     },
+
+    TableNotFound {
+        name: String,
+    },
+
+    TableAlreadyExists {
+        name: String,
+    },
+
     ValueTypeMismatch {
         actual: JsonValueType,
         expected: JsonValueType,
@@ -41,8 +51,12 @@ pub enum AppError {
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AppError::LayerNotFound { name } => write!(f, "Layer '{}' not found", name),
-            AppError::LayerAlreadyExists { name } => write!(f, "Layer '{}' already exists", name),
+            AppError::DatabaseNotFound { name } => write!(f, "Database '{}' not found", name),
+            AppError::DatabaseAlreadyExists { name } => {
+                write!(f, "Database '{}' already exists", name)
+            }
+            AppError::TableNotFound { name } => write!(f, "Table '{}' not found", name),
+            AppError::TableAlreadyExists { name } => write!(f, "Table '{}' already exists", name),
             AppError::StorageError(message) => write!(f, "{}", message),
             AppError::InvalidName { reason } => write!(f, "Invalid name: {}", reason),
             AppError::LogicError(error) => write!(f, "Logic Error: {}", error),
@@ -76,12 +90,20 @@ impl std::error::Error for AppError {}
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
-            AppError::LayerNotFound { name } => {
-                (StatusCode::NOT_FOUND, format!("Layer '{}' not found", name))
-            }
-            AppError::LayerAlreadyExists { name } => (
+            AppError::DatabaseNotFound { name } => (
+                StatusCode::NOT_FOUND,
+                format!("Database '{}' not found", name),
+            ),
+            AppError::DatabaseAlreadyExists { name } => (
                 StatusCode::CONFLICT,
-                format!("Layer '{}' already exists", name),
+                format!("Database '{}' already exists", name),
+            ),
+            AppError::TableNotFound { name } => {
+                (StatusCode::NOT_FOUND, format!("Table '{}' not found", name))
+            }
+            AppError::TableAlreadyExists { name } => (
+                StatusCode::CONFLICT,
+                format!("Table '{}' already exists", name),
             ),
             AppError::StorageError(message) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, message.to_string())
