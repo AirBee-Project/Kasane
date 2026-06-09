@@ -24,16 +24,13 @@ use crate::models::spatial_id::SpatialId;
         // GET  /databases/{name}
         crate::handlers::database::database_info,
         // DELETE /databases/{name}
-        crate::handlers::database::database_remove,
-
-        // GET  /databases/{db_name}/tables
-        crate::handlers::database::table::list::table_list,
-        // POST /databases/{db_name}/tables
+        crate::handlers::database::remove_database,
         crate::handlers::database::table::create::table_create,
+        crate::handlers::database::table::list::table_list,
         // GET  /databases/{db_name}/tables/{table_name}
         crate::handlers::database::table::info::table_info,
         // DELETE /databases/{db_name}/tables/{table_name}
-        crate::handlers::database::table::remove::table_remove,
+        crate::handlers::database::table::remove::remove_table,
         // PUT    /databases/{db_name}/tables/{table_name}/data
         crate::handlers::database::table::data::insert::data_insert,
         // PATCH  /databases/{db_name}/tables/{table_name}/data

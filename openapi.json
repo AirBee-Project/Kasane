@@ -171,7 +171,7 @@
         "tags": [
           "tables"
         ],
-        "operationId": "table_remove",
+        "operationId": "remove_table",
         "parameters": [
           {
             "name": "db_name",
@@ -412,7 +412,7 @@
         "tags": [
           "databases"
         ],
-        "operationId": "database_remove",
+        "operationId": "remove_database",
         "parameters": [
           {
             "name": "name",

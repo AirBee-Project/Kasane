@@ -10,6 +10,12 @@ use crate::models::database::table::JsonValueType;
 
 #[derive(Debug)]
 pub enum AppError {
+    NotFound(String),
+    Unauthorized(String),
+    Forbidden(String),
+    InternalError(String),
+    Conflict(String),
+
     DatabaseNotFound {
         name: String,
     },
@@ -51,6 +57,11 @@ pub enum AppError {
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            AppError::NotFound(msg) => write!(f, "{}", msg),
+            AppError::Unauthorized(msg) => write!(f, "{}", msg),
+            AppError::Forbidden(msg) => write!(f, "{}", msg),
+            AppError::InternalError(msg) => write!(f, "{}", msg),
+            AppError::Conflict(msg) => write!(f, "{}", msg),
             AppError::DatabaseNotFound { name } => write!(f, "Database '{}' not found", name),
             AppError::DatabaseAlreadyExists { name } => {
                 write!(f, "Database '{}' already exists", name)
@@ -90,6 +101,11 @@ impl std::error::Error for AppError {}
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
+            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
+            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
+            AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
+            AppError::InternalError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
+            AppError::Conflict(msg) => (StatusCode::CONFLICT, msg),
             AppError::DatabaseNotFound { name } => (
                 StatusCode::NOT_FOUND,
                 format!("Database '{}' not found", name),

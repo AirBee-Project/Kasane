@@ -1,3 +1,6 @@
+use crate::middleware::auth::AuthUser;
+use crate::models::users::UserRole;
+use axum::Extension;
 use axum::{
     Json,
     extract::{Path, State},
@@ -24,8 +27,12 @@ use crate::{
 pub async fn table_create(
     Path(db_name): Path<String>,
     State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
     Json(request): Json<CreateTableRequest>,
 ) -> Result<Response, AppError> {
+    crate::middleware::auth::check_privilege(&app_state, &auth_user, &db_name, UserRole::Manage)
+        .await?;
+
     let table_name = request.name.clone();
     table_create_service::create(&app_state, &db_name, &table_name, request).await?;
     Ok((

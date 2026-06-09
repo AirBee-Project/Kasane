@@ -95,7 +95,7 @@ flowchart TD
 
 ## Table API の流れ
 
-`/tables` 系 API は次の順序で処理されます。
+`/{db_name}/tables` 系 API は次の順序で処理されます。
 
 1. `routes` が HTTP メソッドとパスを handler に割り当てる。
 2. `handlers` が request を取り出して service を呼ぶ。
@@ -105,7 +105,7 @@ flowchart TD
 
 ## 補足
 
-- `create` は `POST /tables`。
-- `info` は `GET /tables/{name}`。
-- `remove` は `DELETE /tables/{name}`。
+- `create` は `POST /databases/{db_name}/tables`。
+- `info` は `GET /databases/{db_name}/tables/{table_name}/info`。
+- `remove` は `DELETE /databases/{db_name}/tables/{table_name}`。
 - 追加の CRUD が増えても、この依存方向は変えない。

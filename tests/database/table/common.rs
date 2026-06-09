@@ -16,10 +16,25 @@ impl TestApp {
     pub fn new() -> Self {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db = kasane::db_init::initialize_database(temp_file.path().to_str().unwrap());
+        let token = kasane::services::auth::generate_jwt("root").unwrap();
+        let auth_header = axum::http::HeaderValue::from_str(&format!("Bearer {}", token)).unwrap();
+
         let app_state = kasane::AppState {
             redb: std::sync::Arc::new(db),
+            auth_cache: std::sync::Arc::new(tokio::sync::RwLock::new(
+                kasane::auth_cache::AuthCache::new(),
+            )),
         };
-        let app = kasane::kasane(app_state);
+        let app = kasane::kasane(app_state).layer(axum::middleware::from_fn(
+            move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+                let auth_header = auth_header.clone();
+                async move {
+                    req.headers_mut()
+                        .insert(axum::http::header::AUTHORIZATION, auth_header);
+                    next.run(req).await
+                }
+            },
+        ));
         Self {
             app,
             _temp_file: temp_file,

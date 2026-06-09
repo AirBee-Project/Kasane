@@ -12,12 +12,13 @@ Kasaneでは、設定を環境変数で変更することができます。ま�
 | `PORT` | `5173` | サーバーがリッスンするポート番号を指定します。コマンドライン引数 `--port` が指定されていない場合、この環境変数が使用されます。(※ `.env.example` では `3000` と記載されています) |
 | `LOG_MODE` | `kasane=info,tower_http=info` | ログの出力レベルを指定します。`tracing_subscriber::EnvFilter` の書式に従います。 |
 
-## 認証設定 (Authentication)
+## 認証・権限設定 (Authentication & Authorization)
 
-KasaneのAPIアクセスを制限するためのキーです。未設定の場合はそれぞれパブリックアクセスが許可されます。
-APIリクエスト時には `Authorization: Bearer <API_KEY>` もしくは `x-api-key: <API_KEY>` ヘッダーを使用してキーを送信します。
+KasaneはJWT（JSON Web Token）ベースの認証と、ロールベースアクセス制御（RBAC）をサポートしています。
+以下の環境変数を設定することで、初回起動時のルートアカウントやJWTのセキュリティをカスタマイズできます。
 
 | 変数名 | デフォルト値 | 説明 |
 | :--- | :--- | :--- |
-| `READ_KEY` | (設定なし) | `GET`, `HEAD`, `OPTIONS` などの読み取りリクエストを保護するAPIキーです。設定した場合、このキーか `WRITE_KEY` を渡す必要があります。 |
-| `WRITE_KEY` | (設定なし) | `POST`, `PUT`, `DELETE` などの書き込みリクエストを保護するAPIキーです。設定した場合、対象リクエストにこのキーが必須になります。 |
+| `KASANE_ROOT_USERNAME` | `root` | データベース初期化時（初回起動時）に自動作成されるデフォルトの管理者（ルート）ユーザー名です。 |
+| `KASANE_ROOT_PASSWORD` | `password` | データベース初期化時に自動作成されるデフォルトの管理者ユーザーのパスワードです。 |
+| `KASANE_JWT_SECRET` | `kasane-super-secret-key-change-me` | JWTトークンの署名・検証に使用されるシークレットキーです。**本番環境では必ず安全でユニークな文字列に変更してください。** |

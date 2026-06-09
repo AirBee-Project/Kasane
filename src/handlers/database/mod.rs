@@ -1,8 +1,10 @@
+use crate::middleware::auth::AuthUser;
 use crate::{
     AppState,
     error::AppError,
     models::database::{CreateDatabaseRequest, DatabaseInfoResponse},
 };
+use axum::Extension;
 use axum::{
     Json,
     extract::{Path, State},
@@ -21,9 +23,15 @@ use axum::{
 )]
 pub async fn database_create(
     State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
     Json(request): Json<CreateDatabaseRequest>,
 ) -> Result<Response, AppError> {
-    let res = crate::services::database::create(&app_state, &request.name).await?;
+    if !auth_user.user.is_global_admin {
+        return Err(AppError::Forbidden(
+            "Requires GlobalAdmin privileges".to_string(),
+        ));
+    }
+    let res = crate::services::database::create(&app_state, request.name.as_str()).await?;
     Ok((
         StatusCode::CREATED,
         [(LOCATION, format!("/databases/{}", request.name))],
@@ -42,9 +50,9 @@ pub async fn database_create(
 )]
 pub async fn database_info(
     State(app_state): State<AppState>,
-    Path(name): Path<String>,
+    Path(db_name): Path<String>,
 ) -> Result<Json<DatabaseInfoResponse>, AppError> {
-    let res = crate::services::database::info(&app_state, &name).await?;
+    let res = crate::services::database::info(&app_state, &db_name).await?;
     Ok(Json(res))
 }
 
@@ -71,11 +79,17 @@ pub async fn database_list(
     ),
     tag = "databases"
 )]
-pub async fn database_remove(
+pub async fn remove_database(
     State(app_state): State<AppState>,
-    Path(name): Path<String>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(db_name): Path<String>,
 ) -> Result<StatusCode, AppError> {
-    crate::services::database::remove(&app_state, &name).await?;
+    if !auth_user.user.is_global_admin {
+        return Err(AppError::Forbidden(
+            "Requires GlobalAdmin privileges".to_string(),
+        ));
+    }
+    crate::services::database::remove(&app_state, db_name.as_str()).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

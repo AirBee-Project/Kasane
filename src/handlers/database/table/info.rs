@@ -1,3 +1,5 @@
+use crate::middleware::auth::AuthUser;
+use axum::Extension;
 use axum::{
     Json,
     extract::{Path, State},
@@ -19,6 +21,7 @@ use crate::{
 )]
 pub async fn table_info(
     State(app_state): State<AppState>,
+    Extension(_auth_user): Extension<AuthUser>,
     Path((db_name, table_name)): Path<(String, String)>,
 ) -> Result<Json<TableInfoResponse>, AppError> {
     let res = table_info_service::info(&app_state, &db_name, &table_name).await?;

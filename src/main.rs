@@ -1,7 +1,9 @@
 use std::{net::SocketAddr, sync::Arc};
 
+use tokio::sync::RwLock;
+
 use clap::Parser;
-use kasane::{AppState, db_init, kasane};
+use kasane::{AppState, auth_cache::AuthCache, db_init, kasane};
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -43,6 +45,7 @@ async fn main() {
 
     let app = kasane(AppState {
         redb: Arc::new(redb),
+        auth_cache: Arc::new(RwLock::new(AuthCache::new())),
     });
 
     let address = SocketAddr::from(([0, 0, 0, 0], args.port));

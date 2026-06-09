@@ -20,6 +20,10 @@ uuid = { version = "1.23.1", features = ["v7", "fast-rng", "serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tower-http = { version = "0.6.1", features = ["trace"] }
+argon2 = "0.5.3"
+jsonwebtoken = { version = "10.4.0", features = ["rust_crypto"] }
+rand = "0.10.1"
+rand_core = { version = "0.6.4", features = ["getrandom"] }
 
 [dev-dependencies]
 http-body-util = "0.1.3"

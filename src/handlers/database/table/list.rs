@@ -1,3 +1,5 @@
+use crate::middleware::auth::AuthUser;
+use axum::Extension;
 use axum::{
     Json,
     extract::{Path, State},
@@ -19,6 +21,7 @@ use crate::{
 pub async fn table_list(
     Path(db_name): Path<String>,
     State(app_state): State<AppState>,
+    Extension(_auth_user): Extension<AuthUser>,
 ) -> Result<Json<TableListResponse>, AppError> {
     let tables = table_list_service::list(&app_state, &db_name).await?;
     Ok(Json(tables))
