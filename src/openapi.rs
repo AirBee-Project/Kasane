@@ -12,11 +12,26 @@ use crate::models::query::{
     TableFilterInt, TableFilterText, TableFilterType,
 };
 use crate::models::spatial_id::SpatialId;
+use crate::models::auth::{LoginRequest, LoginResponse};
+use crate::models::users::{
+    CreateUserRequest, PrivilegeInfoResponse, UpdatePasswordRequest, UpdatePrivilegeRequest,
+    UserInfoResponse, UserRole,
+};
 
 #[derive(OpenApi)]
 #[openapi(
     servers(),
     paths(
+        // Auth
+        crate::handlers::auth::login,
+        // Users
+        crate::handlers::users::list_users,
+        crate::handlers::users::create_user,
+        crate::handlers::users::delete_user,
+        crate::handlers::users::update_password,
+        crate::handlers::users::get_privileges,
+        crate::handlers::users::set_privilege,
+        crate::handlers::users::delete_privilege,
         // GET  /databases
         crate::handlers::database::database_list,
         // POST /databases
@@ -41,6 +56,16 @@ use crate::models::spatial_id::SpatialId;
         crate::handlers::database::table::data::get::data_get,
     ),
     components(schemas(
+        // Auth
+        LoginRequest,
+        LoginResponse,
+        // Users
+        CreateUserRequest,
+        UserInfoResponse,
+        UpdatePasswordRequest,
+        UpdatePrivilegeRequest,
+        PrivilegeInfoResponse,
+        UserRole,
         // Database
         CreateDatabaseRequest,
         DatabaseInfoResponse,
@@ -67,6 +92,8 @@ use crate::models::spatial_id::SpatialId;
         TableFilterBoolean,
     )),
     tags(
+        (name = "Auth", description = "Authentication endpoints"),
+        (name = "Users", description = "User management operations"),
         (name = "databases", description = "Database operations"),
         (name = "tables", description = "Table operations")
     )

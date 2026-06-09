@@ -36,8 +36,8 @@ pub async fn require_auth(
 
     // Fast path: check in-memory cache
     let cache = app_state.auth_cache.read().await;
-    let user = match cache.users.get(&claims.sub) {
-        Some(u) => u.clone(),
+    let user = match cache.get(&claims.sub) {
+        Some(u) => u,
         None => {
             // Drop read lock to acquire write lock, or just fallback to repository.
             // For now, if not in cache, fallback to repo.
@@ -50,7 +50,7 @@ pub async fn require_auth(
 
             // Add to cache
             let mut write_cache = app_state.auth_cache.write().await;
-            write_cache.users.insert(claims.sub.clone(), user.clone());
+            write_cache.insert(claims.sub.clone(), user.clone());
             user
         }
     };

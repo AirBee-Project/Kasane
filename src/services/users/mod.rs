@@ -40,7 +40,7 @@ pub async fn delete_user(app_state: &AppState, username: &str) -> Result<(), App
 
     // update cache
     let mut cache = app_state.auth_cache.write().await;
-    cache.users.remove(username);
+    cache.remove(username);
     Ok(())
 }
 
