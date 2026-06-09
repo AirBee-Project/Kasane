@@ -15,6 +15,8 @@ pub fn name_valid(name: &str) -> Result<(), AppError> {
         "system",
         "admin",
         "root",
+        "database",
+        "databases",
         "table",
         "tables",
         "index",
