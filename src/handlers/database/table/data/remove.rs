@@ -17,7 +17,7 @@ use axum::{
         (status = 204, description = "Data removed"),
         (status = 404, description = "Table not found")
     ),
-    tag = "tables"
+    tag = "data"
 )]
 pub async fn data_remove(
     State(app_state): State<AppState>,

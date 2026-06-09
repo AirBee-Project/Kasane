@@ -56,8 +56,7 @@ pub fn initialize_database(path: &str) -> Database {
         let _ = write_txn.open_table(USER_PRIVILEGES).unwrap();
 
         if users_table.is_empty().unwrap() {
-            let default_username =
-                std::env::var("KASANE_ROOT_USERNAME").unwrap_or_else(|_| "root".to_string());
+            let default_username = "root";
             let default_password =
                 std::env::var("KASANE_ROOT_PASSWORD").unwrap_or_else(|_| "password".to_string());
 
@@ -70,7 +69,7 @@ pub fn initialize_database(path: &str) -> Database {
             };
             let json = serde_json::to_string(&root_meta).unwrap();
             users_table
-                .insert(default_username.as_str(), json.as_str())
+                .insert(default_username, json.as_str())
                 .unwrap();
         }
     }

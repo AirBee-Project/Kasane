@@ -95,7 +95,8 @@ use crate::models::users::{
         (name = "Auth", description = "Authentication endpoints"),
         (name = "Users", description = "User management operations"),
         (name = "databases", description = "Database operations"),
-        (name = "tables", description = "Table operations")
+        (name = "tables", description = "Table operations"),
+        (name = "data", description = "Data manipulation operations")
     )
 )]
 pub struct ApiDoc;

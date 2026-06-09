@@ -17,7 +17,7 @@ use axum::{
         (status = 200, description = "Data inserted"),
         (status = 404, description = "Table not found")
     ),
-    tag = "tables"
+    tag = "data"
 )]
 pub async fn data_insert(
     State(app_state): State<AppState>,

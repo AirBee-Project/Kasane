@@ -16,7 +16,7 @@ use axum::{
         (status = 200, description = "Data retrieved", body = GetDataResponse),
         (status = 404, description = "Table not found")
     ),
-    tag = "tables"
+    tag = "data"
 )]
 pub async fn data_get(
     State(app_state): State<AppState>,
