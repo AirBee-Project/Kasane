@@ -11,7 +11,7 @@ use axum::{
     path = "/databases/{db_name}/tables/{table_name}/data",
     request_body = InsertDataRequest,
     responses(
-        (status = 200, description = "Data upserted"),
+        (status = 204, description = "Data upserted"),
         (status = 404, description = "Table not found")
     ),
     tag = "tables"
