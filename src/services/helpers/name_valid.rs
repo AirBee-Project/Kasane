@@ -1,7 +1,7 @@
 use crate::error::AppError;
 
 /// Kasane内部のエンティティ名の命名規則チェック
-/// TableやUserの名前に使用する
+/// DatabaseやTableやUserの名前に使用する
 ///  
 /// - 空文字禁止
 /// - 1〜64文字
