@@ -424,7 +424,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "204": {
             "description": "Removed successfully"
           }
         }

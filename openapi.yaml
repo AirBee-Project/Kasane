@@ -119,7 +119,7 @@ paths:
         schema:
           type: string
       responses:
-        '200':
+        '204':
           description: Table removed
         '404':
           description: Table not found
@@ -172,7 +172,7 @@ paths:
               $ref: '#/components/schemas/RemoveDataRequest'
         required: true
       responses:
-        '200':
+        '204':
           description: Data removed
         '404':
           description: Table not found
@@ -198,7 +198,7 @@ paths:
               $ref: '#/components/schemas/InsertDataRequest'
         required: true
       responses:
-        '200':
+        '204':
           description: Data upserted
         '404':
           description: Table not found
@@ -262,7 +262,7 @@ paths:
         schema:
           type: string
       responses:
-        '200':
+        '204':
           description: Removed successfully
 components:
   schemas:
