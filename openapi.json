@@ -191,7 +191,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "204": {
             "description": "Table removed"
           },
           "404": {
