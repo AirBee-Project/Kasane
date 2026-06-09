@@ -6,81 +6,136 @@ info:
     name: ''
   version: 0.1.0
 paths:
-  /layers:
+  /databases:
     get:
       tags:
-      - layers
-      operationId: layer_list
+      - databases
+      operationId: database_list
       responses:
         '200':
-          description: List of all layers
+          description: List databases
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LayerListResponse'
+                type: array
+                items:
+                  $ref: '#/components/schemas/DatabaseInfoResponse'
     post:
       tags:
-      - layers
-      operationId: layer_create
+      - databases
+      operationId: database_create
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateLayerRequest'
+              $ref: '#/components/schemas/CreateDatabaseRequest'
         required: true
       responses:
         '201':
-          description: Layer created
-        '400':
-          description: Invalid request
-        '409':
-          description: Layer already exists
-  /layers/{name}:
+          description: Created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseInfoResponse'
+  /databases/{db_name}/tables:
     get:
       tags:
-      - layers
-      operationId: layer_info
+      - tables
+      operationId: table_list
       parameters:
-      - name: name
+      - name: db_name
         in: path
-        description: Layer name
         required: true
         schema:
           type: string
       responses:
         '200':
-          description: Layer information
+          description: List of tables
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LayerInfoResponse'
+                $ref: '#/components/schemas/TableListResponse'
+    post:
+      tags:
+      - tables
+      operationId: table_create
+      parameters:
+      - name: db_name
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTableRequest'
+        required: true
+      responses:
+        '201':
+          description: Table created
+        '400':
+          description: Invalid request
+        '409':
+          description: Table already exists
+  /databases/{db_name}/tables/{table_name}:
+    get:
+      tags:
+      - tables
+      operationId: table_info
+      parameters:
+      - name: db_name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: table_name
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Table info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TableInfoResponse'
         '404':
-          description: Layer not found
+          description: Table not found
     delete:
       tags:
-      - layers
-      operationId: layer_remove
+      - tables
+      operationId: table_remove
       parameters:
-      - name: name
+      - name: db_name
         in: path
-        description: Layer name
+        required: true
+        schema:
+          type: string
+      - name: table_name
+        in: path
         required: true
         schema:
           type: string
       responses:
         '204':
-          description: Layer deleted
+          description: Table removed
         '404':
-          description: Layer not found
-  /layers/{name}/data:
+          description: Table not found
+  /databases/{db_name}/tables/{table_name}/data:
     put:
       tags:
-      - layers
+      - tables
       operationId: data_insert
       parameters:
-      - name: name
+      - name: db_name
         in: path
-        description: Layer name
+        required: true
+        schema:
+          type: string
+      - name: table_name
+        in: path
         required: true
         schema:
           type: string
@@ -91,18 +146,22 @@ paths:
               $ref: '#/components/schemas/InsertDataRequest'
         required: true
       responses:
-        '201':
-          description: Data Inserted
+        '200':
+          description: Data inserted
         '404':
-          description: Layer not found
+          description: Table not found
     delete:
       tags:
-      - layers
+      - tables
       operationId: data_remove
       parameters:
-      - name: name
+      - name: db_name
         in: path
-        description: Layer name
+        required: true
+        schema:
+          type: string
+      - name: table_name
+        in: path
         required: true
         schema:
           type: string
@@ -114,17 +173,21 @@ paths:
         required: true
       responses:
         '204':
-          description: Data Removed
+          description: Data removed
         '404':
-          description: Layer not found
+          description: Table not found
     patch:
       tags:
-      - layers
+      - tables
       operationId: data_upsert
       parameters:
-      - name: name
+      - name: db_name
         in: path
-        description: Layer name
+        required: true
+        schema:
+          type: string
+      - name: table_name
+        in: path
         required: true
         schema:
           type: string
@@ -136,18 +199,22 @@ paths:
         required: true
       responses:
         '204':
-          description: Data Upserted (written only to empty spatial IDs)
+          description: Data upserted
         '404':
-          description: Layer not found
-  /layers/{name}/data/search:
+          description: Table not found
+  /databases/{db_name}/tables/{table_name}/data/search:
     post:
       tags:
-      - layers
+      - tables
       operationId: data_get
       parameters:
-      - name: name
+      - name: db_name
         in: path
-        description: Layer name
+        required: true
+        schema:
+          type: string
+      - name: table_name
+        in: path
         required: true
         schema:
           type: string
@@ -158,13 +225,57 @@ paths:
               $ref: '#/components/schemas/GetDataRequest'
         required: true
       responses:
+        '200':
+          description: Data retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetDataResponse'
         '404':
-          description: Layer not found
+          description: Table not found
+  /databases/{name}:
+    get:
+      tags:
+      - databases
+      operationId: database_info
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Get database info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseInfoResponse'
+    delete:
+      tags:
+      - databases
+      operationId: database_remove
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Removed successfully
 components:
   schemas:
-    CreateLayerRequest:
+    CreateDatabaseRequest:
       type: object
-      description: 時空間IDと値が対応するLayerを作成する
+      required:
+      - name
+      properties:
+        name:
+          type: string
+    CreateTableRequest:
+      type: object
+      description: 時空間IDと値が対応するTableを作成する
       required:
       - name
       - data_type
@@ -172,15 +283,22 @@ components:
       properties:
         name:
           type: string
-          example: example_layer
+          example: example_table
         data_type:
-          $ref: '#/components/schemas/LayerDataType'
+          $ref: '#/components/schemas/TableDataType'
         max_zoom_level:
           type: integer
           format: int32
           example: 25
           maximum: 30
           minimum: 0
+    DatabaseInfoResponse:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
     Geometry:
       oneOf:
       - type: object
@@ -286,164 +404,6 @@ components:
           $ref: '#/components/schemas/Query'
         zoom_level_policy:
           $ref: '#/components/schemas/ZoomLevelPolicy'
-    LayerDataType:
-      type: string
-      description: Layer内の時空間IDに付与する値の型。
-      enum:
-      - Text
-      - Int
-      - Float
-      - Boolean
-    LayerFilter:
-      type: object
-      required:
-      - name
-      - query
-      properties:
-        name:
-          type: string
-        query:
-          $ref: '#/components/schemas/LayerFilterType'
-    LayerFilterBoolean:
-      oneOf:
-      - type: object
-        required:
-        - value
-        - operator
-        properties:
-          value:
-            type: boolean
-          operator:
-            type: string
-            enum:
-            - equal
-    LayerFilterFloat:
-      oneOf:
-      - type: object
-        required:
-        - value
-        - operator
-        properties:
-          value:
-            type: number
-            format: float
-          operator:
-            type: string
-            enum:
-            - equal
-      - type: object
-        required:
-        - value
-        - operator
-        properties:
-          value:
-            type: number
-            format: float
-          operator:
-            type: string
-            enum:
-            - notEqual
-    LayerFilterInt:
-      oneOf:
-      - type: object
-        required:
-        - value
-        - operator
-        properties:
-          value:
-            type: integer
-            format: int32
-          operator:
-            type: string
-            enum:
-            - equal
-      - type: object
-        required:
-        - value
-        - operator
-        properties:
-          value:
-            type: integer
-            format: int32
-          operator:
-            type: string
-            enum:
-            - notEqual
-    LayerFilterText:
-      oneOf:
-      - type: object
-        required:
-        - value
-        - operator
-        properties:
-          value:
-            type: string
-          operator:
-            type: string
-            enum:
-            - equal
-      - type: object
-        required:
-        - value
-        - operator
-        properties:
-          value:
-            type: string
-          operator:
-            type: string
-            enum:
-            - notEqual
-      - type: object
-        required:
-        - value
-        - operator
-        properties:
-          value:
-            type: string
-          operator:
-            type: string
-            enum:
-            - startsWith
-      - type: object
-        required:
-        - value
-        - operator
-        properties:
-          value:
-            type: array
-            items:
-              type: string
-          operator:
-            type: string
-            enum:
-            - in
-    LayerFilterType:
-      oneOf:
-      - $ref: '#/components/schemas/LayerFilterText'
-      - $ref: '#/components/schemas/LayerFilterInt'
-      - $ref: '#/components/schemas/LayerFilterFloat'
-      - $ref: '#/components/schemas/LayerFilterBoolean'
-    LayerInfoResponse:
-      type: object
-      required:
-      - name
-      - data_type
-      - max_zoom_level
-      properties:
-        name:
-          type: string
-          example: example_layer
-        data_type:
-          $ref: '#/components/schemas/LayerDataType'
-        max_zoom_level:
-          type: integer
-          format: int32
-          example: 25
-          minimum: 0
-    LayerListResponse:
-      type: array
-      items:
-        $ref: '#/components/schemas/LayerInfoResponse'
     PointCoordinate:
       type: object
       required:
@@ -637,13 +597,173 @@ components:
               type: string
               enum:
               - rangeId
+    TableDataType:
+      type: string
+      description: Table内の時空間IDに付与する値の型。
+      enum:
+      - Text
+      - Int
+      - Float
+      - Boolean
+    TableFilter:
+      type: object
+      required:
+      - name
+      - query
+      properties:
+        name:
+          type: string
+        query:
+          $ref: '#/components/schemas/TableFilterType'
+    TableFilterBoolean:
+      oneOf:
+      - type: object
+        required:
+        - value
+        - operator
+        properties:
+          value:
+            type: boolean
+          operator:
+            type: string
+            enum:
+            - equal
+    TableFilterFloat:
+      oneOf:
+      - type: object
+        required:
+        - value
+        - operator
+        properties:
+          value:
+            type: number
+            format: float
+          operator:
+            type: string
+            enum:
+            - equal
+      - type: object
+        required:
+        - value
+        - operator
+        properties:
+          value:
+            type: number
+            format: float
+          operator:
+            type: string
+            enum:
+            - notEqual
+    TableFilterInt:
+      oneOf:
+      - type: object
+        required:
+        - value
+        - operator
+        properties:
+          value:
+            type: integer
+            format: int32
+          operator:
+            type: string
+            enum:
+            - equal
+      - type: object
+        required:
+        - value
+        - operator
+        properties:
+          value:
+            type: integer
+            format: int32
+          operator:
+            type: string
+            enum:
+            - notEqual
+    TableFilterText:
+      oneOf:
+      - type: object
+        required:
+        - value
+        - operator
+        properties:
+          value:
+            type: string
+          operator:
+            type: string
+            enum:
+            - equal
+      - type: object
+        required:
+        - value
+        - operator
+        properties:
+          value:
+            type: string
+          operator:
+            type: string
+            enum:
+            - notEqual
+      - type: object
+        required:
+        - value
+        - operator
+        properties:
+          value:
+            type: string
+          operator:
+            type: string
+            enum:
+            - startsWith
+      - type: object
+        required:
+        - value
+        - operator
+        properties:
+          value:
+            type: array
+            items:
+              type: string
+          operator:
+            type: string
+            enum:
+            - in
+    TableFilterType:
+      oneOf:
+      - $ref: '#/components/schemas/TableFilterText'
+      - $ref: '#/components/schemas/TableFilterInt'
+      - $ref: '#/components/schemas/TableFilterFloat'
+      - $ref: '#/components/schemas/TableFilterBoolean'
+    TableInfoResponse:
+      type: object
+      required:
+      - name
+      - data_type
+      - max_zoom_level
+      properties:
+        name:
+          type: string
+          example: example_table
+        data_type:
+          $ref: '#/components/schemas/TableDataType'
+        max_zoom_level:
+          type: integer
+          format: int32
+          example: 25
+          minimum: 0
+    TableListResponse:
+      type: array
+      items:
+        $ref: '#/components/schemas/TableInfoResponse'
     ZoomLevelPolicy:
       type: string
-      description: 各Layerのmax_zoom_levelよりも小さなIDが入力された場合の挙動を設定できる
+      description: 各Tableのmax_zoom_levelよりも小さなIDが入力された場合の挙動を設定できる
       enum:
       - Error
       - Ignore
       - Normalize
 tags:
-- name: layers
-  description: Layer operations
+- name: databases
+  description: Database operations
+- name: tables
+  description: Table operations

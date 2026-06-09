@@ -1,29 +1,27 @@
 use redb::{Database, TableDefinition};
 
-use crate::models::layer::LayerMetadata;
+use crate::models::{database::DatabaseMetadata, database::table::TableMetadata};
 
-/// KasaneのLayer情報を管理するための内部テーブル
-///
-/// Key: Layerの名前
-/// Value: Layerの名前以外の情報
-pub const LAYERS: TableDefinition<&str, LayerMetadata> = TableDefinition::new("1");
+pub const DATABASES: TableDefinition<&str, DatabaseMetadata> = TableDefinition::new("0");
 
-/// LayerのID衝突チェック用インデックス
+pub const TABLES: TableDefinition<([u8; 16], &str), TableMetadata> = TableDefinition::new("1");
+
+/// TableのID衝突チェック用インデックス
 ///
-/// Key: LayerのID
+/// Key: TableのID
 /// Value: 空
-pub const LAYER_ID_INDEX: TableDefinition<[u8; 16], ()> = TableDefinition::new("2");
+pub const TABLE_ID_INDEX: TableDefinition<[u8; 16], ()> = TableDefinition::new("2");
 
 /// 空間IDと値の対応を管理するためのテーブル
 ///
-/// Key: (LayerのID, 空間IDのエンコードバイト)
+/// Key: (TableのID, 空間IDのエンコードバイト)
 /// Value: 値のバイト列
 pub const SPATIALID_TO_VALUE: TableDefinition<([u8; 16], [u8; 12]), &[u8]> =
     TableDefinition::new("3");
 
 /// 値と空間IDに対応を管理するためのテーブル
 ///
-/// Key:(LayerのID,値のバイト列、空間IDのエンコードバイト列)
+/// Key:(TableのID,値のバイト列、空間IDのエンコードバイト列)
 /// Value: 空
 #[allow(clippy::type_complexity)]
 pub const VALUE_TO_SPATIALID: TableDefinition<([u8; 16], &[u8], [u8; 12]), ()> =
@@ -41,8 +39,9 @@ pub fn initialize_database(path: &str) -> Database {
 
     {
         tracing::debug!("Opening internal tables...");
-        let _ = write_txn.open_table(LAYERS).unwrap();
-        let _ = write_txn.open_table(LAYER_ID_INDEX).unwrap();
+        let _ = write_txn.open_table(DATABASES).unwrap();
+        let _ = write_txn.open_table(TABLES).unwrap();
+        let _ = write_txn.open_table(TABLE_ID_INDEX).unwrap();
         let _ = write_txn.open_table(SPATIALID_TO_VALUE).unwrap();
         let _ = write_txn.open_table(VALUE_TO_SPATIALID).unwrap();
     }

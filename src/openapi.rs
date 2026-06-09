@@ -1,14 +1,15 @@
 use utoipa::OpenApi;
 
-use crate::models::layer::data::{
+use crate::models::database::table::data::{
     GetDataRequest, GetDataResponse, InsertDataRequest, RemoveDataRequest,
 };
-use crate::models::layer::{
-    CreateLayerRequest, LayerDataType, LayerInfoResponse, LayerListResponse,
+use crate::models::database::table::{
+    CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse,
 };
+use crate::models::database::{CreateDatabaseRequest, DatabaseInfoResponse};
 use crate::models::query::{
-    Geometry, LayerFilter, LayerFilterBoolean, LayerFilterFloat, LayerFilterInt, LayerFilterText,
-    LayerFilterType, PointCoordinate, Query,
+    Geometry, PointCoordinate, Query, TableFilter, TableFilterBoolean, TableFilterFloat,
+    TableFilterInt, TableFilterText, TableFilterType,
 };
 use crate::models::spatial_id::SpatialId;
 
@@ -16,29 +17,41 @@ use crate::models::spatial_id::SpatialId;
 #[openapi(
     servers(),
     paths(
-        // GET  /layers
-        crate::handlers::layer::list::layer_list,
-        // POST /layers
-        crate::handlers::layer::create::layer_create,
-        // GET  /layers/{name}
-        crate::handlers::layer::info::layer_info,
-        // DELETE /layers/{name}
-        crate::handlers::layer::remove::layer_remove,
-        // PUT    /layers/{name}/data
-        crate::handlers::layer::data::insert::data_insert,
-        // PATCH  /layers/{name}/data
-        crate::handlers::layer::data::upsert::data_upsert,
-        // DELETE /layers/{name}/data
-        crate::handlers::layer::data::remove::data_remove,
-        // POST   /layers/{name}/data/search
-        crate::handlers::layer::data::get::data_get,
+        // GET  /databases
+        crate::handlers::database::database_list,
+        // POST /databases
+        crate::handlers::database::database_create,
+        // GET  /databases/{name}
+        crate::handlers::database::database_info,
+        // DELETE /databases/{name}
+        crate::handlers::database::database_remove,
+
+        // GET  /databases/{db_name}/tables
+        crate::handlers::database::table::list::table_list,
+        // POST /databases/{db_name}/tables
+        crate::handlers::database::table::create::table_create,
+        // GET  /databases/{db_name}/tables/{table_name}
+        crate::handlers::database::table::info::table_info,
+        // DELETE /databases/{db_name}/tables/{table_name}
+        crate::handlers::database::table::remove::table_remove,
+        // PUT    /databases/{db_name}/tables/{table_name}/data
+        crate::handlers::database::table::data::insert::data_insert,
+        // PATCH  /databases/{db_name}/tables/{table_name}/data
+        crate::handlers::database::table::data::upsert::data_upsert,
+        // DELETE /databases/{db_name}/tables/{table_name}/data
+        crate::handlers::database::table::data::remove::data_remove,
+        // POST   /databases/{db_name}/tables/{table_name}/data/search
+        crate::handlers::database::table::data::get::data_get,
     ),
     components(schemas(
-        // Layer
-        CreateLayerRequest,
-        LayerDataType,
-        LayerInfoResponse,
-        LayerListResponse,
+        // Database
+        CreateDatabaseRequest,
+        DatabaseInfoResponse,
+        // Table
+        CreateTableRequest,
+        TableDataType,
+        TableInfoResponse,
+        TableListResponse,
         // Data
         GetDataRequest,
         GetDataResponse,
@@ -49,15 +62,16 @@ use crate::models::spatial_id::SpatialId;
         SpatialId,
         Geometry,
         PointCoordinate,
-        LayerFilter,
-        LayerFilterType,
-        LayerFilterText,
-        LayerFilterInt,
-        LayerFilterFloat,
-        LayerFilterBoolean,
+        TableFilter,
+        TableFilterType,
+        TableFilterText,
+        TableFilterInt,
+        TableFilterFloat,
+        TableFilterBoolean,
     )),
     tags(
-        (name = "layers", description = "Layer operations")
+        (name = "databases", description = "Database operations"),
+        (name = "tables", description = "Table operations")
     )
 )]
 pub struct ApiDoc;

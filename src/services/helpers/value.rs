@@ -2,12 +2,12 @@ use std::convert::TryFrom;
 
 use crate::{
     error::AppError,
-    models::layer::{JsonValueType, LayerDataType},
+    models::database::table::{JsonValueType, TableDataType},
 };
 
 /// JSONの値を、レイヤーのデータ型に基づいて解釈し、バイト列に変換する関数
 pub fn interpret_value(
-    expected_type: LayerDataType,
+    expected_type: TableDataType,
     value: serde_json::Value,
 ) -> Result<Vec<u8>, AppError> {
     match value {
@@ -16,7 +16,7 @@ pub fn interpret_value(
             expected: expected_type.into(),
         }),
         serde_json::Value::Bool(v) => {
-            if expected_type == LayerDataType::Boolean {
+            if expected_type == TableDataType::Boolean {
                 Ok(vec![v as u8])
             } else {
                 Err(AppError::ValueTypeMismatch {
@@ -26,7 +26,7 @@ pub fn interpret_value(
             }
         }
         serde_json::Value::Number(number) => {
-            if expected_type == LayerDataType::Int {
+            if expected_type == TableDataType::Int {
                 match number.as_i64() {
                     Some(v) => match i32::try_from(v) {
                         Ok(v) => Ok(v.to_be_bytes().to_vec()),
@@ -40,7 +40,7 @@ pub fn interpret_value(
                         expected: "i32".to_string(),
                     }),
                 }
-            } else if expected_type == LayerDataType::Float {
+            } else if expected_type == TableDataType::Float {
                 match number.as_f64() {
                     Some(v) => {
                         let value = v as f32;
@@ -66,7 +66,7 @@ pub fn interpret_value(
             }
         }
         serde_json::Value::String(v) => {
-            if expected_type == LayerDataType::Text {
+            if expected_type == TableDataType::Text {
                 Ok(v.into())
             } else {
                 Err(AppError::ValueTypeMismatch {
@@ -88,18 +88,18 @@ pub fn interpret_value(
 
 /// バイト列を、レイヤーのデータ型に基づいて JSON 値へ復元する関数
 pub fn restore_value(
-    expected_type: LayerDataType,
+    expected_type: TableDataType,
     value: &[u8],
 ) -> Result<serde_json::Value, AppError> {
     match expected_type {
-        LayerDataType::Text => {
+        TableDataType::Text => {
             let text =
                 String::from_utf8(value.to_vec()).map_err(|_| AppError::InvalidStoredValue {
                     reason: "text value is not valid UTF-8".to_string(),
                 })?;
             Ok(serde_json::Value::String(text))
         }
-        LayerDataType::Int => {
+        TableDataType::Int => {
             if value.len() != 4 {
                 return Err(AppError::InvalidStoredValue {
                     reason: format!("int value must be 4 bytes, got {}", value.len()),
@@ -112,7 +112,7 @@ pub fn restore_value(
                 i32::from_be_bytes(bytes),
             )))
         }
-        LayerDataType::Float => {
+        TableDataType::Float => {
             if value.len() != 4 {
                 return Err(AppError::InvalidStoredValue {
                     reason: format!("float value must be 4 bytes, got {}", value.len()),
@@ -129,7 +129,7 @@ pub fn restore_value(
             })?;
             Ok(serde_json::Value::Number(json_number))
         }
-        LayerDataType::Boolean => {
+        TableDataType::Boolean => {
             if value.len() != 1 {
                 return Err(AppError::InvalidStoredValue {
                     reason: format!("boolean value must be 1 byte, got {}", value.len()),

@@ -1,7 +1,7 @@
 use crate::error::AppError;
 
 /// Kasane内部のエンティティ名の命名規則チェック
-/// LayerやUserの名前に使用する
+/// DatabaseやTableやUserの名前に使用する
 ///  
 /// - 空文字禁止
 /// - 1〜64文字
@@ -15,8 +15,10 @@ pub fn name_valid(name: &str) -> Result<(), AppError> {
         "system",
         "admin",
         "root",
-        "layer",
-        "layers",
+        "database",
+        "databases",
+        "table",
+        "tables",
         "index",
         "meta",
         "_internal",

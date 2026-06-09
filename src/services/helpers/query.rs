@@ -5,7 +5,7 @@ use kasane_logic::{
 use crate::{
     error::AppError,
     models::{
-        layer::data::ZoomLevelPolicy,
+        database::table::data::ZoomLevelPolicy,
         query::{Geometry, Query},
     },
 };
