@@ -67,7 +67,7 @@ pub async fn database_list(
     delete,
     path = "/databases/{name}",
     responses(
-        (status = 200, description = "Removed successfully")
+        (status = 204, description = "Removed successfully")
     ),
     tag = "databases"
 )]
