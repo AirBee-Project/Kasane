@@ -277,7 +277,7 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "204": {
             "description": "Data removed"
           },
           "404": {
