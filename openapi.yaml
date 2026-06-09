@@ -146,7 +146,7 @@ paths:
   /databases/{db_name}/tables/{table_name}/data:
     put:
       tags:
-      - tables
+      - data
       operationId: data_insert
       parameters:
       - name: db_name
@@ -172,7 +172,7 @@ paths:
           description: Table not found
     delete:
       tags:
-      - tables
+      - data
       operationId: data_remove
       parameters:
       - name: db_name
@@ -198,7 +198,7 @@ paths:
           description: Table not found
     patch:
       tags:
-      - tables
+      - data
       operationId: data_upsert
       parameters:
       - name: db_name
@@ -225,7 +225,7 @@ paths:
   /databases/{db_name}/tables/{table_name}/data/search:
     post:
       tags:
-      - tables
+      - data
       operationId: data_get
       parameters:
       - name: db_name
@@ -1024,3 +1024,5 @@ tags:
   description: Database operations
 - name: tables
   description: Table operations
+- name: data
+  description: Data manipulation operations

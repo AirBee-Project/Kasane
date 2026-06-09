@@ -236,7 +236,7 @@
     "/databases/{db_name}/tables/{table_name}/data": {
       "put": {
         "tags": [
-          "tables"
+          "data"
         ],
         "operationId": "data_insert",
         "parameters": [
@@ -278,7 +278,7 @@
       },
       "delete": {
         "tags": [
-          "tables"
+          "data"
         ],
         "operationId": "data_remove",
         "parameters": [
@@ -320,7 +320,7 @@
       },
       "patch": {
         "tags": [
-          "tables"
+          "data"
         ],
         "operationId": "data_upsert",
         "parameters": [
@@ -364,7 +364,7 @@
     "/databases/{db_name}/tables/{table_name}/data/search": {
       "post": {
         "tags": [
-          "tables"
+          "data"
         ],
         "operationId": "data_get",
         "parameters": [
@@ -1619,6 +1619,10 @@
     {
       "name": "tables",
       "description": "Table operations"
+    },
+    {
+      "name": "data",
+      "description": "Data manipulation operations"
     }
   ]
 }
