@@ -11,8 +11,10 @@ use crate::models::auth::Claims;
 
 // In a real app, this should be in an environment variable
 pub fn jwt_secret() -> Vec<u8> {
-    std::env::var("KASANE_JWT_SECRET")
-        .unwrap_or_else(|_| "kasane-super-secret-key-change-me".to_string())
+    std::env::var("JWT_SECRET")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "kasane-super-secret-key-change-me".to_string())
         .into_bytes()
 }
 

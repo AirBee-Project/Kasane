@@ -57,8 +57,10 @@ pub fn initialize_database(path: &str) -> Database {
 
         if users_table.is_empty().unwrap() {
             let default_username = "root";
-            let default_password =
-                std::env::var("KASANE_ROOT_PASSWORD").unwrap_or_else(|_| "password".to_string());
+            let default_password = std::env::var("ROOT_PASSWORD")
+                .ok()
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "password".to_string());
 
             tracing::info!("Creating default root user: {}", default_username);
             let hash = hash_password(&default_password).unwrap();

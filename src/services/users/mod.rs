@@ -33,6 +33,10 @@ pub async fn create_user(app_state: &AppState, req: CreateUserRequest) -> Result
 }
 
 pub async fn delete_user(app_state: &AppState, username: &str) -> Result<(), AppError> {
+    if username == "root" {
+        return Err(AppError::Forbidden("Cannot delete the root user".into()));
+    }
+
     let write_txn = app_state.redb.begin_write()?;
     let mut repo = KasaneUsersWrite::new(write_txn);
     repo.delete_user(username)?;

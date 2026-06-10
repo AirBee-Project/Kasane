@@ -19,5 +19,5 @@ KasaneはJWT（JSON Web Token）ベースの認証と、ロールベースアク
 
 | 変数名 | デフォルト値 | 説明 |
 | :--- | :--- | :--- |
-| `KASANE_ROOT_PASSWORD` | `password` | データベース初期化時に自動作成されるデフォルトの管理者ユーザーのパスワードです。（ユーザー名は `root` に固定されています） |
+| `KASANE_ROOT_PASSWORD` | `password` | データベース初期化時に自動作成されるデフォルトの管理者（root）のパスワードです。 |
 | `KASANE_JWT_SECRET` | `kasane-super-secret-key-change-me` | JWTトークンの署名・検証に使用されるシークレットキーです。**本番環境では必ず安全でユニークな文字列に変更してください。** |
