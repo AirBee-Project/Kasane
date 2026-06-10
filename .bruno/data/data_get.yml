@@ -1,0 +1,99 @@
+info:
+  name: data_get
+  type: http
+  seq: 4
+  tags:
+    - data
+
+http:
+  method: POST
+  url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data/search"
+  params:
+    - name: db_name
+      value: ""
+      type: path
+    - name: table_name
+      value: ""
+      type: path
+  body:
+    type: json
+    data: |-
+      {
+        "query": "",
+        "zoom_level_policy": "Error"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 200 Response
+    description: Data retrieved
+    request:
+      url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data/search"
+      method: POST
+      params:
+        - name: db_name
+          value: ""
+          type: path
+        - name: table_name
+          value: ""
+          type: path
+      body:
+        type: json
+        data: |-
+          {
+            "query": "",
+            "zoom_level_policy": "Error"
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "ids": [
+              {
+                "id": {
+                  "z": 20,
+                  "f": 0,
+                  "x": 931386,
+                  "y": 412905
+                },
+                "data": ""
+              }
+            ]
+          }
+  - name: 404 Response
+    description: Table not found
+    request:
+      url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data/search"
+      method: POST
+      params:
+        - name: db_name
+          value: ""
+          type: path
+        - name: table_name
+          value: ""
+          type: path
+      body:
+        type: json
+        data: |-
+          {
+            "query": "",
+            "zoom_level_policy": "Error"
+          }
+    response:
+      status: 404
+      statusText: Not Found
+      body:
+        type: text
+        data: ""

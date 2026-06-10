@@ -1,0 +1,44 @@
+info:
+  name: database_info
+  type: http
+  seq: 3
+  tags:
+    - databases
+
+http:
+  method: GET
+  url: "{{baseUrl}}/databases/:name"
+  params:
+    - name: name
+      value: ""
+      type: path
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 200 Response
+    description: Get database info
+    request:
+      url: "{{baseUrl}}/databases/:name"
+      method: GET
+      params:
+        - name: name
+          value: ""
+          type: path
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "name": ""
+          }

@@ -1,0 +1,56 @@
+info:
+  name: delete_user
+  type: http
+  seq: 3
+  tags:
+    - Users
+
+http:
+  method: DELETE
+  url: "{{baseUrl}}/users/:username"
+  params:
+    - name: username
+      value: ""
+      type: path
+      description: Username
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 204 Response
+    description: User deleted successfully
+    request:
+      url: "{{baseUrl}}/users/:username"
+      method: DELETE
+      params:
+        - name: username
+          value: ""
+          type: path
+          description: Username
+    response:
+      status: 204
+      statusText: No Content
+      body:
+        type: text
+        data: ""
+  - name: 404 Response
+    description: User not found
+    request:
+      url: "{{baseUrl}}/users/:username"
+      method: DELETE
+      params:
+        - name: username
+          value: ""
+          type: path
+          description: Username
+    response:
+      status: 404
+      statusText: Not Found
+      body:
+        type: text
+        data: ""

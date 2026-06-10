@@ -1,0 +1,65 @@
+info:
+  name: get_privileges
+  type: http
+  seq: 5
+  tags:
+    - Users
+
+http:
+  method: GET
+  url: "{{baseUrl}}/users/:username/privileges"
+  params:
+    - name: username
+      value: ""
+      type: path
+      description: Username
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 200 Response
+    description: Get privileges successfully
+    request:
+      url: "{{baseUrl}}/users/:username/privileges"
+      method: GET
+      params:
+        - name: username
+          value: ""
+          type: path
+          description: Username
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          [
+            {
+              "db_name": "",
+              "role": "Read"
+            }
+          ]
+  - name: 404 Response
+    description: User not found
+    request:
+      url: "{{baseUrl}}/users/:username/privileges"
+      method: GET
+      params:
+        - name: username
+          value: ""
+          type: path
+          description: Username
+    response:
+      status: 404
+      statusText: Not Found
+      body:
+        type: text
+        data: ""

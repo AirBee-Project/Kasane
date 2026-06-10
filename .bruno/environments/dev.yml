@@ -1,0 +1,6 @@
+name: dev
+variables:
+  - name: baseUrl
+    value: http://localhost:5173
+  - name: access_token
+    value: ""

@@ -1,0 +1,86 @@
+info:
+  name: data_upsert
+  type: http
+  seq: 3
+  tags:
+    - data
+
+http:
+  method: PATCH
+  url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
+  params:
+    - name: db_name
+      value: ""
+      type: path
+    - name: table_name
+      value: ""
+      type: path
+  body:
+    type: json
+    data: |-
+      {
+        "value": "",
+        "query": "",
+        "zoom_level_policy": "Error"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 204 Response
+    description: Data upserted
+    request:
+      url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
+      method: PATCH
+      params:
+        - name: db_name
+          value: ""
+          type: path
+        - name: table_name
+          value: ""
+          type: path
+      body:
+        type: json
+        data: |-
+          {
+            "value": "",
+            "query": "",
+            "zoom_level_policy": "Error"
+          }
+    response:
+      status: 204
+      statusText: No Content
+      body:
+        type: text
+        data: ""
+  - name: 404 Response
+    description: Table not found
+    request:
+      url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
+      method: PATCH
+      params:
+        - name: db_name
+          value: ""
+          type: path
+        - name: table_name
+          value: ""
+          type: path
+      body:
+        type: json
+        data: |-
+          {
+            "value": "",
+            "query": "",
+            "zoom_level_policy": "Error"
+          }
+    response:
+      status: 404
+      statusText: Not Found
+      body:
+        type: text
+        data: ""
