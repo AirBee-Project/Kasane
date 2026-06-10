@@ -68,9 +68,7 @@ pub fn initialize_database(path: &str) -> Database {
                 is_global_admin: true,
             };
             let json = serde_json::to_string(&root_meta).unwrap();
-            users_table
-                .insert(default_username, json.as_str())
-                .unwrap();
+            users_table.insert(default_username, json.as_str()).unwrap();
         }
     }
 

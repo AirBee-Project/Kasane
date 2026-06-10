@@ -1,4 +1,0 @@
-name: dev
-variables:
-  - name: baseUrl
-    value: http://localhost:5173
