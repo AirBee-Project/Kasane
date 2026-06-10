@@ -35,13 +35,15 @@ pub async fn require_auth(
     let claims = verify_jwt(token)?;
 
     // Fast path: check in-memory cache
-    let cache = app_state.auth_cache.read().await;
-    let user = match cache.get(&claims.sub) {
+    let user_opt = {
+        let cache = app_state.auth_cache.read().await;
+        cache.get(&claims.sub)
+    };
+
+    let user = match user_opt {
         Some(u) => u,
         None => {
-            // Drop read lock to acquire write lock, or just fallback to repository.
-            // For now, if not in cache, fallback to repo.
-            drop(cache);
+            // Fallback to repository if not in cache.
             let read_txn = app_state.redb.begin_read()?;
             let repo = crate::repositories::users::KasaneUsersRead::new(read_txn);
             let user = repo
