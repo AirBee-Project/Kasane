@@ -44,7 +44,6 @@ pub async fn delete_user(app_state: &AppState, username: &str) -> Result<(), App
     repo.delete_user(username)?;
     repo.commit()?;
 
-    // update cache
     let mut cache = app_state.auth_cache.write().await;
     cache.remove(username);
     Ok(())
@@ -66,7 +65,6 @@ pub async fn update_password(
 
     let mut new_meta = meta;
     new_meta.password_hash = hash;
-    // パスワード変更で発行済みトークンを失効させる
     new_meta.token_version = new_meta.token_version.wrapping_add(1);
 
     let write_txn = app_state.redb.begin_write()?;
@@ -74,15 +72,11 @@ pub async fn update_password(
     repo.update_user_meta(username, &new_meta)?;
     repo.commit()?;
 
-    // キャッシュを無効化し、失効を即座に反映する
     app_state.auth_cache.write().await.remove(username);
     Ok(())
 }
 
 /// ユーザーの GlobalAdmin 権限を付与・剥奪する。
-///
-/// root は常に管理者である必要があるため変更を禁止する。
-/// 権限変更時はトークン世代をインクリメントし、発行済みトークンを失効させる。
 pub async fn set_admin(
     app_state: &AppState,
     username: &str,

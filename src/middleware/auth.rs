@@ -34,7 +34,6 @@ pub async fn require_auth(
     let token = &auth_header[7..];
     let claims = verify_jwt(token)?;
 
-    // Fast path: check in-memory cache
     let user_opt = {
         let cache = app_state.auth_cache.read().await;
         cache.get(&claims.sub)
@@ -43,23 +42,18 @@ pub async fn require_auth(
     let user = match user_opt {
         Some(u) => u,
         None => {
-            // Fallback to repository if not in cache.
             let read_txn = app_state.redb.begin_read()?;
             let repo = crate::repositories::users::KasaneUsersRead::new(read_txn);
             let user = repo
                 .get_user(&claims.sub)?
                 .ok_or_else(|| AppError::Unauthorized("User not found".to_string()))?;
 
-            // Add to cache
             let mut write_cache = app_state.auth_cache.write().await;
             write_cache.insert(claims.sub.clone(), user.clone());
             user
         }
     };
 
-    // トークンが現在のユーザー状態と一致するか検証する。
-    // - uid 不一致: 同名ユーザーが削除・再作成された等で別人のトークン → 拒否
-    // - ver 不一致: パスワードや権限変更によりトークンが失効済み → 拒否
     if claims.uid != user.id.to_string() || claims.ver != user.token_version {
         return Err(AppError::Unauthorized("Token has been revoked".to_string()));
     }
