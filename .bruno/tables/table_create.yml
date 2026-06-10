@@ -20,7 +20,9 @@ http:
         "data_type": "Text",
         "max_zoom_level": 25
       }
-  auth: inherit
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
 
 settings:
   encodeUrl: true

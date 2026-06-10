@@ -15,7 +15,9 @@ http:
     - name: table_name
       value: ""
       type: path
-  auth: inherit
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
 
 settings:
   encodeUrl: true

@@ -20,10 +20,18 @@ use axum::{
 )]
 pub async fn data_get(
     State(app_state): State<AppState>,
-    Extension(_auth_user): Extension<AuthUser>,
+    Extension(auth_user): Extension<AuthUser>,
     Path((db_name, table_name)): Path<(String, String)>,
     Json(payload): Json<crate::models::database::table::data::GetDataRequest>,
 ) -> Result<Json<crate::models::database::table::data::GetDataResponse>, AppError> {
+    crate::middleware::auth::check_privilege(
+        &app_state,
+        &auth_user,
+        &db_name,
+        crate::models::users::UserRole::Read,
+    )
+    .await?;
+
     let result = data_get_service::get(
         &app_state,
         &db_name,

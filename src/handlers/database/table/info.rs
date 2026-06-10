@@ -21,9 +21,17 @@ use crate::{
 )]
 pub async fn table_info(
     State(app_state): State<AppState>,
-    Extension(_auth_user): Extension<AuthUser>,
+    Extension(auth_user): Extension<AuthUser>,
     Path((db_name, table_name)): Path<(String, String)>,
 ) -> Result<Json<TableInfoResponse>, AppError> {
+    crate::middleware::auth::check_privilege(
+        &app_state,
+        &auth_user,
+        &db_name,
+        crate::models::users::UserRole::Manage,
+    )
+    .await?;
+
     let res = table_info_service::info(&app_state, &db_name, &table_name).await?;
     Ok(Json(res))
 }

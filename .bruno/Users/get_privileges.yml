@@ -13,7 +13,9 @@ http:
       value: ""
       type: path
       description: Username
-  auth: inherit
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
 
 settings:
   encodeUrl: true

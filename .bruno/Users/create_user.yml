@@ -16,7 +16,9 @@ http:
         "password": "secret123",
         "is_global_admin": false
       }
-  auth: inherit
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
 
 settings:
   encodeUrl: true

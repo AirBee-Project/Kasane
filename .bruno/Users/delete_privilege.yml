@@ -17,7 +17,9 @@ http:
       value: ""
       type: path
       description: Database name
-  auth: inherit
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
 
 settings:
   encodeUrl: true

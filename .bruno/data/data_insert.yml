@@ -23,7 +23,9 @@ http:
         "query": "",
         "zoom_level_policy": "Error"
       }
-  auth: inherit
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
 
 settings:
   encodeUrl: true

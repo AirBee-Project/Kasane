@@ -23,7 +23,9 @@ http:
       {
         "role": "Read"
       }
-  auth: inherit
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
 
 settings:
   encodeUrl: true
