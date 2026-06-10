@@ -23,6 +23,10 @@ pub fn create_router(app_state: AppState) -> Router {
             put(crate::handlers::users::update_password),
         )
         .route(
+            "/users/{username}/admin",
+            put(crate::handlers::users::set_admin),
+        )
+        .route(
             "/users/{username}/privileges",
             get(crate::handlers::users::get_privileges),
         )

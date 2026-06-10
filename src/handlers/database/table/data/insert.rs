@@ -17,6 +17,7 @@ use axum::{
         (status = 200, description = "Data inserted"),
         (status = 404, description = "Table not found")
     ),
+    security(("bearer_auth" = [])),
     tag = "data"
 )]
 pub async fn data_insert(

@@ -24,3 +24,9 @@ pub struct UpdatePrivilegeRequest {
     #[schema(example = "Write")]
     pub role: UserRole,
 }
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdateAdminRequest {
+    #[schema(example = false)]
+    pub is_global_admin: bool,
+}

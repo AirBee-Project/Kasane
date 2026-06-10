@@ -16,8 +16,6 @@ impl TestApp {
     pub fn new() -> Self {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db = kasane::db_init::initialize_database(temp_file.path().to_str().unwrap());
-        let token = kasane::services::auth::generate_jwt("root").unwrap();
-        let auth_header = axum::http::HeaderValue::from_str(&format!("Bearer {}", token)).unwrap();
 
         let app_state = kasane::AppState {
             redb: std::sync::Arc::new(db),
@@ -25,6 +23,9 @@ impl TestApp {
                 kasane::auth_cache::AuthCache::new(),
             )),
         };
+        let token = kasane::services::auth::generate_jwt(&app_state, "root").unwrap();
+        let auth_header = axum::http::HeaderValue::from_str(&format!("Bearer {}", token)).unwrap();
+
         let app = kasane::kasane(app_state).layer(axum::middleware::from_fn(
             move |mut req: axum::extract::Request, next: axum::middleware::Next| {
                 let auth_header = auth_header.clone();

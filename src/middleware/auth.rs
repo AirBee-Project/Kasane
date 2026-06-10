@@ -57,6 +57,13 @@ pub async fn require_auth(
         }
     };
 
+    // トークンが現在のユーザー状態と一致するか検証する。
+    // - uid 不一致: 同名ユーザーが削除・再作成された等で別人のトークン → 拒否
+    // - ver 不一致: パスワードや権限変更によりトークンが失効済み → 拒否
+    if claims.uid != user.id.to_string() || claims.ver != user.token_version {
+        return Err(AppError::Unauthorized("Token has been revoked".to_string()));
+    }
+
     req.extensions_mut().insert(AuthUser { user });
 
     Ok(next.run(req).await)

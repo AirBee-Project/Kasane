@@ -22,6 +22,7 @@ use crate::{
         (status = 400, description = "Invalid request"),
         (status = 409, description = "Table already exists")
     ),
+    security(("bearer_auth" = [])),
     tag = "tables"
 )]
 pub async fn table_create(

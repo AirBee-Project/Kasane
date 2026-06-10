@@ -17,6 +17,7 @@ use crate::{
         (status = 200, description = "Table info", body = TableInfoResponse),
         (status = 404, description = "Table not found")
     ),
+    security(("bearer_auth" = [])),
     tag = "tables"
 )]
 pub async fn table_info(

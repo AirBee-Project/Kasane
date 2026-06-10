@@ -19,6 +19,7 @@ use axum::{
     responses(
         (status = 201, description = "Created successfully", body = DatabaseInfoResponse)
     ),
+    security(("bearer_auth" = [])),
     tag = "databases"
 )]
 pub async fn database_create(
@@ -46,12 +47,21 @@ pub async fn database_create(
     responses(
         (status = 200, description = "Get database info", body = DatabaseInfoResponse)
     ),
+    security(("bearer_auth" = [])),
     tag = "databases"
 )]
 pub async fn database_info(
     State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
     Path(db_name): Path<String>,
 ) -> Result<Json<DatabaseInfoResponse>, AppError> {
+    crate::middleware::auth::check_privilege(
+        &app_state,
+        &auth_user,
+        &db_name,
+        crate::models::users::UserRole::Read,
+    )
+    .await?;
     let res = crate::services::database::info(&app_state, &db_name).await?;
     Ok(Json(res))
 }
@@ -62,12 +72,19 @@ pub async fn database_info(
     responses(
         (status = 200, description = "List databases", body = Vec<DatabaseInfoResponse>)
     ),
+    security(("bearer_auth" = [])),
     tag = "databases"
 )]
 pub async fn database_list(
     State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
 ) -> Result<Json<Vec<DatabaseInfoResponse>>, AppError> {
-    let res = crate::services::database::list(&app_state).await?;
+    let res = crate::services::database::list(
+        &app_state,
+        auth_user.user.is_global_admin,
+        auth_user.user.id.into_bytes(),
+    )
+    .await?;
     Ok(Json(res))
 }
 
@@ -77,6 +94,7 @@ pub async fn database_list(
     responses(
         (status = 204, description = "Removed successfully")
     ),
+    security(("bearer_auth" = [])),
     tag = "databases"
 )]
 pub async fn remove_database(

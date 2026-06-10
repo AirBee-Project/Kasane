@@ -16,6 +16,7 @@ use axum::{
         (status = 200, description = "Data retrieved", body = GetDataResponse),
         (status = 404, description = "Table not found")
     ),
+    security(("bearer_auth" = [])),
     tag = "data"
 )]
 pub async fn data_get(

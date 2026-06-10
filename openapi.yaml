@@ -40,6 +40,8 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/DatabaseInfoResponse'
+      security:
+      - bearer_auth: []
     post:
       tags:
       - databases
@@ -57,6 +59,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DatabaseInfoResponse'
+      security:
+      - bearer_auth: []
   /databases/{db_name}/tables:
     get:
       tags:
@@ -75,6 +79,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TableListResponse'
+      security:
+      - bearer_auth: []
     post:
       tags:
       - tables
@@ -98,6 +104,8 @@ paths:
           description: Invalid request
         '409':
           description: Table already exists
+      security:
+      - bearer_auth: []
   /databases/{db_name}/tables/{table_name}:
     get:
       tags:
@@ -123,6 +131,8 @@ paths:
                 $ref: '#/components/schemas/TableInfoResponse'
         '404':
           description: Table not found
+      security:
+      - bearer_auth: []
     delete:
       tags:
       - tables
@@ -143,6 +153,8 @@ paths:
           description: Table removed
         '404':
           description: Table not found
+      security:
+      - bearer_auth: []
   /databases/{db_name}/tables/{table_name}/data:
     put:
       tags:
@@ -170,6 +182,8 @@ paths:
           description: Data inserted
         '404':
           description: Table not found
+      security:
+      - bearer_auth: []
     delete:
       tags:
       - data
@@ -196,6 +210,8 @@ paths:
           description: Data removed
         '404':
           description: Table not found
+      security:
+      - bearer_auth: []
     patch:
       tags:
       - data
@@ -222,6 +238,8 @@ paths:
           description: Data upserted
         '404':
           description: Table not found
+      security:
+      - bearer_auth: []
   /databases/{db_name}/tables/{table_name}/data/search:
     post:
       tags:
@@ -253,6 +271,8 @@ paths:
                 $ref: '#/components/schemas/GetDataResponse'
         '404':
           description: Table not found
+      security:
+      - bearer_auth: []
   /databases/{name}:
     get:
       tags:
@@ -271,6 +291,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DatabaseInfoResponse'
+      security:
+      - bearer_auth: []
     delete:
       tags:
       - databases
@@ -284,6 +306,8 @@ paths:
       responses:
         '204':
           description: Removed successfully
+      security:
+      - bearer_auth: []
   /users:
     get:
       tags:
@@ -332,6 +356,33 @@ paths:
       responses:
         '204':
           description: User deleted successfully
+        '404':
+          description: User not found
+      security:
+      - bearer_auth: []
+  /users/{username}/admin:
+    put:
+      tags:
+      - Users
+      operationId: set_admin
+      parameters:
+      - name: username
+        in: path
+        description: Username
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAdminRequest'
+        required: true
+      responses:
+        '204':
+          description: Admin status updated successfully
+        '403':
+          description: Cannot modify root admin status
         '404':
           description: User not found
       security:
@@ -977,6 +1028,14 @@ components:
       type: array
       items:
         $ref: '#/components/schemas/TableInfoResponse'
+    UpdateAdminRequest:
+      type: object
+      required:
+      - is_global_admin
+      properties:
+        is_global_admin:
+          type: boolean
+          example: false
     UpdatePasswordRequest:
       type: object
       required:
@@ -1015,6 +1074,11 @@ components:
       - Error
       - Ignore
       - Normalize
+  securitySchemes:
+    bearer_auth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
 tags:
 - name: Auth
   description: Authentication endpoints

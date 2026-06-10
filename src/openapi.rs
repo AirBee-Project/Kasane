@@ -1,4 +1,5 @@
 use utoipa::OpenApi;
+use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 
 use crate::models::auth::{LoginRequest, LoginResponse};
 use crate::models::database::table::data::{
@@ -14,12 +15,37 @@ use crate::models::query::{
 };
 use crate::models::spatial_id::SpatialId;
 use crate::models::users::{
-    CreateUserRequest, PrivilegeInfoResponse, UpdatePasswordRequest, UpdatePrivilegeRequest,
-    UserInfoResponse, UserRole,
+    CreateUserRequest, PrivilegeInfoResponse, UpdateAdminRequest, UpdatePasswordRequest,
+    UpdatePrivilegeRequest, UserInfoResponse, UserRole,
 };
+
+/// `bearer_auth` セキュリティスキーム（JWT Bearer）を OpenAPI コンポーネントに登録する。
+///
+/// 各エンドポイントの `security(("bearer_auth" = []))` 宣言はこのスキーム定義を
+/// 参照するため、これが無いと仕様が不完全になり Swagger UI の Authorize も
+/// 機能しない。
+struct SecurityAddon;
+
+impl utoipa::Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let components = openapi
+            .components
+            .get_or_insert_with(utoipa::openapi::Components::default);
+        components.add_security_scheme(
+            "bearer_auth",
+            SecurityScheme::Http(
+                HttpBuilder::new()
+                    .scheme(HttpAuthScheme::Bearer)
+                    .bearer_format("JWT")
+                    .build(),
+            ),
+        );
+    }
+}
 
 #[derive(OpenApi)]
 #[openapi(
+    modifiers(&SecurityAddon),
     servers(),
     paths(
         // Auth
@@ -29,6 +55,7 @@ use crate::models::users::{
         crate::handlers::users::create_user,
         crate::handlers::users::delete_user,
         crate::handlers::users::update_password,
+        crate::handlers::users::set_admin,
         crate::handlers::users::get_privileges,
         crate::handlers::users::set_privilege,
         crate::handlers::users::delete_privilege,
@@ -64,6 +91,7 @@ use crate::models::users::{
         UserInfoResponse,
         UpdatePasswordRequest,
         UpdatePrivilegeRequest,
+        UpdateAdminRequest,
         PrivilegeInfoResponse,
         UserRole,
         // Database

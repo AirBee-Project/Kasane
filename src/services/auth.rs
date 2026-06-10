@@ -3,19 +3,42 @@ use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
 };
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
-use rand_core::OsRng;
+use rand_core::{OsRng, RngCore};
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use redb::ReadableDatabase;
+
+use crate::AppState;
 use crate::error::AppError;
 use crate::models::auth::Claims;
+use crate::repositories::users::KasaneUsersRead;
 
-// In a real app, this should be in an environment variable
-pub fn jwt_secret() -> Vec<u8> {
-    std::env::var("JWT_SECRET")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "kasane-super-secret-key-change-me".to_string())
-        .into_bytes()
+/// プロセス全体で共有する JWT 署名鍵。
+///
+/// `JWT_SECRET` 環境変数が設定されていればそれを使用する。
+/// 未設定（または空）の場合は、起動時に暗号論的乱数で生成した一時的な鍵を
+/// 使用する。これによりリポジトリにコミットされた既知の固定鍵によるトークン
+/// 偽造を防ぐ。ただし一時鍵は再起動のたびに変わるため、発行済みトークンは
+/// 無効になる。本番環境では必ず `JWT_SECRET` を設定すること。
+static JWT_SECRET: OnceLock<Vec<u8>> = OnceLock::new();
+
+pub fn jwt_secret() -> &'static [u8] {
+    JWT_SECRET.get_or_init(
+        || match std::env::var("JWT_SECRET").ok().filter(|s| !s.is_empty()) {
+            Some(secret) => secret.into_bytes(),
+            None => {
+                let mut bytes = [0u8; 32];
+                OsRng.fill_bytes(&mut bytes);
+                tracing::warn!(
+                    "JWT_SECRET is not set; using a randomly generated ephemeral secret. \
+                     All issued tokens will be invalidated on restart. \
+                     Set JWT_SECRET to a strong, unique value in production."
+                );
+                bytes.to_vec()
+            }
+        },
+    )
 }
 
 pub fn hash_password(password: &str) -> Result<String, AppError> {
@@ -39,7 +62,34 @@ pub fn verify_password(password: &str, password_hash: &str) -> Result<bool, AppE
     Ok(is_valid)
 }
 
-pub fn generate_jwt(username: &str) -> Result<String, AppError> {
+/// 存在しないユーザーへのログイン試行でも、実在ユーザーと同等の計算コストを
+/// かけるためのダミー検証。早期 return による応答時間差からユーザー名の
+/// 存在を推測されること（ユーザー列挙）を防ぐ。
+pub fn dummy_verify_password(password: &str) {
+    // 実在しないユーザー用の固定ダミーハッシュに対して検証を走らせ、計算量を揃える。
+    static DUMMY_HASH: OnceLock<String> = OnceLock::new();
+    let dummy = DUMMY_HASH.get_or_init(|| {
+        hash_password("dummy-password-for-constant-time-login")
+            .expect("failed to build dummy password hash")
+    });
+    if let Ok(parsed) = PasswordHash::new(dummy) {
+        let _ = Argon2::default().verify_password(password.as_bytes(), &parsed);
+    }
+}
+
+/// 指定ユーザーの最新メタデータ（UUID・トークン世代）を読み込み、JWT を発行する。
+///
+/// `uid` と `ver` を DB から取得して埋め込むことで、トークンが常に現在のユーザー
+/// 状態に紐づく。これにより同名ユーザーの再作成時の旧トークン流用や、
+/// パスワード・権限変更後の失効を検証側で判定できる。
+pub fn generate_jwt(app_state: &AppState, username: &str) -> Result<String, AppError> {
+    let meta = {
+        let read_txn = app_state.redb.begin_read()?;
+        let repo = KasaneUsersRead::new(read_txn);
+        repo.get_user_meta(username)?
+            .ok_or_else(|| AppError::NotFound("User not found".to_string()))?
+    };
+
     let expiration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -48,20 +98,22 @@ pub fn generate_jwt(username: &str) -> Result<String, AppError> {
 
     let claims = Claims {
         sub: username.to_string(),
+        uid: meta.id.to_string(),
+        ver: meta.token_version,
         exp: expiration,
     };
 
     encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret(&jwt_secret()),
+        &EncodingKey::from_secret(jwt_secret()),
     )
     .map_err(|_| AppError::InternalError("Failed to generate token".to_string()))
 }
 
 pub fn verify_jwt(token: &str) -> Result<Claims, AppError> {
     let validation = Validation::default();
-    let token_data = decode::<Claims>(token, &DecodingKey::from_secret(&jwt_secret()), &validation)
+    let token_data = decode::<Claims>(token, &DecodingKey::from_secret(jwt_secret()), &validation)
         .map_err(|_| AppError::Unauthorized("Invalid token".to_string()))?;
 
     Ok(token_data.claims)

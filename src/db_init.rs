@@ -68,6 +68,7 @@ pub fn initialize_database(path: &str) -> Database {
                 id: Uuid::now_v7(),
                 password_hash: hash,
                 is_global_admin: true,
+                token_version: 0,
             };
             let json = serde_json::to_string(&root_meta).unwrap();
             users_table.insert(default_username, json.as_str()).unwrap();

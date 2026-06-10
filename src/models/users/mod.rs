@@ -5,5 +5,7 @@ pub mod response;
 
 pub use domain::{Privilege, User};
 pub use entity::{UserMetadata, UserRole};
-pub use request::{CreateUserRequest, UpdatePasswordRequest, UpdatePrivilegeRequest};
+pub use request::{
+    CreateUserRequest, UpdateAdminRequest, UpdatePasswordRequest, UpdatePrivilegeRequest,
+};
 pub use response::{PrivilegeInfoResponse, UserInfoResponse};

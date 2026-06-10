@@ -15,6 +15,7 @@ use axum::Extension;
         (status = 204, description = "Table removed"),
         (status = 404, description = "Table not found")
     ),
+    security(("bearer_auth" = [])),
     tag = "tables"
 )]
 pub async fn remove_table(

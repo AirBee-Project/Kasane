@@ -8,6 +8,7 @@ pub struct User {
     pub username: String,
     pub id: Uuid,
     pub is_global_admin: bool,
+    pub token_version: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,6 +24,7 @@ impl User {
             username: username.to_string(),
             id: meta.id,
             is_global_admin: meta.is_global_admin,
+            token_version: meta.token_version,
         }
     }
 }

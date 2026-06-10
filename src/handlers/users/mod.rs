@@ -9,8 +9,8 @@ use crate::{
     error::AppError,
     middleware::auth::AuthUser,
     models::users::{
-        CreateUserRequest, PrivilegeInfoResponse, UpdatePasswordRequest, UpdatePrivilegeRequest,
-        UserInfoResponse,
+        CreateUserRequest, PrivilegeInfoResponse, UpdateAdminRequest, UpdatePasswordRequest,
+        UpdatePrivilegeRequest, UserInfoResponse,
     },
     services::users as users_service,
 };
@@ -115,6 +115,36 @@ pub async fn update_password(
         ));
     }
     users_service::update_password(&app_state, &username, payload).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    put,
+    path = "/users/{username}/admin",
+    params(
+        ("username" = String, Path, description = "Username")
+    ),
+    request_body = UpdateAdminRequest,
+    responses(
+        (status = 204, description = "Admin status updated successfully"),
+        (status = 403, description = "Cannot modify root admin status"),
+        (status = 404, description = "User not found")
+    ),
+    security(("bearer_auth" = [])),
+    tag = "Users"
+)]
+pub async fn set_admin(
+    State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(username): Path<String>,
+    Json(payload): Json<UpdateAdminRequest>,
+) -> Result<StatusCode, AppError> {
+    if !auth_user.user.is_global_admin {
+        return Err(AppError::Forbidden(
+            "Requires GlobalAdmin privileges".to_string(),
+        ));
+    }
+    users_service::set_admin(&app_state, &username, payload.is_global_admin).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

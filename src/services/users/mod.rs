@@ -19,11 +19,13 @@ pub fn list_users(app_state: &AppState) -> Result<Vec<UserInfoResponse>, AppErro
 }
 
 pub async fn create_user(app_state: &AppState, req: CreateUserRequest) -> Result<(), AppError> {
+    crate::services::helpers::name_valid::name_valid(&req.username)?;
     let hash = hash_password(&req.password)?;
     let meta = UserMetadata {
         id: Uuid::now_v7(),
         password_hash: hash,
         is_global_admin: req.is_global_admin,
+        token_version: 0,
     };
     let write_txn = app_state.redb.begin_write()?;
     let mut repo = KasaneUsersWrite::new(write_txn);
@@ -64,11 +66,51 @@ pub async fn update_password(
 
     let mut new_meta = meta;
     new_meta.password_hash = hash;
+    // パスワード変更で発行済みトークンを失効させる
+    new_meta.token_version = new_meta.token_version.wrapping_add(1);
 
     let write_txn = app_state.redb.begin_write()?;
     let mut repo = KasaneUsersWrite::new(write_txn);
     repo.update_user_meta(username, &new_meta)?;
     repo.commit()?;
+
+    // キャッシュを無効化し、失効を即座に反映する
+    app_state.auth_cache.write().await.remove(username);
+    Ok(())
+}
+
+/// ユーザーの GlobalAdmin 権限を付与・剥奪する。
+///
+/// root は常に管理者である必要があるため変更を禁止する。
+/// 権限変更時はトークン世代をインクリメントし、発行済みトークンを失効させる。
+pub async fn set_admin(
+    app_state: &AppState,
+    username: &str,
+    is_global_admin: bool,
+) -> Result<(), AppError> {
+    if username == "root" {
+        return Err(AppError::Forbidden(
+            "Cannot change the admin status of the root user".into(),
+        ));
+    }
+
+    let meta = {
+        let read_txn = app_state.redb.begin_read()?;
+        let repo = KasaneUsersRead::new(read_txn);
+        repo.get_user_meta(username)?
+            .ok_or_else(|| AppError::NotFound("User not found".into()))?
+    };
+
+    let mut new_meta = meta;
+    new_meta.is_global_admin = is_global_admin;
+    new_meta.token_version = new_meta.token_version.wrapping_add(1);
+
+    let write_txn = app_state.redb.begin_write()?;
+    let mut repo = KasaneUsersWrite::new(write_txn);
+    repo.update_user_meta(username, &new_meta)?;
+    repo.commit()?;
+
+    app_state.auth_cache.write().await.remove(username);
     Ok(())
 }
 

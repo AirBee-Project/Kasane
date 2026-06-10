@@ -16,6 +16,7 @@ use crate::{
     responses(
         (status = 200, description = "List of tables", body = TableListResponse)
     ),
+    security(("bearer_auth" = [])),
     tag = "tables"
 )]
 pub async fn table_list(
