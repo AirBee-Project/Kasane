@@ -15,12 +15,6 @@ use crate::models::auth::Claims;
 use crate::repositories::users::KasaneUsersRead;
 
 /// プロセス全体で共有する JWT 署名鍵。
-///
-/// `JWT_SECRET` 環境変数が設定されていればそれを使用する。
-/// 未設定（または空）の場合は、起動時に暗号論的乱数で生成した一時的な鍵を
-/// 使用する。これによりリポジトリにコミットされた既知の固定鍵によるトークン
-/// 偽造を防ぐ。ただし一時鍵は再起動のたびに変わるため、発行済みトークンは
-/// 無効になる。本番環境では必ず `JWT_SECRET` を設定すること。
 static JWT_SECRET: OnceLock<Vec<u8>> = OnceLock::new();
 
 pub fn jwt_secret() -> &'static [u8] {
@@ -62,11 +56,8 @@ pub fn verify_password(password: &str, password_hash: &str) -> Result<bool, AppE
     Ok(is_valid)
 }
 
-/// 存在しないユーザーへのログイン試行でも、実在ユーザーと同等の計算コストを
-/// かけるためのダミー検証。早期 return による応答時間差からユーザー名の
-/// 存在を推測されること（ユーザー列挙）を防ぐ。
+/// 存在しないユーザーへのログイン試行でも、実在ユーザーと同等の計算コストをかけるためのダミー検証。
 pub fn dummy_verify_password(password: &str) {
-    // 実在しないユーザー用の固定ダミーハッシュに対して検証を走らせ、計算量を揃える。
     static DUMMY_HASH: OnceLock<String> = OnceLock::new();
     let dummy = DUMMY_HASH.get_or_init(|| {
         hash_password("dummy-password-for-constant-time-login")
@@ -78,10 +69,6 @@ pub fn dummy_verify_password(password: &str) {
 }
 
 /// 指定ユーザーの最新メタデータ（UUID・トークン世代）を読み込み、JWT を発行する。
-///
-/// `uid` と `ver` を DB から取得して埋め込むことで、トークンが常に現在のユーザー
-/// 状態に紐づく。これにより同名ユーザーの再作成時の旧トークン流用や、
-/// パスワード・権限変更後の失効を検証側で判定できる。
 pub fn generate_jwt(app_state: &AppState, username: &str) -> Result<String, AppError> {
     let meta = {
         let read_txn = app_state.redb.begin_read()?;
@@ -94,7 +81,7 @@ pub fn generate_jwt(app_state: &AppState, username: &str) -> Result<String, AppE
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs() as usize
-        + 24 * 3600; // 24 hours
+        + 24 * 3600;
 
     let claims = Claims {
         sub: username.to_string(),
