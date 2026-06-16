@@ -1,7 +1,7 @@
 use crate::middleware::auth::AuthUser;
 use crate::{
     AppState,
-    error::AppError,
+    error::{AppError, AuthError},
     models::database::{CreateDatabaseRequest, DatabaseInfoResponse},
 };
 use axum::Extension;
@@ -28,9 +28,7 @@ pub async fn database_create(
     Json(request): Json<CreateDatabaseRequest>,
 ) -> Result<Response, AppError> {
     if !auth_user.user.is_global_admin {
-        return Err(AppError::Forbidden(
-            "Requires GlobalAdmin privileges".to_string(),
-        ));
+        return Err(AuthError::RequiresGlobalAdmin.into());
     }
     let res = crate::services::database::create(&app_state, request.name.as_str()).await?;
     Ok((
@@ -103,9 +101,7 @@ pub async fn remove_database(
     Path(db_name): Path<String>,
 ) -> Result<StatusCode, AppError> {
     if !auth_user.user.is_global_admin {
-        return Err(AppError::Forbidden(
-            "Requires GlobalAdmin privileges".to_string(),
-        ));
+        return Err(AuthError::RequiresGlobalAdmin.into());
     }
     crate::services::database::remove(&app_state, db_name.as_str()).await?;
     Ok(StatusCode::NO_CONTENT)

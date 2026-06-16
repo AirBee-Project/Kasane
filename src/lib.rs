@@ -18,7 +18,7 @@ pub mod services;
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub redb: Arc<Database>,
-    pub auth_cache: Arc<tokio::sync::RwLock<auth_cache::AuthCache>>,
+    pub auth_cache: Arc<auth_cache::AuthCache>,
 }
 
 pub fn kasane(app_state: AppState) -> axum::Router {

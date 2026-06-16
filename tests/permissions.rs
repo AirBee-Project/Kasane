@@ -21,9 +21,7 @@ impl PermissionTestApp {
 
         let app_state = AppState {
             redb: Arc::new(db),
-            auth_cache: Arc::new(tokio::sync::RwLock::new(
-                kasane::auth_cache::AuthCache::new(),
-            )),
+            auth_cache: Arc::new(kasane::auth_cache::AuthCache::new()),
         };
         // We DO NOT inject the root token automatically here.
         // The tests will need to explicitly send the Authorization header.
@@ -95,6 +93,112 @@ async fn grant_privilege(
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::NO_CONTENT);
+}
+
+/// レスポンスの (status, error code) を取り出す
+async fn status_and_code(res: axum::response::Response) -> (StatusCode, String) {
+    let status = res.status();
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let code = json["code"].as_str().unwrap_or("").to_string();
+    (status, code)
+}
+
+#[tokio::test]
+async fn test_auth_error_codes_are_structured() {
+    let test_app = PermissionTestApp::new();
+    let root_token = test_app.root_token();
+
+    // DB を1つ作っておく（権限不足コードの確認用）
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases")
+        .header("Authorization", format!("Bearer {}", root_token))
+        .header("Content-Type", "application/json")
+        .body(Body::from(r#"{"name": "code_db"}"#))
+        .unwrap();
+    test_app.app.clone().oneshot(req).await.unwrap();
+
+    // 一般ユーザー（権限なし）
+    let user_token = create_user_and_token(&test_app.app, &root_token, "code_user", false).await;
+
+    // 1. ヘッダ無し → missing_token
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases")
+        .body(Body::empty())
+        .unwrap();
+    let (status, code) = status_and_code(test_app.app.clone().oneshot(req).await.unwrap()).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(code, "missing_token");
+
+    // 2. Bearer でない → malformed_header
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases")
+        .header("Authorization", "Basic abc")
+        .body(Body::empty())
+        .unwrap();
+    let (status, code) = status_and_code(test_app.app.clone().oneshot(req).await.unwrap()).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(code, "malformed_header");
+
+    // 3. 不正なトークン → invalid_token
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases")
+        .header("Authorization", "Bearer not-a-jwt")
+        .body(Body::empty())
+        .unwrap();
+    let (status, code) = status_and_code(test_app.app.clone().oneshot(req).await.unwrap()).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(code, "invalid_token");
+
+    // 4. ログイン失敗 → invalid_credentials
+    let req = Request::builder()
+        .method("POST")
+        .uri("/auth/login")
+        .header("Content-Type", "application/json")
+        .body(Body::from(
+            r#"{"username": "code_user", "password": "wrong"}"#,
+        ))
+        .unwrap();
+    let (status, code) = status_and_code(test_app.app.clone().oneshot(req).await.unwrap()).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(code, "invalid_credentials");
+
+    // 5. GlobalAdmin 専用エンドポイント → requires_global_admin
+    let req = Request::builder()
+        .method("GET")
+        .uri("/users")
+        .header("Authorization", format!("Bearer {}", user_token))
+        .body(Body::empty())
+        .unwrap();
+    let (status, code) = status_and_code(test_app.app.clone().oneshot(req).await.unwrap()).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(code, "requires_global_admin");
+
+    // 6. DB 権限不足 → insufficient_privilege
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases/code_db")
+        .header("Authorization", format!("Bearer {}", user_token))
+        .body(Body::empty())
+        .unwrap();
+    let (status, code) = status_and_code(test_app.app.clone().oneshot(req).await.unwrap()).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(code, "insufficient_privilege");
+
+    // 7. root の削除 → root_protected
+    let req = Request::builder()
+        .method("DELETE")
+        .uri("/users/root")
+        .header("Authorization", format!("Bearer {}", root_token))
+        .body(Body::empty())
+        .unwrap();
+    let (status, code) = status_and_code(test_app.app.clone().oneshot(req).await.unwrap()).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(code, "root_protected");
 }
 
 #[tokio::test]

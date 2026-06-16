@@ -20,9 +20,7 @@ impl DbTestApp {
 
         let app_state = AppState {
             redb: Arc::new(db),
-            auth_cache: Arc::new(tokio::sync::RwLock::new(
-                kasane::auth_cache::AuthCache::new(),
-            )),
+            auth_cache: Arc::new(kasane::auth_cache::AuthCache::new()),
         };
         let token = kasane::services::auth::generate_jwt(&app_state, "root").unwrap();
         let auth_header = axum::http::HeaderValue::from_str(&format!("Bearer {}", token)).unwrap();

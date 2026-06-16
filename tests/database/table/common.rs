@@ -19,9 +19,7 @@ impl TestApp {
 
         let app_state = kasane::AppState {
             redb: std::sync::Arc::new(db),
-            auth_cache: std::sync::Arc::new(tokio::sync::RwLock::new(
-                kasane::auth_cache::AuthCache::new(),
-            )),
+            auth_cache: std::sync::Arc::new(kasane::auth_cache::AuthCache::new()),
         };
         let token = kasane::services::auth::generate_jwt(&app_state, "root").unwrap();
         let auth_header = axum::http::HeaderValue::from_str(&format!("Bearer {}", token)).unwrap();

@@ -1,7 +1,11 @@
 use axum::{Extension, extract::Request, http::header, middleware::Next, response::Response};
 
 use crate::models::users::{User, UserRole};
-use crate::{AppState, error::AppError, services::auth::verify_jwt};
+use crate::{
+    AppState,
+    error::{AppError, AuthError},
+    services::auth::verify_jwt,
+};
 use redb::ReadableDatabase;
 
 #[derive(Clone)]
@@ -19,25 +23,18 @@ pub async fn require_auth(
     let auth_header = match auth_header {
         Some(header) => header.to_str().unwrap_or(""),
         None => {
-            return Err(AppError::Unauthorized(
-                "Missing Authorization header".to_string(),
-            ));
+            return Err(AuthError::MissingToken.into());
         }
     };
 
     if !auth_header.starts_with("Bearer ") {
-        return Err(AppError::Unauthorized(
-            "Invalid Authorization header format".to_string(),
-        ));
+        return Err(AuthError::MalformedHeader.into());
     }
 
     let token = &auth_header[7..];
     let claims = verify_jwt(token)?;
 
-    let user_opt = {
-        let cache = app_state.auth_cache.read().await;
-        cache.get(&claims.sub)
-    };
+    let user_opt = { app_state.auth_cache.get(&claims.sub) };
 
     let user = match user_opt {
         Some(u) => u,
@@ -46,16 +43,17 @@ pub async fn require_auth(
             let repo = crate::repositories::users::KasaneUsersRead::new(read_txn);
             let user = repo
                 .get_user(&claims.sub)?
-                .ok_or_else(|| AppError::Unauthorized("User not found".to_string()))?;
+                .ok_or(AppError::Auth(AuthError::TokenRevoked))?;
 
-            let mut write_cache = app_state.auth_cache.write().await;
-            write_cache.insert(claims.sub.clone(), user.clone());
+            app_state
+                .auth_cache
+                .insert(claims.sub.clone(), user.clone());
             user
         }
     };
 
     if claims.uid != user.id.to_string() || claims.ver != user.token_version {
-        return Err(AppError::Unauthorized("Token has been revoked".to_string()));
+        return Err(AuthError::TokenRevoked.into());
     }
 
     req.extensions_mut().insert(AuthUser { user });
@@ -70,9 +68,7 @@ pub async fn require_global_admin(
     next: Next,
 ) -> Result<Response, AppError> {
     if !auth_user.user.is_global_admin {
-        return Err(AppError::Forbidden(
-            "Requires GlobalAdmin privileges".to_string(),
-        ));
+        return Err(AuthError::RequiresGlobalAdmin.into());
     }
     Ok(next.run(req).await)
 }
@@ -99,7 +95,9 @@ pub async fn check_privilege(
         return Ok(());
     }
 
-    Err(AppError::Forbidden(
-        "Insufficient privileges for this database".to_string(),
-    ))
+    Err(AuthError::InsufficientPrivilege {
+        db_name: db_name.to_string(),
+        required: required_role,
+    }
+    .into())
 }

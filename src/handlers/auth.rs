@@ -3,7 +3,7 @@ use redb::ReadableDatabase;
 
 use crate::{
     AppState,
-    error::AppError,
+    error::{AppError, AuthError},
     models::auth::{LoginRequest, LoginResponse},
     services::auth::{dummy_verify_password, generate_jwt, verify_password},
 };
@@ -31,16 +31,12 @@ pub async fn login(
             // ユーザーが存在しなくても実在時と同等の計算コストをかけ、
             // 応答時間差によるユーザー列挙を防ぐ。
             dummy_verify_password(&payload.password);
-            return Err(AppError::Unauthorized(
-                "Invalid username or password".to_string(),
-            ));
+            return Err(AuthError::InvalidCredentials.into());
         }
     };
 
     if !verify_password(&payload.password, &meta.password_hash)? {
-        return Err(AppError::Unauthorized(
-            "Invalid username or password".to_string(),
-        ));
+        return Err(AuthError::InvalidCredentials.into());
     }
 
     let token = generate_jwt(&app_state, &payload.username)?;

@@ -6,7 +6,7 @@ use axum::{
 
 use crate::{
     AppState,
-    error::AppError,
+    error::{AppError, AuthError},
     middleware::auth::AuthUser,
     models::users::{
         CreateUserRequest, PrivilegeInfoResponse, UpdateAdminRequest, UpdatePasswordRequest,
@@ -29,9 +29,7 @@ pub async fn list_users(
     Extension(auth_user): Extension<AuthUser>,
 ) -> Result<Json<Vec<UserInfoResponse>>, AppError> {
     if !auth_user.user.is_global_admin {
-        return Err(AppError::Forbidden(
-            "Requires GlobalAdmin privileges".to_string(),
-        ));
+        return Err(AuthError::RequiresGlobalAdmin.into());
     }
     let users = users_service::list_users(&app_state)?;
     Ok(Json(users))
@@ -54,9 +52,7 @@ pub async fn create_user(
     Json(payload): Json<CreateUserRequest>,
 ) -> Result<StatusCode, AppError> {
     if !auth_user.user.is_global_admin {
-        return Err(AppError::Forbidden(
-            "Requires GlobalAdmin privileges".to_string(),
-        ));
+        return Err(AuthError::RequiresGlobalAdmin.into());
     }
     users_service::create_user(&app_state, payload).await?;
     Ok(StatusCode::CREATED)
@@ -81,9 +77,7 @@ pub async fn delete_user(
     Path(username): Path<String>,
 ) -> Result<StatusCode, AppError> {
     if !auth_user.user.is_global_admin {
-        return Err(AppError::Forbidden(
-            "Requires GlobalAdmin privileges".to_string(),
-        ));
+        return Err(AuthError::RequiresGlobalAdmin.into());
     }
     users_service::delete_user(&app_state, &username).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -110,9 +104,7 @@ pub async fn update_password(
     Json(payload): Json<UpdatePasswordRequest>,
 ) -> Result<StatusCode, AppError> {
     if !auth_user.user.is_global_admin && auth_user.user.username != username {
-        return Err(AppError::Forbidden(
-            "You can only change your own password".to_string(),
-        ));
+        return Err(AuthError::NotSelfOrAdmin.into());
     }
     users_service::update_password(&app_state, &username, payload).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -140,9 +132,7 @@ pub async fn set_admin(
     Json(payload): Json<UpdateAdminRequest>,
 ) -> Result<StatusCode, AppError> {
     if !auth_user.user.is_global_admin {
-        return Err(AppError::Forbidden(
-            "Requires GlobalAdmin privileges".to_string(),
-        ));
+        return Err(AuthError::RequiresGlobalAdmin.into());
     }
     users_service::set_admin(&app_state, &username, payload.is_global_admin).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -167,9 +157,7 @@ pub async fn get_privileges(
     Path(username): Path<String>,
 ) -> Result<Json<Vec<PrivilegeInfoResponse>>, AppError> {
     if !auth_user.user.is_global_admin {
-        return Err(AppError::Forbidden(
-            "Requires GlobalAdmin privileges".to_string(),
-        ));
+        return Err(AuthError::RequiresGlobalAdmin.into());
     }
     let privs = users_service::get_privileges(&app_state, &username)?;
     Ok(Json(privs))
@@ -197,9 +185,7 @@ pub async fn set_privilege(
     Json(payload): Json<UpdatePrivilegeRequest>,
 ) -> Result<StatusCode, AppError> {
     if !auth_user.user.is_global_admin {
-        return Err(AppError::Forbidden(
-            "Requires GlobalAdmin privileges".to_string(),
-        ));
+        return Err(AuthError::RequiresGlobalAdmin.into());
     }
     users_service::set_privilege(&app_state, &username, &db_name, payload).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -225,9 +211,7 @@ pub async fn delete_privilege(
     Path((username, db_name)): Path<(String, String)>,
 ) -> Result<StatusCode, AppError> {
     if !auth_user.user.is_global_admin {
-        return Err(AppError::Forbidden(
-            "Requires GlobalAdmin privileges".to_string(),
-        ));
+        return Err(AuthError::RequiresGlobalAdmin.into());
     }
     users_service::delete_privilege(&app_state, &username, &db_name).await?;
     Ok(StatusCode::NO_CONTENT)

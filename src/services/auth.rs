@@ -10,7 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use redb::ReadableDatabase;
 
 use crate::AppState;
-use crate::error::AppError;
+use crate::error::{AppError, AuthError};
 use crate::models::auth::Claims;
 use crate::repositories::users::KasaneUsersRead;
 
@@ -101,7 +101,7 @@ pub fn generate_jwt(app_state: &AppState, username: &str) -> Result<String, AppE
 pub fn verify_jwt(token: &str) -> Result<Claims, AppError> {
     let validation = Validation::default();
     let token_data = decode::<Claims>(token, &DecodingKey::from_secret(jwt_secret()), &validation)
-        .map_err(|_| AppError::Unauthorized("Invalid token".to_string()))?;
+        .map_err(|_| AppError::Auth(AuthError::InvalidToken))?;
 
     Ok(token_data.claims)
 }
