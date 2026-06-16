@@ -5,8 +5,16 @@ use crate::models::{database::DatabaseMetadata, database::table::TableMetadata};
 use crate::services::auth::hash_password;
 use uuid::Uuid;
 
+/// データベースを管理するためのテーブル
+///
+/// Key: データベース名
+/// Value: データベースのメタデータ（データベースのID など）
 pub const DATABASES: TableDefinition<&str, DatabaseMetadata> = TableDefinition::new("0");
 
+/// Tableを管理するためのテーブル
+///
+/// Key: (データベースのID, Table名)
+/// Value: Tableのメタデータ（TableのID, データ型, 最大ズームレベル）
 pub const TABLES: TableDefinition<([u8; 16], &str), TableMetadata> = TableDefinition::new("1");
 
 /// TableのID衝突チェック用インデックス
@@ -30,7 +38,16 @@ pub const SPATIALID_TO_VALUE: TableDefinition<([u8; 16], [u8; 12]), &[u8]> =
 pub const VALUE_TO_SPATIALID: TableDefinition<([u8; 16], &[u8], [u8; 12]), ()> =
     TableDefinition::new("4");
 
+/// ユーザーを管理するためのテーブル
+///
+/// Key: ユーザー名
+/// Value: ユーザーのメタデータ（[`UserMetadata`]）を JSON 文字列にしたもの
 pub const USERS: TableDefinition<&str, &str> = TableDefinition::new("users");
+
+/// ユーザーごとのデータベース単位の権限（ロール）を管理するためのテーブル
+///
+/// Key: (ユーザーのID, データベースのID)
+/// Value: ロール（[`crate::models::users::UserRole`] を `u8` で表したもの）
 pub const USER_PRIVILEGES: TableDefinition<([u8; 16], [u8; 16]), u8> =
     TableDefinition::new("user_privileges");
 
