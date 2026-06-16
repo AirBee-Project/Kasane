@@ -1,0 +1,40 @@
+info:
+  name: remove_database
+  type: http
+  seq: 4
+  tags:
+    - databases
+
+http:
+  method: DELETE
+  url: "{{baseUrl}}/databases/:name"
+  params:
+    - name: name
+      value: ""
+      type: path
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 204 Response
+    description: Removed successfully
+    request:
+      url: "{{baseUrl}}/databases/:name"
+      method: DELETE
+      params:
+        - name: name
+          value: ""
+          type: path
+    response:
+      status: 204
+      statusText: No Content
+      body:
+        type: text
+        data: ""

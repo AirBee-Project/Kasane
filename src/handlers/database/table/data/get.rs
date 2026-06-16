@@ -1,6 +1,8 @@
 use crate::AppState;
+use crate::middleware::auth::AuthUser;
 use crate::models::database::table::data::{GetDataRequest, GetDataResponse};
 use crate::{error::AppError, services::database::table::data::get as data_get_service};
+use axum::Extension;
 use axum::{
     Json,
     extract::{Path, State},
@@ -14,13 +16,23 @@ use axum::{
         (status = 200, description = "Data retrieved", body = GetDataResponse),
         (status = 404, description = "Table not found")
     ),
-    tag = "tables"
+    security(("bearer_auth" = [])),
+    tag = "data"
 )]
 pub async fn data_get(
     State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
     Path((db_name, table_name)): Path<(String, String)>,
     Json(payload): Json<crate::models::database::table::data::GetDataRequest>,
 ) -> Result<Json<crate::models::database::table::data::GetDataResponse>, AppError> {
+    crate::middleware::auth::check_privilege(
+        &app_state,
+        &auth_user,
+        &db_name,
+        crate::models::users::UserRole::Read,
+    )
+    .await?;
+
     let result = data_get_service::get(
         &app_state,
         &db_name,

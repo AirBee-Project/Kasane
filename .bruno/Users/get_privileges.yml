@@ -1,19 +1,21 @@
 info:
-  name: layer_info
+  name: get_privileges
   type: http
-  seq: 3
+  seq: 5
   tags:
-    - layers
+    - Users
 
 http:
   method: GET
-  url: "{{baseUrl}}/layers/:name"
+  url: "{{baseUrl}}/users/:username/privileges"
   params:
-    - name: name
-      value: example_layer
+    - name: username
+      value: ""
       type: path
-      description: Layer name
-  auth: inherit
+      description: Username
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
 
 settings:
   encodeUrl: true
@@ -23,15 +25,15 @@ settings:
 
 examples:
   - name: 200 Response
-    description: Layer information
+    description: Get privileges successfully
     request:
-      url: "{{baseUrl}}/layers/:name"
+      url: "{{baseUrl}}/users/:username/privileges"
       method: GET
       params:
-        - name: name
+        - name: username
           value: ""
           type: path
-          description: Layer name
+          description: Username
     response:
       status: 200
       statusText: OK
@@ -41,21 +43,22 @@ examples:
       body:
         type: json
         data: |-
-          {
-            "name": "example_layer",
-            "data_type": "Text",
-            "max_zoom_level": 25
-          }
+          [
+            {
+              "db_name": "",
+              "role": "Read"
+            }
+          ]
   - name: 404 Response
-    description: Layer not found
+    description: User not found
     request:
-      url: "{{baseUrl}}/layers/:name"
+      url: "{{baseUrl}}/users/:username/privileges"
       method: GET
       params:
-        - name: name
+        - name: username
           value: ""
           type: path
-          description: Layer name
+          description: Username
     response:
       status: 404
       statusText: Not Found

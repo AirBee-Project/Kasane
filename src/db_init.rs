@@ -1,6 +1,9 @@
-use redb::{Database, TableDefinition};
+use redb::{Database, ReadableTableMetadata, TableDefinition};
 
+use crate::models::users::UserMetadata;
 use crate::models::{database::DatabaseMetadata, database::table::TableMetadata};
+use crate::services::auth::hash_password;
+use uuid::Uuid;
 
 pub const DATABASES: TableDefinition<&str, DatabaseMetadata> = TableDefinition::new("0");
 
@@ -27,6 +30,10 @@ pub const SPATIALID_TO_VALUE: TableDefinition<([u8; 16], [u8; 12]), &[u8]> =
 pub const VALUE_TO_SPATIALID: TableDefinition<([u8; 16], &[u8], [u8; 12]), ()> =
     TableDefinition::new("4");
 
+pub const USERS: TableDefinition<&str, &str> = TableDefinition::new("users");
+pub const USER_PRIVILEGES: TableDefinition<([u8; 16], [u8; 16]), u8> =
+    TableDefinition::new("user_privileges");
+
 #[tracing::instrument]
 pub fn initialize_database(path: &str) -> Database {
     tracing::info!("Initializing database at: {}", path);
@@ -44,6 +51,28 @@ pub fn initialize_database(path: &str) -> Database {
         let _ = write_txn.open_table(TABLE_ID_INDEX).unwrap();
         let _ = write_txn.open_table(SPATIALID_TO_VALUE).unwrap();
         let _ = write_txn.open_table(VALUE_TO_SPATIALID).unwrap();
+
+        let mut users_table = write_txn.open_table(USERS).unwrap();
+        let _ = write_txn.open_table(USER_PRIVILEGES).unwrap();
+
+        if users_table.is_empty().unwrap() {
+            let default_username = "root";
+            let default_password = std::env::var("ROOT_PASSWORD")
+                .ok()
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "password".to_string());
+
+            tracing::info!("Creating default root user: {}", default_username);
+            let hash = hash_password(&default_password).unwrap();
+            let root_meta = UserMetadata {
+                id: Uuid::now_v7(),
+                password_hash: hash,
+                is_global_admin: true,
+                token_version: 0,
+            };
+            let json = serde_json::to_string(&root_meta).unwrap();
+            users_table.insert(default_username, json.as_str()).unwrap();
+        }
     }
 
     write_txn.commit().unwrap();

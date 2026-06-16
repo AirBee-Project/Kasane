@@ -1,37 +1,31 @@
 info:
   name: data_insert
   type: http
-  seq: 5
+  seq: 1
   tags:
-    - layers
+    - data
 
 http:
   method: PUT
-  url: "{{baseUrl}}/layers/:name/data"
+  url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
   params:
-    - name: name
-      value: example_layer
+    - name: db_name
+      value: ""
       type: path
-      description: Layer name
+    - name: table_name
+      value: ""
+      type: path
   body:
     type: json
     data: |-
       {
-          "value": 3,
-          "query": {
-              "ids": [
-                  {
-                  "z": 20,
-                  "f": [0,100],
-                  "x": [931380,931386],
-                  "y": [412900,412905],
-                  "type": "rangeId"
-                  }
-              ],
-              "type": "spatialIds"
-              }
-          }
-  auth: inherit
+        "value": "",
+        "query": "",
+        "zoom_level_policy": "Error"
+      }
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
 
 settings:
   encodeUrl: true
@@ -40,16 +34,18 @@ settings:
   maxRedirects: 5
 
 examples:
-  - name: 201 Response
-    description: Data Inserted
+  - name: 200 Response
+    description: Data inserted
     request:
-      url: "{{baseUrl}}/layers/:name/data"
+      url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
       method: PUT
       params:
-        - name: name
+        - name: db_name
           value: ""
           type: path
-          description: Layer name
+        - name: table_name
+          value: ""
+          type: path
       body:
         type: json
         data: |-
@@ -59,21 +55,23 @@ examples:
             "zoom_level_policy": "Error"
           }
     response:
-      status: 201
-      statusText: Created
+      status: 200
+      statusText: OK
       body:
         type: text
         data: ""
   - name: 404 Response
-    description: Layer not found
+    description: Table not found
     request:
-      url: "{{baseUrl}}/layers/:name/data"
+      url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
       method: PUT
       params:
-        - name: name
+        - name: db_name
           value: ""
           type: path
-          description: Layer name
+        - name: table_name
+          value: ""
+          type: path
       body:
         type: json
         data: |-

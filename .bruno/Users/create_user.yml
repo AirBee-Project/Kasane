@@ -1,0 +1,67 @@
+info:
+  name: create_user
+  type: http
+  seq: 2
+  tags:
+    - Users
+
+http:
+  method: POST
+  url: "{{baseUrl}}/users"
+  body:
+    type: json
+    data: |-
+      {
+        "username": "alice",
+        "password": "secret123",
+        "is_global_admin": false
+      }
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 201 Response
+    description: User created successfully
+    request:
+      url: "{{baseUrl}}/users"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "username": "alice",
+            "password": "secret123",
+            "is_global_admin": false
+          }
+    response:
+      status: 201
+      statusText: Created
+      body:
+        type: text
+        data: ""
+  - name: 409 Response
+    description: User already exists
+    request:
+      url: "{{baseUrl}}/users"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "username": "alice",
+            "password": "secret123",
+            "is_global_admin": false
+          }
+    response:
+      status: 409
+      statusText: Conflict
+      body:
+        type: text
+        data: ""

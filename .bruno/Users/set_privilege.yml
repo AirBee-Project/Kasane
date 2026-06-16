@@ -1,0 +1,88 @@
+info:
+  name: set_privilege
+  type: http
+  seq: 6
+  tags:
+    - Users
+
+http:
+  method: PUT
+  url: "{{baseUrl}}/users/:username/privileges/:db_name"
+  params:
+    - name: username
+      value: ""
+      type: path
+      description: Username
+    - name: db_name
+      value: ""
+      type: path
+      description: Database name
+  body:
+    type: json
+    data: |-
+      {
+        "role": "Read"
+      }
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 204 Response
+    description: Privilege updated successfully
+    request:
+      url: "{{baseUrl}}/users/:username/privileges/:db_name"
+      method: PUT
+      params:
+        - name: username
+          value: ""
+          type: path
+          description: Username
+        - name: db_name
+          value: ""
+          type: path
+          description: Database name
+      body:
+        type: json
+        data: |-
+          {
+            "role": "Read"
+          }
+    response:
+      status: 204
+      statusText: No Content
+      body:
+        type: text
+        data: ""
+  - name: 404 Response
+    description: User or database not found
+    request:
+      url: "{{baseUrl}}/users/:username/privileges/:db_name"
+      method: PUT
+      params:
+        - name: username
+          value: ""
+          type: path
+          description: Username
+        - name: db_name
+          value: ""
+          type: path
+          description: Database name
+      body:
+        type: json
+        data: |-
+          {
+            "role": "Read"
+          }
+    response:
+      status: 404
+      statusText: Not Found
+      body:
+        type: text
+        data: ""

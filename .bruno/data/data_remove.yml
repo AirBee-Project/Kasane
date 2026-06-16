@@ -1,18 +1,20 @@
 info:
   name: data_remove
   type: http
-  seq: 7
+  seq: 2
   tags:
-    - layers
+    - data
 
 http:
   method: DELETE
-  url: "{{baseUrl}}/layers/:name/data"
+  url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
   params:
-    - name: name
+    - name: db_name
       value: ""
       type: path
-      description: Layer name
+    - name: table_name
+      value: ""
+      type: path
   body:
     type: json
     data: |-
@@ -20,7 +22,9 @@ http:
         "query": "",
         "zoom_level_policy": "Error"
       }
-  auth: inherit
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
 
 settings:
   encodeUrl: true
@@ -30,15 +34,17 @@ settings:
 
 examples:
   - name: 204 Response
-    description: Data Removed
+    description: Data removed
     request:
-      url: "{{baseUrl}}/layers/:name/data"
+      url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
       method: DELETE
       params:
-        - name: name
+        - name: db_name
           value: ""
           type: path
-          description: Layer name
+        - name: table_name
+          value: ""
+          type: path
       body:
         type: json
         data: |-
@@ -53,15 +59,17 @@ examples:
         type: text
         data: ""
   - name: 404 Response
-    description: Layer not found
+    description: Table not found
     request:
-      url: "{{baseUrl}}/layers/:name/data"
+      url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
       method: DELETE
       params:
-        - name: name
+        - name: db_name
           value: ""
           type: path
-          description: Layer name
+        - name: table_name
+          value: ""
+          type: path
       body:
         type: json
         data: |-

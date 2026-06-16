@@ -17,8 +17,24 @@ impl DbTestApp {
     pub fn new() -> Self {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db = db_init::initialize_database(temp_file.path().to_str().unwrap());
-        let app_state = AppState { redb: Arc::new(db) };
-        let app = kasane(app_state);
+
+        let app_state = AppState {
+            redb: Arc::new(db),
+            auth_cache: Arc::new(kasane::auth_cache::AuthCache::new()),
+        };
+        let token = kasane::services::auth::generate_jwt(&app_state, "root").unwrap();
+        let auth_header = axum::http::HeaderValue::from_str(&format!("Bearer {}", token)).unwrap();
+
+        let app = kasane(app_state).layer(axum::middleware::from_fn(
+            move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+                let auth_header = auth_header.clone();
+                async move {
+                    req.headers_mut()
+                        .insert(axum::http::header::AUTHORIZATION, auth_header);
+                    next.run(req).await
+                }
+            },
+        ));
         Self {
             app,
             _temp_file: temp_file,

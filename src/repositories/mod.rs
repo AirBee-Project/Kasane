@@ -1,4 +1,5 @@
 pub mod database;
+pub mod users;
 
 use crate::models::{database::DatabaseMetadata, database::table::TableMetadata};
 use redb::{ReadTransaction, WriteTransaction};

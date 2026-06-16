@@ -1,14 +1,16 @@
 info:
-  name: layer_list
+  name: list_users
   type: http
   seq: 1
   tags:
-    - layers
+    - Users
 
 http:
   method: GET
-  url: "{{baseUrl}}/layers"
-  auth: inherit
+  url: "{{baseUrl}}/users"
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
 
 settings:
   encodeUrl: true
@@ -18,9 +20,9 @@ settings:
 
 examples:
   - name: 200 Response
-    description: List of all layers
+    description: List users successfully
     request:
-      url: "{{baseUrl}}/layers"
+      url: "{{baseUrl}}/users"
       method: GET
     response:
       status: 200
@@ -33,8 +35,7 @@ examples:
         data: |-
           [
             {
-              "name": "example_layer",
-              "data_type": "Text",
-              "max_zoom_level": 25
+              "username": "",
+              "is_global_admin": false
             }
           ]

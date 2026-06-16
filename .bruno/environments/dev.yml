@@ -2,3 +2,9 @@ name: dev
 variables:
   - name: baseUrl
     value: http://localhost:5173
+  - name: userName
+    value: root
+  - name: password
+    value: neko
+  - name: accessToken
+    value: ""

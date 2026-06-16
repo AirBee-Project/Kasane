@@ -7,9 +7,9 @@ use axum::routing::{get, post};
 fn table_routes() -> Router<AppState> {
     Router::new()
         .route(
-            "/{name}",
+            "/{table_name}",
             get(crate::handlers::database::table::info::table_info)
-                .delete(crate::handlers::database::table::remove::table_remove),
+                .delete(crate::handlers::database::table::remove::remove_table),
         )
         .route(
             "/",
