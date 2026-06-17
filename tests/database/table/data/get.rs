@@ -31,7 +31,7 @@ async fn test_table_data_get_multiple() {
         table_name,
         &serde_json::json!({
             "value": 100,
-            "query": { "ids": [{ "z": 20, "f": 0, "x": 10, "y": 10, "type": "singleId" }], "type": "spatialIds" }
+            "spatial_ids": [{ "z": 20, "f": 0, "x": 10, "y": 10, "type": "singleId" }]
         }),
     )
     .await;
@@ -41,18 +41,15 @@ async fn test_table_data_get_multiple() {
         table_name,
         &serde_json::json!({
             "value": 200,
-            "query": { "ids": [{ "z": 20, "f": 0, "x": 20, "y": 20, "type": "singleId" }], "type": "spatialIds" }
+            "spatial_ids": [{ "z": 20, "f": 0, "x": 20, "y": 20, "type": "singleId" }]
         }),
     )
     .await;
 
-    let query = serde_json::json!({
-        "ids": [
-            { "z": 20, "f": 0, "x": 10, "y": 10, "type": "singleId" },
-            { "z": 20, "f": 0, "x": 20, "y": 20, "type": "singleId" }
-        ],
-        "type": "spatialIds"
-    });
+    let query = serde_json::json!([
+        { "z": 20, "f": 0, "x": 10, "y": 10, "type": "singleId" },
+        { "z": 20, "f": 0, "x": 20, "y": 20, "type": "singleId" }
+    ]);
 
     let result_json = search_data(&test_app, table_name, &query).await;
     let result_map = to_result_map::<i64>(&result_json);

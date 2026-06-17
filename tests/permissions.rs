@@ -320,7 +320,7 @@ async fn test_write_privileges() {
         .uri("/databases/test_db/tables/t1/data")
         .header("Authorization", format!("Bearer {}", user_token))
         .header("Content-Type", "application/json")
-        .body(Body::from(r#"{"value": 10, "query": { "ids": [{ "z": 0, "f": 0, "x": 0, "y": 0, "type": "singleId" }], "type": "spatialIds" }}"#))
+        .body(Body::from(r#"{"value": 10, "spatial_ids": [{ "z": 0, "f": 0, "x": 0, "y": 0, "type": "singleId" }]}"#))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -358,7 +358,7 @@ async fn test_read_privileges() {
         .uri("/databases/test_db/tables/t1/data")
         .header("Authorization", format!("Bearer {}", root_token))
         .header("Content-Type", "application/json")
-        .body(Body::from(r#"{"value": 10, "query": { "ids": [{ "z": 0, "f": 0, "x": 0, "y": 0, "type": "singleId" }], "type": "spatialIds" }}"#))
+        .body(Body::from(r#"{"value": 10, "spatial_ids": [{ "z": 0, "f": 0, "x": 0, "y": 0, "type": "singleId" }]}"#))
         .unwrap();
     test_app.app.clone().oneshot(req).await.unwrap();
 
@@ -371,7 +371,7 @@ async fn test_read_privileges() {
         .uri("/databases/test_db/tables/t1/data")
         .header("Authorization", format!("Bearer {}", user_token))
         .header("Content-Type", "application/json")
-        .body(Body::from(r#"{"value": 20, "query": { "ids": [{ "z": 1, "f": 0, "x": 0, "y": 0, "type": "singleId" }], "type": "spatialIds" }}"#))
+        .body(Body::from(r#"{"value": 20, "spatial_ids": [{ "z": 1, "f": 0, "x": 0, "y": 0, "type": "singleId" }]}"#))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
@@ -382,7 +382,9 @@ async fn test_read_privileges() {
         .uri("/databases/test_db/tables/t1/data/search")
         .header("Authorization", format!("Bearer {}", user_token))
         .header("Content-Type", "application/json")
-        .body(Body::from(r#"{"query": { "ids": [{ "z": 0, "f": 0, "x": 0, "y": 0, "type": "singleId" }], "type": "spatialIds" }}"#))
+        .body(Body::from(
+            r#"{"spatial_ids": [{ "z": 0, "f": 0, "x": 0, "y": 0, "type": "singleId" }]}"#,
+        ))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -499,7 +501,9 @@ async fn test_no_privileges() {
         .uri("/databases/test_db/tables/t1/data/search")
         .header("Authorization", format!("Bearer {}", user_token))
         .header("Content-Type", "application/json")
-        .body(Body::from(r#"{"query": { "ids": [{ "z": 0, "f": 0, "x": 0, "y": 0, "type": "singleId" }], "type": "spatialIds" }}"#))
+        .body(Body::from(
+            r#"{"spatial_ids": [{ "z": 0, "f": 0, "x": 0, "y": 0, "type": "singleId" }]}"#,
+        ))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::FORBIDDEN);

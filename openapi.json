@@ -903,126 +903,18 @@
           }
         }
       },
-      "Geometry": {
-        "oneOf": [
-          {
-            "type": "object",
-            "required": [
-              "zoomlevel",
-              "coordinate",
-              "type"
-            ],
-            "properties": {
-              "zoomlevel": {
-                "type": "integer",
-                "format": "int32",
-                "minimum": 0
-              },
-              "coordinate": {
-                "$ref": "#/components/schemas/PointCoordinate"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "coordinate"
-                ]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": [
-              "zoomlevel",
-              "points",
-              "type"
-            ],
-            "properties": {
-              "zoomlevel": {
-                "type": "integer",
-                "format": "int32",
-                "minimum": 0
-              },
-              "points": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/PointCoordinate"
-                }
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "line"
-                ]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": [
-              "zoomlevel",
-              "points",
-              "type"
-            ],
-            "properties": {
-              "zoomlevel": {
-                "type": "integer",
-                "format": "int32",
-                "minimum": 0
-              },
-              "points": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/PointCoordinate"
-                }
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "triangle"
-                ]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": [
-              "zoomlevel",
-              "radius_m",
-              "center",
-              "type"
-            ],
-            "properties": {
-              "zoomlevel": {
-                "type": "integer",
-                "format": "int32",
-                "minimum": 0
-              },
-              "radius_m": {
-                "type": "number",
-                "format": "double"
-              },
-              "center": {
-                "$ref": "#/components/schemas/PointCoordinate"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "sphere"
-                ]
-              }
-            }
-          }
-        ]
-      },
       "GetDataRequest": {
         "type": "object",
-        "description": "空間IDの範囲を[Query]で指定して値を取得する",
+        "description": "空間IDの配列を指定して値を取得する",
         "required": [
-          "query"
+          "spatial_ids"
         ],
         "properties": {
-          "query": {
-            "$ref": "#/components/schemas/Query"
+          "spatial_ids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpatialId"
+            }
           },
           "zoom_level_policy": {
             "$ref": "#/components/schemas/ZoomLevelPolicy"
@@ -1045,15 +937,18 @@
       },
       "InsertDataRequest": {
         "type": "object",
-        "description": "空間IDの範囲を指定して値を挿入する",
+        "description": "空間IDの配列を指定して値を挿入する",
         "required": [
           "value",
-          "query"
+          "spatial_ids"
         ],
         "properties": {
           "value": {},
-          "query": {
-            "$ref": "#/components/schemas/Query"
+          "spatial_ids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpatialId"
+            }
           },
           "zoom_level_policy": {
             "$ref": "#/components/schemas/ZoomLevelPolicy"
@@ -1088,28 +983,6 @@
           }
         }
       },
-      "PointCoordinate": {
-        "type": "object",
-        "required": [
-          "latitude",
-          "longitude",
-          "altitude"
-        ],
-        "properties": {
-          "latitude": {
-            "type": "number",
-            "format": "double"
-          },
-          "longitude": {
-            "type": "number",
-            "format": "double"
-          },
-          "altitude": {
-            "type": "number",
-            "format": "double"
-          }
-        }
-      },
       "PrivilegeInfoResponse": {
         "type": "object",
         "required": [
@@ -1124,115 +997,6 @@
             "$ref": "#/components/schemas/UserRole"
           }
         }
-      },
-      "Query": {
-        "oneOf": [
-          {
-            "type": "object",
-            "required": [
-              "ids",
-              "type"
-            ],
-            "properties": {
-              "ids": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/SpatialId"
-                }
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "spatialIds"
-                ]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": [
-              "geometry",
-              "type"
-            ],
-            "properties": {
-              "geometry": {
-                "$ref": "#/components/schemas/Geometry"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "geometry"
-                ]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": [
-              "left",
-              "right",
-              "type"
-            ],
-            "properties": {
-              "left": {
-                "$ref": "#/components/schemas/Query"
-              },
-              "right": {
-                "$ref": "#/components/schemas/Query"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "union"
-                ]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": [
-              "left",
-              "right",
-              "type"
-            ],
-            "properties": {
-              "left": {
-                "$ref": "#/components/schemas/Query"
-              },
-              "right": {
-                "$ref": "#/components/schemas/Query"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "intersection"
-                ]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": [
-              "base",
-              "subtract",
-              "type"
-            ],
-            "properties": {
-              "base": {
-                "$ref": "#/components/schemas/Query"
-              },
-              "subtract": {
-                "$ref": "#/components/schemas/Query"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "difference"
-                ]
-              }
-            }
-          }
-        ]
       },
       "RangeId": {
         "type": "object",
@@ -1289,13 +1053,16 @@
       },
       "RemoveDataRequest": {
         "type": "object",
-        "description": "空間IDの範囲を指定して値を削除する",
+        "description": "空間IDの配列を指定して値を削除する",
         "required": [
-          "query"
+          "spatial_ids"
         ],
         "properties": {
-          "query": {
-            "$ref": "#/components/schemas/Query"
+          "spatial_ids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpatialId"
+            }
           },
           "zoom_level_policy": {
             "$ref": "#/components/schemas/ZoomLevelPolicy"
@@ -1404,222 +1171,6 @@
           "Int",
           "Float",
           "Boolean"
-        ]
-      },
-      "TableFilter": {
-        "type": "object",
-        "required": [
-          "name",
-          "query"
-        ],
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "query": {
-            "$ref": "#/components/schemas/TableFilterType"
-          }
-        }
-      },
-      "TableFilterBoolean": {
-        "oneOf": [
-          {
-            "type": "object",
-            "required": [
-              "value",
-              "operator"
-            ],
-            "properties": {
-              "value": {
-                "type": "boolean"
-              },
-              "operator": {
-                "type": "string",
-                "enum": [
-                  "equal"
-                ]
-              }
-            }
-          }
-        ]
-      },
-      "TableFilterFloat": {
-        "oneOf": [
-          {
-            "type": "object",
-            "required": [
-              "value",
-              "operator"
-            ],
-            "properties": {
-              "value": {
-                "type": "number",
-                "format": "float"
-              },
-              "operator": {
-                "type": "string",
-                "enum": [
-                  "equal"
-                ]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": [
-              "value",
-              "operator"
-            ],
-            "properties": {
-              "value": {
-                "type": "number",
-                "format": "float"
-              },
-              "operator": {
-                "type": "string",
-                "enum": [
-                  "notEqual"
-                ]
-              }
-            }
-          }
-        ]
-      },
-      "TableFilterInt": {
-        "oneOf": [
-          {
-            "type": "object",
-            "required": [
-              "value",
-              "operator"
-            ],
-            "properties": {
-              "value": {
-                "type": "integer",
-                "format": "int32"
-              },
-              "operator": {
-                "type": "string",
-                "enum": [
-                  "equal"
-                ]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": [
-              "value",
-              "operator"
-            ],
-            "properties": {
-              "value": {
-                "type": "integer",
-                "format": "int32"
-              },
-              "operator": {
-                "type": "string",
-                "enum": [
-                  "notEqual"
-                ]
-              }
-            }
-          }
-        ]
-      },
-      "TableFilterText": {
-        "oneOf": [
-          {
-            "type": "object",
-            "required": [
-              "value",
-              "operator"
-            ],
-            "properties": {
-              "value": {
-                "type": "string"
-              },
-              "operator": {
-                "type": "string",
-                "enum": [
-                  "equal"
-                ]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": [
-              "value",
-              "operator"
-            ],
-            "properties": {
-              "value": {
-                "type": "string"
-              },
-              "operator": {
-                "type": "string",
-                "enum": [
-                  "notEqual"
-                ]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": [
-              "value",
-              "operator"
-            ],
-            "properties": {
-              "value": {
-                "type": "string"
-              },
-              "operator": {
-                "type": "string",
-                "enum": [
-                  "startsWith"
-                ]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": [
-              "value",
-              "operator"
-            ],
-            "properties": {
-              "value": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "operator": {
-                "type": "string",
-                "enum": [
-                  "in"
-                ]
-              }
-            }
-          }
-        ]
-      },
-      "TableFilterType": {
-        "oneOf": [
-          {
-            "$ref": "#/components/schemas/TableFilterText"
-          },
-          {
-            "$ref": "#/components/schemas/TableFilterInt"
-          },
-          {
-            "$ref": "#/components/schemas/TableFilterFloat"
-          },
-          {
-            "$ref": "#/components/schemas/TableFilterBoolean"
-          }
         ]
       },
       "TableInfoResponse": {

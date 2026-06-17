@@ -9,10 +9,6 @@ use crate::models::database::table::{
     CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse,
 };
 use crate::models::database::{CreateDatabaseRequest, DatabaseInfoResponse};
-use crate::models::query::{
-    Geometry, PointCoordinate, Query, TableFilter, TableFilterBoolean, TableFilterFloat,
-    TableFilterInt, TableFilterText, TableFilterType,
-};
 use crate::models::spatial_id::SpatialId;
 use crate::models::users::{
     CreateUserRequest, PrivilegeInfoResponse, UpdateAdminRequest, UpdatePasswordRequest,
@@ -107,17 +103,7 @@ impl utoipa::Modify for SecurityAddon {
         GetDataResponse,
         InsertDataRequest,
         RemoveDataRequest,
-        // Query
-        Query,
         SpatialId,
-        Geometry,
-        PointCoordinate,
-        TableFilter,
-        TableFilterType,
-        TableFilterText,
-        TableFilterInt,
-        TableFilterFloat,
-        TableFilterBoolean,
     )),
     tags(
         (name = "Auth", description = "Authentication endpoints"),

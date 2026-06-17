@@ -68,14 +68,13 @@ async fn test_delete_table_cache_bug() {
         .create_table("test_db", table_name, "Int", 25)
         .await;
 
-    let single_id_query = serde_json::json!({
-        "ids": [{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let single_id_query = serde_json::json!([
+        { "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }
+    ]);
     crate::database::table::data::common::put_data(
         &test_app,
         table_name,
-        &serde_json::json!({ "value": 1, "query": single_id_query }),
+        &serde_json::json!({ "value": 1, "spatial_ids": single_id_query }),
     )
     .await;
 

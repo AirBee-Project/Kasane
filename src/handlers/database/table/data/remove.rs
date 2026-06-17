@@ -33,7 +33,7 @@ pub async fn data_remove(
         &app_state,
         &db_name,
         &table_name,
-        payload.query,
+        &payload.spatial_ids,
         &payload.zoom_level_policy,
     )
     .await?;
