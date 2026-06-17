@@ -1,15 +1,16 @@
 use crate::{
     AppState,
     error::AppError,
-    models::{database::table::data::ZoomLevelPolicy, query::Query},
+    models::{database::table::data::ZoomLevelPolicy, spatial_id::SpatialId},
     repositories::KasaneDbWrite,
+    services::helpers::spatial_ids::process_spatial_ids,
 };
 
 pub async fn remove(
     app_state: &AppState,
     db_name: &str,
     table_name: &str,
-    query: Query,
+    spatial_ids: &[SpatialId],
     zoom_level_policy: &ZoomLevelPolicy,
 ) -> Result<(), AppError> {
     let write_txn = app_state.redb.begin_write()?;
@@ -25,7 +26,7 @@ pub async fn remove(
         }
     };
 
-    let ids = query.process(table.max_zoom_level, zoom_level_policy)?;
+    let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
     tracing::debug!("Removing {} spatial IDs", ids.count());
     db.data_remove(db_name, table_name, ids)?;
     db.commit()?;

@@ -21,15 +21,13 @@ async fn test_table_data_remove_single_id() {
         .create_table("test_db", "test_table_BOOLEAN", "Boolean", 25)
         .await;
 
-    let single_id_query = serde_json::json!({
-        "ids": [{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let single_id_query =
+        serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
 
     put_data(
         &test_app,
         "test_table_BOOLEAN",
-        &serde_json::json!({ "value": true, "query": single_id_query }),
+        &serde_json::json!({ "value": true, "spatial_ids": single_id_query }),
     )
     .await;
 
@@ -54,7 +52,7 @@ async fn test_table_data_remove_single_id() {
         ))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(
-            serde_json::to_string(&serde_json::json!({ "query": single_id_query })).unwrap(),
+            serde_json::to_string(&serde_json::json!({ "spatial_ids": single_id_query })).unwrap(),
         ))
         .unwrap();
 
@@ -79,31 +77,27 @@ async fn test_table_data_remove_logical_bug() {
         .create_table("test_db", table_name, "Int", 25)
         .await;
 
-    let parent_id_query = serde_json::json!({
-        "ids": [{ "z": 10, "f": 0, "x": 909, "y": 403, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let parent_id_query =
+        serde_json::json!([{ "z": 10, "f": 0, "x": 909, "y": 403, "type": "singleId" }]);
     put_data(
         &test_app,
         table_name,
-        &serde_json::json!({ "value": 100, "query": parent_id_query }),
+        &serde_json::json!({ "value": 100, "spatial_ids": parent_id_query }),
     )
     .await;
 
     let result = search_data(&test_app, table_name, &parent_id_query).await;
     assert!(!to_result_map::<i64>(&result).is_empty());
 
-    let child_id_query = serde_json::json!({
-        "ids": [{ "z": 11, "f": 0, "x": 1818, "y": 806, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let child_id_query =
+        serde_json::json!([{ "z": 11, "f": 0, "x": 1818, "y": 806, "type": "singleId" }]);
 
     let req = Request::builder()
         .method("DELETE")
         .uri(format!("/databases/test_db/tables/{}/data", table_name))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(
-            serde_json::to_string(&serde_json::json!({ "query": child_id_query })).unwrap(),
+            serde_json::to_string(&serde_json::json!({ "spatial_ids": child_id_query })).unwrap(),
         ))
         .unwrap();
 
@@ -134,14 +128,11 @@ async fn test_table_data_remove_partial_overlap() {
     let id1 = serde_json::json!({ "z": 20, "f": 0, "x": 10, "y": 10, "type": "singleId" });
     let id2 = serde_json::json!({ "z": 20, "f": 0, "x": 11, "y": 10, "type": "singleId" });
 
-    let insert_query = serde_json::json!({
-        "ids": [id1, id2],
-        "type": "spatialIds"
-    });
+    let insert_query = serde_json::json!([id1, id2]);
     put_data(
         &test_app,
         table_name,
-        &serde_json::json!({ "value": 500, "query": insert_query }),
+        &serde_json::json!({ "value": 500, "spatial_ids": insert_query }),
     )
     .await;
 
@@ -151,7 +142,7 @@ async fn test_table_data_remove_partial_overlap() {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(
             serde_json::to_string(&serde_json::json!({
-                "query": { "ids": [id1], "type": "spatialIds" }
+                "spatial_ids": [id1]
             }))
             .unwrap(),
         ))
@@ -159,20 +150,10 @@ async fn test_table_data_remove_partial_overlap() {
     let response = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-    let res1 = search_data(
-        &test_app,
-        table_name,
-        &serde_json::json!({ "ids": [id1], "type": "spatialIds" }),
-    )
-    .await;
+    let res1 = search_data(&test_app, table_name, &serde_json::json!([id1])).await;
     assert!(to_result_map::<i64>(&res1).is_empty());
 
-    let res2 = search_data(
-        &test_app,
-        table_name,
-        &serde_json::json!({ "ids": [id2], "type": "spatialIds" }),
-    )
-    .await;
+    let res2 = search_data(&test_app, table_name, &serde_json::json!([id2])).await;
     assert_first_entry(
         &res2,
         500i64,

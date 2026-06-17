@@ -28,7 +28,7 @@ use crate::database::table::common::TestApp;
 /// put_data(
 ///     &test_app,
 ///     "my_table",
-///     &serde_json::json!({ "value": 42, "query": query }),
+///     &serde_json::json!({ "value": 42, "spatial_ids": query }),
 /// )
 /// .await;
 /// ```
@@ -73,7 +73,7 @@ pub async fn patch_data(test_app: &TestApp, table_name: &str, body: &serde_json:
 
 /// `POST /tables/{table_name}/data/search` でデータを検索し、レスポンスボディを JSON で返す。
 ///
-/// `query` には空間ID指定部分のみを渡せばよく、`{ "query": ... }` へのラップはこの関数内で行う。
+/// `query` には空間ID指定部分のみを渡せばよく、`{ "spatial_ids": ... }` へのラップはこの関数内で行う。
 ///
 /// # Arguments
 /// - `test_app`   - テスト用アプリケーション
@@ -95,7 +95,7 @@ pub async fn search_data(
     table_name: &str,
     query: &serde_json::Value,
 ) -> serde_json::Value {
-    let body = serde_json::json!({ "query": query });
+    let body = serde_json::json!({ "spatial_ids": query });
 
     let req = Request::builder()
         .method("POST")

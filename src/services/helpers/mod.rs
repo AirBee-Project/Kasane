@@ -1,3 +1,3 @@
 pub mod name_valid;
-pub mod query;
+pub mod spatial_ids;
 pub mod value;

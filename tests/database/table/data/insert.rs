@@ -18,15 +18,13 @@ async fn test_table_data_insert_single_id() {
         .create_table("test_db", "test_table", "Int", 25)
         .await;
 
-    let single_id_query = serde_json::json!({
-        "ids": [{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let single_id_query =
+        serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
 
     put_data(
         &test_app,
         "test_table",
-        &serde_json::json!({ "value": 3, "query": single_id_query }),
+        &serde_json::json!({ "value": 3, "spatial_ids": single_id_query }),
     )
     .await;
 
@@ -53,10 +51,8 @@ async fn test_table_data_insert_single_id_error() {
         .create_table("test_db", "test_table", "Int", 25)
         .await;
 
-    let single_id_query = serde_json::json!({
-        "ids": [{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let single_id_query =
+        serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
 
     let req = Request::builder()
         .method("PUT")
@@ -64,7 +60,7 @@ async fn test_table_data_insert_single_id_error() {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(
             serde_json::to_string(
-                &serde_json::json!({ "value": "SampleText", "query": single_id_query }),
+                &serde_json::json!({ "value": "SampleText", "spatial_ids": single_id_query }),
             )
             .unwrap(),
         ))
@@ -84,10 +80,8 @@ async fn test_table_data_insert_single_id_logic_error() {
         .create_table("test_db", "test_table", "Text", 25)
         .await;
 
-    let single_id_query = serde_json::json!({
-        "ids": [{ "z": 3, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let single_id_query =
+        serde_json::json!([{ "z": 3, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
 
     let req = Request::builder()
         .method("PUT")
@@ -95,7 +89,7 @@ async fn test_table_data_insert_single_id_logic_error() {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(
             serde_json::to_string(
-                &serde_json::json!({ "value": "SampleText", "query": single_id_query }),
+                &serde_json::json!({ "value": "SampleText", "spatial_ids": single_id_query }),
             )
             .unwrap(),
         ))
@@ -115,27 +109,23 @@ async fn test_table_data_insert_two_single_id() {
         .create_table("test_db", "test_table", "Int", 25)
         .await;
 
-    let single_id_query_1 = serde_json::json!({
-        "ids": [{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let single_id_query_1 =
+        serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
 
     put_data(
         &test_app,
         "test_table",
-        &serde_json::json!({ "value": 3, "query": single_id_query_1 }),
+        &serde_json::json!({ "value": 3, "spatial_ids": single_id_query_1 }),
     )
     .await;
 
-    let single_id_query_2 = serde_json::json!({
-        "ids": [{ "z": 20, "f": -1, "x": 931386, "y": 412905, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let single_id_query_2 =
+        serde_json::json!([{ "z": 20, "f": -1, "x": 931386, "y": 412905, "type": "singleId" }]);
 
     put_data(
         &test_app,
         "test_table",
-        &serde_json::json!({ "value": 4, "query": single_id_query_2 }),
+        &serde_json::json!({ "value": 4, "spatial_ids": single_id_query_2 }),
     )
     .await;
 
@@ -174,15 +164,13 @@ async fn test_table_data_insert_single_id_overwrite() {
         .create_table("test_db", "test_table", "Int", 25)
         .await;
 
-    let single_id_query = serde_json::json!({
-        "ids": [{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let single_id_query =
+        serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
 
     put_data(
         &test_app,
         "test_table",
-        &serde_json::json!({ "value": 3, "query": single_id_query }),
+        &serde_json::json!({ "value": 3, "spatial_ids": single_id_query }),
     )
     .await;
 
@@ -202,7 +190,7 @@ async fn test_table_data_insert_single_id_overwrite() {
     put_data(
         &test_app,
         "test_table",
-        &serde_json::json!({ "value": 4, "query": single_id_query }),
+        &serde_json::json!({ "value": 4, "spatial_ids": single_id_query }),
     )
     .await;
 
@@ -229,15 +217,12 @@ async fn test_table_data_insert_range_id_overwrite() {
         .create_table("test_db", "test_table_text", "Text", 25)
         .await;
 
-    let range_id_query = serde_json::json!({
-        "ids": [{ "z": 18, "f": [0,0], "x": [232846,232850], "y": [103226,103240], "type": "rangeId" }],
-        "type": "spatialIds"
-    });
+    let range_id_query = serde_json::json!([{ "z": 18, "f": [0,0], "x": [232846,232850], "y": [103226,103240], "type": "rangeId" }]);
 
     put_data(
         &test_app,
         "test_table_text",
-        &serde_json::json!({ "value": "猫(Cat)", "query": range_id_query }),
+        &serde_json::json!({ "value": "猫(Cat)", "spatial_ids": range_id_query }),
     )
     .await;
 
@@ -266,7 +251,7 @@ async fn test_table_data_insert_range_id_overwrite() {
     put_data(
         &test_app,
         "test_table_text",
-        &serde_json::json!({ "value": "犬(Dog)", "query": range_id_query }),
+        &serde_json::json!({ "value": "犬(Dog)", "spatial_ids": range_id_query }),
     )
     .await;
 
@@ -302,22 +287,17 @@ async fn test_table_data_insert_range_id() {
         .create_table("test_db", "test_table", "Int", 25)
         .await;
 
-    let range_id_query = serde_json::json!({
-        "ids": [{ "z": 20, "f": [0, 100], "x": [931380, 931386], "y": [412900, 412905], "type": "rangeId" }],
-        "type": "spatialIds"
-    });
+    let range_id_query = serde_json::json!([{ "z": 20, "f": [0, 100], "x": [931380, 931386], "y": [412900, 412905], "type": "rangeId" }]);
 
     put_data(
         &test_app,
         "test_table",
-        &serde_json::json!({ "value": 3, "query": range_id_query }),
+        &serde_json::json!({ "value": 3, "spatial_ids": range_id_query }),
     )
     .await;
 
-    let single_id_query = serde_json::json!({
-        "ids": [{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let single_id_query =
+        serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
     let result_json = search_data(&test_app, "test_table", &single_id_query).await;
 
     assert_first_entry(
@@ -367,27 +347,23 @@ async fn test_table_data_overload_insert() {
         .create_table("test_db", "test_table", "Text", 30)
         .await;
 
-    let query1 = serde_json::json!({
-        "ids": [{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let query1 =
+        serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
 
     put_data(
         &test_app,
         "test_table",
-        &serde_json::json!({ "value": "A", "query": query1 }),
+        &serde_json::json!({ "value": "A", "spatial_ids": query1 }),
     )
     .await;
 
-    let query2 = serde_json::json!({
-        "ids": [{ "z": 21, "f": 0, "x": 1862772, "y": 825810, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let query2 =
+        serde_json::json!([{ "z": 21, "f": 0, "x": 1862772, "y": 825810, "type": "singleId" }]);
 
     put_data(
         &test_app,
         "test_table",
-        &serde_json::json!({ "value": "B", "query": query2 }),
+        &serde_json::json!({ "value": "B", "spatial_ids": query2 }),
     )
     .await;
 
@@ -426,24 +402,19 @@ async fn test_table_data_recursive_merge() {
     for f in 0..4 {
         for y in 0..4 {
             for x in 0..4 {
-                let single_id_query = serde_json::json!({
-                    "ids": [{ "z": 20, "f": f, "x": x, "y": y, "type": "singleId" }],
-                    "type": "spatialIds"
-                });
+                let single_id_query =
+                    serde_json::json!([{ "z": 20, "f": f, "x": x, "y": y, "type": "singleId" }]);
                 put_data(
                     &test_app,
                     table_name,
-                    &serde_json::json!({ "value": 7, "query": single_id_query }),
+                    &serde_json::json!({ "value": 7, "spatial_ids": single_id_query }),
                 )
                 .await;
             }
         }
     }
 
-    let search_query = serde_json::json!({
-        "ids": [{ "z": 18, "f": 0, "x": 0, "y": 0, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let search_query = serde_json::json!([{ "z": 18, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
     let result_json = search_data(&test_app, table_name, &search_query).await;
     let result_map = to_result_map::<i64>(&result_json);
 
@@ -474,21 +445,18 @@ async fn test_table_data_isolation() {
     test_app.create_table("test_db", table1, "Int", 25).await;
     test_app.create_table("test_db", table2, "Int", 25).await;
 
-    let query = serde_json::json!({
-        "ids": [{ "z": 20, "f": 0, "x": 100, "y": 100, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let query = serde_json::json!([{ "z": 20, "f": 0, "x": 100, "y": 100, "type": "singleId" }]);
 
     put_data(
         &test_app,
         table1,
-        &serde_json::json!({ "value": 1, "query": query }),
+        &serde_json::json!({ "value": 1, "spatial_ids": query }),
     )
     .await;
     put_data(
         &test_app,
         table2,
-        &serde_json::json!({ "value": 2, "query": query }),
+        &serde_json::json!({ "value": 2, "spatial_ids": query }),
     )
     .await;
 
@@ -528,18 +496,18 @@ async fn test_table_data_max_zoom_enforcement() {
         .create_table("test_db", table_name, "Int", 10)
         .await;
 
-    let high_zoom_query = serde_json::json!({
-        "ids": [{ "z": 11, "f": 0, "x": 0, "y": 0, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let high_zoom_query =
+        serde_json::json!([{ "z": 11, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
 
     let req = Request::builder()
         .method("PUT")
         .uri(format!("/databases/test_db/tables/{}/data", table_name))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(
-            serde_json::to_string(&serde_json::json!({ "value": 100, "query": high_zoom_query }))
-                .unwrap(),
+            serde_json::to_string(
+                &serde_json::json!({ "value": 100, "spatial_ids": high_zoom_query }),
+            )
+            .unwrap(),
         ))
         .unwrap();
 
@@ -558,25 +526,19 @@ async fn test_table_data_deep_split() {
         .create_table("test_db", table_name, "Int", 25)
         .await;
 
-    let parent_query = serde_json::json!({
-        "ids": [{ "z": 18, "f": 0, "x": 0, "y": 0, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let parent_query = serde_json::json!([{ "z": 18, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
     put_data(
         &test_app,
         table_name,
-        &serde_json::json!({ "value": 100, "query": parent_query }),
+        &serde_json::json!({ "value": 100, "spatial_ids": parent_query }),
     )
     .await;
 
-    let child_query = serde_json::json!({
-        "ids": [{ "z": 20, "f": 0, "x": 0, "y": 0, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let child_query = serde_json::json!([{ "z": 20, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
     put_data(
         &test_app,
         table_name,
-        &serde_json::json!({ "value": 200, "query": child_query }),
+        &serde_json::json!({ "value": 200, "spatial_ids": child_query }),
     )
     .await;
 
@@ -592,10 +554,8 @@ async fn test_table_data_deep_split() {
         },
     );
 
-    let sibling_query = serde_json::json!({
-        "ids": [{ "z": 20, "f": 0, "x": 1, "y": 0, "type": "singleId" }],
-        "type": "spatialIds"
-    });
+    let sibling_query =
+        serde_json::json!([{ "z": 20, "f": 0, "x": 1, "y": 0, "type": "singleId" }]);
     let res_sibling = search_data(&test_app, table_name, &sibling_query).await;
     assert_first_entry(
         &res_sibling,

@@ -1,16 +1,16 @@
 use crate::{
     AppState,
     error::AppError,
-    models::{database::table::data::ZoomLevelPolicy, query::Query},
+    models::{database::table::data::ZoomLevelPolicy, spatial_id::SpatialId},
     repositories::KasaneDbWrite,
-    services::helpers::value::interpret_value,
+    services::helpers::{spatial_ids::process_spatial_ids, value::interpret_value},
 };
 
 pub async fn insert(
     app_state: &AppState,
     db_name: &str,
     table_name: &str,
-    query: Query,
+    spatial_ids: &[SpatialId],
     value: serde_json::Value,
     zoom_level_policy: &ZoomLevelPolicy,
 ) -> Result<(), AppError> {
@@ -28,7 +28,7 @@ pub async fn insert(
     };
 
     let value = interpret_value(table.data_type, value)?;
-    let ids = query.process(table.max_zoom_level, zoom_level_policy)?;
+    let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
 
     tracing::debug!("Inserting {} spatial IDs", ids.count());
     db.data_insert(db_name, table_name, ids, &value)?;

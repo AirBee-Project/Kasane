@@ -33,7 +33,7 @@ pub async fn data_insert(
         &app_state,
         &db_name,
         &table_name,
-        payload.query,
+        &payload.spatial_ids,
         payload.value,
         &payload.zoom_level_policy,
     )

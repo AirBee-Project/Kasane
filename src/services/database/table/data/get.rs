@@ -3,11 +3,10 @@ use crate::{
     error::AppError,
     models::{
         database::table::data::{GetDataResponse, SpatialData, ZoomLevelPolicy},
-        query::Query,
-        spatial_id::RawSingleId,
+        spatial_id::{RawSingleId, SpatialId},
     },
     repositories::KasaneDbRead,
-    services::helpers::value::restore_value,
+    services::helpers::{spatial_ids::process_spatial_ids, value::restore_value},
 };
 use redb::ReadableDatabase;
 
@@ -15,7 +14,7 @@ pub async fn get(
     app_state: &AppState,
     db_name: &str,
     table_name: &str,
-    query: Query,
+    spatial_ids: &[SpatialId],
     zoom_level_policy: &ZoomLevelPolicy,
 ) -> Result<GetDataResponse, AppError> {
     let read_txn = app_state.redb.begin_read()?;
@@ -33,7 +32,7 @@ pub async fn get(
             return Err(e);
         }
     };
-    let ids = query.process(table.max_zoom_level, zoom_level_policy)?;
+    let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
     tracing::debug!("Searching {} spatial IDs", ids.count());
 
     let mut result = Vec::new();
