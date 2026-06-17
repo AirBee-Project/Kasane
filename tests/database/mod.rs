@@ -43,10 +43,10 @@ impl DbTestApp {
 }
 
 #[tokio::test]
+/// データベースの作成と一覧取得が正常に行えるかを検証する。
 async fn test_create_and_list_database() {
     let test_app = DbTestApp::new();
 
-    // List empty
     let req = Request::builder()
         .method("GET")
         .uri("/databases")
@@ -55,7 +55,6 @@ async fn test_create_and_list_database() {
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
 
-    // Create DB
     let req = Request::builder()
         .method("POST")
         .uri("/databases")
@@ -65,7 +64,6 @@ async fn test_create_and_list_database() {
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
-    // List again
     let req = Request::builder()
         .method("GET")
         .uri("/databases")
@@ -79,10 +77,10 @@ async fn test_create_and_list_database() {
 }
 
 #[tokio::test]
+/// データベースおよび配下のテーブルが正しく削除されるかを検証する。
 async fn test_remove_database() {
     let test_app = DbTestApp::new();
 
-    // Create DB
     let req = Request::builder()
         .method("POST")
         .uri("/databases")
@@ -91,7 +89,6 @@ async fn test_remove_database() {
         .unwrap();
     test_app.app.clone().oneshot(req).await.unwrap();
 
-    // Create Table inside DB
     let req = Request::builder()
         .method("POST")
         .uri("/databases/test_db/tables")
@@ -102,7 +99,6 @@ async fn test_remove_database() {
         .unwrap();
     test_app.app.clone().oneshot(req).await.unwrap();
 
-    // Remove DB
     let req = Request::builder()
         .method("DELETE")
         .uri("/databases/test_db")
@@ -111,7 +107,6 @@ async fn test_remove_database() {
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::NO_CONTENT);
 
-    // Verify DB is gone
     let req = Request::builder()
         .method("GET")
         .uri("/databases/test_db")

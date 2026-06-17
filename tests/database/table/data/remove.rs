@@ -12,7 +12,7 @@ use crate::database::table::{
     data::common::{assert_first_entry, put_data, search_data, to_result_map},
 };
 
-/// singleIdで指定した空間IDにデータを挿入し、削除できることを検証する
+/// singleIdで指定した空間IDのデータを挿入後に正常に削除できるかを検証する。
 #[tokio::test]
 async fn test_table_data_remove_single_id() {
     let test_app = TestApp::new();
@@ -26,7 +26,6 @@ async fn test_table_data_remove_single_id() {
         "type": "spatialIds"
     });
 
-    //挿入する
     put_data(
         &test_app,
         "test_table_BOOLEAN",
@@ -36,7 +35,6 @@ async fn test_table_data_remove_single_id() {
 
     let result_json = search_data(&test_app, "test_table_BOOLEAN", &single_id_query).await;
 
-    //値が正しく挿入できたか検証する
     assert_first_entry(
         &result_json,
         true,
@@ -48,7 +46,6 @@ async fn test_table_data_remove_single_id() {
         },
     );
 
-    //削除する
     let req = Request::builder()
         .method("DELETE")
         .uri(format!(
@@ -63,19 +60,16 @@ async fn test_table_data_remove_single_id() {
 
     let response = test_app.app.clone().oneshot(req).await.unwrap();
 
-    //削除が完了する
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-    //値が削除できていることを確認する
     let result_json = search_data(&test_app, "test_table_BOOLEAN", &single_id_query).await;
     let result_map: HashMap<RawSingleId, bool> = to_result_map(&result_json);
 
-    //値は空になっている
     assert!(result_map.is_empty());
 }
 
 #[tokio::test]
-/// 親ノードが存在する領域の一部を削除したとき、その部分が正しく削除されることを検証する (Bug 3 の検証)
+/// 親ノードが存在する領域の一部を削除した際、その部分のみが正しく削除されるかを検証する。
 async fn test_table_data_remove_logical_bug() {
     let test_app = TestApp::new();
 
@@ -85,7 +79,6 @@ async fn test_table_data_remove_logical_bug() {
         .create_table("test_db", table_name, "Int", 25)
         .await;
 
-    // 1. Zoom 10 の広範な領域にデータを挿入 (これにより親ノードが作成される)
     let parent_id_query = serde_json::json!({
         "ids": [{ "z": 10, "f": 0, "x": 909, "y": 403, "type": "singleId" }],
         "type": "spatialIds"
@@ -97,12 +90,9 @@ async fn test_table_data_remove_logical_bug() {
     )
     .await;
 
-    // 挿入されたことを確認
     let result = search_data(&test_app, table_name, &parent_id_query).await;
     assert!(!to_result_map::<i64>(&result).is_empty());
 
-    // 2. その領域内の Zoom 11 の子ノード部分を削除
-    // (親ノード 10/0/909/403 の子は 11/0/1818/806, 11/0/1819/806, 11/0/1818/807, 11/0/1819/807)
     let child_id_query = serde_json::json!({
         "ids": [{ "z": 11, "f": 0, "x": 1818, "y": 806, "type": "singleId" }],
         "type": "spatialIds"
@@ -120,12 +110,9 @@ async fn test_table_data_remove_logical_bug() {
     let response = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-    // 3. 削除した子ノード部分を検索
-    // バグがある場合、削除したはずの領域にデータが再挿入されて残っている
     let result_json = search_data(&test_app, table_name, &child_id_query).await;
     let result_map: HashMap<RawSingleId, i64> = to_result_map(&result_json);
 
-    // 期待値は空だが、バグがあるとデータが残っている
     assert!(
         result_map.is_empty(),
         "Removed sub-area should be empty, but found: {:?}",
@@ -134,8 +121,7 @@ async fn test_table_data_remove_logical_bug() {
 }
 
 #[tokio::test]
-/// 存在するデータの一部のみが削除クエリの範囲に含まれる場合、
-/// 重なっている部分だけが削除され、残りのデータは維持されることを検証する
+/// 存在するデータの一部のみが削除クエリの範囲に含まれる場合、重なっている部分だけが削除されるかを検証する。
 async fn test_table_data_remove_partial_overlap() {
     let test_app = TestApp::new();
 
@@ -145,7 +131,6 @@ async fn test_table_data_remove_partial_overlap() {
         .create_table("test_db", table_name, "Int", 25)
         .await;
 
-    // 1. Z=20 の隣接する 2 つの点を挿入
     let id1 = serde_json::json!({ "z": 20, "f": 0, "x": 10, "y": 10, "type": "singleId" });
     let id2 = serde_json::json!({ "z": 20, "f": 0, "x": 11, "y": 10, "type": "singleId" });
 
@@ -160,7 +145,6 @@ async fn test_table_data_remove_partial_overlap() {
     )
     .await;
 
-    // 2. 片方 (id1) だけを削除
     let req = Request::builder()
         .method("DELETE")
         .uri(format!("/databases/test_db/tables/{}/data", table_name))
@@ -175,7 +159,6 @@ async fn test_table_data_remove_partial_overlap() {
     let response = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-    // 3. 削除した点 (id1) が消えているか確認
     let res1 = search_data(
         &test_app,
         table_name,
@@ -184,7 +167,6 @@ async fn test_table_data_remove_partial_overlap() {
     .await;
     assert!(to_result_map::<i64>(&res1).is_empty());
 
-    // 4. 削除していない点 (id2) が残っているか確認
     let res2 = search_data(
         &test_app,
         table_name,

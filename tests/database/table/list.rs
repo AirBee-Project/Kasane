@@ -8,7 +8,7 @@ use tower::ServiceExt;
 use crate::database::table::common::TestApp;
 
 #[tokio::test]
-/// 初期状態を検証する
+/// 初期状態で空のテーブル一覧が取得できることを検証する。
 async fn test_table_list_empty() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
@@ -26,13 +26,12 @@ async fn test_table_list_empty() {
     let body_bytes = response.into_body().collect().await.unwrap().to_bytes();
     let body_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
-    // 空の配列が返るはず
     assert!(body_json.is_array());
     assert_eq!(body_json.as_array().unwrap().len(), 0);
 }
 
 #[tokio::test]
-/// 2つのTableを追加する
+/// 2つのテーブルを追加し、一覧に両方が含まれていることを検証する。
 async fn test_table_list_two() {
     let test_app = TestApp::new();
 
@@ -59,14 +58,13 @@ async fn test_table_list_two() {
     let array = body_json.as_array().unwrap();
     assert_eq!(array.len(), 2);
 
-    // 順序は保証されていないかもしれないので、両方含まれているか確認する
     let names: Vec<&str> = array.iter().map(|v| v["name"].as_str().unwrap()).collect();
     assert!(names.contains(&"table_a"));
     assert!(names.contains(&"table_b"));
 }
 
 #[tokio::test]
-/// 2つのTableを追加する
+/// 3つのテーブルを追加し、一覧にすべてが含まれていることを検証する。
 async fn test_table_list_three() {
     let test_app = TestApp::new();
 
@@ -96,7 +94,6 @@ async fn test_table_list_three() {
     let array = body_json.as_array().unwrap();
     assert_eq!(array.len(), 3);
 
-    // 順序は保証されていないかもしれないので、両方含まれているか確認する
     let names: Vec<&str> = array.iter().map(|v| v["name"].as_str().unwrap()).collect();
     assert!(names.contains(&"table_a"));
     assert!(names.contains(&"table_b"));

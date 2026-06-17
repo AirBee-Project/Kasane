@@ -1,4 +1,5 @@
 #[test]
+/// OpenAPI仕様書（JSONおよびYAML）の生成が正常に行えるかを検証する。
 fn generate_openapi_spec() {
     use kasane::openapi::ApiDoc;
     use utoipa::OpenApi;

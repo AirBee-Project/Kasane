@@ -9,7 +9,7 @@ use crate::database::table::data::common::{
     assert_first_entry, put_data, search_data, to_result_map,
 };
 
-/// singleIdで指定した空間IDにデータを挿入し、同じ場所から正しく取得できるか検証する
+/// singleIdで指定した空間IDにデータを挿入し、同じ場所から正しく取得できるかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_single_id() {
     let test_app = TestApp::new();
@@ -44,7 +44,7 @@ async fn test_table_data_insert_single_id() {
     );
 }
 
-/// singleIdで指定した空間IDにtableと型が一致しない値を挿入し、エラーが帰ってくることを検証する
+/// singleIdで指定した空間IDに、テーブルの型と一致しない値を挿入した際にエラーが返るかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_single_id_error() {
     let test_app = TestApp::new();
@@ -72,11 +72,10 @@ async fn test_table_data_insert_single_id_error() {
 
     let response = test_app.app.clone().oneshot(req).await.unwrap();
 
-    //エラーが帰ってくる
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
-/// 間違ったSingleIdを入力したときにエラーが帰ってくることを確認する
+/// 不正なsingleIdを入力した際にエラーが返るかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_single_id_logic_error() {
     let test_app = TestApp::new();
@@ -104,11 +103,10 @@ async fn test_table_data_insert_single_id_logic_error() {
 
     let response = test_app.app.clone().oneshot(req).await.unwrap();
 
-    //エラーが帰ってくる
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
-/// 2つのSingleIdを挿入したときに正しく挿入できることを検証する
+/// 2つのsingleIdに対してそれぞれデータが正しく挿入できるかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_two_single_id() {
     let test_app = TestApp::new();
@@ -117,7 +115,6 @@ async fn test_table_data_insert_two_single_id() {
         .create_table("test_db", "test_table", "Int", 25)
         .await;
 
-    //1つ目のSingleIdを挿入する
     let single_id_query_1 = serde_json::json!({
         "ids": [{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }],
         "type": "spatialIds"
@@ -130,7 +127,6 @@ async fn test_table_data_insert_two_single_id() {
     )
     .await;
 
-    //2つ目のSingleIdを挿入する
     let single_id_query_2 = serde_json::json!({
         "ids": [{ "z": 20, "f": -1, "x": 931386, "y": 412905, "type": "singleId" }],
         "type": "spatialIds"
@@ -169,7 +165,7 @@ async fn test_table_data_insert_two_single_id() {
     );
 }
 
-/// 同じSingleIdに値を挿入して上書きできていることを検証する
+/// 同じsingleIdに対してデータを挿入した場合、値が正しく上書きされるかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_single_id_overwrite() {
     let test_app = TestApp::new();
@@ -178,7 +174,6 @@ async fn test_table_data_insert_single_id_overwrite() {
         .create_table("test_db", "test_table", "Int", 25)
         .await;
 
-    //1つ目のSingleIdを挿入する
     let single_id_query = serde_json::json!({
         "ids": [{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }],
         "type": "spatialIds"
@@ -191,7 +186,6 @@ async fn test_table_data_insert_single_id_overwrite() {
     )
     .await;
 
-    //1つ目のSingleIdが正しく入力されていることを検証する
     let result_json = search_data(&test_app, "test_table", &single_id_query).await;
 
     assert_first_entry(
@@ -205,7 +199,6 @@ async fn test_table_data_insert_single_id_overwrite() {
         },
     );
 
-    //2つ目のSingleIdを挿入する
     put_data(
         &test_app,
         "test_table",
@@ -213,7 +206,6 @@ async fn test_table_data_insert_single_id_overwrite() {
     )
     .await;
 
-    //2つ目のSingleIdが正しく入力されていることを検証する
     let result_json = search_data(&test_app, "test_table", &single_id_query).await;
 
     assert_first_entry(
@@ -228,7 +220,7 @@ async fn test_table_data_insert_single_id_overwrite() {
     );
 }
 
-/// 同じRangeIdに値を挿入して上書きできていることを検証する
+/// 同じrangeIdに対してデータを挿入した場合、値が正しく上書きされるかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_range_id_overwrite() {
     let test_app = TestApp::new();
@@ -237,7 +229,6 @@ async fn test_table_data_insert_range_id_overwrite() {
         .create_table("test_db", "test_table_text", "Text", 25)
         .await;
 
-    //1つ目のRangeIdを挿入する
     let range_id_query = serde_json::json!({
         "ids": [{ "z": 18, "f": [0,0], "x": [232846,232850], "y": [103226,103240], "type": "rangeId" }],
         "type": "spatialIds"
@@ -250,7 +241,6 @@ async fn test_table_data_insert_range_id_overwrite() {
     )
     .await;
 
-    //1つ目のRangeIdに値が挿入できていることを確認する
     let result_json = search_data(&test_app, "test_table_text", &range_id_query).await;
     let result_map: std::collections::HashMap<RawSingleId, String> = to_result_map(&result_json);
 
@@ -273,7 +263,6 @@ async fn test_table_data_insert_range_id_overwrite() {
 
     assert_eq!(answer, result);
 
-    //2つ目のRangeIdを挿入する
     put_data(
         &test_app,
         "test_table_text",
@@ -304,7 +293,7 @@ async fn test_table_data_insert_range_id_overwrite() {
     assert_eq!(answer, result);
 }
 
-/// rangeIdで指定した範囲にデータを挿入し、一部・全体それぞれが正しく取得できるか検証する
+/// rangeIdで指定した範囲にデータを挿入し、一部・全体それぞれが正しく取得できるかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_range_id() {
     let test_app = TestApp::new();
@@ -325,7 +314,6 @@ async fn test_table_data_insert_range_id() {
     )
     .await;
 
-    // 範囲内の一点だけを取得して検証する
     let single_id_query = serde_json::json!({
         "ids": [{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }],
         "type": "spatialIds"
@@ -343,14 +331,11 @@ async fn test_table_data_insert_range_id() {
         },
     );
 
-    // 範囲全体を取得して、件数とSingleIdへの分解結果を検証する
     let result_json = search_data(&test_app, "test_table", &range_id_query).await;
     let result_map = to_result_map::<i64>(&result_json);
 
-    // 最適配置のSingleIdに分解すれば917個になるはず
     assert_eq!(result_map.len(), 917);
 
-    // 各エントリの値が正しく、SpatialChildrenへの展開がanswerと一致するか検証する
     let mut answer: Vec<SingleId> = RangeId::new(20, [0, 100], [931380, 931386], [412900, 412905])
         .unwrap()
         .into_single_ids()
@@ -373,7 +358,7 @@ async fn test_table_data_insert_range_id() {
     assert_eq!(answer, result);
 }
 
-/// Insertを用いて一部の値の上書きを行ったときに、新しい値と元の値が正しい状態を保つことを検証する
+/// Insertを用いて一部の値の上書きを行った際、新しい値と元の値が正しい状態を保つかを検証する。
 #[tokio::test]
 async fn test_table_data_overload_insert() {
     let test_app = TestApp::new();
@@ -409,10 +394,8 @@ async fn test_table_data_overload_insert() {
     let result_json = search_data(&test_app, "test_table", &query1).await;
     let result_map = to_result_map::<String>(&result_json);
 
-    //SingleIdの個数は8個なはず
     assert_eq!(result_map.len(), 8);
 
-    //上書きした部分
     let overload_single_id = RawSingleId {
         z: 21,
         f: 0,
@@ -430,7 +413,7 @@ async fn test_table_data_overload_insert() {
 }
 
 #[tokio::test]
-/// 64個のノード（Zoom 20）を順次挿入したとき、再帰的にマージされて1つのZoom 18ノードになることを検証する (Bug 5 の検証)
+/// 64個のノード（Zoom 20）を順次挿入した際、再帰的にマージされて1つのZoom 18ノードになるかを検証する。
 async fn test_table_data_recursive_merge() {
     let test_app = TestApp::new();
 
@@ -440,8 +423,6 @@ async fn test_table_data_recursive_merge() {
         .create_table("test_db", table_name, "Int", 25)
         .await;
 
-    // Zoom 20 の (f:0..4, x:0..4, y:0..4) の計 64 個のノードを挿入
-    // Octree なので 2x2x2 = 8 個で 1 段上がり、4x4x4 = 64 個で 2 段上がるはず
     for f in 0..4 {
         for y in 0..4 {
             for x in 0..4 {
@@ -459,7 +440,6 @@ async fn test_table_data_recursive_merge() {
         }
     }
 
-    // 検索して、結果が1つの Zoom 18 ノードになっているか確認
     let search_query = serde_json::json!({
         "ids": [{ "z": 18, "f": 0, "x": 0, "y": 0, "type": "singleId" }],
         "type": "spatialIds"
@@ -467,7 +447,6 @@ async fn test_table_data_recursive_merge() {
     let result_json = search_data(&test_app, table_name, &search_query).await;
     let result_map = to_result_map::<i64>(&result_json);
 
-    // 再帰的マージが機能していれば、1つの Z=18 ノードになっているはず
     assert_eq!(
         result_map.len(),
         1,
@@ -484,7 +463,7 @@ async fn test_table_data_recursive_merge() {
 }
 
 #[tokio::test]
-/// 異なるレイヤー間で同じ座標にデータを挿入しても、互いに干渉しないことを検証する
+/// 異なるテーブル間で同じ座標にデータを挿入しても、互いに干渉しないかを検証する。
 async fn test_table_data_isolation() {
     let test_app = TestApp::new();
 
@@ -500,14 +479,12 @@ async fn test_table_data_isolation() {
         "type": "spatialIds"
     });
 
-    // Table 1 に挿入
     put_data(
         &test_app,
         table1,
         &serde_json::json!({ "value": 1, "query": query }),
     )
     .await;
-    // Table 2 には別の値を挿入
     put_data(
         &test_app,
         table2,
@@ -515,7 +492,6 @@ async fn test_table_data_isolation() {
     )
     .await;
 
-    // それぞれ正しく取得できるか
     let res1 = search_data(&test_app, table1, &query).await;
     assert_first_entry(
         &res1,
@@ -542,12 +518,11 @@ async fn test_table_data_isolation() {
 }
 
 #[tokio::test]
-/// max_zoom_level を超えるズームレベルでの挿入がエラーになることを検証する
+/// max_zoom_levelを超えるズームレベルでの挿入がエラーになるかを検証する。
 async fn test_table_data_max_zoom_enforcement() {
     let test_app = TestApp::new();
 
     let table_name = "low_zoom_table";
-    // max_zoom_level を 10 に設定
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", table_name, "Int", 10)
@@ -569,13 +544,11 @@ async fn test_table_data_max_zoom_enforcement() {
         .unwrap();
 
     let response = test_app.app.clone().oneshot(req).await.unwrap();
-    // ズームレベル制限違反で 400 Bad Request を期待
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
-/// 広範な親ノード(Z=18)の中に、ピンポイントな子ノード(Z=20)を挿入した際、
-/// 親が適切に分割され、かつ値の整合性が保たれることを検証する
+/// 広範な親ノード内にピンポイントな子ノードを挿入した際、親が適切に分割され値の整合性が保たれるかを検証する。
 async fn test_table_data_deep_split() {
     let test_app = TestApp::new();
 
@@ -585,7 +558,6 @@ async fn test_table_data_deep_split() {
         .create_table("test_db", table_name, "Int", 25)
         .await;
 
-    // 1. Z=18 の広範な領域を値 100 で埋める
     let parent_query = serde_json::json!({
         "ids": [{ "z": 18, "f": 0, "x": 0, "y": 0, "type": "singleId" }],
         "type": "spatialIds"
@@ -597,7 +569,6 @@ async fn test_table_data_deep_split() {
     )
     .await;
 
-    // 2. その中の 1 点 (Z=20) だけを値 200 で上書き
     let child_query = serde_json::json!({
         "ids": [{ "z": 20, "f": 0, "x": 0, "y": 0, "type": "singleId" }],
         "type": "spatialIds"
@@ -609,7 +580,6 @@ async fn test_table_data_deep_split() {
     )
     .await;
 
-    // 3. 上書きした点が 200 になっているか
     let res_child = search_data(&test_app, table_name, &child_query).await;
     assert_first_entry(
         &res_child,
@@ -622,7 +592,6 @@ async fn test_table_data_deep_split() {
         },
     );
 
-    // 4. 隣の点 (Z=20) は元の値 100 を維持しているか
     let sibling_query = serde_json::json!({
         "ids": [{ "z": 20, "f": 0, "x": 1, "y": 0, "type": "singleId" }],
         "type": "spatialIds"
