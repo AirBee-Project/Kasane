@@ -34,7 +34,7 @@ impl PermissionTestApp {
         }
     }
 
-    /// 現在の DB 状態（root の uid・トークン世代）に基づく有効な root トークンを発行する。
+    /// 現在のDB状態に基づく有効なrootトークンを発行する。
     fn root_token(&self) -> String {
         kasane::services::auth::generate_jwt(&self.app_state, "root").unwrap()
     }
@@ -46,7 +46,6 @@ async fn create_user_and_token(
     username: &str,
     is_global_admin: bool,
 ) -> String {
-    // 1. Create User
     let req = Request::builder()
         .method("POST")
         .uri("/users")
@@ -60,7 +59,6 @@ async fn create_user_and_token(
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
-    // 2. Login to get token
     let req = Request::builder()
         .method("POST")
         .uri("/auth/login")
@@ -95,7 +93,7 @@ async fn grant_privilege(
     assert_eq!(res.status(), StatusCode::NO_CONTENT);
 }
 
-/// レスポンスの (status, error code) を取り出す
+/// レスポンスからステータスコードとエラーコードを抽出する。
 async fn status_and_code(res: axum::response::Response) -> (StatusCode, String) {
     let status = res.status();
     let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
@@ -105,6 +103,7 @@ async fn status_and_code(res: axum::response::Response) -> (StatusCode, String) 
 }
 
 #[tokio::test]
+/// 認証・認可に関する各種エラーコードが正しく構造化されて返されるかを検証する。
 async fn test_auth_error_codes_are_structured() {
     let test_app = PermissionTestApp::new();
     let root_token = test_app.root_token();
@@ -202,6 +201,7 @@ async fn test_auth_error_codes_are_structured() {
 }
 
 #[tokio::test]
+/// グローバル管理者がデータベースを作成できるかを検証する。
 async fn test_global_admin_privileges() {
     let test_app = PermissionTestApp::new();
     let root_token = test_app.root_token();
@@ -221,6 +221,7 @@ async fn test_global_admin_privileges() {
 }
 
 #[tokio::test]
+/// Manage権限を持つユーザーがDB作成はできず、テーブル作成はできるかを検証する。
 async fn test_manage_privileges() {
     let test_app = PermissionTestApp::new();
     let root_token = test_app.root_token();
@@ -271,6 +272,7 @@ async fn test_manage_privileges() {
 }
 
 #[tokio::test]
+/// Write権限を持つユーザーがテーブル作成はできず、データ挿入はできるかを検証する。
 async fn test_write_privileges() {
     let test_app = PermissionTestApp::new();
     let root_token = test_app.root_token();
@@ -325,6 +327,7 @@ async fn test_write_privileges() {
 }
 
 #[tokio::test]
+/// Read権限を持つユーザーがデータ挿入はできず、データ取得はできるかを検証する。
 async fn test_read_privileges() {
     let test_app = PermissionTestApp::new();
     let root_token = test_app.root_token();
@@ -386,6 +389,7 @@ async fn test_read_privileges() {
 }
 
 #[tokio::test]
+/// データベース一覧および詳細取得が、ユーザーの権限に応じて正しくフィルタリングされるかを検証する。
 async fn test_database_list_and_info_authorization() {
     let test_app = PermissionTestApp::new();
     let root_token = test_app.root_token();
@@ -461,6 +465,7 @@ async fn test_database_list_and_info_authorization() {
 }
 
 #[tokio::test]
+/// 権限を持たないユーザーがデータベース内のデータにアクセスできないかを検証する。
 async fn test_no_privileges() {
     let test_app = PermissionTestApp::new();
     let root_token = test_app.root_token();
@@ -500,7 +505,7 @@ async fn test_no_privileges() {
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
 }
 
-/// 指定ユーザーが /databases にアクセスできるか（=トークンが有効か）を返す
+/// 指定ユーザーのトークンが有効か（データベース一覧を取得できるか）を検証する。
 async fn token_is_valid(app: &axum::Router, token: &str) -> bool {
     let req = Request::builder()
         .method("GET")
@@ -513,6 +518,7 @@ async fn token_is_valid(app: &axum::Router, token: &str) -> bool {
 }
 
 #[tokio::test]
+/// パスワード変更時に、既存のセッション（トークン）が失効し再ログインが要求されるかを検証する。
 async fn test_password_change_revokes_tokens() {
     let test_app = PermissionTestApp::new();
     let root_token = test_app.root_token();
@@ -535,6 +541,7 @@ async fn test_password_change_revokes_tokens() {
 }
 
 #[tokio::test]
+/// 管理者権限の剥奪時にトークンが失効し、rootの権限は変更できないことを検証する。
 async fn test_admin_demotion_and_root_protection() {
     let test_app = PermissionTestApp::new();
     let root_token = test_app.root_token();
@@ -611,6 +618,7 @@ async fn test_admin_demotion_and_root_protection() {
 }
 
 #[tokio::test]
+/// ユーザー削除後に同名ユーザーを再作成した場合、旧ユーザーのトークンが無効になるかを検証する。
 async fn test_username_reuse_rejects_old_token() {
     let test_app = PermissionTestApp::new();
     let root_token = test_app.root_token();

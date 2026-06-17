@@ -3,7 +3,7 @@ use crate::database::table::data::common::{put_data, search_data, to_result_map}
 use kasane::models::spatial_id::RawSingleId;
 
 #[tokio::test]
-/// 複数の空間IDを一度に指定して検索できることを検証する
+/// 複数の空間IDを一度に指定してデータを検索・取得できることを検証する。
 async fn test_table_data_get_multiple() {
     let test_app = TestApp::new();
 
@@ -13,7 +13,6 @@ async fn test_table_data_get_multiple() {
         .create_table("test_db", table_name, "Int", 25)
         .await;
 
-    // 2つの異なる場所にデータを挿入
     let id1 = RawSingleId {
         z: 20,
         f: 0,
@@ -47,7 +46,6 @@ async fn test_table_data_get_multiple() {
     )
     .await;
 
-    // 2つ同時に検索
     let query = serde_json::json!({
         "ids": [
             { "z": 20, "f": 0, "x": 10, "y": 10, "type": "singleId" },

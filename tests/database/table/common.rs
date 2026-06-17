@@ -40,7 +40,7 @@ impl TestApp {
         }
     }
 
-    /// テスト用にデータベースを初期作成する
+    /// テスト用のデータベースを作成する。
     pub async fn create_database(&self, name: &str) {
         let create_body = serde_json::json!({
             "name": name,

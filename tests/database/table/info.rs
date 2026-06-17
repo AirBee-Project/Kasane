@@ -8,17 +8,15 @@ use tower::ServiceExt;
 use crate::database::table::common::TestApp;
 
 #[tokio::test]
-/// 正しく情報を取得できているかを検証する
+/// テーブル情報が正しく取得できることを検証する。
 async fn test_table_info_success() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
 
-    // 事前にレイヤーを作成
     test_app
         .create_table("test_db", "info_target_table", "Float", 15)
         .await;
 
-    // レイヤー情報の取得リクエスト
     let req = Request::builder()
         .method("GET")
         .uri("/databases/test_db/tables/info_target_table")
@@ -38,17 +36,15 @@ async fn test_table_info_success() {
 }
 
 #[tokio::test]
-/// 存在しないレイヤーの情報が取得できないことを確認する
+/// 存在しないテーブルの情報取得リクエストが404エラーとなることを検証する。
 async fn test_table_info_not_found() {
     let test_app = TestApp::new();
 
-    // ダミーのレイヤーを作成
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "example_table", "Int", 25)
         .await;
 
-    // 存在しないレイヤーの情報を取得しようとする
     let req = Request::builder()
         .method("GET")
         .uri("/databases/test_db/tables/non_existent_table")
@@ -57,6 +53,5 @@ async fn test_table_info_not_found() {
 
     let response = test_app.app.clone().oneshot(req).await.unwrap();
 
-    // 404 Not Found が返されることを確認
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
