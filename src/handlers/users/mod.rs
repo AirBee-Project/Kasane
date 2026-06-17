@@ -106,6 +106,10 @@ pub async fn update_password(
     if !auth_user.user.is_global_admin && auth_user.user.username != username {
         return Err(AuthError::NotSelfOrAdmin.into());
     }
+
+    if username == "root" && auth_user.user.username != "root" {
+        return Err(AuthError::RootProtected.into());
+    }
     users_service::update_password(&app_state, &username, payload).await?;
     Ok(StatusCode::NO_CONTENT)
 }

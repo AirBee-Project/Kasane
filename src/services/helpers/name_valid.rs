@@ -55,7 +55,7 @@ pub fn name_valid(name: &str) -> Result<(), AppError> {
     }
 
     // 予約語
-    if RESERVED.contains(&name) {
+    if RESERVED.contains(&name.to_lowercase().as_str()) {
         return Err(AppError::InvalidName {
             reason: format!("'{}' is reserved", name),
         });
