@@ -31,7 +31,7 @@ pub async fn insert(
     let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
 
     tracing::debug!("Inserting {} spatial IDs", ids.count());
-    db.data_insert(db_name, table_name, ids, &value)?;
+    db.data_insert(table.id, ids, &value)?;
     db.commit()?;
     Ok(())
 }

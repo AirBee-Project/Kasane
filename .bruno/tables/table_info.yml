@@ -50,7 +50,8 @@ examples:
           {
             "name": "example_table",
             "data_type": "Text",
-            "max_zoom_level": 25
+            "max_zoom_level": 25,
+            "count": 0
           }
   - name: 404 Response
     description: Table not found

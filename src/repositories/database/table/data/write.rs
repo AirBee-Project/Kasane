@@ -13,21 +13,10 @@ impl KasaneDbWrite {
     /// 空間IDに対して値を割り当てる
     pub fn data_insert(
         &self,
-        db_name: &str,
-        table_name: &str,
+        table_id: uuid::Uuid,
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
-        //存在検証
-        let table_meta = match self.table_info(db_name, table_name)? {
-            Some(v) => v,
-            None => {
-                return Err(AppError::TableNotFound {
-                    name: table_name.to_string(),
-                });
-            }
-        };
-
         let mut redb_sppatialid_to_value = self.write_txn.open_table(SPATIALID_TO_VALUE)?;
 
         let mut should_remove: Vec<SingleId> = Vec::new();
@@ -36,7 +25,7 @@ impl KasaneDbWrite {
         for single_id in ids.iter_single_ids() {
             //single_idと完全に等しい位置を調べる
             if let Some(access_guard) =
-                Self::overlap_equal(&redb_sppatialid_to_value, table_meta.id, &single_id)?
+                Self::overlap_equal(&redb_sppatialid_to_value, table_id, &single_id)?
             {
                 if access_guard.value() == data {
                     continue;
@@ -49,7 +38,7 @@ impl KasaneDbWrite {
 
             //single_idの親を調べていく
             if let Some((parent_single_id, access_guard)) =
-                Self::overlap_parent(&redb_sppatialid_to_value, table_meta.id, &single_id)?
+                Self::overlap_parent(&redb_sppatialid_to_value, table_id, &single_id)?
             {
                 if access_guard.value() == data {
                     //値が等しいので何もしなくてよい
@@ -67,7 +56,7 @@ impl KasaneDbWrite {
 
             //single_idの子を全て削除する
             if let Some(children_single_ids) =
-                Self::overlap_children(&redb_sppatialid_to_value, table_meta.id, &single_id)?
+                Self::overlap_children(&redb_sppatialid_to_value, table_id, &single_id)?
             {
                 should_remove.extend(children_single_ids);
             }
@@ -82,7 +71,7 @@ impl KasaneDbWrite {
             Self::remove(
                 &mut redb_sppatialid_to_value,
                 &mut redb_value_to_spatialid,
-                table_meta.id,
+                table_id,
                 &single_id,
             )?;
         }
@@ -91,7 +80,7 @@ impl KasaneDbWrite {
             Self::insert_and_merge(
                 &mut redb_sppatialid_to_value,
                 &mut redb_value_to_spatialid,
-                table_meta.id,
+                table_id,
                 &single_id,
                 &value,
             )?;
@@ -101,21 +90,10 @@ impl KasaneDbWrite {
     }
     pub fn data_upsert(
         &self,
-        db_name: &str,
-        table_name: &str,
+        table_id: uuid::Uuid,
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
-        //存在検証
-        let table_meta = match self.table_info(db_name, table_name)? {
-            Some(v) => v,
-            None => {
-                return Err(AppError::TableNotFound {
-                    name: table_name.to_string(),
-                });
-            }
-        };
-
         let mut redb_sppatialid_to_value = self.write_txn.open_table(SPATIALID_TO_VALUE)?;
 
         let mut should_insert: Vec<(SingleId, Vec<u8>)> = Vec::new();
@@ -124,7 +102,7 @@ impl KasaneDbWrite {
         for single_id in ids.iter_single_ids() {
             //single_idと完全に等しい位置を調べる
             if let Some(access_guard) =
-                Self::overlap_equal(&redb_sppatialid_to_value, table_meta.id, &single_id)?
+                Self::overlap_equal(&redb_sppatialid_to_value, table_id, &single_id)?
             {
                 if access_guard.value() == data {
                     continue;
@@ -133,7 +111,7 @@ impl KasaneDbWrite {
 
             //single_idの親を調べていく
             if let Some(children_single_ids) =
-                Self::overlap_children(&redb_sppatialid_to_value, table_meta.id, &single_id)?
+                Self::overlap_children(&redb_sppatialid_to_value, table_id, &single_id)?
             {
                 let mut children_set = SpatialIdSet::new();
                 let mut parent_set = SpatialIdSet::new();
@@ -165,7 +143,7 @@ impl KasaneDbWrite {
             Self::insert_and_merge(
                 &mut redb_sppatialid_to_value,
                 &mut redb_value_to_spatialid,
-                table_meta.id,
+                table_id,
                 &single_id,
                 &value,
             )?;
@@ -173,22 +151,7 @@ impl KasaneDbWrite {
 
         Ok(())
     }
-    pub fn data_remove(
-        &self,
-        db_name: &str,
-        table_name: &str,
-        ids: SpatialIdSet,
-    ) -> Result<(), AppError> {
-        //存在検証
-        let table_meta = match self.table_info(db_name, table_name)? {
-            Some(v) => v,
-            None => {
-                return Err(AppError::TableNotFound {
-                    name: table_name.to_string(),
-                });
-            }
-        };
-
+    pub fn data_remove(&self, table_id: uuid::Uuid, ids: SpatialIdSet) -> Result<(), AppError> {
         let mut redb_sppatialid_to_value = self.write_txn.open_table(SPATIALID_TO_VALUE)?;
 
         let mut should_remove: Vec<SingleId> = Vec::new();
@@ -196,15 +159,14 @@ impl KasaneDbWrite {
 
         for single_id in ids.iter_single_ids() {
             //single_idと完全に等しい位置を調べる
-            if Self::overlap_equal(&redb_sppatialid_to_value, table_meta.id, &single_id)?.is_some()
-            {
+            if Self::overlap_equal(&redb_sppatialid_to_value, table_id, &single_id)?.is_some() {
                 should_remove.push(single_id);
                 continue;
             };
 
             //single_idの親を調べていく
             if let Some((parent_single_id, access_guard)) =
-                Self::overlap_parent(&redb_sppatialid_to_value, table_meta.id, &single_id)?
+                Self::overlap_parent(&redb_sppatialid_to_value, table_id, &single_id)?
             {
                 let overlap_data = access_guard.value().to_vec();
                 for fragment_single_id in parent_single_id.difference(&single_id) {
@@ -216,7 +178,7 @@ impl KasaneDbWrite {
 
             //single_idの子を全て削除する
             if let Some(children_single_ids) =
-                Self::overlap_children(&redb_sppatialid_to_value, table_meta.id, &single_id)?
+                Self::overlap_children(&redb_sppatialid_to_value, table_id, &single_id)?
             {
                 should_remove.extend(children_single_ids);
             }
@@ -228,7 +190,7 @@ impl KasaneDbWrite {
             Self::remove(
                 &mut redb_sppatialid_to_value,
                 &mut redb_value_to_spatialid,
-                table_meta.id,
+                table_id,
                 &single_id,
             )?;
         }
@@ -237,7 +199,7 @@ impl KasaneDbWrite {
             Self::insert_and_merge(
                 &mut redb_sppatialid_to_value,
                 &mut redb_value_to_spatialid,
-                table_meta.id,
+                table_id,
                 &single_id,
                 &value,
             )?;

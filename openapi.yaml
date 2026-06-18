@@ -732,6 +732,7 @@ components:
       - name
       - data_type
       - max_zoom_level
+      - count
       properties:
         name:
           type: string
@@ -742,6 +743,11 @@ components:
           type: integer
           format: int32
           example: 25
+          minimum: 0
+        count:
+          type: integer
+          format: int64
+          example: 100
           minimum: 0
     TableListResponse:
       type: array
