@@ -5,12 +5,12 @@ use crate::{
 use heed::BytesDecode;
 
 pub struct KasaneUsersRead<'a> {
-    read_txn: heed::RoTxn<'a, heed::WithTls>,
+    read_txn: heed::RoTxn<'a, heed::WithoutTls>,
     db: &'a crate::db_init::AppDb,
 }
 
 impl<'a> KasaneUsersRead<'a> {
-    pub fn new(read_txn: heed::RoTxn<'a, heed::WithTls>, db: &'a crate::db_init::AppDb) -> Self {
+    pub fn new(read_txn: heed::RoTxn<'a, heed::WithoutTls>, db: &'a crate::db_init::AppDb) -> Self {
         Self { read_txn, db }
     }
 

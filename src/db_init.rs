@@ -1,5 +1,5 @@
 use heed::types::*;
-use heed::{Database, Env, EnvOpenOptions};
+use heed::{Database, Env, EnvFlags, EnvOpenOptions};
 
 use crate::models::users::UserMetadata;
 use crate::models::{database::DatabaseMetadata, database::table::TableMetadata};
@@ -138,7 +138,7 @@ impl<'a> heed::BytesDecode<'a> for UserIdAndDbId {
 
 #[derive(Clone)]
 pub struct AppDb {
-    pub env: Env,
+    pub env: Env<heed::WithoutTls>,
     pub databases: Database<Str, SerdeBincode<DatabaseMetadata>>,
     pub tables: Database<DbIdAndName, SerdeBincode<TableMetadata>>,
     pub table_id_index: Database<SerdeBincode<[u8; 16]>, Unit>,
@@ -158,15 +158,25 @@ pub fn initialize_database(path: &str) -> AppDb {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(10 * 1024 * 1024 * 1024);
 
+    // ランダムアクセス主体でワーキングセットが RAM を超える場合、OS の readahead が
+    // ページキャッシュを汚して逆効果になることがある。その際は環境変数で無効化できる
+    // （逐次レンジスキャン主体のワークロードでは付けない方が速いので既定は無効）。
+    let no_readahead = std::env::var("KASANE_LMDB_NO_READAHEAD")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
     let env = unsafe {
-        EnvOpenOptions::new()
-            .map_size(map_size)
-            .max_dbs(10)
-            .open(path)
-            .unwrap_or_else(|e| {
-                tracing::error!("Failed to open heed Env at {}: {}", path, e);
-                panic!("Failed to open heed Env: {}", e);
-            })
+        // TLS を無効化し、read トランザクションをスレッド間で共有可能にする
+        // （1つの読みスナップショットを rayon の複数ワーカーから並列に読む）。
+        let mut opts = EnvOpenOptions::new().read_txn_without_tls();
+        opts.map_size(map_size).max_dbs(10);
+        if no_readahead {
+            opts.flags(EnvFlags::NO_READ_AHEAD);
+        }
+        opts.open(path).unwrap_or_else(|e| {
+            tracing::error!("Failed to open heed Env at {}: {}", path, e);
+            panic!("Failed to open heed Env: {}", e);
+        })
     };
 
     let mut write_txn = env.write_txn().unwrap();

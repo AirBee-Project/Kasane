@@ -34,9 +34,13 @@ pub async fn get(
     let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
     tracing::debug!("Searching {} spatial IDs", ids.count());
 
-    let mut result = Vec::new();
-    for (single_id, value) in db.data_get(table.id, ids)? {
-        let json_value = restore_value(table.data_type, &value)?;
+    // 値の復元はリポジトリの txn スコープ内・並列ワーカー内で行う
+    // （生バイト列をコピーせず、その場で JSON 値へ復元する）。
+    let data_type = table.data_type;
+    let decoded = db.data_get(table.id, ids, |bytes| restore_value(data_type, bytes))?;
+
+    let mut result = Vec::with_capacity(decoded.len());
+    for (single_id, json_value) in decoded {
         result.push(SpatialData {
             id: RawSingleId {
                 z: single_id.z(),

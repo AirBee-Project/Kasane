@@ -24,6 +24,7 @@ jsonwebtoken = { version = "10.4.0", features = ["rust_crypto"] }
 rand = "0.10.1"
 rand_core = { version = "0.6.4", features = ["getrandom"] }
 heed = "0.22.1"
+rayon = "1.10"
 
 [dev-dependencies]
 http-body-util = "0.1.3"

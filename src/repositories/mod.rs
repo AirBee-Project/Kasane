@@ -6,12 +6,12 @@ use crate::models::{database::DatabaseMetadata, database::table::TableMetadata};
 use std::collections::HashMap;
 
 pub struct KasaneDbRead<'a> {
-    pub read_txn: heed::RoTxn<'a, heed::WithTls>,
+    pub read_txn: heed::RoTxn<'a, heed::WithoutTls>,
     pub db: &'a crate::db_init::AppDb,
 }
 
 impl<'a> KasaneDbRead<'a> {
-    pub fn new(read_txn: heed::RoTxn<'a, heed::WithTls>, db: &'a crate::db_init::AppDb) -> Self {
+    pub fn new(read_txn: heed::RoTxn<'a, heed::WithoutTls>, db: &'a crate::db_init::AppDb) -> Self {
         Self { read_txn, db }
     }
 }
