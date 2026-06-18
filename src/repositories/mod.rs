@@ -2,29 +2,32 @@ pub mod database;
 pub mod users;
 
 use crate::models::{database::DatabaseMetadata, database::table::TableMetadata};
-use redb::{ReadTransaction, WriteTransaction};
+
 use std::collections::HashMap;
 
-pub struct KasaneDbRead {
-    pub read_txn: ReadTransaction,
+pub struct KasaneDbRead<'a> {
+    pub read_txn: heed::RoTxn<'a, heed::WithTls>,
+    pub db: &'a crate::db_init::AppDb,
 }
 
-impl KasaneDbRead {
-    pub fn new(read_txn: ReadTransaction) -> Self {
-        Self { read_txn }
+impl<'a> KasaneDbRead<'a> {
+    pub fn new(read_txn: heed::RoTxn<'a, heed::WithTls>, db: &'a crate::db_init::AppDb) -> Self {
+        Self { read_txn, db }
     }
 }
 
-pub struct KasaneDbWrite {
-    pub write_txn: WriteTransaction,
+pub struct KasaneDbWrite<'a> {
+    pub write_txn: heed::RwTxn<'a>,
+    pub db: &'a crate::db_init::AppDb,
     pub database_caches: HashMap<String, DatabaseMetadata>,
     pub table_caches: HashMap<(uuid::Uuid, String), TableMetadata>,
 }
 
-impl KasaneDbWrite {
-    pub fn new(write_txn: WriteTransaction) -> Self {
+impl<'a> KasaneDbWrite<'a> {
+    pub fn new(write_txn: heed::RwTxn<'a>, db: &'a crate::db_init::AppDb) -> Self {
         Self {
             write_txn,
+            db,
             database_caches: HashMap::new(),
             table_caches: HashMap::new(),
         }
@@ -36,7 +39,7 @@ impl KasaneDbWrite {
     }
 
     pub fn abort(self) -> Result<(), crate::error::AppError> {
-        self.write_txn.abort()?;
+        self.write_txn.abort();
         Ok(())
     }
 }

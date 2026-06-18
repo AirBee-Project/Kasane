@@ -6,7 +6,6 @@ use crate::{
     error::{AppError, AuthError},
     services::auth::verify_jwt,
 };
-use redb::ReadableDatabase;
 
 #[derive(Clone)]
 pub struct AuthUser {
@@ -39,8 +38,8 @@ pub async fn require_auth(
     let user = match user_opt {
         Some(u) => u,
         None => {
-            let read_txn = app_state.redb.begin_read()?;
-            let repo = crate::repositories::users::KasaneUsersRead::new(read_txn);
+            let read_txn = app_state.db.env.read_txn()?;
+            let repo = crate::repositories::users::KasaneUsersRead::new(read_txn, &app_state.db);
             let user = repo
                 .get_user(&claims.sub)?
                 .ok_or(AppError::Auth(AuthError::TokenRevoked))?;
@@ -84,8 +83,8 @@ pub async fn check_privilege(
     }
 
     let role = {
-        let read_txn = app_state.redb.begin_read()?;
-        let repo = crate::repositories::users::KasaneUsersRead::new(read_txn);
+        let read_txn = app_state.db.env.read_txn()?;
+        let repo = crate::repositories::users::KasaneUsersRead::new(read_txn, &app_state.db);
         repo.get_privilege(auth_user.user.id.into_bytes(), db_name)?
     };
 

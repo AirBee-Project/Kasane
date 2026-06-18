@@ -14,8 +14,8 @@ pub async fn insert(
     value: serde_json::Value,
     zoom_level_policy: &ZoomLevelPolicy,
 ) -> Result<(), AppError> {
-    let write_txn = app_state.redb.begin_write()?;
-    let db = KasaneDbWrite::new(write_txn);
+    let write_txn = app_state.db.env.write_txn()?;
+    let mut db = KasaneDbWrite::new(write_txn, &app_state.db);
 
     let table = match db.table_info(db_name, table_name)? {
         Some(v) => v,

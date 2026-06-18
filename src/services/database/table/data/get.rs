@@ -8,7 +8,6 @@ use crate::{
     repositories::KasaneDbRead,
     services::helpers::{spatial_ids::process_spatial_ids, value::restore_value},
 };
-use redb::ReadableDatabase;
 
 pub async fn get(
     app_state: &AppState,
@@ -17,8 +16,8 @@ pub async fn get(
     spatial_ids: &[SpatialId],
     zoom_level_policy: &ZoomLevelPolicy,
 ) -> Result<GetDataResponse, AppError> {
-    let read_txn = app_state.redb.begin_read()?;
-    let db = KasaneDbRead::new(read_txn);
+    let read_txn = app_state.db.env.read_txn()?;
+    let db = KasaneDbRead::new(read_txn, &app_state.db);
     let table = match db.table_info(db_name, table_name) {
         Ok(Some(v)) => v,
         Ok(None) => {

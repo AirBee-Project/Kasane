@@ -7,8 +7,6 @@ use rand_core::{OsRng, RngCore};
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use redb::ReadableDatabase;
-
 use crate::AppState;
 use crate::error::{AppError, AuthError};
 use crate::models::auth::Claims;
@@ -71,8 +69,8 @@ pub fn dummy_verify_password(password: &str) {
 /// 指定ユーザーの最新メタデータ（UUID・トークン世代）を読み込み、JWT を発行する。
 pub fn generate_jwt(app_state: &AppState, username: &str) -> Result<String, AppError> {
     let meta = {
-        let read_txn = app_state.redb.begin_read()?;
-        let repo = KasaneUsersRead::new(read_txn);
+        let read_txn = app_state.db.env.read_txn()?;
+        let repo = KasaneUsersRead::new(read_txn, &app_state.db);
         repo.get_user_meta(username)?
             .ok_or_else(|| AppError::NotFound("User not found".to_string()))?
     };

@@ -1,14 +1,12 @@
-use redb::ReadableTable;
 use uuid::Uuid;
 
 use crate::{
-    db_init::DATABASES,
     error::AppError,
     models::database::{DatabaseInfoResponse, DatabaseMetadata},
     repositories::KasaneDbWrite,
 };
 
-impl KasaneDbWrite {
+impl<'a> KasaneDbWrite<'a> {
     /// Databaseの情報を取得する
     pub fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
         if self.database_caches.contains_key(name) {
@@ -17,8 +15,8 @@ impl KasaneDbWrite {
             }));
         }
 
-        let redb_dbs = self.write_txn.open_table(DATABASES)?;
-        if redb_dbs.get(name)?.is_some() {
+        let db = self.db.databases;
+        if db.get(&self.write_txn, name)?.is_some() {
             Ok(Some(DatabaseInfoResponse {
                 name: name.to_string(),
             }))
@@ -38,8 +36,8 @@ impl KasaneDbWrite {
         let id = Uuid::now_v7();
         let meta = DatabaseMetadata { id };
 
-        let mut redb_dbs = self.write_txn.open_table(DATABASES)?;
-        redb_dbs.insert(name, meta.clone())?;
+        let db = self.db.databases;
+        db.put(&mut self.write_txn, name, &meta)?;
 
         self.database_caches.insert(name.to_string(), meta);
 
@@ -51,9 +49,9 @@ impl KasaneDbWrite {
     /// Databaseを削除する
     pub fn database_remove(&mut self, name: &str) -> Result<(), AppError> {
         let _meta = {
-            let redb_dbs = self.write_txn.open_table(DATABASES)?;
-            if let Some(meta_data) = redb_dbs.get(name)? {
-                meta_data.value()
+            let db = self.db.databases;
+            if let Some(meta_data) = db.get(&self.write_txn, name)? {
+                meta_data
             } else {
                 return Err(AppError::DatabaseNotFound {
                     name: name.to_string(),
@@ -65,8 +63,8 @@ impl KasaneDbWrite {
         // before deleting the database itself, or we do it here.
         // For simplicity, we just remove the database metadata here.
 
-        let mut redb_dbs = self.write_txn.open_table(DATABASES)?;
-        redb_dbs.remove(name)?;
+        let db = self.db.databases;
+        db.delete(&mut self.write_txn, name)?;
         self.database_caches.remove(name);
 
         Ok(())

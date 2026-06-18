@@ -4,23 +4,22 @@ use axum::{
 };
 use kasane::{AppState, db_init, kasane};
 use std::sync::Arc;
-use tempfile::NamedTempFile;
 use tower::ServiceExt;
 
 pub struct PermissionTestApp {
     pub app: axum::Router,
     pub app_state: AppState,
-    _temp_file: NamedTempFile,
+    _temp_dir: tempfile::TempDir,
 }
 
 impl PermissionTestApp {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        let temp_file = tempfile::NamedTempFile::new().unwrap();
-        let db = db_init::initialize_database(temp_file.path().to_str().unwrap());
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let db = db_init::initialize_database(temp_dir.path().to_str().unwrap());
 
         let app_state = AppState {
-            redb: Arc::new(db),
+            db: db.clone(),
             auth_cache: Arc::new(kasane::auth_cache::AuthCache::new()),
         };
         // We DO NOT inject the root token automatically here.
@@ -30,7 +29,7 @@ impl PermissionTestApp {
         Self {
             app,
             app_state,
-            _temp_file: temp_file,
+            _temp_dir: temp_dir,
         }
     }
 

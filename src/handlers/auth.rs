@@ -1,5 +1,4 @@
 use axum::{Json, extract::State};
-use redb::ReadableDatabase;
 
 use crate::{
     AppState,
@@ -22,8 +21,8 @@ pub async fn login(
     State(app_state): State<AppState>,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, AppError> {
-    let read_txn = app_state.redb.begin_read()?;
-    let repo = crate::repositories::users::KasaneUsersRead::new(read_txn);
+    let read_txn = app_state.db.env.read_txn()?;
+    let repo = crate::repositories::users::KasaneUsersRead::new(read_txn, &app_state.db);
 
     let meta = match repo.get_user_meta(&payload.username)? {
         Some(meta) => meta,
@@ -38,6 +37,8 @@ pub async fn login(
     if !verify_password(&payload.password, &meta.password_hash)? {
         return Err(AuthError::InvalidCredentials.into());
     }
+
+    drop(repo);
 
     let token = generate_jwt(&app_state, &payload.username)?;
 

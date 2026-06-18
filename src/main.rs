@@ -14,7 +14,7 @@ struct Args {
 }
 
 fn default_database_path() -> String {
-    std::env::var("FILE").unwrap_or_else(|_| "default.kasane".to_string())
+    std::env::var("DATABASE_DIR").unwrap_or_else(|_| "default_kasane_db".to_string())
 }
 
 fn default_port() -> u16 {
@@ -33,16 +33,16 @@ async fn main() {
     // 環境変数の読み込み
     dotenvy::dotenv().ok();
 
-    // ログの初期化
+    // ログの初期化
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::new(log_filter()))
         .init();
 
     let args = Args::parse();
-    let redb = db_init::initialize_database(&args.database_path);
+    let db = db_init::initialize_database(&args.database_path);
 
     let app = kasane(AppState {
-        redb: Arc::new(redb),
+        db,
         auth_cache: Arc::new(AuthCache::new()),
     });
 

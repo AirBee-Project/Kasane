@@ -1,99 +1,226 @@
-use redb::{Database, ReadableTableMetadata, TableDefinition};
+use heed::types::*;
+use heed::{Database, Env, EnvOpenOptions};
 
 use crate::models::users::UserMetadata;
 use crate::models::{database::DatabaseMetadata, database::table::TableMetadata};
 use crate::services::auth::hash_password;
+use std::borrow::Cow;
 use uuid::Uuid;
 
-/// データベースを管理するためのテーブル
-///
-/// Key: データベース名
-/// Value: データベースのメタデータ（データベースのID など）
-pub const DATABASES: TableDefinition<&str, DatabaseMetadata> = TableDefinition::new("0");
+pub struct DbIdAndName;
 
-/// Tableを管理するためのテーブル
-///
-/// Key: (データベースのID, Table名)
-/// Value: Tableのメタデータ（TableのID, データ型, 最大ズームレベル）
-pub const TABLES: TableDefinition<([u8; 16], &str), TableMetadata> = TableDefinition::new("1");
+impl<'a> heed::BytesEncode<'a> for DbIdAndName {
+    type EItem = ([u8; 16], &'a str);
 
-/// TableのID衝突チェック用インデックス
-///
-/// Key: TableのID
-/// Value: 空
-pub const TABLE_ID_INDEX: TableDefinition<[u8; 16], ()> = TableDefinition::new("2");
+    fn bytes_encode(
+        item: &'a Self::EItem,
+    ) -> Result<Cow<'a, [u8]>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut bytes = Vec::with_capacity(16 + item.1.len());
+        bytes.extend_from_slice(&item.0);
+        bytes.extend_from_slice(item.1.as_bytes());
+        Ok(Cow::Owned(bytes))
+    }
+}
 
-/// 空間IDと値の対応を管理するためのテーブル
-///
-/// Key: (TableのID, 空間IDのエンコードバイト)
-/// Value: 値のバイト列
-pub const SPATIALID_TO_VALUE: TableDefinition<([u8; 16], [u8; 12]), &[u8]> =
-    TableDefinition::new("3");
+impl<'a> heed::BytesDecode<'a> for DbIdAndName {
+    type DItem = ([u8; 16], &'a str);
 
-/// 値と空間IDに対応を管理するためのテーブル
-///
-/// Key:(TableのID,値のバイト列、空間IDのエンコードバイト列)
-/// Value: 空
-#[allow(clippy::type_complexity)]
-pub const VALUE_TO_SPATIALID: TableDefinition<([u8; 16], &[u8], [u8; 12]), ()> =
-    TableDefinition::new("4");
+    fn bytes_decode(
+        bytes: &'a [u8],
+    ) -> Result<Self::DItem, Box<dyn std::error::Error + Send + Sync>> {
+        if bytes.len() < 16 {
+            return Err("invalid length".into());
+        }
+        let mut id = [0u8; 16];
+        id.copy_from_slice(&bytes[0..16]);
+        let name = std::str::from_utf8(&bytes[16..])?;
+        Ok((id, name))
+    }
+}
 
-/// ユーザーを管理するためのテーブル
-///
-/// Key: ユーザー名
-/// Value: ユーザーのメタデータ（[`UserMetadata`]）を JSON 文字列にしたもの
-pub const USERS: TableDefinition<&str, &str> = TableDefinition::new("users");
+pub struct TableIdAndSpatialId;
 
-/// ユーザーごとのデータベース単位の権限（ロール）を管理するためのテーブル
-///
-/// Key: (ユーザーのID, データベースのID)
-/// Value: ロール（[`crate::models::users::UserRole`] を `u8` で表したもの）
-pub const USER_PRIVILEGES: TableDefinition<([u8; 16], [u8; 16]), u8> =
-    TableDefinition::new("user_privileges");
+impl<'a> heed::BytesEncode<'a> for TableIdAndSpatialId {
+    type EItem = ([u8; 16], [u8; 12]);
+
+    fn bytes_encode(
+        item: &'a Self::EItem,
+    ) -> Result<Cow<'a, [u8]>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut bytes = Vec::with_capacity(28);
+        bytes.extend_from_slice(&item.0);
+        bytes.extend_from_slice(&item.1);
+        Ok(Cow::Owned(bytes))
+    }
+}
+
+impl<'a> heed::BytesDecode<'a> for TableIdAndSpatialId {
+    type DItem = ([u8; 16], [u8; 12]);
+
+    fn bytes_decode(
+        bytes: &'a [u8],
+    ) -> Result<Self::DItem, Box<dyn std::error::Error + Send + Sync>> {
+        if bytes.len() != 28 {
+            return Err("invalid length".into());
+        }
+        let mut id = [0u8; 16];
+        id.copy_from_slice(&bytes[0..16]);
+        let mut spatial = [0u8; 12];
+        spatial.copy_from_slice(&bytes[16..28]);
+        Ok((id, spatial))
+    }
+}
+
+pub struct ValueToSpatialId;
+
+impl<'a> heed::BytesEncode<'a> for ValueToSpatialId {
+    type EItem = ([u8; 16], &'a [u8], [u8; 12]);
+
+    fn bytes_encode(
+        item: &'a Self::EItem,
+    ) -> Result<Cow<'a, [u8]>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut bytes = Vec::with_capacity(16 + item.1.len() + 12);
+        bytes.extend_from_slice(&item.0);
+        bytes.extend_from_slice(item.1);
+        bytes.extend_from_slice(&item.2);
+        Ok(Cow::Owned(bytes))
+    }
+}
+
+impl<'a> heed::BytesDecode<'a> for ValueToSpatialId {
+    type DItem = ([u8; 16], &'a [u8], [u8; 12]);
+
+    fn bytes_decode(
+        bytes: &'a [u8],
+    ) -> Result<Self::DItem, Box<dyn std::error::Error + Send + Sync>> {
+        if bytes.len() < 28 {
+            return Err("invalid length".into());
+        }
+        let mut id = [0u8; 16];
+        id.copy_from_slice(&bytes[0..16]);
+        let value = &bytes[16..bytes.len() - 12];
+        let mut spatial = [0u8; 12];
+        spatial.copy_from_slice(&bytes[bytes.len() - 12..]);
+        Ok((id, value, spatial))
+    }
+}
+
+pub struct UserIdAndDbId;
+
+impl<'a> heed::BytesEncode<'a> for UserIdAndDbId {
+    type EItem = ([u8; 16], [u8; 16]);
+
+    fn bytes_encode(
+        item: &'a Self::EItem,
+    ) -> Result<Cow<'a, [u8]>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut bytes = Vec::with_capacity(32);
+        bytes.extend_from_slice(&item.0);
+        bytes.extend_from_slice(&item.1);
+        Ok(Cow::Owned(bytes))
+    }
+}
+
+impl<'a> heed::BytesDecode<'a> for UserIdAndDbId {
+    type DItem = ([u8; 16], [u8; 16]);
+
+    fn bytes_decode(
+        bytes: &'a [u8],
+    ) -> Result<Self::DItem, Box<dyn std::error::Error + Send + Sync>> {
+        if bytes.len() != 32 {
+            return Err("invalid length".into());
+        }
+        let mut uid = [0u8; 16];
+        uid.copy_from_slice(&bytes[0..16]);
+        let mut dbid = [0u8; 16];
+        dbid.copy_from_slice(&bytes[16..32]);
+        Ok((uid, dbid))
+    }
+}
+
+#[derive(Clone)]
+pub struct AppDb {
+    pub env: Env,
+    pub databases: Database<Str, SerdeBincode<DatabaseMetadata>>,
+    pub tables: Database<DbIdAndName, SerdeBincode<TableMetadata>>,
+    pub table_id_index: Database<SerdeBincode<[u8; 16]>, Unit>,
+    pub spatialid_to_value: Database<TableIdAndSpatialId, Bytes>,
+    pub value_to_spatialid: Database<ValueToSpatialId, Unit>,
+    pub users: Database<Str, Str>,
+    pub user_privileges: Database<UserIdAndDbId, SerdeBincode<u8>>,
+}
 
 #[tracing::instrument]
-pub fn initialize_database(path: &str) -> Database {
+pub fn initialize_database(path: &str) -> AppDb {
     tracing::info!("Initializing database at: {}", path);
-    let database = Database::create(path).unwrap_or_else(|e| {
-        tracing::error!("Failed to create database at {}: {}", path, e);
-        panic!("Failed to create database: {}", e);
-    });
+    std::fs::create_dir_all(path).unwrap();
 
-    let write_txn = database.begin_write().unwrap();
+    let map_size = std::env::var("KASANE_LMDB_MAP_SIZE")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(10 * 1024 * 1024 * 1024);
 
-    {
-        tracing::debug!("Opening internal tables...");
-        let _ = write_txn.open_table(DATABASES).unwrap();
-        let _ = write_txn.open_table(TABLES).unwrap();
-        let _ = write_txn.open_table(TABLE_ID_INDEX).unwrap();
-        let _ = write_txn.open_table(SPATIALID_TO_VALUE).unwrap();
-        let _ = write_txn.open_table(VALUE_TO_SPATIALID).unwrap();
+    let env = unsafe {
+        EnvOpenOptions::new()
+            .map_size(map_size)
+            .max_dbs(10)
+            .open(path)
+            .unwrap_or_else(|e| {
+                tracing::error!("Failed to open heed Env at {}: {}", path, e);
+                panic!("Failed to open heed Env: {}", e);
+            })
+    };
 
-        let mut users_table = write_txn.open_table(USERS).unwrap();
-        let _ = write_txn.open_table(USER_PRIVILEGES).unwrap();
+    let mut write_txn = env.write_txn().unwrap();
 
-        if users_table.is_empty().unwrap() {
-            let default_username = "root";
-            let default_password = std::env::var("ROOT_PASSWORD")
-                .ok()
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| "password".to_string());
+    let databases = env
+        .create_database(&mut write_txn, Some("databases"))
+        .unwrap();
+    let tables = env.create_database(&mut write_txn, Some("tables")).unwrap();
+    let table_id_index = env
+        .create_database(&mut write_txn, Some("table_id_index"))
+        .unwrap();
+    let spatialid_to_value = env
+        .create_database(&mut write_txn, Some("spatialid_to_value"))
+        .unwrap();
+    let value_to_spatialid = env
+        .create_database(&mut write_txn, Some("value_to_spatialid"))
+        .unwrap();
+    let users = env.create_database(&mut write_txn, Some("users")).unwrap();
+    let user_privileges = env
+        .create_database(&mut write_txn, Some("user_privileges"))
+        .unwrap();
 
-            tracing::info!("Creating default root user: {}", default_username);
-            let hash = hash_password(&default_password).unwrap();
-            let root_meta = UserMetadata {
-                id: Uuid::now_v7(),
-                password_hash: hash,
-                is_global_admin: true,
-                token_version: 0,
-            };
-            let json = serde_json::to_string(&root_meta).unwrap();
-            users_table.insert(default_username, json.as_str()).unwrap();
-        }
+    if users.is_empty(&write_txn).unwrap() {
+        let default_username = "root";
+        let default_password = std::env::var("ROOT_PASSWORD")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "password".to_string());
+
+        tracing::info!("Creating default root user: {}", default_username);
+        let hash = hash_password(&default_password).unwrap();
+        let root_meta = UserMetadata {
+            id: Uuid::now_v7(),
+            password_hash: hash,
+            is_global_admin: true,
+            token_version: 0,
+        };
+        let json = serde_json::to_string(&root_meta).unwrap();
+        users
+            .put(&mut write_txn, default_username, json.as_str())
+            .unwrap();
     }
 
     write_txn.commit().unwrap();
     tracing::info!("Database initialized successfully");
 
-    database
+    AppDb {
+        env,
+        databases,
+        tables,
+        table_id_index,
+        spatialid_to_value,
+        value_to_spatialid,
+        users,
+        user_privileges,
+    }
 }

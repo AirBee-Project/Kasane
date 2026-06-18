@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use redb::Database;
-
 use crate::routes::create_router;
 
 pub mod auth_cache;
@@ -15,9 +13,9 @@ pub mod repositories;
 pub mod routes;
 pub mod services;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AppState {
-    pub redb: Arc<Database>,
+    pub db: db_init::AppDb,
     pub auth_cache: Arc<auth_cache::AuthCache>,
 }
 

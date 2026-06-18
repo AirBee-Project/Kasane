@@ -8,12 +8,11 @@ use crate::{
     repositories::users::{KasaneUsersRead, KasaneUsersWrite},
     services::auth::hash_password,
 };
-use redb::ReadableDatabase;
 use uuid::Uuid;
 
 pub fn list_users(app_state: &AppState) -> Result<Vec<UserInfoResponse>, AppError> {
-    let read_txn = app_state.redb.begin_read()?;
-    let repo = KasaneUsersRead::new(read_txn);
+    let read_txn = app_state.db.env.read_txn()?;
+    let repo = KasaneUsersRead::new(read_txn, &app_state.db);
     let users = repo.get_all_users()?;
     Ok(users.into_iter().map(UserInfoResponse::from).collect())
 }
@@ -27,8 +26,8 @@ pub async fn create_user(app_state: &AppState, req: CreateUserRequest) -> Result
         is_global_admin: req.is_global_admin,
         token_version: 0,
     };
-    let write_txn = app_state.redb.begin_write()?;
-    let mut repo = KasaneUsersWrite::new(write_txn);
+    let write_txn = app_state.db.env.write_txn()?;
+    let mut repo = KasaneUsersWrite::new(write_txn, &app_state.db);
     repo.create_user(&req.username, &meta)?;
     repo.commit()?;
     Ok(())
@@ -39,8 +38,8 @@ pub async fn delete_user(app_state: &AppState, username: &str) -> Result<(), App
         return Err(AuthError::RootProtected.into());
     }
 
-    let write_txn = app_state.redb.begin_write()?;
-    let mut repo = KasaneUsersWrite::new(write_txn);
+    let write_txn = app_state.db.env.write_txn()?;
+    let mut repo = KasaneUsersWrite::new(write_txn, &app_state.db);
     repo.delete_user(username)?;
     repo.commit()?;
 
@@ -56,8 +55,8 @@ pub async fn update_password(
     let hash = hash_password(&req.password)?;
 
     let meta = {
-        let read_txn = app_state.redb.begin_read()?;
-        let repo = KasaneUsersRead::new(read_txn);
+        let read_txn = app_state.db.env.read_txn()?;
+        let repo = KasaneUsersRead::new(read_txn, &app_state.db);
         repo.get_user_meta(username)?
             .ok_or_else(|| AppError::NotFound("User not found".into()))?
     };
@@ -66,8 +65,8 @@ pub async fn update_password(
     new_meta.password_hash = hash;
     new_meta.token_version = new_meta.token_version.wrapping_add(1);
 
-    let write_txn = app_state.redb.begin_write()?;
-    let mut repo = KasaneUsersWrite::new(write_txn);
+    let write_txn = app_state.db.env.write_txn()?;
+    let mut repo = KasaneUsersWrite::new(write_txn, &app_state.db);
     repo.update_user_meta(username, &new_meta)?;
     repo.commit()?;
 
@@ -86,8 +85,8 @@ pub async fn set_admin(
     }
 
     let meta = {
-        let read_txn = app_state.redb.begin_read()?;
-        let repo = KasaneUsersRead::new(read_txn);
+        let read_txn = app_state.db.env.read_txn()?;
+        let repo = KasaneUsersRead::new(read_txn, &app_state.db);
         repo.get_user_meta(username)?
             .ok_or_else(|| AppError::NotFound("User not found".into()))?
     };
@@ -96,8 +95,8 @@ pub async fn set_admin(
     new_meta.is_global_admin = is_global_admin;
     new_meta.token_version = new_meta.token_version.wrapping_add(1);
 
-    let write_txn = app_state.redb.begin_write()?;
-    let mut repo = KasaneUsersWrite::new(write_txn);
+    let write_txn = app_state.db.env.write_txn()?;
+    let mut repo = KasaneUsersWrite::new(write_txn, &app_state.db);
     repo.update_user_meta(username, &new_meta)?;
     repo.commit()?;
 
@@ -112,15 +111,15 @@ pub async fn set_privilege(
     req: UpdatePrivilegeRequest,
 ) -> Result<(), AppError> {
     let user_id = {
-        let read_txn = app_state.redb.begin_read()?;
-        let repo = KasaneUsersRead::new(read_txn);
+        let read_txn = app_state.db.env.read_txn()?;
+        let repo = KasaneUsersRead::new(read_txn, &app_state.db);
         let user = repo
             .get_user(username)?
             .ok_or_else(|| AppError::NotFound("User not found".into()))?;
         user.id.into_bytes()
     };
-    let write_txn = app_state.redb.begin_write()?;
-    let mut repo = KasaneUsersWrite::new(write_txn);
+    let write_txn = app_state.db.env.write_txn()?;
+    let mut repo = KasaneUsersWrite::new(write_txn, &app_state.db);
     repo.set_privilege(user_id, db_name, req.role)?;
     repo.commit()?;
     Ok(())
@@ -132,15 +131,15 @@ pub async fn delete_privilege(
     db_name: &str,
 ) -> Result<(), AppError> {
     let user_id = {
-        let read_txn = app_state.redb.begin_read()?;
-        let repo = KasaneUsersRead::new(read_txn);
+        let read_txn = app_state.db.env.read_txn()?;
+        let repo = KasaneUsersRead::new(read_txn, &app_state.db);
         let user = repo
             .get_user(username)?
             .ok_or_else(|| AppError::NotFound("User not found".into()))?;
         user.id.into_bytes()
     };
-    let write_txn = app_state.redb.begin_write()?;
-    let mut repo = KasaneUsersWrite::new(write_txn);
+    let write_txn = app_state.db.env.write_txn()?;
+    let mut repo = KasaneUsersWrite::new(write_txn, &app_state.db);
     repo.remove_privilege(user_id, db_name)?;
     repo.commit()?;
     Ok(())
@@ -150,8 +149,8 @@ pub fn get_privileges(
     app_state: &AppState,
     username: &str,
 ) -> Result<Vec<PrivilegeInfoResponse>, AppError> {
-    let read_txn = app_state.redb.begin_read()?;
-    let repo = KasaneUsersRead::new(read_txn);
+    let read_txn = app_state.db.env.read_txn()?;
+    let repo = KasaneUsersRead::new(read_txn, &app_state.db);
     let user = repo
         .get_user(username)?
         .ok_or_else(|| AppError::NotFound("User not found".into()))?;
