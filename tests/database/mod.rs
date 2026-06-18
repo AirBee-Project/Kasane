@@ -4,22 +4,21 @@ use axum::{
 };
 use kasane::{AppState, db_init, kasane};
 use std::sync::Arc;
-use tempfile::NamedTempFile;
 use tower::ServiceExt;
 
 pub struct DbTestApp {
     pub app: axum::Router,
-    _temp_file: NamedTempFile,
+    _temp_dir: tempfile::TempDir,
 }
 
 impl DbTestApp {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        let temp_file = tempfile::NamedTempFile::new().unwrap();
-        let db = db_init::initialize_database(temp_file.path().to_str().unwrap());
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let db = db_init::initialize_database(temp_dir.path().to_str().unwrap());
 
         let app_state = AppState {
-            redb: Arc::new(db),
+            db: db.clone(),
             auth_cache: Arc::new(kasane::auth_cache::AuthCache::new()),
         };
         let token = kasane::services::auth::generate_jwt(&app_state, "root").unwrap();
@@ -37,7 +36,7 @@ impl DbTestApp {
         ));
         Self {
             app,
-            _temp_file: temp_file,
+            _temp_dir: temp_dir,
         }
     }
 }

@@ -122,7 +122,7 @@ pub enum AppError {
     InvalidStoredValue {
         reason: String,
     },
-    StorageError(redb::Error),
+    StorageError(heed::Error),
     InvalidName {
         reason: String,
     },
@@ -236,49 +236,9 @@ impl From<AuthError> for AppError {
     }
 }
 
-impl From<redb::Error> for AppError {
-    fn from(error: redb::Error) -> Self {
+impl From<heed::Error> for AppError {
+    fn from(error: heed::Error) -> Self {
         AppError::StorageError(error)
-    }
-}
-impl From<redb::TransactionError> for AppError {
-    fn from(error: redb::TransactionError) -> Self {
-        AppError::StorageError(error.into())
-    }
-}
-impl From<redb::DatabaseError> for AppError {
-    fn from(error: redb::DatabaseError) -> Self {
-        AppError::StorageError(error.into())
-    }
-}
-impl From<redb::TableError> for AppError {
-    fn from(error: redb::TableError) -> Self {
-        AppError::StorageError(error.into())
-    }
-}
-impl From<redb::StorageError> for AppError {
-    fn from(error: redb::StorageError) -> Self {
-        AppError::StorageError(error.into())
-    }
-}
-impl From<redb::SavepointError> for AppError {
-    fn from(error: redb::SavepointError) -> Self {
-        AppError::StorageError(error.into())
-    }
-}
-impl From<redb::CommitError> for AppError {
-    fn from(error: redb::CommitError) -> Self {
-        AppError::StorageError(error.into())
-    }
-}
-impl From<redb::CompactionError> for AppError {
-    fn from(error: redb::CompactionError) -> Self {
-        AppError::StorageError(error.into())
-    }
-}
-impl From<redb::SetDurabilityError> for AppError {
-    fn from(error: redb::SetDurabilityError) -> Self {
-        AppError::StorageError(error.into())
     }
 }
 impl From<kasane_logic::Error> for AppError {

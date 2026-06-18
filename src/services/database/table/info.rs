@@ -1,13 +1,12 @@
 use crate::{AppState, error::AppError, models::database::table::TableInfoResponse};
-use redb::ReadableDatabase;
 
 pub async fn info(
     app_state: &AppState,
     db_name: &str,
     table_name: &str,
 ) -> Result<TableInfoResponse, AppError> {
-    let read_txn = app_state.redb.begin_read()?;
-    let db = crate::repositories::KasaneDbRead::new(read_txn);
+    let read_txn = app_state.db.env.read_txn()?;
+    let db = crate::repositories::KasaneDbRead::new(read_txn, &app_state.db);
     match db.table_info(db_name, table_name)? {
         Some(table) => {
             let count = db.table_count(table.id)?;

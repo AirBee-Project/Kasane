@@ -1,110 +1,165 @@
 use kasane_logic::{IterSingleIds, SingleId, SpatialIdSet};
-use redb::{AccessGuard, ReadOnlyTable};
+use rayon::prelude::*;
 
-use crate::{db_init::SPATIALID_TO_VALUE, error::AppError, repositories::KasaneDbRead};
+use crate::{error::AppError, repositories::KasaneDbRead};
 
-type SpatialDataResult<'a> = Result<Option<(SingleId, AccessGuard<'a, &'static [u8]>)>, AppError>;
-type SpatialDataListResult<'a> =
-    Result<Option<Vec<(SingleId, AccessGuard<'a, &'static [u8]>)>>, AppError>;
+type SpatialDataResult<'txn> = Result<Option<(SingleId, &'txn [u8])>, AppError>;
+type SpatialDataListResult<'txn> = Result<Option<Vec<(SingleId, &'txn [u8])>>, AppError>;
 
-impl KasaneDbRead {
-    ///データを取得する
-    pub fn data_get(
+/// この件数以上の SingleId を引く場合は rayon で並列にファンアウトする。
+/// 小さなクエリではスレッド分配のオーバーヘッドが勝つため直列で処理する。
+const PARALLEL_FANOUT_THRESHOLD: usize = 512;
+
+impl<'a> KasaneDbRead<'a> {
+    /// 空間IDごとに格納値を解決し、`decode` で復元した値を返す。
+    ///
+    /// `decode` は「ストレージ上のバイト列 → 任意の復元値」への変換関数で、
+    /// 呼び出し側（サービス層）が `restore_value` などを渡す。これにより
+    /// リポジトリ層はデータ型の解釈に依存せず、かつ **復元を txn スコープ内・
+    /// 並列ワーカー内で行える**（borrow したスライスを `Vec<u8>` に一旦コピー
+    /// せず、その場で所有値へ復元できる）。
+    pub fn data_get<T, F>(
         &self,
         table_id: uuid::Uuid,
         ids: SpatialIdSet,
-    ) -> Result<Vec<(SingleId, Vec<u8>)>, AppError> {
-        let mut result = Vec::new();
+        decode: F,
+    ) -> Result<Vec<(SingleId, T)>, AppError>
+    where
+        F: Fn(&[u8]) -> Result<T, AppError> + Sync,
+        T: Send,
+    {
+        let spatial_db = self.db.spatialid_to_value;
+        let single_ids: Vec<SingleId> = ids.iter_single_ids().collect();
 
-        let redb_spatial_ids = self.read_txn.open_table(SPATIALID_TO_VALUE)?;
-
-        for single_id in ids.iter_single_ids() {
-            //single_idと完全に等しい位置を調べる
-            if let Some(access_guard) =
-                Self::overlap_equal(&redb_spatial_ids, table_id, &single_id)?
-            {
-                result.push((single_id, access_guard.value().to_vec()));
-                continue;
-            };
-
-            //single_idの親を調べる
-            if let Some((_, access_guard)) =
-                Self::overlap_parent(&redb_spatial_ids, table_id, &single_id)?
-            {
-                result.push((single_id, access_guard.value().to_vec()));
-                continue;
+        if single_ids.len() < PARALLEL_FANOUT_THRESHOLD {
+            // 直列パス: 既存の read スナップショットをそのまま使う。
+            let mut result = Vec::with_capacity(single_ids.len());
+            for single_id in &single_ids {
+                Self::lookup_one(
+                    &spatial_db,
+                    &self.read_txn,
+                    table_id,
+                    single_id,
+                    &decode,
+                    &mut result,
+                )?;
             }
-
-            //single_idの子を調べる
-            if let Some(children_single_ids) =
-                Self::overlap_children(&redb_spatial_ids, table_id, &single_id)?
-            {
-                for (child_single_id, value) in children_single_ids {
-                    result.push((child_single_id, value.value().to_vec()));
-                }
-            }
+            return Ok(result);
         }
 
+        // 並列パス: 各 lookup は独立なので rayon でファンアウトする。
+        //
+        // LMDB の read トランザクションは（NOTLS でも）スレッド間で *同時* 共有できないため、
+        // 1つの txn を共有するのではなく、ワーカーごとに自分の read txn を開く。
+        // チャンク単位に分割して txn の生成コストを償却する。
+        // 各 txn は独立スナップショットになるが、読み取りクエリでは許容できる。
+        let env = &self.db.env;
+        let chunk_size = single_ids
+            .len()
+            .div_ceil(rayon::current_num_threads())
+            .max(1);
+
+        let nested = single_ids
+            .par_chunks(chunk_size)
+            .map(|chunk| -> Result<Vec<(SingleId, T)>, AppError> {
+                let txn = env.read_txn()?;
+                let mut out = Vec::with_capacity(chunk.len());
+                for single_id in chunk {
+                    Self::lookup_one(&spatial_db, &txn, table_id, single_id, &decode, &mut out)?;
+                }
+                Ok(out)
+            })
+            .collect::<Result<Vec<Vec<(SingleId, T)>>, AppError>>()?;
+
+        let total: usize = nested.iter().map(Vec::len).sum();
+        let mut result = Vec::with_capacity(total);
+        for chunk_result in nested {
+            result.extend(chunk_result);
+        }
         Ok(result)
     }
 
-    ///入力された[SingleId]と同じかつ、[SingleId]が存在するかを検証する
+    /// 1つの SingleId に対して equal → parent → children の順で値を解決し、
+    /// `decode` で復元した結果を `out` に push する。
     ///
-    /// 存在した場合には値の参照を返す
-    pub(self) fn overlap_equal<'a>(
-        redb_spatial_ids: &ReadOnlyTable<([u8; 16], [u8; 12]), &'static [u8]>,
+    /// 復元を借用スライスに対してその場で行うため、生バイト列のコピーが発生しない。
+    fn lookup_one<'txn, 'env, T, F>(
+        spatial_db: &heed::Database<crate::db_init::TableIdAndSpatialId, heed::types::Bytes>,
+        txn: &'txn heed::RoTxn<'env, heed::WithoutTls>,
+        table_id: uuid::Uuid,
+        single_id: &SingleId,
+        decode: &F,
+        out: &mut Vec<(SingleId, T)>,
+    ) -> Result<(), AppError>
+    where
+        F: Fn(&[u8]) -> Result<T, AppError>,
+    {
+        if let Some(data) = Self::overlap_equal(spatial_db, txn, table_id, single_id)? {
+            out.push((single_id.clone(), decode(data)?));
+            return Ok(());
+        }
+
+        if let Some((_, data)) = Self::overlap_parent(spatial_db, txn, table_id, single_id)? {
+            out.push((single_id.clone(), decode(data)?));
+            return Ok(());
+        }
+
+        if let Some(children) = Self::overlap_children(spatial_db, txn, table_id, single_id)? {
+            for (child, value) in children {
+                out.push((child, decode(value)?));
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(self) fn overlap_equal<'txn, 'env>(
+        spatial_db: &heed::Database<crate::db_init::TableIdAndSpatialId, heed::types::Bytes>,
+        txn: &'txn heed::RoTxn<'env, heed::WithoutTls>,
         table_id: uuid::Uuid,
         target: &SingleId,
-    ) -> Result<Option<AccessGuard<'a, &'static [u8]>>, AppError> {
-        if let Some(access_guard) =
-            redb_spatial_ids.get((table_id.into_bytes(), target.spatial_encode()))?
-        {
-            return Ok(Some(access_guard));
+    ) -> Result<Option<&'txn [u8]>, AppError> {
+        if let Some(val) = spatial_db.get(txn, &(table_id.into_bytes(), target.spatial_encode()))? {
+            return Ok(Some(val));
         }
         Ok(None)
     }
 
-    ///入力された[SingleId]の親となる[SingleId]が存在するかを確かめる
-    ///
-    /// 存在した場合には[SingleId]と値の参照を返す
-    pub(self) fn overlap_parent<'a>(
-        redb_spatial_ids: &ReadOnlyTable<([u8; 16], [u8; 12]), &'static [u8]>,
+    pub(self) fn overlap_parent<'txn, 'env>(
+        spatial_db: &heed::Database<crate::db_init::TableIdAndSpatialId, heed::types::Bytes>,
+        txn: &'txn heed::RoTxn<'env, heed::WithoutTls>,
         table_id: uuid::Uuid,
         target: &SingleId,
-    ) -> SpatialDataResult<'a> {
+    ) -> SpatialDataResult<'txn> {
         for parent in target.spatial_parents() {
-            if let Some(access_guard) =
-                redb_spatial_ids.get((table_id.into_bytes(), parent.spatial_encode()))?
+            if let Some(val) =
+                spatial_db.get(txn, &(table_id.into_bytes(), parent.spatial_encode()))?
             {
-                return Ok(Some((parent, access_guard)));
+                return Ok(Some((parent, val)));
             }
         }
         Ok(None)
     }
 
-    /// 入力した[SingleId]に含まれる[SingleId]が存在するかを確かめる
-    ///
-    /// 存在した場合には[SingleId]と値の参照を返す
-    pub(self) fn overlap_children<'a>(
-        redb_spatial_ids: &ReadOnlyTable<([u8; 16], [u8; 12]), &'static [u8]>,
+    pub(self) fn overlap_children<'txn, 'env>(
+        spatial_db: &heed::Database<crate::db_init::TableIdAndSpatialId, heed::types::Bytes>,
+        txn: &'txn heed::RoTxn<'env, heed::WithoutTls>,
         table_id: uuid::Uuid,
         target: &SingleId,
-    ) -> SpatialDataListResult<'a> {
-        let mut result: Vec<_> = Vec::new();
+    ) -> SpatialDataListResult<'txn> {
+        let mut result = Vec::new();
 
-        for ele in redb_spatial_ids.range(
-            (table_id.into_bytes(), target.spatial_encode())
-                ..=(table_id.into_bytes(), target.spatial_encode_prefix_max()),
-        )? {
-            let (key, value) = ele?;
-            let (_, single_id_encode) = key.value();
+        let start = (table_id.into_bytes(), target.spatial_encode());
+        let end = (table_id.into_bytes(), target.spatial_encode_prefix_max());
 
-            //equalの排除
+        for item in spatial_db.range(txn, &(start..=end))? {
+            let (key, value) = item?;
+            let single_id_encode = key.1;
+
             if SingleId::spatial_decode(&single_id_encode)? == *target {
                 continue;
             }
 
-            //resultに対する挿入
             result.push((SingleId::spatial_decode(&single_id_encode)?, value));
         }
 

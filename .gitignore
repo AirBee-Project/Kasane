@@ -14,24 +14,7 @@
 .DS_Store
 Thumbs.db
 
-# === Other ===
-/Cargo.lock  # ※ワークスペースにライブラリのみなら基本は無視でOK
-
-# === Test / Temp files ===
-*.tmp
-*.bak
-*.old
-/core/pkg
-
 /logs
 
-data.mdb
-lock.mdb
-sled_db
-
-default.kasane
-kasane.toml
-default.kasane
-/core/bindings
 .env
-profile.json.gz
+/default
