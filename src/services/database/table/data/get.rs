@@ -36,7 +36,7 @@ pub async fn get(
     tracing::debug!("Searching {} spatial IDs", ids.count());
 
     let mut result = Vec::new();
-    for (single_id, value) in db.data_get(db_name, table_name, ids)? {
+    for (single_id, value) in db.data_get(table.id, ids)? {
         let json_value = restore_value(table.data_type, &value)?;
         result.push(SpatialData {
             id: RawSingleId {

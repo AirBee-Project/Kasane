@@ -11,20 +11,9 @@ impl KasaneDbRead {
     ///データを取得する
     pub fn data_get(
         &self,
-        db_name: &str,
-        table_name: &str,
+        table_id: uuid::Uuid,
         ids: SpatialIdSet,
     ) -> Result<Vec<(SingleId, Vec<u8>)>, AppError> {
-        //存在検証
-        let table_meta = match self.table_info(db_name, table_name)? {
-            Some(v) => v,
-            None => {
-                return Err(AppError::TableNotFound {
-                    name: table_name.to_string(),
-                });
-            }
-        };
-
         let mut result = Vec::new();
 
         let redb_spatial_ids = self.read_txn.open_table(SPATIALID_TO_VALUE)?;
@@ -32,7 +21,7 @@ impl KasaneDbRead {
         for single_id in ids.iter_single_ids() {
             //single_idと完全に等しい位置を調べる
             if let Some(access_guard) =
-                Self::overlap_equal(&redb_spatial_ids, table_meta.id, &single_id)?
+                Self::overlap_equal(&redb_spatial_ids, table_id, &single_id)?
             {
                 result.push((single_id, access_guard.value().to_vec()));
                 continue;
@@ -40,7 +29,7 @@ impl KasaneDbRead {
 
             //single_idの親を調べる
             if let Some((_, access_guard)) =
-                Self::overlap_parent(&redb_spatial_ids, table_meta.id, &single_id)?
+                Self::overlap_parent(&redb_spatial_ids, table_id, &single_id)?
             {
                 result.push((single_id, access_guard.value().to_vec()));
                 continue;
@@ -48,7 +37,7 @@ impl KasaneDbRead {
 
             //single_idの子を調べる
             if let Some(children_single_ids) =
-                Self::overlap_children(&redb_spatial_ids, table_meta.id, &single_id)?
+                Self::overlap_children(&redb_spatial_ids, table_id, &single_id)?
             {
                 for (child_single_id, value) in children_single_ids {
                     result.push((child_single_id, value.value().to_vec()));

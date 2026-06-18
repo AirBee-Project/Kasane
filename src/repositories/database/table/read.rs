@@ -33,6 +33,17 @@ impl KasaneDbRead {
         }
     }
 
+    /// Tableの件数を取得する
+    pub fn table_count(&self, table_id: uuid::Uuid) -> Result<u64, AppError> {
+        let redb_spatial_ids = self
+            .read_txn
+            .open_table(crate::db_init::SPATIALID_TO_VALUE)?;
+        let count = redb_spatial_ids
+            .range((table_id.into_bytes(), [0; 12])..=(table_id.into_bytes(), [255; 12]))?
+            .count() as u64;
+        Ok(count)
+    }
+
     /// Tableの一覧を取得する
     pub fn table_list(&self, db_name: &str) -> Result<Vec<Table>, AppError> {
         let db_meta = {
