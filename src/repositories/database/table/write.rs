@@ -11,6 +11,9 @@ use heed::BytesDecode;
 impl<'a> KasaneDbWrite<'a> {
     /// Tableの情報を取得する
     pub fn table_info(&self, db_name: &str, table_name: &str) -> Result<Option<Table>, AppError> {
+        if db_name.is_empty() {
+            return Ok(None);
+        }
         let db_meta = {
             let db = self.db.databases;
             if let Some(m) = db.get(&self.write_txn, db_name)? {
@@ -52,6 +55,16 @@ impl<'a> KasaneDbWrite<'a> {
         data_type: TableDataType,
         max_zoom_level: u8,
     ) -> Result<Table, AppError> {
+        if db_name.is_empty() {
+            return Err(AppError::DatabaseNotFound {
+                name: db_name.to_string(),
+            });
+        }
+        if table_name.is_empty() {
+            return Err(AppError::InternalError(
+                "Table name cannot be empty".to_string(),
+            ));
+        }
         let db_meta = {
             let db = self.db.databases;
             if let Some(m) = db.get(&self.write_txn, db_name)? {
@@ -106,6 +119,16 @@ impl<'a> KasaneDbWrite<'a> {
 
     /// Tableを削除する
     pub fn table_remove(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError> {
+        if db_name.is_empty() {
+            return Err(AppError::DatabaseNotFound {
+                name: db_name.to_string(),
+            });
+        }
+        if table_name.is_empty() {
+            return Err(AppError::TableNotFound {
+                name: table_name.to_string(),
+            });
+        }
         let db_meta = {
             let db = self.db.databases;
             if let Some(m) = db.get(&self.write_txn, db_name)? {

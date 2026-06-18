@@ -3,6 +3,9 @@ use crate::{error::AppError, models::database::DatabaseInfoResponse, repositorie
 impl<'a> KasaneDbRead<'a> {
     /// Databaseの情報を取得する
     pub fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
+        if name.is_empty() {
+            return Ok(None);
+        }
         let db = self.db.databases;
         if db.get(&self.read_txn, name)?.is_some() {
             Ok(Some(DatabaseInfoResponse {

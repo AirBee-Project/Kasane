@@ -73,6 +73,11 @@ impl<'a> KasaneUsersWrite<'a> {
         db_name: &str,
         role: UserRole,
     ) -> Result<(), AppError> {
+        if db_name.is_empty() {
+            return Err(AppError::DatabaseNotFound {
+                name: db_name.to_string(),
+            });
+        }
         let dbs_table = self.db.databases;
         let db_id = if let Some(val) = dbs_table.get(&self.write_txn, db_name)? {
             val.id.into_bytes()
@@ -86,6 +91,11 @@ impl<'a> KasaneUsersWrite<'a> {
     }
 
     pub fn remove_privilege(&mut self, user_id: [u8; 16], db_name: &str) -> Result<(), AppError> {
+        if db_name.is_empty() {
+            return Err(AppError::DatabaseNotFound {
+                name: db_name.to_string(),
+            });
+        }
         let dbs_table = self.db.databases;
         let db_id = if let Some(val) = dbs_table.get(&self.write_txn, db_name)? {
             val.id.into_bytes()

@@ -48,6 +48,11 @@ impl<'a> KasaneDbWrite<'a> {
 
     /// Databaseを削除する
     pub fn database_remove(&mut self, name: &str) -> Result<(), AppError> {
+        if name.is_empty() {
+            return Err(AppError::DatabaseNotFound {
+                name: name.to_string(),
+            });
+        }
         let _meta = {
             let db = self.db.databases;
             if let Some(meta_data) = db.get(&self.write_txn, name)? {

@@ -99,3 +99,20 @@ async fn test_table_list_three() {
     assert!(names.contains(&"table_b"));
     assert!(names.contains(&"table_c"));
 }
+
+#[tokio::test]
+/// db_nameが空文字列の場合に500エラー(MDB_BAD_VALSIZE等)にならず、404エラーになることを検証する。
+async fn test_table_list_empty_db_name() {
+    let test_app = TestApp::new();
+
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases//tables")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+
+    // Axumのルーティングで弾かれるか、RepositoryでDatabaseNotFoundが返って404になるはず
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}

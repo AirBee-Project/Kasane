@@ -38,6 +38,9 @@ impl<'a> KasaneUsersRead<'a> {
         user_id: [u8; 16],
         db_name: &str,
     ) -> Result<Option<UserRole>, AppError> {
+        if db_name.is_empty() {
+            return Ok(None);
+        }
         let dbs_table = self.db.databases;
         let db_id = if let Some(val) = dbs_table.get(&self.read_txn, db_name)? {
             val.id.into_bytes()

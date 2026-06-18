@@ -5,6 +5,9 @@ use heed::BytesDecode;
 impl<'a> KasaneDbRead<'a> {
     /// Tableの情報を取得する
     pub fn table_info(&self, db_name: &str, table_name: &str) -> Result<Option<Table>, AppError> {
+        if db_name.is_empty() {
+            return Ok(None);
+        }
         let db_meta = {
             let db = self.db.databases;
             if let Some(m) = db.get(&self.read_txn, db_name)? {
@@ -46,6 +49,11 @@ impl<'a> KasaneDbRead<'a> {
 
     /// Tableの一覧を取得する
     pub fn table_list(&self, db_name: &str) -> Result<Vec<Table>, AppError> {
+        if db_name.is_empty() {
+            return Err(AppError::DatabaseNotFound {
+                name: db_name.to_string(),
+            });
+        }
         let db_meta = {
             let db = self.db.databases;
             if let Some(m) = db.get(&self.read_txn, db_name)? {
