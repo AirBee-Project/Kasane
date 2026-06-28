@@ -8,6 +8,7 @@
 use std::collections::HashSet;
 
 use kasane::db_init::initialize_database;
+use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
 use kasane::repositories::{KasaneDbRead, KasaneDbWrite};
 use kasane_logic::{IntoSingleIds, RangeId, SingleId, SpatialIdSet};
@@ -24,8 +25,12 @@ fn dynamic_shard_splits_and_reads_back() {
     {
         let wtxn = db.env.write_txn().unwrap();
         let mut w = KasaneDbWrite::new(wtxn, &db);
-        let ids = (0..n).map(|i| SingleId::new(20, 0, i * 4, 0).unwrap());
-        w.data_insert(table_id, ids, b"v").unwrap();
+        let mut ids = SpatialIdSet::new();
+        for i in 0..n {
+            ids.insert(SingleId::new(20, 0, i * 4, 0).unwrap());
+        }
+        w.data_insert(table_id, TableDataType::Text, ids, b"v")
+            .unwrap();
         w.commit().unwrap();
     }
 
@@ -60,13 +65,15 @@ fn dynamic_shard_splits_and_reads_back() {
     // 3. 全域を range クエリして、分割後も全 5000 セルが読めることを検証。
     let mut query = SpatialIdSet::new();
     query.insert(RangeId::new(20, [0, 0], [0, (n - 1) * 4], [0, 0]).unwrap());
-    let got = r.data_get(table_id, query, |b| Ok(b.to_vec())).unwrap();
+    let got = r.data_get(table_id, query).unwrap();
 
     let mut xs: HashSet<u32> = HashSet::new();
-    for (flex_id, value) in got {
+    for (value, flex_ids) in got {
         assert_eq!(value, b"v".to_vec());
-        for sid in flex_id.into_single_ids() {
-            xs.insert(sid.x());
+        for flex_id in flex_ids {
+            for sid in flex_id.into_single_ids() {
+                xs.insert(sid.x());
+            }
         }
     }
     let expected: HashSet<u32> = (0..n).map(|i| i * 4).collect();

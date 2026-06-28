@@ -36,21 +36,25 @@ pub async fn get(
     tracing::debug!("Searching {} spatial IDs", ids.count());
 
     let data_type = table.data_type;
-    let decoded = db.data_get(table.id, ids, |bytes| restore_value(data_type, bytes))?;
+    let groups = db.data_get(table.id, ids)?;
 
-    // data_get は (FlexId, 値) を返す。SingleId への展開は上位レイヤー（ここ）で行う。
-    let mut result = Vec::with_capacity(decoded.len());
-    for (flex_id, json_value) in decoded {
-        for single_id in flex_id.into_single_ids() {
-            result.push(SpatialData {
-                id: RawSingleId {
-                    z: single_id.z(),
-                    f: single_id.f(),
-                    x: single_id.x(),
-                    y: single_id.y(),
-                },
-                data: json_value.clone(),
-            });
+    // data_get は (値バイト, FlexId群) を返す。値の復元は値ごとに1回、
+    // SingleId への展開は上位レイヤー（ここ）で行う。
+    let mut result = Vec::new();
+    for (bytes, flex_ids) in groups {
+        let json_value = restore_value(data_type, &bytes)?;
+        for flex_id in flex_ids {
+            for single_id in flex_id.into_single_ids() {
+                result.push(SpatialData {
+                    id: RawSingleId {
+                        z: single_id.z(),
+                        f: single_id.f(),
+                        x: single_id.x(),
+                        y: single_id.y(),
+                    },
+                    data: json_value.clone(),
+                });
+            }
         }
     }
     Ok(GetDataResponse { ids: result })

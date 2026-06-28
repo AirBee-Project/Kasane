@@ -147,6 +147,20 @@ impl<'a> KasaneDbWrite<'a> {
             tables_data.delete(&mut self.write_txn, &k)?;
         }
 
+        // 1b. 値インデックスも table_id プレフィックスで全削除。
+        let value_index = self.db.value_index;
+        let vi_keys: Vec<Vec<u8>> = {
+            let mut ks = Vec::new();
+            for iter in value_index.prefix_iter(&self.write_txn, prefix.as_slice())? {
+                let (k_bytes, _) = iter?;
+                ks.push(k_bytes.to_vec());
+            }
+            ks
+        };
+        for k in vi_keys {
+            value_index.delete(&mut self.write_txn, &k)?;
+        }
+
         // 2. テーブルメタデータと ID インデックスを削除。
         self.db
             .tables

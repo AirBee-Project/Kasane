@@ -143,6 +143,10 @@ pub struct AppDb {
     /// テーブルごとの保持 FlexId 総数（O(1) で `table_count` を返すための累積カウンタ）。
     /// Key: `TableId` -> Value: `u64`
     pub table_counts: Database<SerdeBincode<crate::models::id::TableId>, SerdeBincode<u64>>,
+
+    /// 値→空間の二次インデックス（値フィルタ用）。
+    /// Key 生バイト列: `table_id(16) ‖ 順序保存エンコード値(可変) ‖ flexid.spatial_encode(14)` -> 値なし
+    pub value_index: Database<Bytes, Unit>,
 }
 
 #[tracing::instrument]
@@ -190,6 +194,9 @@ pub fn initialize_database(path: &str) -> AppDb {
     let table_counts = env
         .create_database(&mut write_txn, Some("table_counts"))
         .unwrap();
+    let value_index = env
+        .create_database(&mut write_txn, Some("value_index"))
+        .unwrap();
 
     if users.is_empty(&write_txn).unwrap() {
         let default_username = "root";
@@ -224,5 +231,6 @@ pub fn initialize_database(path: &str) -> AppDb {
         user_privileges,
         tables_data,
         table_counts,
+        value_index,
     }
 }
