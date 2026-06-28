@@ -9,7 +9,7 @@
 
 use heed::types::Bytes;
 use heed::{Database, RoTxn, WithoutTls};
-use kasane_logic::{FlexId, SpatialIdMap};
+use kasane_logic::{ArchivedMap, FlexId, SpatialIdMap};
 
 use crate::db_init::TableIdAndFlexId;
 use crate::error::AppError;
@@ -171,6 +171,36 @@ pub fn find_parent_pointer(
             },
             None => return Ok(None),
         }
+    }
+}
+
+/// エントリ生バイト列がリーフなら、その中身（`SpatialIdMap` バイト列）への借用を返す。
+/// ポインタノードなら `None`、不正なら `Err`。
+fn leaf_payload(entry: &[u8]) -> Result<Option<&[u8]>, AppError> {
+    match entry.first() {
+        Some(&TAG_LEAF) => Ok(Some(&entry[1..])),
+        Some(&TAG_POINTERS) => Ok(None),
+        _ => Err(AppError::InternalError("empty shard entry".to_string())),
+    }
+}
+
+/// リーフ領域 `region` を **ZeroCopy archived リーダ**として開く（`Arc` 木を再構築しない）。
+/// 未作成なら `Ok(None)`、ポインタノードに当たったら `Err`。読み取り専用。
+pub fn load_leaf_archived<'txn>(
+    tables_data: &Database<TableIdAndFlexId, Bytes>,
+    txn: &'txn RoTxn<WithoutTls>,
+    table_id: TableId,
+    region: &FlexId,
+) -> Result<Option<ArchivedMap<'txn>>, AppError> {
+    match tables_data.get(txn, &(table_id, region.clone()))? {
+        Some(entry) => match leaf_payload(entry)? {
+            // SAFETY: 自分自身の to_bytes が書いた正当なバイト列。
+            Some(map_bytes) => Ok(Some(unsafe { ArchivedMap::access(map_bytes) })),
+            None => Err(AppError::InternalError(
+                "routed to a pointer node".to_string(),
+            )),
+        },
+        None => Ok(None),
     }
 }
 

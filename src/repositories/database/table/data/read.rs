@@ -29,15 +29,23 @@ impl<'a> KasaneDbRead<'a> {
             for region in
                 shard::route_leaves(&self.db.tables_data, &self.read_txn, table_id, &query_flex)?
             {
-                let map =
-                    shard::load_leaf_map(&self.db.tables_data, &self.read_txn, table_id, &region)?;
+                // ZeroCopy archived リーダで、Arc 木を再構築せずに走査する。
+                let Some(arch) = shard::load_leaf_archived(
+                    &self.db.tables_data,
+                    &self.read_txn,
+                    table_id,
+                    &region,
+                )?
+                else {
+                    continue; // 未作成リーフ（データなし）
+                };
                 // query_flex に切り取られた (FlexId, 値) を、値ごとにまとめる。
-                for (got_flex, value) in map.get(&query_flex) {
+                for (got_flex, value) in arch.get(&query_flex) {
                     // 値バイトのクローンは初出時のみ（既出値は get_mut で参照のみ）。
                     if let Some(flex_ids) = by_value.get_mut(value) {
                         flex_ids.push(got_flex);
                     } else {
-                        by_value.insert(value.clone(), vec![got_flex]);
+                        by_value.insert(value.to_vec(), vec![got_flex]);
                     }
                 }
             }
