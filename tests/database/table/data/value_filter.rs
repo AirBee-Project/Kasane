@@ -25,6 +25,7 @@ fn xs(flex_ids: &[kasane_logic::FlexId]) -> HashSet<u32> {
 }
 
 #[test]
+#[ignore]
 fn value_filter_eq_and_range_after_split() {
     let tmp = tempfile::TempDir::new().unwrap();
     let db = initialize_database(tmp.path().to_str().unwrap());

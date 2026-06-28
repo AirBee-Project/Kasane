@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use kasane_logic::{FlexId, IntoFlexIds, SpatialIdMap, SpatialIdSet};
 
-use super::shard::{self, MAX_FLEX_ID_PER_SHARD, ShardEntry};
+use super::shard::{self, MAX_FLEX_ID_PER_SHARD, MERGE_FLEX_ID_THRESHOLD, ShardEntry};
 use super::value_index;
 use crate::models::database::table::TableDataType;
 use crate::models::id::TableId;
@@ -78,16 +78,122 @@ impl<'a> KasaneDbWrite<'a> {
     ) -> Result<(), AppError> {
         let by_leaf = self.group_by_leaf(table_id, ids.into_flex_ids())?;
         let mut delta: i64 = 0;
+        let mut affected: Vec<FlexId> = Vec::new();
         for (region, flex_ids) in by_leaf {
             let map =
                 shard::load_leaf_map(&self.db.tables_data, &self.write_txn, table_id, &region)?;
-            delta += self.apply_leaf(table_id, data_type, region, map, &flex_ids, |m| {
+            delta += self.apply_leaf(table_id, data_type, region.clone(), map, &flex_ids, |m| {
                 for flex_id in &flex_ids {
                     m.remove(flex_id).for_each(drop);
                 }
             })?;
+            affected.push(region);
         }
         self.adjust_table_count(table_id, delta)?;
+
+        // remove で縮んだリーフは、兄弟と統合できるなら統合する（split の逆）。
+        for region in affected {
+            self.try_merge_up(table_id, data_type, region)?;
+        }
+        Ok(())
+    }
+
+    /// `region` から親へ遡り、親ポインタノードの子（兄弟）合算が
+    /// [`MERGE_FLEX_ID_THRESHOLD`] 以下なら1つのリーフへ統合する。可能な限り上へ伝播する。
+    fn try_merge_up(
+        &mut self,
+        table_id: TableId,
+        data_type: TableDataType,
+        region: FlexId,
+    ) -> Result<(), AppError> {
+        let mut region = region;
+        loop {
+            let Some((parent_region, child_regions)) = shard::find_parent_pointer(
+                &self.db.tables_data,
+                &self.write_txn,
+                table_id,
+                &region,
+            )?
+            else {
+                break;
+            };
+
+            // 子を順にロード。すべてリーフで、合算が閾値以下なら統合する。
+            let mut child_maps: Vec<SpatialIdMap<Vec<u8>>> =
+                Vec::with_capacity(child_regions.len());
+            let mut combined = 0usize;
+            let mut mergeable = true;
+            for cr in &child_regions {
+                let m = match self
+                    .db
+                    .tables_data
+                    .get(&self.write_txn, &(table_id, cr.clone()))?
+                {
+                    Some(bytes) => match ShardEntry::decode(bytes)? {
+                        ShardEntry::Leaf(map_bytes) => {
+                            unsafe { SpatialIdMap::<Vec<u8>>::from_bytes(&map_bytes) }.map_err(
+                                |e| AppError::InternalError(format!("rkyv deserialize: {e}")),
+                            )?
+                        }
+                        // 子がまだ分割木 → このレベルでは統合しない。
+                        ShardEntry::Pointers(_) => {
+                            mergeable = false;
+                            break;
+                        }
+                    },
+                    None => SpatialIdMap::new_in_shard(cr.clone()),
+                };
+                combined += m.count();
+                if combined > MERGE_FLEX_ID_THRESHOLD {
+                    mergeable = false;
+                    break;
+                }
+                child_maps.push(m);
+            }
+            if !mergeable {
+                break;
+            }
+
+            // 値インデックス用に、変更前の全子リーフを集める。
+            let old: Vec<(FlexId, Vec<u8>)> = child_maps
+                .iter()
+                .flat_map(|m| m.iter().map(|(f, v)| (f, v.clone())))
+                .collect();
+
+            // 統合（union。境界跨ぎの同値は compaction される）。
+            let merged = SpatialIdMap::merge_siblings(parent_region.clone(), child_maps);
+            let new: Vec<(FlexId, Vec<u8>)> = merged.iter().map(|(f, v)| (f, v.clone())).collect();
+
+            // 値インデックス差分更新 ＋ compaction による件数減を table_count に反映。
+            self.update_value_index(table_id, data_type, &old, &new)?;
+            let merge_delta = new.len() as i64 - combined as i64;
+            self.adjust_table_count(table_id, merge_delta)?;
+
+            // 親キーをリーフ（空なら削除）に置換し、子キーを削除。
+            let parent_key = (table_id, parent_region.clone());
+            if merged.is_empty() {
+                self.db
+                    .tables_data
+                    .delete(&mut self.write_txn, &parent_key)?;
+            } else {
+                let bytes = merged
+                    .to_bytes()
+                    .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
+                self.db.tables_data.put(
+                    &mut self.write_txn,
+                    &parent_key,
+                    &ShardEntry::encode_leaf(&bytes),
+                )?;
+            }
+            for cr in &child_regions {
+                self.db
+                    .tables_data
+                    .delete(&mut self.write_txn, &(table_id, cr.clone()))?;
+            }
+
+            // 親が新たなリーフになった → さらに上へ伝播。
+            region = parent_region;
+        }
         Ok(())
     }
 

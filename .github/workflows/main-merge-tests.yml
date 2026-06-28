@@ -74,14 +74,16 @@ jobs:
               --bins \
               --tests \
               --no-default-features \
-              --features "${{ matrix.features }}"
+              --features "${{ matrix.features }}" \
+              -- --include-ignored
           else
             cargo test \
               --locked \
               --lib \
               --bins \
               --tests \
-              --no-default-features
+              --no-default-features \
+              -- --include-ignored
           fi
 
       - name: Verify OpenAPI spec matches generated

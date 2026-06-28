@@ -14,6 +14,7 @@ use kasane::repositories::{KasaneDbRead, KasaneDbWrite};
 use kasane_logic::{IntoSingleIds, RangeId, SingleId, SpatialIdSet};
 
 #[test]
+#[ignore]
 fn dynamic_shard_splits_and_reads_back() {
     let tmp = tempfile::TempDir::new().unwrap();
     let db = initialize_database(tmp.path().to_str().unwrap());

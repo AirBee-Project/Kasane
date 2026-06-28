@@ -18,6 +18,10 @@ use crate::models::id::TableId;
 /// 1 シャードが保持できる [`FlexId`] 数の上限。これを超えたシャードは動的に分割される。
 pub const MAX_FLEX_ID_PER_SHARD: usize = 4096;
 
+/// 兄弟シャードの合算件数がこの値以下になったら統合（merge）する低ウォーターマーク。
+/// `MAX` と分けてヒステリシスを持たせ、split↔merge の往復（スラッシング）を防ぐ。
+pub const MERGE_FLEX_ID_THRESHOLD: usize = MAX_FLEX_ID_PER_SHARD / 2;
+
 /// [`FlexId`] の `spatial_encode` のバイト長。
 const FLEX_ID_LEN: usize = 14;
 
@@ -122,6 +126,52 @@ pub fn route_leaves(
     let mut out = Vec::new();
     collect_leaf_regions(tables_data, txn, table_id, root, flex_id, &mut out)?;
     Ok(out)
+}
+
+/// `region`（リーフの領域）を直接の子に持つ**親ポインタノード**を見つけ、
+/// `(親領域, 親の全子領域)` を返す。`region` がルート（半球）や、ポインタ配下でないなら `None`。
+///
+/// 兄弟 merge のために、ルートから `region` へ降りながら「`region` を直接の子に持つ
+/// ポインタノード」を特定する。
+pub fn find_parent_pointer(
+    tables_data: &Database<TableIdAndFlexId, Bytes>,
+    txn: &RoTxn<WithoutTls>,
+    table_id: TableId,
+    region: &FlexId,
+) -> Result<Option<(FlexId, Vec<FlexId>)>, AppError> {
+    let root = if region.f_index().is_negative() {
+        FlexId::LOWER_MAX
+    } else {
+        FlexId::UPPER_MAX
+    };
+    // ルート自身に親はない。
+    if region == &root {
+        return Ok(None);
+    }
+
+    let mut cur = root;
+    loop {
+        match tables_data.get(txn, &(table_id, cur.clone()))? {
+            Some(bytes) => match ShardEntry::decode(bytes)? {
+                ShardEntry::Pointers(children) => {
+                    // region が直接の子なら、cur が親。
+                    if children.iter().any(|c| c == region) {
+                        return Ok(Some((cur, children)));
+                    }
+                    // region を含む子へ降りる（region ⊆ child）。
+                    match children
+                        .into_iter()
+                        .find(|c| c.intersection(region) == Some(region.clone()))
+                    {
+                        Some(child) => cur = child,
+                        None => return Ok(None),
+                    }
+                }
+                ShardEntry::Leaf(_) => return Ok(None),
+            },
+            None => return Ok(None),
+        }
+    }
 }
 
 /// リーフ領域 `region` の [`SpatialIdMap`] をロードする。未作成なら領域に閉じた空マップを返す。

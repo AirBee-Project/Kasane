@@ -29,7 +29,7 @@ pub async fn table_info(
         &app_state,
         &auth_user,
         &db_name,
-        crate::models::users::UserRole::Manage,
+        crate::models::users::UserRole::Read,
     )
     .await?;
 
