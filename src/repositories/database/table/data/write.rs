@@ -148,18 +148,32 @@ impl<'a> KasaneDbWrite<'a> {
                 break;
             }
 
-            // 値インデックス用に、変更前の全子リーフを集める。
-            let old: Vec<(FlexId, Vec<u8>)> = child_maps
-                .iter()
-                .flat_map(|m| m.iter().map(|(f, v)| (f, v.clone())))
-                .collect();
+            // 値インデックス用に、変更前の全子リーフのキーを集める。
+            let mut old_keys = HashSet::new();
+            for m in &child_maps {
+                for (f, v) in m.iter() {
+                    old_keys.insert(value_index::make_key(
+                        table_id,
+                        &value_index::order_preserving(data_type, v),
+                        &f,
+                    ));
+                }
+            }
 
             // 統合（union。境界跨ぎの同値は compaction される）。
             let merged = SpatialIdMap::merge_siblings(parent_region.clone(), child_maps);
-            let new: Vec<(FlexId, Vec<u8>)> = merged.iter().map(|(f, v)| (f, v.clone())).collect();
+
+            let mut new_keys = HashSet::new();
+            for (f, v) in merged.iter() {
+                new_keys.insert(value_index::make_key(
+                    table_id,
+                    &value_index::order_preserving(data_type, v),
+                    &f,
+                ));
+            }
 
             // 値インデックス差分更新。
-            self.update_value_index(table_id, data_type, &old, &new)?;
+            self.update_value_index(old_keys, new_keys)?;
 
             // 親キーをリーフ（空なら削除）に置換し、子キーを削除。
             let parent_key = (table_id, parent_region.clone());
@@ -210,24 +224,36 @@ impl<'a> KasaneDbWrite<'a> {
             scan.insert(f.clone());
         }
 
-        // 変更前の重なりリーフ（切り取らず）。
-        let old: Vec<(FlexId, Vec<u8>)> = map
-            .get_overlapping(&scan)
-            .map(|(f, v)| (f, v.clone()))
-            .collect();
+        // 変更前の重なりリーフからインデックスキーを計算
+        let mut old_keys = HashSet::new();
+        let mut old_flex_ids = Vec::new();
+        for (f, v) in map.get_overlapping(&scan) {
+            old_keys.insert(value_index::make_key(
+                table_id,
+                &value_index::order_preserving(data_type, v),
+                &f,
+            ));
+            old_flex_ids.push(f);
+        }
 
         modify(&mut map);
 
         // 再スキャン範囲 = 入力 ∪ 旧リーフ領域（分割で生じた残りリーフも拾う）。
-        for (f, _) in &old {
-            scan.insert(f.clone());
+        for f in old_flex_ids {
+            scan.insert(f);
         }
-        let new: Vec<(FlexId, Vec<u8>)> = map
-            .get_overlapping(&scan)
-            .map(|(f, v)| (f, v.clone()))
-            .collect();
 
-        self.update_value_index(table_id, data_type, &old, &new)?;
+        // 変更後の重なりリーフからインデックスキーを計算
+        let mut new_keys = HashSet::new();
+        for (f, v) in map.get_overlapping(&scan) {
+            new_keys.insert(value_index::make_key(
+                table_id,
+                &value_index::order_preserving(data_type, v),
+                &f,
+            ));
+        }
+
+        self.update_value_index(old_keys, new_keys)?;
 
         let key = (table_id, region.clone());
         if map.is_empty() {
@@ -240,35 +266,20 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(())
     }
 
-    /// 旧/新リーフ集合の対称差だけ `value_index` を更新する。
+    /// 旧/新のインデックスキーセットの対称差だけ `value_index` を更新する。
     fn update_value_index(
         &mut self,
-        table_id: TableId,
-        data_type: TableDataType,
-        old: &[(FlexId, Vec<u8>)],
-        new: &[(FlexId, Vec<u8>)],
+        old_keys: HashSet<Vec<u8>>,
+        new_keys: HashSet<Vec<u8>>,
     ) -> Result<(), AppError> {
-        let old_set: HashSet<(&FlexId, &Vec<u8>)> = old.iter().map(|(f, v)| (f, v)).collect();
-        let new_set: HashSet<(&FlexId, &Vec<u8>)> = new.iter().map(|(f, v)| (f, v)).collect();
-
-        for (f, v) in old {
-            if !new_set.contains(&(f, v)) {
-                let key = value_index::make_key(
-                    table_id,
-                    &value_index::order_preserving(data_type, v),
-                    f,
-                );
-                self.db.value_index.delete(&mut self.write_txn, &key)?;
+        for key in &old_keys {
+            if !new_keys.contains(key) {
+                self.db.value_index.delete(&mut self.write_txn, key)?;
             }
         }
-        for (f, v) in new {
-            if !old_set.contains(&(f, v)) {
-                let key = value_index::make_key(
-                    table_id,
-                    &value_index::order_preserving(data_type, v),
-                    f,
-                );
-                self.db.value_index.put(&mut self.write_txn, &key, &())?;
+        for key in &new_keys {
+            if !old_keys.contains(key) {
+                self.db.value_index.put(&mut self.write_txn, key, &())?;
             }
         }
         Ok(())

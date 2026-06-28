@@ -86,11 +86,9 @@ impl<'a> KasaneDbRead<'a> {
         {
             let (_, bytes) = item?;
             if let ShardEntry::Leaf(map_bytes) = ShardEntry::decode(bytes)? {
-                // ※現状はデシリアライズして count() を取得していますが、
-                // 将来的に rkyv のゼロコピー対応が行われれば、より高速（O(1)）に取得できるようになります。
-                let map = unsafe { kasane_logic::SpatialIdMap::<Vec<u8>>::from_bytes(&map_bytes) }
-                    .map_err(|e| AppError::InternalError(format!("rkyv deserialize: {e}")))?;
-                total += map.count() as u64;
+                let map = unsafe { kasane_logic::ArchivedMap::access(&map_bytes) };
+                // ArchivedMap には count がないので iter().len() で代用する
+                total += map.iter().len() as u64;
             }
         }
         Ok(total)
