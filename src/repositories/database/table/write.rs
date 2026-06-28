@@ -168,9 +168,6 @@ impl<'a> KasaneDbWrite<'a> {
         self.db
             .table_id_index
             .delete(&mut self.write_txn, &table.id)?;
-        self.db
-            .table_counts
-            .delete(&mut self.write_txn, &table.id)?;
 
         // 3. キャッシュから除去。
         self.table_caches

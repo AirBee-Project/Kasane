@@ -22,17 +22,15 @@ impl<'a> KasaneDbWrite<'a> {
         data: &[u8],
     ) -> Result<(), AppError> {
         let by_leaf = self.group_by_leaf(table_id, ids.into_flex_ids())?;
-        let mut delta: i64 = 0;
         for (region, flex_ids) in by_leaf {
             let map =
                 shard::load_leaf_map(&self.db.tables_data, &self.write_txn, table_id, &region)?;
-            delta += self.apply_leaf(table_id, data_type, region, map, &flex_ids, |m| {
+            self.apply_leaf(table_id, data_type, region, map, &flex_ids, |m| {
                 for flex_id in &flex_ids {
                     m.insert(flex_id.clone(), data.to_vec());
                 }
             })?;
         }
-        self.adjust_table_count(table_id, delta)?;
         Ok(())
     }
 
@@ -45,11 +43,10 @@ impl<'a> KasaneDbWrite<'a> {
         data: &[u8],
     ) -> Result<(), AppError> {
         let by_leaf = self.group_by_leaf(table_id, ids.into_flex_ids())?;
-        let mut delta: i64 = 0;
         for (region, flex_ids) in by_leaf {
             let map =
                 shard::load_leaf_map(&self.db.tables_data, &self.write_txn, table_id, &region)?;
-            delta += self.apply_leaf(table_id, data_type, region, map, &flex_ids, |m| {
+            self.apply_leaf(table_id, data_type, region, map, &flex_ids, |m| {
                 for flex_id in &flex_ids {
                     // 既に値があるセルは除外し、`target - 既存` のみ挿入する。
                     let occupied: Vec<FlexId> = m.get(flex_id).map(|(f, _)| f).collect();
@@ -65,7 +62,6 @@ impl<'a> KasaneDbWrite<'a> {
                 }
             })?;
         }
-        self.adjust_table_count(table_id, delta)?;
         Ok(())
     }
 
@@ -77,19 +73,17 @@ impl<'a> KasaneDbWrite<'a> {
         ids: SpatialIdSet,
     ) -> Result<(), AppError> {
         let by_leaf = self.group_by_leaf(table_id, ids.into_flex_ids())?;
-        let mut delta: i64 = 0;
         let mut affected: Vec<FlexId> = Vec::new();
         for (region, flex_ids) in by_leaf {
             let map =
                 shard::load_leaf_map(&self.db.tables_data, &self.write_txn, table_id, &region)?;
-            delta += self.apply_leaf(table_id, data_type, region.clone(), map, &flex_ids, |m| {
+            self.apply_leaf(table_id, data_type, region.clone(), map, &flex_ids, |m| {
                 for flex_id in &flex_ids {
                     m.remove(flex_id).for_each(drop);
                 }
             })?;
             affected.push(region);
         }
-        self.adjust_table_count(table_id, delta)?;
 
         // remove で縮んだリーフは、兄弟と統合できるなら統合する（split の逆）。
         for region in affected {
@@ -164,10 +158,8 @@ impl<'a> KasaneDbWrite<'a> {
             let merged = SpatialIdMap::merge_siblings(parent_region.clone(), child_maps);
             let new: Vec<(FlexId, Vec<u8>)> = merged.iter().map(|(f, v)| (f, v.clone())).collect();
 
-            // 値インデックス差分更新 ＋ compaction による件数減を table_count に反映。
+            // 値インデックス差分更新。
             self.update_value_index(table_id, data_type, &old, &new)?;
-            let merge_delta = new.len() as i64 - combined as i64;
-            self.adjust_table_count(table_id, merge_delta)?;
 
             // 親キーをリーフ（空なら削除）に置換し、子キーを削除。
             let parent_key = (table_id, parent_region.clone());
@@ -201,7 +193,6 @@ impl<'a> KasaneDbWrite<'a> {
     ///
     /// `modify` 実行前後で「入力 ∪ 旧リーフ領域」に重なるリーフ集合 (FlexId, 値) を取り、
     /// その対称差だけ `value_index` を put/delete する（分割で生じた残りリーフも拾える）。
-    /// 戻り値は保持件数の増減（`table_counts` 用）。
     fn apply_leaf<F>(
         &mut self,
         table_id: TableId,
@@ -210,7 +201,7 @@ impl<'a> KasaneDbWrite<'a> {
         mut map: SpatialIdMap<Vec<u8>>,
         input: &[FlexId],
         modify: F,
-    ) -> Result<i64, AppError>
+    ) -> Result<(), AppError>
     where
         F: FnOnce(&mut SpatialIdMap<Vec<u8>>),
     {
@@ -225,9 +216,7 @@ impl<'a> KasaneDbWrite<'a> {
             .map(|(f, v)| (f, v.clone()))
             .collect();
 
-        let before = map.count() as i64;
         modify(&mut map);
-        let after = map.count() as i64;
 
         // 再スキャン範囲 = 入力 ∪ 旧リーフ領域（分割で生じた残りリーフも拾う）。
         for (f, _) in &old {
@@ -248,7 +237,7 @@ impl<'a> KasaneDbWrite<'a> {
             self.store_leaf_with_split(table_id, region, map)?;
         }
 
-        Ok(after - before)
+        Ok(())
     }
 
     /// 旧/新リーフ集合の対称差だけ `value_index` を更新する。
@@ -282,23 +271,6 @@ impl<'a> KasaneDbWrite<'a> {
                 self.db.value_index.put(&mut self.write_txn, &key, &())?;
             }
         }
-        Ok(())
-    }
-
-    /// テーブルの保持件数カウンタ（`table_counts`）を `delta` だけ増減する。
-    fn adjust_table_count(&mut self, table_id: TableId, delta: i64) -> Result<(), AppError> {
-        if delta == 0 {
-            return Ok(());
-        }
-        let current = self
-            .db
-            .table_counts
-            .get(&self.write_txn, &table_id)?
-            .unwrap_or(0);
-        let next = (current as i64 + delta).max(0) as u64;
-        self.db
-            .table_counts
-            .put(&mut self.write_txn, &table_id, &next)?;
         Ok(())
     }
 

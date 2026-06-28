@@ -140,10 +140,6 @@ pub struct AppDb {
     /// Key: `TableId` と 空間ID（`FlexId`）(`TableIdAndFlexId`) -> SpatialIdMapのバイト列(rkvy)
     pub tables_data: Database<TableIdAndFlexId, Bytes>,
 
-    /// テーブルごとの保持 FlexId 総数（O(1) で `table_count` を返すための累積カウンタ）。
-    /// Key: `TableId` -> Value: `u64`
-    pub table_counts: Database<SerdeBincode<crate::models::id::TableId>, SerdeBincode<u64>>,
-
     /// 値→空間の二次インデックス（値フィルタ用）。
     /// Key 生バイト列: `table_id(16) ‖ 順序保存エンコード値(可変) ‖ flexid.spatial_encode(14)` -> 値なし
     pub value_index: Database<Bytes, Unit>,
@@ -191,9 +187,6 @@ pub fn initialize_database(path: &str) -> AppDb {
     let tables_data = env
         .create_database(&mut write_txn, Some("tables_data"))
         .unwrap();
-    let table_counts = env
-        .create_database(&mut write_txn, Some("table_counts"))
-        .unwrap();
     let value_index = env
         .create_database(&mut write_txn, Some("value_index"))
         .unwrap();
@@ -230,7 +223,6 @@ pub fn initialize_database(path: &str) -> AppDb {
         users,
         user_privileges,
         tables_data,
-        table_counts,
         value_index,
     }
 }

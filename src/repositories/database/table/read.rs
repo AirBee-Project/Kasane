@@ -73,12 +73,26 @@ impl<'a> KasaneDbRead<'a> {
 
     /// テーブルが保持する空間ID(FlexId)の総数を返す。
     ///
-    /// 書き込み時に維持される累積カウンタ（`table_counts`）を1回引くだけの O(1)。
+    /// シャード（Leaf）をスキャンして要素数を足し合わせる動的計算で取得します。
     pub fn table_count(&self, table_id: crate::models::id::TableId) -> Result<u64, AppError> {
-        Ok(self
+        use crate::repositories::database::table::data::shard::ShardEntry;
+
+        let mut total = 0;
+        for item in self
             .db
-            .table_counts
-            .get(&self.read_txn, &table_id)?
-            .unwrap_or(0))
+            .tables_data
+            .remap_key_type::<heed::types::Bytes>()
+            .prefix_iter(&self.read_txn, table_id.0.as_bytes())?
+        {
+            let (_, bytes) = item?;
+            if let ShardEntry::Leaf(map_bytes) = ShardEntry::decode(bytes)? {
+                // ※現状はデシリアライズして count() を取得していますが、
+                // 将来的に rkyv のゼロコピー対応が行われれば、より高速（O(1)）に取得できるようになります。
+                let map = unsafe { kasane_logic::SpatialIdMap::<Vec<u8>>::from_bytes(&map_bytes) }
+                    .map_err(|e| AppError::InternalError(format!("rkyv deserialize: {e}")))?;
+                total += map.count() as u64;
+            }
+        }
+        Ok(total)
     }
 }
