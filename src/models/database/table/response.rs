@@ -11,7 +11,8 @@ pub struct TableInfoResponse {
     #[schema(example = 25)]
     pub max_zoom_level: u8,
     #[schema(example = 100)]
-    pub count: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub count: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]

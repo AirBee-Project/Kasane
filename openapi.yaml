@@ -732,7 +732,6 @@ components:
       - name
       - data_type
       - max_zoom_level
-      - count
       properties:
         name:
           type: string
@@ -745,7 +744,9 @@ components:
           example: 25
           minimum: 0
         count:
-          type: integer
+          type:
+          - integer
+          - 'null'
           format: int64
           example: 100
           minimum: 0

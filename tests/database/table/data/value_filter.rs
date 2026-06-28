@@ -47,13 +47,18 @@ fn value_filter_eq_and_range_after_split() {
 
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
 
-    // 等価: value == 1234 → セル x = 1234*4 のみ。
-    let eq = r.data_filter_eq(table_id, dt, &enc(1234)).unwrap();
+    let eq = r
+        .data_filter_eq(table_id, dt, &enc(1234))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
     assert_eq!(xs(&eq), HashSet::from([1234u32 * 4]));
 
     // 範囲: 10 <= value <= 20 → 11 セル。順序保存エンコードが効くことを確認。
     let rng = r
         .data_filter_range(table_id, dt, &enc(10), &enc(20))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
         .unwrap();
     let expected: HashSet<u32> = (10u32..=20).map(|i| i * 4).collect();
     assert_eq!(xs(&rng), expected);
@@ -79,18 +84,33 @@ fn value_filter_reflects_overwrite_and_remove() {
     insert(7);
     {
         let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
-        assert_eq!(r.data_filter_eq(table_id, dt, &enc(7)).unwrap().len(), 1);
+        let eq_7 = r
+            .data_filter_eq(table_id, dt, &enc(7))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(eq_7.len(), 1);
     }
 
     // 値 8 で上書き → 旧値 7 は消え、8 が引ける。
     insert(8);
     {
         let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
+        let eq_7 = r
+            .data_filter_eq(table_id, dt, &enc(7))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         assert!(
-            r.data_filter_eq(table_id, dt, &enc(7)).unwrap().is_empty(),
+            eq_7.is_empty(),
             "overwritten value must be gone from the index"
         );
-        assert_eq!(r.data_filter_eq(table_id, dt, &enc(8)).unwrap().len(), 1);
+        let eq_8 = r
+            .data_filter_eq(table_id, dt, &enc(8))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(eq_8.len(), 1);
     }
 
     // 削除 → 8 も消える。
@@ -103,9 +123,11 @@ fn value_filter_reflects_overwrite_and_remove() {
     }
     {
         let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
-        assert!(
-            r.data_filter_eq(table_id, dt, &enc(8)).unwrap().is_empty(),
-            "removed value must be gone from the index"
-        );
+        let eq_8 = r
+            .data_filter_eq(table_id, dt, &enc(8))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert!(eq_8.is_empty(), "removed value must be gone from the index");
     }
 }

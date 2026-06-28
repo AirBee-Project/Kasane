@@ -49,13 +49,10 @@ impl<'a> KasaneDbWrite<'a> {
             self.apply_leaf(table_id, data_type, region, map, &flex_ids, |m| {
                 for flex_id in &flex_ids {
                     // 既に値があるセルは除外し、`target - 既存` のみ挿入する。
-                    let occupied: Vec<FlexId> = m.get(flex_id).map(|(f, _)| f).collect();
+                    let occupied_set: SpatialIdSet = m.get(flex_id).map(|(f, _)| f).collect();
                     let mut target_set = SpatialIdSet::new();
                     target_set.insert(flex_id.clone());
-                    let mut occupied_set = SpatialIdSet::new();
-                    for f in &occupied {
-                        occupied_set.insert(f.clone());
-                    }
+
                     for f in (&target_set - &occupied_set).into_flex_ids() {
                         m.insert(f, data.to_vec());
                     }
@@ -219,10 +216,7 @@ impl<'a> KasaneDbWrite<'a> {
     where
         F: FnOnce(&mut SpatialIdMap<Vec<u8>>),
     {
-        let mut scan = SpatialIdSet::new();
-        for f in input {
-            scan.insert(f.clone());
-        }
+        let mut scan: SpatialIdSet = input.iter().cloned().collect();
 
         // 変更前の重なりリーフからインデックスキーを計算
         let mut old_keys = HashSet::new();
@@ -239,9 +233,7 @@ impl<'a> KasaneDbWrite<'a> {
         modify(&mut map);
 
         // 再スキャン範囲 = 入力 ∪ 旧リーフ領域（分割で生じた残りリーフも拾う）。
-        for f in old_flex_ids {
-            scan.insert(f);
-        }
+        scan.extend(old_flex_ids);
 
         // 変更後の重なりリーフからインデックスキーを計算
         let mut new_keys = HashSet::new();
