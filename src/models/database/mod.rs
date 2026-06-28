@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseMetadata {
-    pub id: Uuid,
+    pub id: crate::models::id::DatabaseId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]

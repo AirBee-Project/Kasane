@@ -37,7 +37,7 @@ pub async fn get(
     // 値の復元はリポジトリの txn スコープ内・並列ワーカー内で行う
     // （生バイト列をコピーせず、その場で JSON 値へ復元する）。
     let data_type = table.data_type;
-    let decoded = db.data_get(table.id, ids, |bytes| restore_value(data_type, bytes))?;
+    let decoded = db.data_get(table.id.into(), ids, |bytes| restore_value(data_type, bytes))?;
 
     let mut result = Vec::with_capacity(decoded.len());
     for (single_id, json_value) in decoded {

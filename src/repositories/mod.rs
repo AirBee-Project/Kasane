@@ -20,7 +20,7 @@ pub struct KasaneDbWrite<'a> {
     pub write_txn: heed::RwTxn<'a>,
     pub db: &'a crate::db_init::AppDb,
     pub database_caches: HashMap<String, DatabaseMetadata>,
-    pub table_caches: HashMap<(uuid::Uuid, String), TableMetadata>,
+    pub table_caches: HashMap<(crate::models::id::DatabaseId, String), TableMetadata>,
 }
 
 impl<'a> KasaneDbWrite<'a> {
@@ -29,7 +29,7 @@ impl<'a> KasaneDbWrite<'a> {
             write_txn,
             db,
             database_caches: HashMap::new(),
-            table_caches: HashMap::new(),
+            table_caches: std::collections::HashMap::new(),
         }
     }
 

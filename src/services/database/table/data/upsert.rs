@@ -32,7 +32,7 @@ pub async fn upsert(
     let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
 
     tracing::debug!("Upserting {} spatial IDs", ids.count());
-    db.data_upsert(table.id, ids, &value)?;
+    db.data_upsert(table.id.into(), ids, &value)?;
     db.commit()?;
     Ok(())
 }

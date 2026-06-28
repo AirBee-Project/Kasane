@@ -80,7 +80,7 @@ pub async fn database_list(
     let res = crate::services::database::list(
         &app_state,
         auth_user.user.is_global_admin,
-        auth_user.user.id.into_bytes(),
+        crate::models::id::UserId(auth_user.user.id),
     )
     .await?;
     Ok(Json(res))

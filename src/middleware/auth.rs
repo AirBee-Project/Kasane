@@ -85,7 +85,7 @@ pub async fn check_privilege(
     let role = {
         let read_txn = app_state.db.env.read_txn()?;
         let repo = crate::repositories::users::KasaneUsersRead::new(read_txn, &app_state.db);
-        repo.get_privilege(auth_user.user.id.into_bytes(), db_name)?
+        repo.get_privilege(crate::models::id::UserId(auth_user.user.id), db_name)?
     };
 
     if let Some(r) = role

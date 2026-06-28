@@ -20,7 +20,7 @@ impl<'a> KasaneDbRead<'a> {
         };
 
         let db_tables = self.db.tables;
-        if let Some(m) = db_tables.get(&self.read_txn, &(db_meta.id.into_bytes(), table_name))? {
+        if let Some(m) = db_tables.get(&self.read_txn, &(db_meta.id, table_name))? {
             Ok(Some(Table {
                 id: m.id,
                 name: table_name.to_string(),
@@ -33,18 +33,8 @@ impl<'a> KasaneDbRead<'a> {
     }
 
     /// Tableの件数を取得する
-    pub fn table_count(&self, table_id: uuid::Uuid) -> Result<u64, AppError> {
-        let table_id_bytes = table_id.into_bytes();
-        let db = self
-            .db
-            .spatialid_to_value
-            .remap_key_type::<heed::types::Bytes>();
-        let mut count = 0;
-        for iter in db.prefix_iter(&self.read_txn, table_id_bytes.as_slice())? {
-            let _ = iter?;
-            count += 1;
-        }
-        Ok(count)
+    pub fn table_count(&self, table_id: crate::models::id::TableId) -> Result<u64, AppError> {
+        todo!()
     }
 
     /// Tableの一覧を取得する
