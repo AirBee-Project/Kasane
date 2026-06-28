@@ -32,11 +32,6 @@ impl<'a> KasaneDbRead<'a> {
         }
     }
 
-    /// Tableの件数を取得する
-    pub fn table_count(&self, table_id: crate::models::id::TableId) -> Result<u64, AppError> {
-        todo!()
-    }
-
     /// Tableの一覧を取得する
     pub fn table_list(&self, db_name: &str) -> Result<Vec<Table>, AppError> {
         if db_name.is_empty() {
@@ -74,5 +69,16 @@ impl<'a> KasaneDbRead<'a> {
             });
         }
         Ok(tables)
+    }
+
+    /// テーブルが保持する空間ID(FlexId)の総数を返す。
+    ///
+    /// 書き込み時に維持される累積カウンタ（`table_counts`）を1回引くだけの O(1)。
+    pub fn table_count(&self, table_id: crate::models::id::TableId) -> Result<u64, AppError> {
+        Ok(self
+            .db
+            .table_counts
+            .get(&self.read_txn, &table_id)?
+            .unwrap_or(0))
     }
 }

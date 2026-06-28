@@ -1,6 +1,5 @@
 use crate::models::database::table::TableDataType;
 use serde::Deserialize;
-use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
 pub struct Table {

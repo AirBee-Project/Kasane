@@ -1,5 +1,3 @@
-use uuid::Uuid;
-
 use crate::{
     error::AppError,
     models::database::table::{Table, TableDataType, TableMetadata},
@@ -97,11 +95,7 @@ impl<'a> KasaneDbWrite<'a> {
         };
 
         let db = self.db.tables;
-        db.put(
-            &mut self.write_txn,
-            &(db_meta.id, table_name),
-            &meta,
-        )?;
+        db.put(&mut self.write_txn, &(db_meta.id, table_name), &meta)?;
         db_index.put(&mut self.write_txn, &id, &())?;
 
         self.table_caches
@@ -115,8 +109,59 @@ impl<'a> KasaneDbWrite<'a> {
         })
     }
 
-    /// Tableを削除する
+    /// Tableを削除する（メタデータ・IDインデックス・シャードデータをすべて削除）。
     pub fn table_remove(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError> {
-        todo!()
+        let table = match self.table_info(db_name, table_name)? {
+            Some(t) => t,
+            None => {
+                return Err(AppError::TableNotFound {
+                    name: table_name.to_string(),
+                });
+            }
+        };
+
+        let db_meta = {
+            let db = self.db.databases;
+            db.get(&self.write_txn, db_name)?
+                .ok_or_else(|| AppError::DatabaseNotFound {
+                    name: db_name.to_string(),
+                })?
+        };
+
+        // 1. シャードデータを全削除（tables_data の table_id プレフィックス）。
+        //    反復中に削除できないため、キーを集めてから削除する。
+        let tables_data = self
+            .db
+            .tables_data
+            .remap_types::<heed::types::Bytes, heed::types::Bytes>();
+        let prefix = table.id.into_bytes();
+        let keys: Vec<Vec<u8>> = {
+            let mut ks = Vec::new();
+            for iter in tables_data.prefix_iter(&self.write_txn, prefix.as_slice())? {
+                let (k_bytes, _) = iter?;
+                ks.push(k_bytes.to_vec());
+            }
+            ks
+        };
+        for k in keys {
+            tables_data.delete(&mut self.write_txn, &k)?;
+        }
+
+        // 2. テーブルメタデータと ID インデックスを削除。
+        self.db
+            .tables
+            .delete(&mut self.write_txn, &(db_meta.id, table_name))?;
+        self.db
+            .table_id_index
+            .delete(&mut self.write_txn, &table.id)?;
+        self.db
+            .table_counts
+            .delete(&mut self.write_txn, &table.id)?;
+
+        // 3. キャッシュから除去。
+        self.table_caches
+            .remove(&(db_meta.id, table_name.to_string()));
+
+        Ok(())
     }
 }

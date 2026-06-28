@@ -49,7 +49,13 @@ impl<'a> KasaneUsersRead<'a> {
         };
 
         let privs_table = self.db.user_privileges;
-        if let Some(val) = privs_table.get(&self.read_txn, &(user_id, crate::models::id::DatabaseId(uuid::Uuid::from_bytes(db_id))))? {
+        if let Some(val) = privs_table.get(
+            &self.read_txn,
+            &(
+                user_id,
+                crate::models::id::DatabaseId(uuid::Uuid::from_bytes(db_id)),
+            ),
+        )? {
             Ok(UserRole::from_u8(val))
         } else {
             Ok(None)

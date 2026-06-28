@@ -1,6 +1,5 @@
 use super::TableDataType;
 use serde::Deserialize;
-use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, Deserialize, Copy)]
 pub struct TableMetadata {

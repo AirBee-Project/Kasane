@@ -5,6 +5,7 @@ use crate::{
     repositories::KasaneDbWrite,
     services::helpers::{spatial_ids::process_spatial_ids, value::interpret_value},
 };
+use kasane_logic::IntoSingleIds;
 
 pub async fn insert(
     app_state: &AppState,
@@ -31,7 +32,7 @@ pub async fn insert(
     let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
 
     tracing::debug!("Inserting {} spatial IDs", ids.count());
-    // db.data_insert(table.id, ids.into_single_ids(), &value)?;
+    db.data_insert(table.id, ids.into_single_ids(), &value)?;
     db.commit()?;
     Ok(())
 }

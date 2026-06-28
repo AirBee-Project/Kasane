@@ -34,7 +34,9 @@ impl<'a> KasaneDbWrite<'a> {
         }
 
         let id = Uuid::now_v7();
-        let meta = DatabaseMetadata { id: crate::models::id::DatabaseId(id) };
+        let meta = DatabaseMetadata {
+            id: crate::models::id::DatabaseId(id),
+        };
 
         let db = self.db.databases;
         db.put(&mut self.write_txn, name, &meta)?;

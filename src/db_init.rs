@@ -111,7 +111,6 @@ impl<'a> heed::BytesDecode<'a> for TableIdAndFlexId {
     }
 }
 
-/// アプリケーション全体のLMDB環境と各データベースのハンドルを保持する構造体
 #[derive(Clone)]
 pub struct AppDb {
     /// LMDBの環境本体
@@ -137,9 +136,13 @@ pub struct AppDb {
     /// Key: `UserId` と `DatabaseId` (`UserIdAndDbId`) -> Value: 権限レベル (`UserRole` を表す `u8`)
     pub user_privileges: Database<UserIdAndDbId, SerdeBincode<u8>>,
 
-    /// 各テーブルに紐づく実際の空間データ（GeoJSONフィーチャやタイル要素など）を格納する
-    /// Key: `TableId` と 空間ID（`FlexId`）(`TableIdAndFlexId`) -> Value: BincodeやJSON等でシリアライズされた生データ (`Bytes`)
+    /// FlexTree
+    /// Key: `TableId` と 空間ID（`FlexId`）(`TableIdAndFlexId`) -> SpatialIdMapのバイト列(rkvy)
     pub tables_data: Database<TableIdAndFlexId, Bytes>,
+
+    /// テーブルごとの保持 FlexId 総数（O(1) で `table_count` を返すための累積カウンタ）。
+    /// Key: `TableId` -> Value: `u64`
+    pub table_counts: Database<SerdeBincode<crate::models::id::TableId>, SerdeBincode<u64>>,
 }
 
 #[tracing::instrument]
@@ -152,16 +155,11 @@ pub fn initialize_database(path: &str) -> AppDb {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(10 * 1024 * 1024 * 1024);
 
-    // ランダムアクセス主体でワーキングセットが RAM を超える場合、OS の readahead が
-    // ページキャッシュを汚して逆効果になることがある。その際は環境変数で無効化できる
-    // （逐次レンジスキャン主体のワークロードでは付けない方が速いので既定は無効）。
     let no_readahead = std::env::var("KASANE_LMDB_NO_READAHEAD")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
 
     let env = unsafe {
-        // TLS を無効化し、read トランザクションをスレッド間で共有可能にする
-        // （1つの読みスナップショットを rayon の複数ワーカーから並列に読む）。
         let mut opts = EnvOpenOptions::new().read_txn_without_tls();
         opts.map_size(map_size).max_dbs(15);
         if no_readahead {
@@ -188,6 +186,9 @@ pub fn initialize_database(path: &str) -> AppDb {
         .unwrap();
     let tables_data = env
         .create_database(&mut write_txn, Some("tables_data"))
+        .unwrap();
+    let table_counts = env
+        .create_database(&mut write_txn, Some("table_counts"))
         .unwrap();
 
     if users.is_empty(&write_txn).unwrap() {
@@ -222,5 +223,6 @@ pub fn initialize_database(path: &str) -> AppDb {
         users,
         user_privileges,
         tables_data,
+        table_counts,
     }
 }

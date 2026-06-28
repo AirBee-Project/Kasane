@@ -86,11 +86,22 @@ impl<'a> KasaneUsersWrite<'a> {
         };
 
         let privs_table = self.db.user_privileges;
-        privs_table.put(&mut self.write_txn, &(user_id, crate::models::id::DatabaseId(uuid::Uuid::from_bytes(db_id))), &(role as u8))?;
+        privs_table.put(
+            &mut self.write_txn,
+            &(
+                user_id,
+                crate::models::id::DatabaseId(uuid::Uuid::from_bytes(db_id)),
+            ),
+            &(role as u8),
+        )?;
         Ok(())
     }
 
-    pub fn remove_privilege(&mut self, user_id: crate::models::id::UserId, db_name: &str) -> Result<(), AppError> {
+    pub fn remove_privilege(
+        &mut self,
+        user_id: crate::models::id::UserId,
+        db_name: &str,
+    ) -> Result<(), AppError> {
         if db_name.is_empty() {
             return Err(AppError::DatabaseNotFound {
                 name: db_name.to_string(),
@@ -104,7 +115,13 @@ impl<'a> KasaneUsersWrite<'a> {
         };
 
         let privs_table = self.db.user_privileges;
-        privs_table.delete(&mut self.write_txn, &(user_id, crate::models::id::DatabaseId(uuid::Uuid::from_bytes(db_id))))?;
+        privs_table.delete(
+            &mut self.write_txn,
+            &(
+                user_id,
+                crate::models::id::DatabaseId(uuid::Uuid::from_bytes(db_id)),
+            ),
+        )?;
         Ok(())
     }
 

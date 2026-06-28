@@ -28,7 +28,7 @@ pub async fn remove(
 
     let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
     tracing::debug!("Removing {} spatial IDs", ids.count());
-    db.data_remove(table.id.into(), ids)?;
+    db.data_remove(table.id, ids)?;
     db.commit()?;
     Ok(())
 }

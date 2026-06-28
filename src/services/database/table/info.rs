@@ -9,7 +9,7 @@ pub async fn info(
     let db = crate::repositories::KasaneDbRead::new(read_txn, &app_state.db);
     match db.table_info(db_name, table_name)? {
         Some(table) => {
-            let count = db.table_count(table.id.into())?;
+            let count = db.table_count(table.id)?;
             Ok(TableInfoResponse {
                 name: table.name,
                 data_type: table.data_type,
