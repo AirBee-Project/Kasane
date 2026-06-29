@@ -61,8 +61,6 @@ impl<'a> KasaneDbWrite<'a> {
                 "Table name cannot be empty".to_string(),
             ));
         }
-        // ズームレベルの検証はサービス層で行う
-
         let db_meta = {
             let db = self.db.databases;
             if let Some(m) = db.get(&self.write_txn, db_name)? {
@@ -111,7 +109,7 @@ impl<'a> KasaneDbWrite<'a> {
         })
     }
 
-    /// Tableを削除する（メタデータ・IDインデックス・シャードデータをすべて削除）。
+    /// Tableを削除する。
     pub fn table_remove(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError> {
         let table = match self.table_info(db_name, table_name)? {
             Some(t) => t,
