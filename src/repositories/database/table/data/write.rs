@@ -109,37 +109,39 @@ impl<'a> KasaneDbWrite<'a> {
                 break;
             };
 
-            // 子を順にロード。すべてリーフで、合算が閾値以下なら統合する。
-            let mut child_maps: Vec<SpatialIdMap<Vec<u8>>> =
-                Vec::with_capacity(child_regions.len());
+            // パス圧縮により子は可変数（2 以上）。子を走査し、いずれかがポインタノードなら
+            // このレベルは統合しない。全リーフ（＋空マーカ）で合算が閾値以下なら1リーフへ畳み込む。
+            let mut child_maps: Vec<SpatialIdMap<Vec<u8>>> = Vec::new();
             let mut combined = 0usize;
             let mut mergeable = true;
             for cr in &child_regions {
-                let m = match self
+                // 空領域（被覆マーカ）はキーが無く、寄与もしないのでスキップ。
+                let Some(bytes) = self
                     .db
                     .tables_data
                     .get(&self.write_txn, &(table_id, cr.clone()))?
-                {
-                    Some(bytes) => match ShardEntry::decode(bytes)? {
-                        ShardEntry::Leaf(map_bytes) => {
-                            unsafe { SpatialIdMap::<Vec<u8>>::from_bytes(&map_bytes) }.map_err(
-                                |e| AppError::InternalError(format!("rkyv deserialize: {e}")),
-                            )?
-                        }
-                        // 子がまだ分割木 → このレベルでは統合しない。
-                        ShardEntry::Pointers(_) => {
+                else {
+                    continue;
+                };
+                match ShardEntry::decode(bytes)? {
+                    ShardEntry::Leaf(map_bytes) => {
+                        let m = unsafe { SpatialIdMap::<Vec<u8>>::from_bytes(&map_bytes) }
+                            .map_err(|e| {
+                                AppError::InternalError(format!("rkyv deserialize: {e}"))
+                            })?;
+                        combined += m.count();
+                        if combined > MERGE_FLEX_ID_THRESHOLD {
                             mergeable = false;
                             break;
                         }
-                    },
-                    None => SpatialIdMap::new_in_shard(cr.clone()),
-                };
-                combined += m.count();
-                if combined > MERGE_FLEX_ID_THRESHOLD {
-                    mergeable = false;
-                    break;
+                        child_maps.push(m);
+                    }
+                    // 子がまだ分割木 → このレベルでは統合しない。
+                    ShardEntry::Pointers(_) => {
+                        mergeable = false;
+                        break;
+                    }
                 }
-                child_maps.push(m);
             }
             if !mergeable {
                 break;
@@ -157,8 +159,8 @@ impl<'a> KasaneDbWrite<'a> {
                 }
             }
 
-            // 統合（union。境界跨ぎの同値は compaction される）。
-            let merged = SpatialIdMap::merge_siblings(parent_region.clone(), child_maps);
+            // 子リーフ群を親領域へ畳み込む（union。境界跨ぎの同値は compaction される）。
+            let merged = SpatialIdMap::merge_children(parent_region.clone(), child_maps)?;
 
             let mut new_keys = HashSet::new();
             for (f, v) in merged.iter() {
@@ -169,7 +171,7 @@ impl<'a> KasaneDbWrite<'a> {
                 ));
             }
 
-            // 値インデックス差分更新。
+            // 値インデックス差分更新（table_count はヘッダ集計式なので別途調整不要）。
             self.update_value_index(old_keys, new_keys)?;
 
             // 親キーをリーフ（空なら削除）に置換し、子キーを削除。
@@ -179,14 +181,7 @@ impl<'a> KasaneDbWrite<'a> {
                     .tables_data
                     .delete(&mut self.write_txn, &parent_key)?;
             } else {
-                let bytes = merged
-                    .to_bytes()
-                    .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
-                self.db.tables_data.put(
-                    &mut self.write_txn,
-                    &parent_key,
-                    &ShardEntry::encode_leaf(&bytes),
-                )?;
+                self.put_leaf(table_id, &parent_region, &merged)?;
             }
             for cr in &child_regions {
                 self.db
@@ -247,13 +242,8 @@ impl<'a> KasaneDbWrite<'a> {
 
         self.update_value_index(old_keys, new_keys)?;
 
-        let key = (table_id, region.clone());
-        if map.is_empty() {
-            // 空になったリーフは削除（親ポインタは None 解決でリーフ扱いされるため安全）。
-            self.db.tables_data.delete(&mut self.write_txn, &key)?;
-        } else {
-            self.store_leaf_with_split(table_id, region, map)?;
-        }
+        // 保存（過大なら2分割、空なら削除）。
+        self.store_shard(table_id, region, map)?;
 
         Ok(())
     }
@@ -294,8 +284,18 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(by_leaf)
     }
 
-    /// リーフを保存する。閾値超過なら動的分割し、親キーを子へのポインタノードに置換する。
-    fn store_leaf_with_split(
+    /// シャードを保存する。閾値超過なら**データが実際に割れる軸まで分割を畳み込み**（適応軸＝パス圧縮）、
+    /// 親キーを**被覆ポインタノード**にする。
+    ///
+    /// 内部は正準軸（F→X→Y, level%3）での二分割を繰り返すが、片側が空になる**退化分割は
+    /// ポインタノードを作らず子を上位へ巻き上げる**。その結果 materialize されるポインタノードは
+    /// XY のようにデータが実際に分割される軸で枝分かれし、F に偏りがなければ F の退化ノードは生成
+    /// されない（FlexId の独立軸ズームを活かす）。被覆は常に保たれる（空領域はキーを持たないが
+    /// 親ポインタが領域を列挙するためルーティングで取りこぼされない）。空マップはキーを削除する。
+    ///
+    /// 前提: `region` は呼び出し時点で**リーフ（または未作成）**。よって分割はこの場で初めて
+    /// 部分木キーを生成し、孤児キーは生じない。
+    fn store_shard(
         &mut self,
         table_id: TableId,
         region: FlexId,
@@ -303,40 +303,106 @@ impl<'a> KasaneDbWrite<'a> {
     ) -> Result<(), AppError> {
         let key = (table_id, region.clone());
 
-        if map.should_split_shard(MAX_FLEX_ID_PER_SHARD) {
-            let children = map.split_shard(MAX_FLEX_ID_PER_SHARD);
-            if children.len() >= 2 {
-                let mut child_regions = Vec::with_capacity(children.len());
-                for child in &children {
-                    let child_region = child.shard().cloned().ok_or_else(|| {
-                        AppError::InternalError("split child has no shard region".to_string())
-                    })?;
-                    let child_bytes = child
-                        .to_bytes()
-                        .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
-                    self.db.tables_data.put(
-                        &mut self.write_txn,
-                        &(table_id, child_region.clone()),
-                        &ShardEntry::encode_leaf(&child_bytes),
-                    )?;
-                    child_regions.push(child_region);
-                }
-                self.db.tables_data.put(
-                    &mut self.write_txn,
-                    &key,
-                    &ShardEntry::encode_pointers(&child_regions),
-                )?;
-                return Ok(());
+        if !map.should_split_shard(MAX_FLEX_ID_PER_SHARD) {
+            if map.is_empty() {
+                self.db.tables_data.delete(&mut self.write_txn, &key)?;
+            } else {
+                self.put_leaf(table_id, &region, &map)?;
             }
-            // 分割できなかった（1 ピース）場合はリーフ保存にフォールバック。
+            return Ok(());
         }
 
+        // 分割が必要 → パス圧縮した被覆子領域を構築し、親をポインタノードにする。
+        let mut children = Vec::new();
+        self.cover_split(table_id, &map, &mut children)?;
+        self.db.tables_data.put(
+            &mut self.write_txn,
+            &key,
+            &ShardEntry::encode_pointers(&children),
+        )?;
+        Ok(())
+    }
+
+    /// 分割が必要な `map` を正準二分割し、各子を [`emit_child`](Self::emit_child) で処理して
+    /// **被覆子領域**を `out` に積む。
+    fn cover_split(
+        &mut self,
+        table_id: TableId,
+        map: &SpatialIdMap<Vec<u8>>,
+        out: &mut Vec<FlexId>,
+    ) -> Result<(), AppError> {
+        // should_split が真 ⇒ シャード領域があり split_once は Some。
+        let ((lo_r, lo), (hi_r, hi)) = map
+            .split_once()
+            .ok_or_else(|| AppError::InternalError("split on shardless map".to_string()))?;
+        self.emit_child(table_id, lo_r, lo, out)?;
+        self.emit_child(table_id, hi_r, hi, out)?;
+        Ok(())
+    }
+
+    /// 子シャード `(cr, cm)` を被覆集合 `out` に組み込む（パス圧縮の本体）。
+    /// - 空 → 領域だけ被覆として積む（キーは持たない）。
+    /// - 収まる → リーフとして保存し領域を積む。
+    /// - 過大かつ片側が空になる退化分割 → ポインタノードを作らず**孫を巻き上げ**る。
+    /// - 過大で両側に割れる → `cr` を独立ポインタノードとして保存し領域を積む。
+    fn emit_child(
+        &mut self,
+        table_id: TableId,
+        cr: FlexId,
+        cm: SpatialIdMap<Vec<u8>>,
+        out: &mut Vec<FlexId>,
+    ) -> Result<(), AppError> {
+        if cm.is_empty() {
+            // 空領域：被覆として領域だけ積む。万一の古いキーは消す。
+            self.db
+                .tables_data
+                .delete(&mut self.write_txn, &(table_id, cr.clone()))?;
+            out.push(cr);
+            return Ok(());
+        }
+        if !cm.should_split_shard(MAX_FLEX_ID_PER_SHARD) {
+            self.put_leaf(table_id, &cr, &cm)?;
+            out.push(cr);
+            return Ok(());
+        }
+        // 過大：1段だけ覗いて、圧縮（退化）か枝分かれ（実分割）かを決める。
+        let ((clo_r, clo), (chi_r, chi)) = cm
+            .split_once()
+            .ok_or_else(|| AppError::InternalError("split on shardless map".to_string()))?;
+        if clo.is_empty() || chi.is_empty() {
+            // 退化分割：cr にポインタノードを作らず孫を out へ巻き上げる（チェーン圧縮）。
+            self.emit_child(table_id, clo_r, clo, out)?;
+            self.emit_child(table_id, chi_r, chi, out)?;
+        } else {
+            // 実分割：cr を独立ポインタノードにする。
+            let mut grand = Vec::new();
+            self.emit_child(table_id, clo_r, clo, &mut grand)?;
+            self.emit_child(table_id, chi_r, chi, &mut grand)?;
+            self.db.tables_data.put(
+                &mut self.write_txn,
+                &(table_id, cr.clone()),
+                &ShardEntry::encode_pointers(&grand),
+            )?;
+            out.push(cr);
+        }
+        Ok(())
+    }
+
+    /// リーフを保持 [`FlexId`] 件数ヘッダ付きで保存する。
+    fn put_leaf(
+        &mut self,
+        table_id: TableId,
+        region: &FlexId,
+        map: &SpatialIdMap<Vec<u8>>,
+    ) -> Result<(), AppError> {
         let bytes = map
             .to_bytes()
             .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
-        self.db
-            .tables_data
-            .put(&mut self.write_txn, &key, &ShardEntry::encode_leaf(&bytes))?;
+        self.db.tables_data.put(
+            &mut self.write_txn,
+            &(table_id, region.clone()),
+            &ShardEntry::encode_leaf(map.count() as u32, &bytes),
+        )?;
         Ok(())
     }
 }

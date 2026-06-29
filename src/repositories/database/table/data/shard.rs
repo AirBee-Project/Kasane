@@ -28,6 +28,10 @@ const FLEX_ID_LEN: usize = 14;
 const TAG_LEAF: u8 = 0;
 const TAG_POINTERS: u8 = 1;
 
+/// Leaf エントリのヘッダ長 = タグ(1) + 件数(u32 LE, 4)。
+/// 件数を埋めておくことで `table_count` がリーフを deserialize せず合算できる。
+const LEAF_HEADER_LEN: usize = 1 + 4;
+
 /// `tables_data` の値の論理表現。
 pub enum ShardEntry {
     /// 実データ（`SpatialIdMap` の rkyv バイト列）。
@@ -40,7 +44,12 @@ impl ShardEntry {
     /// 生バイト列を解釈する。
     pub fn decode(bytes: &[u8]) -> Result<Self, AppError> {
         match bytes.first() {
-            Some(&TAG_LEAF) => Ok(ShardEntry::Leaf(bytes[1..].to_vec())),
+            Some(&TAG_LEAF) => {
+                if bytes.len() < LEAF_HEADER_LEN {
+                    return Err(AppError::InternalError("truncated leaf entry".to_string()));
+                }
+                Ok(ShardEntry::Leaf(bytes[LEAF_HEADER_LEN..].to_vec()))
+            }
             Some(&TAG_POINTERS) => {
                 let body = &bytes[1..];
                 if !body.len().is_multiple_of(FLEX_ID_LEN) {
@@ -63,12 +72,30 @@ impl ShardEntry {
         }
     }
 
-    /// リーフ（`SpatialIdMap` バイト列）をエンコードする。
-    pub fn encode_leaf(map_bytes: &[u8]) -> Vec<u8> {
-        let mut out = Vec::with_capacity(1 + map_bytes.len());
+    /// リーフ（`SpatialIdMap` バイト列）を、保持 [`FlexId`] 件数ヘッダ付きでエンコードする。
+    pub fn encode_leaf(flex_id_count: u32, map_bytes: &[u8]) -> Vec<u8> {
+        let mut out = Vec::with_capacity(LEAF_HEADER_LEN + map_bytes.len());
         out.push(TAG_LEAF);
+        out.extend_from_slice(&flex_id_count.to_le_bytes());
         out.extend_from_slice(map_bytes);
         out
+    }
+
+    /// エントリがリーフなら、ヘッダに埋めた保持件数を deserialize せず返す。
+    /// ポインタノードなら `None`。`table_count` の高速集計に使う。
+    pub fn leaf_count(entry: &[u8]) -> Result<Option<u32>, AppError> {
+        match entry.first() {
+            Some(&TAG_LEAF) => {
+                if entry.len() < LEAF_HEADER_LEN {
+                    return Err(AppError::InternalError("truncated leaf entry".to_string()));
+                }
+                let mut b = [0u8; 4];
+                b.copy_from_slice(&entry[1..LEAF_HEADER_LEN]);
+                Ok(Some(u32::from_le_bytes(b)))
+            }
+            Some(&TAG_POINTERS) => Ok(None),
+            _ => Err(AppError::InternalError("empty shard entry".to_string())),
+        }
     }
 
     /// 子シャード領域へのポインタノードをエンコードする。
@@ -178,7 +205,12 @@ pub fn find_parent_pointer(
 /// ポインタノードなら `None`、不正なら `Err`。
 fn leaf_payload(entry: &[u8]) -> Result<Option<&[u8]>, AppError> {
     match entry.first() {
-        Some(&TAG_LEAF) => Ok(Some(&entry[1..])),
+        Some(&TAG_LEAF) => {
+            if entry.len() < LEAF_HEADER_LEN {
+                return Err(AppError::InternalError("truncated leaf entry".to_string()));
+            }
+            Ok(Some(&entry[LEAF_HEADER_LEN..]))
+        }
         Some(&TAG_POINTERS) => Ok(None),
         _ => Err(AppError::InternalError("empty shard entry".to_string())),
     }

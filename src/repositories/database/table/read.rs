@@ -73,11 +73,13 @@ impl<'a> KasaneDbRead<'a> {
 
     /// テーブルが保持する空間ID(FlexId)の総数を返す。
     ///
-    /// シャード（Leaf）をスキャンして要素数を足し合わせる動的計算で取得します。
+    /// 各リーフシャードの**ヘッダに埋めた件数（u32）だけ**を読んで合算する。
+    /// `SpatialIdMap` を deserialize せず、セルを1つも展開しないため O(リーフ数)。
+    /// （O(1) にはグローバルカウンタが必要だが、現状は採用していない。）
     pub fn table_count(&self, table_id: crate::models::id::TableId) -> Result<u64, AppError> {
         use crate::repositories::database::table::data::shard::ShardEntry;
 
-        let mut total = 0;
+        let mut total = 0u64;
         for item in self
             .db
             .tables_data
@@ -85,10 +87,8 @@ impl<'a> KasaneDbRead<'a> {
             .prefix_iter(&self.read_txn, table_id.0.as_bytes())?
         {
             let (_, bytes) = item?;
-            if let ShardEntry::Leaf(map_bytes) = ShardEntry::decode(bytes)? {
-                let map = unsafe { kasane_logic::ArchivedMap::access(&map_bytes) };
-                // ArchivedMap には count がないので iter().len() で代用する
-                total += map.iter().len() as u64;
+            if let Some(count) = ShardEntry::leaf_count(bytes)? {
+                total += count as u64;
             }
         }
         Ok(total)
