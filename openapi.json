@@ -481,6 +481,80 @@
         ]
       }
     },
+    "/databases/{db_name}/tables/{table_name}/data/search/stream": {
+      "post": {
+        "tags": [
+          "data"
+        ],
+        "operationId": "data_get_stream",
+        "parameters": [
+          {
+            "name": "db_name",
+            "in": "path",
+            "description": "データベース名",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "table_name",
+            "in": "path",
+            "description": "テーブル名",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "description": "Output format (singleId, rangeId, flexId)",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/OutputFormat"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of returned elements",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetDataRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "NDJSONストリームデータ",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/databases/{name}": {
       "get": {
         "tags": [
@@ -1499,6 +1573,211 @@
                     "type": "string",
                     "enum": [
                       "flexId"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "StreamDataEventFlex": {
+        "type": "object",
+        "required": [
+          "valueRef",
+          "spatialIds"
+        ],
+        "properties": {
+          "valueRef": {
+            "type": "string"
+          },
+          "spatialIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FlexId"
+            }
+          }
+        }
+      },
+      "StreamDataEventRange": {
+        "type": "object",
+        "required": [
+          "valueRef",
+          "spatialIds"
+        ],
+        "properties": {
+          "valueRef": {
+            "type": "string"
+          },
+          "spatialIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RangeId"
+            }
+          }
+        }
+      },
+      "StreamDataEventSingle": {
+        "type": "object",
+        "required": [
+          "valueRef",
+          "spatialIds"
+        ],
+        "properties": {
+          "valueRef": {
+            "type": "string"
+          },
+          "spatialIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SingleId"
+            }
+          }
+        }
+      },
+      "StreamDictionaryEvent": {
+        "type": "object",
+        "required": [
+          "valueRef",
+          "value"
+        ],
+        "properties": {
+          "valueRef": {
+            "type": "string"
+          },
+          "value": {}
+        }
+      },
+      "StreamEventFlex": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StreamDictionaryEvent"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "dictionary"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StreamDataEventFlex"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "data"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "StreamEventRange": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StreamDictionaryEvent"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "dictionary"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StreamDataEventRange"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "data"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "StreamEventSingle": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StreamDictionaryEvent"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "dictionary"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StreamDataEventSingle"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "data"
                     ]
                   }
                 }

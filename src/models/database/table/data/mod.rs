@@ -7,4 +7,6 @@ pub use request::{
 };
 pub use response::{
     DataGroup, GetDataResponse, GetDataResponseFlex, GetDataResponseRange, GetDataResponseSingle,
+    StreamDataEventFlex, StreamDataEventRange, StreamDataEventSingle, StreamDictionaryEvent,
+    StreamEventFlex, StreamEventRange, StreamEventSingle,
 };

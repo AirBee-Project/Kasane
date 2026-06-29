@@ -71,6 +71,89 @@ impl<'a> KasaneDbRead<'a> {
         }
         Ok(by_value.into_iter().collect())
     }
+}
+
+pub type DataStreamSender = tokio::sync::mpsc::Sender<Result<(Vec<u8>, Vec<FlexId>), AppError>>;
+
+impl<'a> KasaneDbRead<'a> {
+    pub fn data_get_stream(
+        &self,
+        table_id: TableId,
+        flex_ids: SpatialIdSet,
+        sender: DataStreamSender,
+    ) {
+        let tables_data = self.db.tables_data;
+        let env = self.db.env.clone();
+
+        // Rayon task is completely detached
+        rayon::spawn(move || {
+            let flex_ids_vec: Vec<FlexId> = flex_ids.iter_flex_ids().collect();
+            if flex_ids_vec.is_empty() {
+                return;
+            }
+
+            // 直列処理 (IDが少ない場合)
+            if flex_ids_vec.len() < 100 {
+                let txn_res = env
+                    .read_txn()
+                    .map_err(|e| AppError::InternalError(e.to_string()));
+                match txn_res {
+                    Ok(txn) => {
+                        let mut local = HashMap::new();
+                        if let Err(e) = Self::resolve_chunk(
+                            &tables_data,
+                            &txn,
+                            table_id,
+                            &flex_ids_vec,
+                            &mut local,
+                        ) {
+                            let _ = sender.blocking_send(Err(e));
+                            return;
+                        }
+                        for (val, ids) in local {
+                            if sender.blocking_send(Ok((val, ids))).is_err() {
+                                return; // receiver dropped (limit reached or stream closed)
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = sender.blocking_send(Err(e));
+                    }
+                }
+                return;
+            }
+
+            use rayon::prelude::*;
+            let chunk_size = flex_ids_vec
+                .len()
+                .div_ceil(rayon::current_num_threads().max(1));
+
+            // 並列ストリーミング処理
+            let _ = flex_ids_vec
+                .par_chunks(chunk_size.max(1))
+                .try_for_each(|chunk| {
+                    let txn = env.read_txn().map_err(|e| {
+                        let _ = sender.blocking_send(Err(AppError::InternalError(e.to_string())));
+                    })?;
+
+                    let mut local = HashMap::new();
+                    if let Err(e) =
+                        Self::resolve_chunk(&tables_data, &txn, table_id, chunk, &mut local)
+                    {
+                        let _ = sender.blocking_send(Err(e));
+                        return Err(());
+                    }
+
+                    // チャンク単位で即座にチャネルへ送信
+                    for (val, ids) in local {
+                        if sender.blocking_send(Ok((val, ids))).is_err() {
+                            return Err(()); // receiver dropped
+                        }
+                    }
+                    Ok(())
+                });
+        });
+    }
 
     /// `chunk` 内の各クエリ FlexId を解決し、`by_value`（値→FlexId群）へ蓄積する。
     /// `data_get` の直列パスと並列ワーカで共有するコア処理。
