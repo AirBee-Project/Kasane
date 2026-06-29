@@ -249,39 +249,36 @@ impl<'a> KasaneDbWrite<'a> {
     }
 
     /// 旧/新のインデックスキーセットの対称差だけ `value_index` を更新する。
+    ///
+    /// 削除・追加とも**キー昇順**に適用する。`value_index` は LMDB（B-tree）なので、
+    /// ソート済みの逐次アクセスはランダム順より挿入局所性が良くキャッシュ効率が高い。
     fn update_value_index(
         &mut self,
         old_keys: HashSet<Vec<u8>>,
         new_keys: HashSet<Vec<u8>>,
     ) -> Result<(), AppError> {
-        for key in &old_keys {
-            if !new_keys.contains(key) {
-                self.db.value_index.delete(&mut self.write_txn, key)?;
-            }
+        let mut to_delete: Vec<&Vec<u8>> = old_keys.difference(&new_keys).collect();
+        to_delete.sort_unstable();
+        for key in to_delete {
+            self.db.value_index.delete(&mut self.write_txn, key)?;
         }
-        for key in &new_keys {
-            if !old_keys.contains(key) {
-                self.db.value_index.put(&mut self.write_txn, key, &())?;
-            }
+
+        let mut to_put: Vec<&Vec<u8>> = new_keys.difference(&old_keys).collect();
+        to_put.sort_unstable();
+        for key in to_put {
+            self.db.value_index.put(&mut self.write_txn, key, &())?;
         }
         Ok(())
     }
 
-    /// 与えた FlexId 群を、ポインタツリーを辿って担当リーフ領域ごとにまとめる。
+    /// 与えた FlexId 群を、ポインタツリーを**一度の降下**で辿って担当リーフ領域ごとにまとめる。
     fn group_by_leaf(
         &self,
         table_id: TableId,
         flex_ids: impl Iterator<Item = FlexId>,
     ) -> Result<HashMap<FlexId, Vec<FlexId>>, AppError> {
-        let mut by_leaf: HashMap<FlexId, Vec<FlexId>> = HashMap::new();
-        for flex_id in flex_ids {
-            for leaf in
-                shard::route_leaves(&self.db.tables_data, &self.write_txn, table_id, &flex_id)?
-            {
-                by_leaf.entry(leaf).or_default().push(flex_id.clone());
-            }
-        }
-        Ok(by_leaf)
+        let ids: Vec<FlexId> = flex_ids.collect();
+        shard::route_leaves_batched(&self.db.tables_data, &self.write_txn, table_id, &ids)
     }
 
     /// シャードを保存する。閾値超過なら**データが実際に割れる軸まで分割を畳み込み**（適応軸＝パス圧縮）、

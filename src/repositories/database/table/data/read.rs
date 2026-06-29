@@ -164,16 +164,16 @@ impl<'a> KasaneDbRead<'a> {
         chunk: &[FlexId],
         by_value: &mut HashMap<Vec<u8>, Vec<FlexId>>,
     ) -> Result<(), AppError> {
-        for query_flex in chunk {
-            // ポインタツリーを辿って query_flex と重なるリーフをすべて取得。
-            for region in shard::route_leaves(tables_data, txn, table_id, query_flex)? {
-                // ZeroCopy archived リーダで、Arc 木を再構築せずに走査する。
-                let Some(arch) = shard::load_leaf_archived(tables_data, txn, table_id, &region)?
-                else {
-                    continue; // 未作成リーフ（データなし）
-                };
+        // 一度の木降下で「リーフ -> そこに当たるクエリ群」へまとめ、リーフは 1 回だけ開く。
+        let by_leaf = shard::route_leaves_batched(tables_data, txn, table_id, chunk)?;
+        for (region, queries) in by_leaf {
+            // ZeroCopy archived リーダで、Arc 木を再構築せずに走査する。
+            let Some(arch) = shard::load_leaf_archived(tables_data, txn, table_id, &region)? else {
+                continue; // 未作成リーフ（データなし）
+            };
+            for query_flex in queries {
                 // query_flex に切り取られた (FlexId, 値) を、値ごとにまとめる。
-                for (got_flex, value) in arch.get(query_flex) {
+                for (got_flex, value) in arch.get(&query_flex) {
                     // 値バイトのクローンは初出時のみ（既出値は get_mut で参照のみ）。
                     if let Some(flex_ids) = by_value.get_mut(value) {
                         flex_ids.push(got_flex);

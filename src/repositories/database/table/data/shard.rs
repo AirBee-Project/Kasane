@@ -107,52 +107,103 @@ impl ShardEntry {
         }
         out
     }
+
+    /// ポインタノードなら子領域群を、リーフなら `None` を返す**軽量版**。
+    ///
+    /// ルーティングはタグだけ見れば十分なので、リーフ本体（`SpatialIdMap` バイト列）を
+    /// コピーする [`decode`](Self::decode) を避け、無駄なアロケーションをなくす。
+    pub fn child_pointers(bytes: &[u8]) -> Result<Option<Vec<FlexId>>, AppError> {
+        match bytes.first() {
+            Some(&TAG_LEAF) => Ok(None),
+            Some(&TAG_POINTERS) => match ShardEntry::decode(bytes)? {
+                ShardEntry::Pointers(children) => Ok(Some(children)),
+                ShardEntry::Leaf(_) => unreachable!("tag は POINTERS"),
+            },
+            _ => Err(AppError::InternalError("empty shard entry".to_string())),
+        }
+    }
 }
 
 // --- ルーティング・ロード（read / write 共用の自由関数） ---
 
-/// `region` を根として `flex_id` と重なるリーフシャードの領域をすべて集める。
-/// ポインタノードは再帰的に辿り、リーフ（または未作成のキー）を `out` に積む。
-pub fn collect_leaf_regions(
+/// 複数の `flex_id` を**一度の木降下**でまとめてルーティングし、
+/// `担当リーフ領域 -> そこへ到達した flex_id 群` を返す。
+///
+/// セルごとに半球ルートから辿り直す素朴版（`O(N × 深さ)` 回の `get`、上位ノードを N 回再走査）に対し、
+/// 各ポインタノードを **1 回だけ** 訪れてセル集合を子へ振り分けるため、`get` 回数が
+/// `O(到達ノード数 + N)` に減る。粗い `flex_id` は複数リーフに振り分けられる（被覆どおり）。
+pub fn route_leaves_batched(
+    tables_data: &Database<TableIdAndFlexId, Bytes>,
+    txn: &RoTxn<WithoutTls>,
+    table_id: TableId,
+    ids: &[FlexId],
+) -> Result<std::collections::HashMap<FlexId, Vec<FlexId>>, AppError> {
+    // f 符号で上下半球に分け、各半球ルートから 1 回ずつ降りる。
+    let mut lower = Vec::new();
+    let mut upper = Vec::new();
+    for f in ids {
+        if f.f_index().is_negative() {
+            lower.push(f.clone());
+        } else {
+            upper.push(f.clone());
+        }
+    }
+
+    let mut out: std::collections::HashMap<FlexId, Vec<FlexId>> = std::collections::HashMap::new();
+    descend_batched(
+        tables_data,
+        txn,
+        table_id,
+        FlexId::LOWER_MAX,
+        lower,
+        &mut out,
+    )?;
+    descend_batched(
+        tables_data,
+        txn,
+        table_id,
+        FlexId::UPPER_MAX,
+        upper,
+        &mut out,
+    )?;
+    Ok(out)
+}
+
+/// `region` を根として `ids` を子へ振り分けながら降り、リーフ（または未作成キー）へ到達した
+/// flex_id 群を `out` に積む。
+fn descend_batched(
     tables_data: &Database<TableIdAndFlexId, Bytes>,
     txn: &RoTxn<WithoutTls>,
     table_id: TableId,
     region: FlexId,
-    flex_id: &FlexId,
-    out: &mut Vec<FlexId>,
+    ids: Vec<FlexId>,
+    out: &mut std::collections::HashMap<FlexId, Vec<FlexId>>,
 ) -> Result<(), AppError> {
+    if ids.is_empty() {
+        return Ok(());
+    }
     match tables_data.get(txn, &(table_id, region.clone()))? {
-        // 未作成 → ここが新規リーフになる。
-        None => out.push(region),
-        Some(bytes) => match ShardEntry::decode(bytes)? {
-            ShardEntry::Leaf(_) => out.push(region),
-            ShardEntry::Pointers(children) => {
+        // 未作成リーフ or 実データリーフ → ここへ到達した全 flex_id が担当。
+        None => {
+            out.entry(region).or_default().extend(ids);
+        }
+        Some(bytes) => match ShardEntry::child_pointers(bytes)? {
+            None => {
+                out.entry(region).or_default().extend(ids);
+            }
+            Some(children) => {
                 for child in children {
-                    if child.intersection(flex_id).is_some() {
-                        collect_leaf_regions(tables_data, txn, table_id, child, flex_id, out)?;
-                    }
+                    let bucket: Vec<FlexId> = ids
+                        .iter()
+                        .filter(|f| child.intersection(f).is_some())
+                        .cloned()
+                        .collect();
+                    descend_batched(tables_data, txn, table_id, child, bucket, out)?;
                 }
             }
         },
     }
     Ok(())
-}
-
-/// `flex_id` が属する全リーフ領域を、f 符号で選んだ上下半球ルートから辿って返す。
-pub fn route_leaves(
-    tables_data: &Database<TableIdAndFlexId, Bytes>,
-    txn: &RoTxn<WithoutTls>,
-    table_id: TableId,
-    flex_id: &FlexId,
-) -> Result<Vec<FlexId>, AppError> {
-    let root = if flex_id.f_index().is_negative() {
-        FlexId::LOWER_MAX
-    } else {
-        FlexId::UPPER_MAX
-    };
-    let mut out = Vec::new();
-    collect_leaf_regions(tables_data, txn, table_id, root, flex_id, &mut out)?;
-    Ok(out)
 }
 
 /// `region`（リーフの領域）を直接の子に持つ**親ポインタノード**を見つけ、
@@ -179,8 +230,8 @@ pub fn find_parent_pointer(
     let mut cur = root;
     loop {
         match tables_data.get(txn, &(table_id, cur.clone()))? {
-            Some(bytes) => match ShardEntry::decode(bytes)? {
-                ShardEntry::Pointers(children) => {
+            Some(bytes) => match ShardEntry::child_pointers(bytes)? {
+                Some(children) => {
                     // region が直接の子なら、cur が親。
                     if children.iter().any(|c| c == region) {
                         return Ok(Some((cur, children)));
@@ -194,7 +245,7 @@ pub fn find_parent_pointer(
                         None => return Ok(None),
                     }
                 }
-                ShardEntry::Leaf(_) => return Ok(None),
+                None => return Ok(None),
             },
             None => return Ok(None),
         }

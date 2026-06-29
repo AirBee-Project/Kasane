@@ -155,15 +155,38 @@ pub fn initialize_database(path: &str) -> AppDb {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(10 * 1024 * 1024 * 1024);
 
-    let no_readahead = std::env::var("KASANE_LMDB_NO_READAHEAD")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
+    let env_bool = |name: &str| {
+        std::env::var(name)
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+    };
+
+    // すべて opt-in（既定は従来挙動）。
+    // - NO_READ_AHEAD : ランダムアクセス主体で readahead を無効化。
+    // - WRITE_MAP     : 書き込み可能 mmap。書き込みスループット向上（疎ファイル肥大・ネスト txn 不可）。
+    // - NO_SYNC       : コミット毎の fsync を省く。バルク投入を大幅高速化するが耐久性は低下。
+    //                   （投入後に `env.force_sync()` で明示同期する運用を想定）
+    let mut env_flags = EnvFlags::empty();
+    if env_bool("KASANE_LMDB_NO_READAHEAD") {
+        env_flags |= EnvFlags::NO_READ_AHEAD;
+    }
+    let write_map = env_bool("KASANE_LMDB_WRITE_MAP");
+    if write_map {
+        env_flags |= EnvFlags::WRITE_MAP;
+    }
+    if env_bool("KASANE_LMDB_NO_SYNC") {
+        env_flags |= EnvFlags::NO_SYNC | EnvFlags::NO_META_SYNC;
+        // MAP_ASYNC は WRITE_MAP と併用時のみ有効。
+        if write_map {
+            env_flags |= EnvFlags::MAP_ASYNC;
+        }
+    }
 
     let env = unsafe {
         let mut opts = EnvOpenOptions::new().read_txn_without_tls();
         opts.map_size(map_size).max_dbs(15);
-        if no_readahead {
-            opts.flags(EnvFlags::NO_READ_AHEAD);
+        if !env_flags.is_empty() {
+            opts.flags(env_flags);
         }
         opts.open(path).unwrap_or_else(|e| {
             tracing::error!("Failed to open heed Env at {}: {}", path, e);
