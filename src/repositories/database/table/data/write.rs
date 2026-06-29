@@ -162,7 +162,7 @@ impl<'a> KasaneDbWrite<'a> {
                 ));
             }
 
-            // 値インデックス差分更新（table_count はヘッダ集計式なので別途調整不要）。
+            // 値インデックス差分更新
             self.update_value_index(old_keys, new_keys)?;
 
             // 親キーをリーフ（空なら削除）に置換し、子キーを削除。
@@ -187,9 +187,6 @@ impl<'a> KasaneDbWrite<'a> {
     }
 
     /// 1 リーフへの変更を適用し、値インデックスを差分更新したうえで保存する。
-    ///
-    /// `modify` 実行前後で「入力 ∪ 旧リーフ領域」に重なるリーフ集合 (FlexId, 値) を取り、
-    /// その対称差だけ `value_index` を put/delete する（分割で生じた残りリーフも拾える）。
     fn apply_leaf<F>(
         &mut self,
         table_id: TableId,
