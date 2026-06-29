@@ -14,7 +14,7 @@ pub async fn info(
                 name: table.name,
                 data_type: table.data_type,
                 max_zoom_level: table.max_zoom_level,
-                count: Some(count),
+                count,
             })
         }
         None => Err(AppError::TableNotFound {

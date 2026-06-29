@@ -7,7 +7,7 @@ use crate::models::database::table::data::{
     RemoveDataRequest,
 };
 use crate::models::database::table::{
-    CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse,
+    CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse, TableSummary,
 };
 use crate::models::database::{CreateDatabaseRequest, DatabaseInfoResponse};
 use crate::models::spatial_id::SpatialId;
@@ -100,6 +100,7 @@ impl utoipa::Modify for SecurityAddon {
         CreateTableRequest,
         TableDataType,
         TableInfoResponse,
+        TableSummary,
         TableListResponse,
         GetDataRequest,
         GetDataResponse,

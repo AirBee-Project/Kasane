@@ -1905,6 +1905,44 @@
       },
       "TableInfoResponse": {
         "type": "object",
+        "description": "単一テーブルの詳細情報。保持する空間ID(FlexId)の総数 `count` を必ず含む。",
+        "required": [
+          "name",
+          "data_type",
+          "max_zoom_level",
+          "count"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "example_table"
+          },
+          "data_type": {
+            "$ref": "#/components/schemas/TableDataType"
+          },
+          "max_zoom_level": {
+            "type": "integer",
+            "format": "int32",
+            "example": 25,
+            "minimum": 0
+          },
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "example": 100,
+            "minimum": 0
+          }
+        }
+      },
+      "TableListResponse": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/TableSummary"
+        }
+      },
+      "TableSummary": {
+        "type": "object",
+        "description": "テーブルの基本情報。一覧で返す軽量ビューで、件数は含まない。",
         "required": [
           "name",
           "data_type",
@@ -1923,22 +1961,7 @@
             "format": "int32",
             "example": 25,
             "minimum": 0
-          },
-          "count": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64",
-            "example": 100,
-            "minimum": 0
           }
-        }
-      },
-      "TableListResponse": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/TableInfoResponse"
         }
       },
       "UpdateAdminRequest": {
