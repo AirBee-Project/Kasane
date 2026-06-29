@@ -10,20 +10,11 @@ use crate::{error::AppError, repositories::KasaneDbRead};
 /// `data_get` の戻り値：`(値バイト, その値を持つ FlexId 群)` の一覧。
 type ValueGroups = Vec<(Vec<u8>, Vec<FlexId>)>;
 
-/// クエリ FlexId 数がこれ以上なら `data_get` を Rayon で並列化する。
-/// 各クエリは独立（route→load→get）なので、ワーカごとに read txn を開いて分担できる。
+/// `data_get` を 並列化する基準。
 const DATA_GET_PARALLEL_THRESHOLD: usize = 64;
 
 impl<'a> KasaneDbRead<'a> {
-    /// 空間IDごとに格納値（生バイト列）を解決し、**値でグループ化**して返す。
-    ///
-    /// 1つの値が複数の [`FlexId`] に割り当たるケース（同値の離れた複数領域や、
-    /// コアースなリーフのクエリ切り取り）があるため、`(値バイト, その値を持つ FlexId 群)`
-    /// の形で返す。これにより値バイトの重複保持と、上位での重複復元を避けられる。
-    /// 値の解釈（[`restore_value`] 等）と [`SingleId`](kasane_logic::SingleId) への展開は上位レイヤーが行う。
-    ///
-    /// クエリ数が多いときは Rayon でクエリを分割し、ワーカごとに read txn を開いて
-    /// 部分結果を並列に集め、最後に値でマージする。
+    /// 指定された範囲の空間IDを値ごとにグループ化して返す。
     pub fn data_get(
         &self,
         table_id: crate::models::id::TableId,
@@ -33,7 +24,7 @@ impl<'a> KasaneDbRead<'a> {
 
         if flex_ids.len() < DATA_GET_PARALLEL_THRESHOLD {
             let mut by_value: HashMap<Vec<u8>, Vec<FlexId>> = HashMap::new();
-            Self::resolve_chunk(
+            Self::resolve_query_batch(
                 &self.db.tables_data,
                 &self.read_txn,
                 table_id,
@@ -43,8 +34,6 @@ impl<'a> KasaneDbRead<'a> {
             return Ok(by_value.into_iter().collect());
         }
 
-        // 並列パス：read txn は跨ぎ共有できないため、ワーカごとに env から開く。
-        // 非 Sync な self.read_txn には触れず、Copy な Database と Clone な Env だけを渡す。
         use rayon::prelude::*;
         let tables_data = self.db.tables_data;
         let env = &self.db.env;
@@ -57,7 +46,7 @@ impl<'a> KasaneDbRead<'a> {
                     .read_txn()
                     .map_err(|e| AppError::InternalError(e.to_string()))?;
                 let mut local: HashMap<Vec<u8>, Vec<FlexId>> = HashMap::new();
-                Self::resolve_chunk(&tables_data, &txn, table_id, chunk, &mut local)?;
+                Self::resolve_query_batch(&tables_data, &txn, table_id, chunk, &mut local)?;
                 Ok(local)
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -85,14 +74,12 @@ impl<'a> KasaneDbRead<'a> {
         let tables_data = self.db.tables_data;
         let env = self.db.env.clone();
 
-        // Rayon task is completely detached
         rayon::spawn(move || {
             let flex_ids_vec: Vec<FlexId> = flex_ids.iter_flex_ids().collect();
             if flex_ids_vec.is_empty() {
                 return;
             }
 
-            // 直列処理 (IDが少ない場合)
             if flex_ids_vec.len() < 100 {
                 let txn_res = env
                     .read_txn()
@@ -100,7 +87,7 @@ impl<'a> KasaneDbRead<'a> {
                 match txn_res {
                     Ok(txn) => {
                         let mut local = HashMap::new();
-                        if let Err(e) = Self::resolve_chunk(
+                        if let Err(e) = Self::resolve_query_batch(
                             &tables_data,
                             &txn,
                             table_id,
@@ -128,7 +115,6 @@ impl<'a> KasaneDbRead<'a> {
                 .len()
                 .div_ceil(rayon::current_num_threads().max(1));
 
-            // 並列ストリーミング処理
             let _ = flex_ids_vec
                 .par_chunks(chunk_size.max(1))
                 .try_for_each(|chunk| {
@@ -138,16 +124,15 @@ impl<'a> KasaneDbRead<'a> {
 
                     let mut local = HashMap::new();
                     if let Err(e) =
-                        Self::resolve_chunk(&tables_data, &txn, table_id, chunk, &mut local)
+                        Self::resolve_query_batch(&tables_data, &txn, table_id, chunk, &mut local)
                     {
                         let _ = sender.blocking_send(Err(e));
                         return Err(());
                     }
 
-                    // チャンク単位で即座にチャネルへ送信
                     for (val, ids) in local {
                         if sender.blocking_send(Ok((val, ids))).is_err() {
-                            return Err(()); // receiver dropped
+                            return Err(());
                         }
                     }
                     Ok(())
@@ -155,26 +140,21 @@ impl<'a> KasaneDbRead<'a> {
         });
     }
 
-    /// `chunk` 内の各クエリ FlexId を解決し、`by_value`（値→FlexId群）へ蓄積する。
-    /// `data_get` の直列パスと並列ワーカで共有するコア処理。
-    fn resolve_chunk(
+    /// `queries` 内の各クエリ FlexId を解決し、`by_value`（値→FlexId群）へ蓄積する。
+    fn resolve_query_batch(
         tables_data: &heed::Database<crate::db_init::TableIdAndFlexId, heed::types::Bytes>,
         txn: &heed::RoTxn<heed::WithoutTls>,
         table_id: TableId,
-        chunk: &[FlexId],
+        queries: &[FlexId],
         by_value: &mut HashMap<Vec<u8>, Vec<FlexId>>,
     ) -> Result<(), AppError> {
-        // 一度の木降下で「リーフ -> そこに当たるクエリ群」へまとめ、リーフは 1 回だけ開く。
-        let by_leaf = shard::route_leaves_batched(tables_data, txn, table_id, chunk)?;
+        let by_leaf = shard::route_leaves_batched(tables_data, txn, table_id, queries)?;
         for (region, queries) in by_leaf {
-            // ZeroCopy archived リーダで、Arc 木を再構築せずに走査する。
             let Some(arch) = shard::load_leaf_archived(tables_data, txn, table_id, &region)? else {
-                continue; // 未作成リーフ（データなし）
+                continue;
             };
             for query_flex in queries {
-                // query_flex に切り取られた (FlexId, 値) を、値ごとにまとめる。
                 for (got_flex, value) in arch.get(&query_flex) {
-                    // 値バイトのクローンは初出時のみ（既出値は get_mut で参照のみ）。
                     if let Some(flex_ids) = by_value.get_mut(value) {
                         flex_ids.push(got_flex);
                     } else {
