@@ -14,13 +14,13 @@ use axum::{
 
 /// データベースの作成
 ///
-/// 新しいデータベースを作成します。この操作はグローバル管理者権限が必要です。
+/// 新しいデータベースを作成します。この操作はGlobal Admin権限が必要です。
 #[utoipa::path(
     post,
     path = "/databases",
     request_body = CreateDatabaseRequest,
     responses(
-        (status = 201, description = "データベース作成成功", body = DatabaseInfoResponse)
+        (status = 201, body = DatabaseInfoResponse)
     ),
     security(("bearer_auth" = ["global_admin"])),
     tag = "databases"
@@ -44,12 +44,12 @@ pub async fn database_create(
 
 /// データベース情報の取得
 ///
-/// 指定したデータベースの詳細情報（作成日、データサイズ、テーブル数など）を取得します。対象データベースのRead以上の権限が必要です。
+/// 指定したデータベースの詳細情報を取得します。対象データベースのRead以上の権限が必要です。
 #[utoipa::path(
     get,
     path = "/databases/{name}",
     responses(
-        (status = 200, description = "データベース情報取得成功", body = DatabaseInfoResponse)
+        (status = 200, body = DatabaseInfoResponse)
     ),
     security(("bearer_auth" = [])),
     tag = "databases"
@@ -72,12 +72,15 @@ pub async fn database_info(
 
 /// データベース一覧の取得
 ///
-/// ユーザーがアクセス権限を持つデータベースの一覧を取得します。グローバル管理者の場合はすべてのデータベースが返されます。
+/// ユーザー権限に応じて、アクセス可能なデータベースの一覧を取得します。
+///
+/// - **グローバル管理者**: システム内の全データベースが見えます。
+/// - **一般ユーザー**: 自分が権限を持っているデータベースだけが見えます。
 #[utoipa::path(
     get,
     path = "/databases",
     responses(
-        (status = 200, description = "データベース一覧取得成功", body = Vec<DatabaseInfoResponse>)
+        (status = 200, body = Vec<DatabaseInfoResponse>)
     ),
     security(("bearer_auth" = [])),
     tag = "databases"
@@ -97,12 +100,12 @@ pub async fn database_list(
 
 /// データベースの削除
 ///
-/// 指定したデータベースとその中のすべてのデータを完全に削除します。この操作はグローバル管理者権限が必要です。
+/// 指定したデータベースを削除します。この操作はGlobal Admin権限が必要です。
 #[utoipa::path(
     delete,
     path = "/databases/{name}",
     responses(
-        (status = 204, description = "データベース削除成功")
+        (status = 204)
     ),
     security(("bearer_auth" = ["global_admin"])),
     tag = "databases"

@@ -28,7 +28,7 @@ use tokio_stream::StreamExt;
         ("limit" = Option<usize>, Query, description = "Maximum number of returned elements")
     ),
     responses(
-        (status = 200, description = "NDJSONストリームデータ", body = String)
+        (status = 200, body = String)
     ),
     security(("bearer_auth" = [])),
     tag = "data"

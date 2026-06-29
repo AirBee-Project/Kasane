@@ -29,7 +29,7 @@
         },
         "responses": {
           "200": {
-            "description": "ログイン成功",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -39,7 +39,7 @@
             }
           },
           "401": {
-            "description": "認証失敗"
+            "description": "認証失敗（ユーザー名またはパスワードが不正）"
           }
         }
       }
@@ -50,11 +50,11 @@
           "databases"
         ],
         "summary": "データベース一覧の取得",
-        "description": "ユーザーがアクセス権限を持つデータベースの一覧を取得します。グローバル管理者の場合はすべてのデータベースが返されます。",
+        "description": "ユーザー権限に応じて、アクセス可能なデータベースの一覧を取得します。\n\n- **グローバル管理者**: システム内の全データベースが見えます。\n- **一般ユーザー**: 自分が権限を持っているデータベースだけが見えます。",
         "operationId": "database_list",
         "responses": {
           "200": {
-            "description": "データベース一覧取得成功",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -78,7 +78,7 @@
           "databases"
         ],
         "summary": "データベースの作成",
-        "description": "新しいデータベースを作成します。この操作はグローバル管理者権限が必要です。",
+        "description": "新しいデータベースを作成します。この操作はGlobal Admin権限が必要です。",
         "operationId": "database_create",
         "requestBody": {
           "content": {
@@ -92,7 +92,7 @@
         },
         "responses": {
           "201": {
-            "description": "データベース作成成功",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -117,7 +117,7 @@
           "tables"
         ],
         "summary": "テーブル一覧の取得",
-        "description": "指定したデータベース内に存在するすべてのテーブルの一覧を取得します。この操作はデータベースのRead以上の権限が必要です。",
+        "description": "指定したデータベース内に存在するテーブルの一覧を取得します。この操作はデータベースのRead以上の権限が必要です。",
         "operationId": "table_list",
         "parameters": [
           {
@@ -131,7 +131,7 @@
         ],
         "responses": {
           "200": {
-            "description": "テーブル一覧取得成功",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -176,7 +176,7 @@
         },
         "responses": {
           "201": {
-            "description": "テーブル作成成功"
+            "description": ""
           },
           "400": {
             "description": "リクエストが不正（パラメータエラーなど）"
@@ -198,7 +198,7 @@
           "tables"
         ],
         "summary": "テーブル情報の取得",
-        "description": "指定したテーブルの詳細情報（データ型やデータエントリ数など）を取得します。この操作はデータベースのRead以上の権限が必要です。",
+        "description": "指定したテーブルの詳細情報を取得します。この操作はデータベースのRead以上の権限が必要です。",
         "operationId": "table_info",
         "parameters": [
           {
@@ -220,7 +220,7 @@
         ],
         "responses": {
           "200": {
-            "description": "テーブル情報取得成功",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -244,7 +244,7 @@
           "tables"
         ],
         "summary": "テーブルの削除",
-        "description": "指定したテーブルとその中のすべてのデータを完全に削除します。この操作はデータベースのWrite以上の権限が必要です。",
+        "description": "指定したテーブルを削除します。この操作はデータベースのWrite以上の権限が必要です。",
         "operationId": "remove_table",
         "parameters": [
           {
@@ -266,7 +266,7 @@
         ],
         "responses": {
           "204": {
-            "description": "テーブル削除成功"
+            "description": ""
           },
           "404": {
             "description": "テーブルが存在しない"
@@ -317,7 +317,7 @@
         },
         "responses": {
           "200": {
-            "description": "データ挿入成功"
+            "description": ""
           },
           "404": {
             "description": "テーブルが存在しない"
@@ -366,7 +366,7 @@
         },
         "responses": {
           "204": {
-            "description": "データ削除成功"
+            "description": ""
           },
           "404": {
             "description": "テーブルが存在しない"
@@ -415,7 +415,7 @@
         },
         "responses": {
           "204": {
-            "description": "データ更新成功"
+            "description": ""
           },
           "404": {
             "description": "テーブルが存在しない"
@@ -485,7 +485,7 @@
         },
         "responses": {
           "200": {
-            "description": "データ取得成功",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -564,7 +564,7 @@
         },
         "responses": {
           "200": {
-            "description": "NDJSONストリームデータ",
+            "description": "",
             "content": {
               "text/plain": {
                 "schema": {
@@ -587,7 +587,7 @@
           "databases"
         ],
         "summary": "データベース情報の取得",
-        "description": "指定したデータベースの詳細情報（作成日、データサイズ、テーブル数など）を取得します。対象データベースのRead以上の権限が必要です。",
+        "description": "指定したデータベースの詳細情報を取得します。対象データベースのRead以上の権限が必要です。",
         "operationId": "database_info",
         "parameters": [
           {
@@ -601,7 +601,7 @@
         ],
         "responses": {
           "200": {
-            "description": "データベース情報取得成功",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -622,7 +622,7 @@
           "databases"
         ],
         "summary": "データベースの削除",
-        "description": "指定したデータベースとその中のすべてのデータを完全に削除します。この操作はグローバル管理者権限が必要です。",
+        "description": "指定したデータベースを削除します。この操作はGlobal Admin権限が必要です。",
         "operationId": "remove_database",
         "parameters": [
           {
@@ -636,7 +636,7 @@
         ],
         "responses": {
           "204": {
-            "description": "データベース削除成功"
+            "description": ""
           }
         },
         "security": [
@@ -654,11 +654,11 @@
           "Users"
         ],
         "summary": "ユーザー一覧の取得",
-        "description": "登録されているすべてのユーザーの一覧を取得します。この操作はグローバル管理者のみ実行可能です。",
+        "description": "ユーザーの一覧を取得します。この操作はGlobal Adminのみ実行可能です。",
         "operationId": "list_users",
         "responses": {
           "200": {
-            "description": "ユーザー一覧取得成功",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -684,7 +684,7 @@
           "Users"
         ],
         "summary": "新規ユーザー作成",
-        "description": "新しいユーザーを作成し、パスワードや管理者権限を設定します。この操作はグローバル管理者のみ実行可能です。",
+        "description": "新しいユーザーを作成し、パスワードやGlobal Adminを設定します。この操作はGlobal Adminのみ実行可能です。",
         "operationId": "create_user",
         "requestBody": {
           "content": {
@@ -698,7 +698,7 @@
         },
         "responses": {
           "201": {
-            "description": "ユーザー作成成功"
+            "description": ""
           },
           "409": {
             "description": "同名のユーザーが既に存在する"
@@ -719,7 +719,7 @@
           "Users"
         ],
         "summary": "ユーザーの削除",
-        "description": "指定したユーザーをシステムから完全に削除します。この操作はグローバル管理者のみ実行可能です。",
+        "description": "指定したユーザーを削除します。この操作はGlobal Adminのみ実行可能です。",
         "operationId": "delete_user",
         "parameters": [
           {
@@ -734,7 +734,7 @@
         ],
         "responses": {
           "204": {
-            "description": "ユーザー削除成功"
+            "description": ""
           },
           "404": {
             "description": "ユーザーが存在しない"
@@ -754,8 +754,8 @@
         "tags": [
           "Users"
         ],
-        "summary": "グローバル管理者権限の変更",
-        "description": "指定したユーザーのグローバル管理者権限（is_global_admin）を付与または剥奪します。この操作はグローバル管理者のみ実行可能です。",
+        "summary": "Global Admin権限の変更",
+        "description": "指定したユーザーのGlobal Admin権限を付与または剥奪します。この操作はGlobal Adminのみ実行可能です。",
         "operationId": "set_admin",
         "parameters": [
           {
@@ -780,7 +780,7 @@
         },
         "responses": {
           "204": {
-            "description": "管理者権限の更新成功"
+            "description": ""
           },
           "403": {
             "description": "rootユーザーの権限は変更不可"
@@ -804,7 +804,7 @@
           "Users"
         ],
         "summary": "パスワードの更新",
-        "description": "指定したユーザーのパスワードを更新します。ユーザー本人が自分自身のパスワードを変更するか、グローバル管理者が他人のパスワードをリセットする場合に利用可能です。",
+        "description": "指定したユーザーのパスワードを更新します。ユーザー本人が自分自身のパスワードを変更するか、Global Adminが他人のパスワードをリセットする場合に利用可能です。",
         "operationId": "update_password",
         "parameters": [
           {
@@ -829,7 +829,7 @@
         },
         "responses": {
           "204": {
-            "description": "パスワード更新成功"
+            "description": ""
           },
           "404": {
             "description": "ユーザーが存在しない"
@@ -848,7 +848,7 @@
           "Users"
         ],
         "summary": "データベース権限の取得",
-        "description": "指定したユーザーが持つデータベースごとのアクセス権限（Read, Write, Admin）の一覧を取得します。この操作はグローバル管理者のみ実行可能です。",
+        "description": "指定したユーザーが持つデータベースごとのアクセス権限（Read, Write, Manage）の一覧を取得します。この操作はグローバル管理者のみ実行可能です。",
         "operationId": "get_privileges",
         "parameters": [
           {
@@ -863,7 +863,7 @@
         ],
         "responses": {
           "200": {
-            "description": "権限一覧取得成功",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -894,7 +894,7 @@
           "Users"
         ],
         "summary": "データベース権限の設定",
-        "description": "指定したユーザーに対し、特定のデータベースへのアクセス権限（Read, Write, Admin）を設定します。この操作はグローバル管理者のみ実行可能です。",
+        "description": "指定したユーザーに対し、特定のデータベースへのアクセス権限（Read, Write, Manage）を設定します。この操作はグローバル管理者のみ実行可能です。",
         "operationId": "set_privilege",
         "parameters": [
           {
@@ -928,7 +928,7 @@
         },
         "responses": {
           "204": {
-            "description": "権限設定成功"
+            "description": ""
           },
           "404": {
             "description": "ユーザーまたはデータベースが存在しない"
@@ -947,7 +947,7 @@
           "Users"
         ],
         "summary": "データベース権限の削除",
-        "description": "指定したユーザーから、特定のデータベースへのアクセス権限を削除（剥奪）します。この操作はグローバル管理者のみ実行可能です。",
+        "description": "指定したユーザーから、特定のデータベースへのアクセス権限を削除します。この操作はGlobal Adminのみ実行可能です。",
         "operationId": "delete_privilege",
         "parameters": [
           {
@@ -971,7 +971,7 @@
         ],
         "responses": {
           "204": {
-            "description": "権限削除成功"
+            "description": ""
           },
           "404": {
             "description": "ユーザーまたはデータベースが存在しない"

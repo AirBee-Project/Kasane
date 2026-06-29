@@ -17,12 +17,12 @@ use crate::{
 
 /// ユーザー一覧の取得
 ///
-/// 登録されているすべてのユーザーの一覧を取得します。この操作はグローバル管理者のみ実行可能です。
+/// ユーザーの一覧を取得します。この操作はGlobal Adminのみ実行可能です。
 #[utoipa::path(
     get,
     path = "/users",
     responses(
-        (status = 200, description = "ユーザー一覧取得成功", body = [UserInfoResponse]),
+        (status = 200, body = [UserInfoResponse]),
     ),
     security(("bearer_auth" = ["global_admin"])),
     tag = "Users"
@@ -40,13 +40,13 @@ pub async fn list_users(
 
 /// 新規ユーザー作成
 ///
-/// 新しいユーザーを作成し、パスワードや管理者権限を設定します。この操作はグローバル管理者のみ実行可能です。
+/// 新しいユーザーを作成し、パスワードやGlobal Adminを設定します。この操作はGlobal Adminのみ実行可能です。
 #[utoipa::path(
     post,
     path = "/users",
     request_body = CreateUserRequest,
     responses(
-        (status = 201, description = "ユーザー作成成功"),
+        (status = 201),
         (status = 409, description = "同名のユーザーが既に存在する")
     ),
     security(("bearer_auth" = ["global_admin"])),
@@ -66,7 +66,7 @@ pub async fn create_user(
 
 /// ユーザーの削除
 ///
-/// 指定したユーザーをシステムから完全に削除します。この操作はグローバル管理者のみ実行可能です。
+/// 指定したユーザーを削除します。この操作はGlobal Adminのみ実行可能です。
 #[utoipa::path(
     delete,
     path = "/users/{username}",
@@ -74,7 +74,7 @@ pub async fn create_user(
         ("username" = String, Path, description = "ユーザー名")
     ),
     responses(
-        (status = 204, description = "ユーザー削除成功"),
+        (status = 204),
         (status = 404, description = "ユーザーが存在しない")
     ),
     security(("bearer_auth" = ["global_admin"])),
@@ -94,7 +94,7 @@ pub async fn delete_user(
 
 /// パスワードの更新
 ///
-/// 指定したユーザーのパスワードを更新します。ユーザー本人が自分自身のパスワードを変更するか、グローバル管理者が他人のパスワードをリセットする場合に利用可能です。
+/// 指定したユーザーのパスワードを更新します。ユーザー本人が自分自身のパスワードを変更するか、Global Adminが他人のパスワードをリセットする場合に利用可能です。
 #[utoipa::path(
     put,
     path = "/users/{username}/password",
@@ -103,7 +103,7 @@ pub async fn delete_user(
     ),
     request_body = UpdatePasswordRequest,
     responses(
-        (status = 204, description = "パスワード更新成功"),
+        (status = 204),
         (status = 404, description = "ユーザーが存在しない")
     ),
     security(("bearer_auth" = [])),
@@ -126,9 +126,9 @@ pub async fn update_password(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// グローバル管理者権限の変更
+/// Global Admin権限の変更
 ///
-/// 指定したユーザーのグローバル管理者権限（is_global_admin）を付与または剥奪します。この操作はグローバル管理者のみ実行可能です。
+/// 指定したユーザーのGlobal Admin権限を付与または剥奪します。この操作はGlobal Adminのみ実行可能です。
 #[utoipa::path(
     put,
     path = "/users/{username}/admin",
@@ -137,7 +137,7 @@ pub async fn update_password(
     ),
     request_body = UpdateAdminRequest,
     responses(
-        (status = 204, description = "管理者権限の更新成功"),
+        (status = 204),
         (status = 403, description = "rootユーザーの権限は変更不可"),
         (status = 404, description = "ユーザーが存在しない")
     ),
@@ -159,7 +159,7 @@ pub async fn set_admin(
 
 /// データベース権限の取得
 ///
-/// 指定したユーザーが持つデータベースごとのアクセス権限（Read, Write, Admin）の一覧を取得します。この操作はグローバル管理者のみ実行可能です。
+/// 指定したユーザーが持つデータベースごとのアクセス権限（Read, Write, Manage）の一覧を取得します。この操作はグローバル管理者のみ実行可能です。
 #[utoipa::path(
     get,
     path = "/users/{username}/privileges",
@@ -167,7 +167,7 @@ pub async fn set_admin(
         ("username" = String, Path, description = "ユーザー名")
     ),
     responses(
-        (status = 200, description = "権限一覧取得成功", body = [PrivilegeInfoResponse]),
+        (status = 200, body = [PrivilegeInfoResponse]),
         (status = 404, description = "ユーザーが存在しない")
     ),
     security(("bearer_auth" = ["global_admin"])),
@@ -187,7 +187,7 @@ pub async fn get_privileges(
 
 /// データベース権限の設定
 ///
-/// 指定したユーザーに対し、特定のデータベースへのアクセス権限（Read, Write, Admin）を設定します。この操作はグローバル管理者のみ実行可能です。
+/// 指定したユーザーに対し、特定のデータベースへのアクセス権限（Read, Write, Manage）を設定します。この操作はグローバル管理者のみ実行可能です。
 #[utoipa::path(
     put,
     path = "/users/{username}/privileges/{db_name}",
@@ -197,7 +197,7 @@ pub async fn get_privileges(
     ),
     request_body = UpdatePrivilegeRequest,
     responses(
-        (status = 204, description = "権限設定成功"),
+        (status = 204),
         (status = 404, description = "ユーザーまたはデータベースが存在しない")
     ),
     security(("bearer_auth" = ["global_admin"])),
@@ -218,7 +218,7 @@ pub async fn set_privilege(
 
 /// データベース権限の削除
 ///
-/// 指定したユーザーから、特定のデータベースへのアクセス権限を削除（剥奪）します。この操作はグローバル管理者のみ実行可能です。
+/// 指定したユーザーから、特定のデータベースへのアクセス権限を削除します。この操作はGlobal Adminのみ実行可能です。
 #[utoipa::path(
     delete,
     path = "/users/{username}/privileges/{db_name}",
@@ -227,7 +227,7 @@ pub async fn set_privilege(
         ("db_name" = String, Path, description = "データベース名")
     ),
     responses(
-        (status = 204, description = "権限削除成功"),
+        (status = 204),
         (status = 404, description = "ユーザーまたはデータベースが存在しない")
     ),
     security(("bearer_auth" = ["global_admin"])),

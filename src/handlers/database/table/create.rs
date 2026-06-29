@@ -21,7 +21,7 @@ use crate::{
     path = "/databases/{db_name}/tables",
     request_body = CreateTableRequest,
     responses(
-        (status = 201, description = "テーブル作成成功"),
+        (status = 201),
         (status = 400, description = "リクエストが不正（パラメータエラーなど）"),
         (status = 409, description = "同名のテーブルが既に存在する")
     ),

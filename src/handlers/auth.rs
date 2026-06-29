@@ -15,8 +15,8 @@ use crate::{
     path = "/auth/login",
     request_body = LoginRequest,
     responses(
-        (status = 200, description = "ログイン成功", body = LoginResponse),
-        (status = 401, description = "認証失敗")
+        (status = 200, body = LoginResponse),
+        (status = 401, description = "認証失敗（ユーザー名またはパスワードが不正）")
     ),
     tag = "Auth"
 )]

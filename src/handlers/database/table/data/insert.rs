@@ -24,7 +24,7 @@ use axum::{
     path = "/databases/{db_name}/tables/{table_name}/data",
     request_body = InsertDataRequest,
     responses(
-        (status = 200, description = "データ挿入成功"),
+        (status = 200),
         (status = 404, description = "テーブルが存在しない")
     ),
     security(("bearer_auth" = [])),

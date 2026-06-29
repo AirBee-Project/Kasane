@@ -22,7 +22,7 @@ use axum::{
         ("limit" = Option<usize>, Query, description = "最大取得件数")
     ),
     responses(
-        (status = 200, description = "データ取得成功", body = GetDataResponse),
+        (status = 200, body = GetDataResponse),
         (status = 404, description = "テーブルが存在しない")
     ),
     security(("bearer_auth" = [])),

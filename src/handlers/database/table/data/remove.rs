@@ -17,7 +17,7 @@ use axum::{
     path = "/databases/{db_name}/tables/{table_name}/data",
     request_body = RemoveDataRequest,
     responses(
-        (status = 204, description = "データ削除成功"),
+        (status = 204),
         (status = 404, description = "テーブルが存在しない")
     ),
     security(("bearer_auth" = [])),

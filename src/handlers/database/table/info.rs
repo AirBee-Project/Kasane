@@ -12,12 +12,12 @@ use crate::{
 
 /// テーブル情報の取得
 ///
-/// 指定したテーブルの詳細情報（データ型やデータエントリ数など）を取得します。この操作はデータベースのRead以上の権限が必要です。
+/// 指定したテーブルの詳細情報を取得します。この操作はデータベースのRead以上の権限が必要です。
 #[utoipa::path(
     get,
     path = "/databases/{db_name}/tables/{table_name}",
     responses(
-        (status = 200, description = "テーブル情報取得成功", body = TableInfoResponse),
+        (status = 200, body = TableInfoResponse),
         (status = 404, description = "テーブルまたはデータベースが存在しない")
     ),
     security(("bearer_auth" = [])),

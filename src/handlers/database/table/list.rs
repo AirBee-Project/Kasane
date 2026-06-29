@@ -12,12 +12,12 @@ use crate::{
 
 /// テーブル一覧の取得
 ///
-/// 指定したデータベース内に存在するすべてのテーブルの一覧を取得します。この操作はデータベースのRead以上の権限が必要です。
+/// 指定したデータベース内に存在するテーブルの一覧を取得します。この操作はデータベースのRead以上の権限が必要です。
 #[utoipa::path(
     get,
     path = "/databases/{db_name}/tables",
     responses(
-        (status = 200, description = "テーブル一覧取得成功", body = TableListResponse)
+        (status = 200, body = TableListResponse)
     ),
     security(("bearer_auth" = [])),
     tag = "tables"
