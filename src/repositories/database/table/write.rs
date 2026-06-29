@@ -61,6 +61,10 @@ impl<'a> KasaneDbWrite<'a> {
                 "Table name cannot be empty".to_string(),
             ));
         }
+        // max_zoom_level はシステムの有効ズーム（0..=30）でなければならない。
+        // 範囲外（31..=255）を黙って受理すると挿入時のズーム制限が事実上無効化されるため、ここで弾く。
+        kasane_logic::ZoomLevel::new(max_zoom_level)?;
+
         let db_meta = {
             let db = self.db.databases;
             if let Some(m) = db.get(&self.write_txn, db_name)? {

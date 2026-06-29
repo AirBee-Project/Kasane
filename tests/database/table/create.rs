@@ -96,3 +96,58 @@ async fn test_create_table_conflict() {
     assert_eq!(json["data_type"], "Int");
     assert_eq!(json["max_zoom_level"], 25);
 }
+
+#[tokio::test]
+/// max_zoom_level がシステム上限(30)を超える場合は 400 で拒否され、テーブルは作成されない。
+async fn test_create_table_max_zoom_level_too_large() {
+    let test_app = TestApp::new();
+    test_app.create_database("test_db").await;
+
+    let create_body = serde_json::json!({
+        "name": "too_deep",
+        "data_type": "Int",
+        "max_zoom_level": 31
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/test_db/tables")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // 検証で弾かれているので、テーブルは作成されていない。
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases/test_db/tables/too_deep")
+        .body(Body::empty())
+        .unwrap();
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+/// max_zoom_level の境界値 30（システム上限）は許可される。
+async fn test_create_table_max_zoom_level_boundary_ok() {
+    let test_app = TestApp::new();
+    test_app.create_database("test_db").await;
+
+    let create_body = serde_json::json!({
+        "name": "boundary_table",
+        "data_type": "Int",
+        "max_zoom_level": 30
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/test_db/tables")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+}
