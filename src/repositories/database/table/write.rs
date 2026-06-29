@@ -1,12 +1,8 @@
-use uuid::Uuid;
-
 use crate::{
     error::AppError,
     models::database::table::{Table, TableDataType, TableMetadata},
     repositories::KasaneDbWrite,
 };
-
-use heed::BytesDecode;
 
 impl<'a> KasaneDbWrite<'a> {
     /// Tableの情報を取得する
@@ -35,7 +31,7 @@ impl<'a> KasaneDbWrite<'a> {
         }
 
         let db = self.db.tables;
-        if let Some(m) = db.get(&self.write_txn, &(db_meta.id.into_bytes(), table_name))? {
+        if let Some(m) = db.get(&self.write_txn, &(db_meta.id, table_name))? {
             Ok(Some(Table {
                 id: m.id,
                 name: table_name.to_string(),
@@ -84,12 +80,12 @@ impl<'a> KasaneDbWrite<'a> {
 
         let db_index = self.db.table_id_index;
 
-        let mut id = Uuid::now_v7();
+        let mut id = crate::models::id::TableId(uuid::Uuid::now_v7());
         loop {
-            if db_index.get(&self.write_txn, &id.into_bytes())?.is_none() {
+            if db_index.get(&self.write_txn, &id)?.is_none() {
                 break;
             }
-            id = Uuid::now_v7();
+            id = crate::models::id::TableId(uuid::Uuid::now_v7());
         }
 
         let meta = TableMetadata {
@@ -99,12 +95,8 @@ impl<'a> KasaneDbWrite<'a> {
         };
 
         let db = self.db.tables;
-        db.put(
-            &mut self.write_txn,
-            &(db_meta.id.into_bytes(), table_name),
-            &meta,
-        )?;
-        db_index.put(&mut self.write_txn, &id.into_bytes(), &())?;
+        db.put(&mut self.write_txn, &(db_meta.id, table_name), &meta)?;
+        db_index.put(&mut self.write_txn, &id, &())?;
 
         self.table_caches
             .insert((db_meta.id, table_name.to_string()), meta);
@@ -117,73 +109,67 @@ impl<'a> KasaneDbWrite<'a> {
         })
     }
 
-    /// Tableを削除する
+    /// Tableを削除する。
     pub fn table_remove(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError> {
-        if db_name.is_empty() {
-            return Err(AppError::DatabaseNotFound {
-                name: db_name.to_string(),
-            });
-        }
-        if table_name.is_empty() {
-            return Err(AppError::TableNotFound {
-                name: table_name.to_string(),
-            });
-        }
-        let db_meta = {
-            let db = self.db.databases;
-            if let Some(m) = db.get(&self.write_txn, db_name)? {
-                m
-            } else {
-                return Err(AppError::DatabaseNotFound {
-                    name: db_name.to_string(),
+        let table = match self.table_info(db_name, table_name)? {
+            Some(t) => t,
+            None => {
+                return Err(AppError::TableNotFound {
+                    name: table_name.to_string(),
                 });
             }
         };
 
-        let table_meta = if let Some(meta) = self.table_info(db_name, table_name)? {
-            meta
-        } else {
-            return Err(AppError::TableNotFound {
-                name: table_name.to_string(),
-            });
+        let db_meta = {
+            let db = self.db.databases;
+            db.get(&self.write_txn, db_name)?
+                .ok_or_else(|| AppError::DatabaseNotFound {
+                    name: db_name.to_string(),
+                })?
         };
 
-        let db = self.db.tables;
-        db.delete(&mut self.write_txn, &(db_meta.id.into_bytes(), table_name))?;
-
-        let db_index = self.db.table_id_index;
-        db_index.delete(&mut self.write_txn, &table_meta.id.into_bytes())?;
-
-        let table_id_bytes = table_meta.id.into_bytes();
-
-        let db_spatial = self.db.spatialid_to_value;
-        let mut keys_to_delete = Vec::new();
-        for iter in db_spatial
-            .remap_key_type::<heed::types::Bytes>()
-            .prefix_iter(&self.write_txn, table_id_bytes.as_slice())?
-        {
-            let (k, _) = iter?;
-            let decoded_k = crate::db_init::TableIdAndSpatialId::bytes_decode(k).unwrap();
-            keys_to_delete.push(decoded_k);
-        }
-        for k in keys_to_delete {
-            db_spatial.delete(&mut self.write_txn, &k)?;
+        // 1. シャードデータを全削除（tables_data の table_id プレフィックス）。
+        //    反復中に削除できないため、キーを集めてから削除する。
+        let tables_data = self
+            .db
+            .tables_data
+            .remap_types::<heed::types::Bytes, heed::types::Bytes>();
+        let prefix = table.id.into_bytes();
+        let keys: Vec<Vec<u8>> = {
+            let mut ks = Vec::new();
+            for iter in tables_data.prefix_iter(&self.write_txn, prefix.as_slice())? {
+                let (k_bytes, _) = iter?;
+                ks.push(k_bytes.to_vec());
+            }
+            ks
+        };
+        for k in keys {
+            tables_data.delete(&mut self.write_txn, &k)?;
         }
 
-        let db_value = self.db.value_to_spatialid;
-        let mut v_keys_to_delete = Vec::new();
-        for iter in db_value
-            .remap_key_type::<heed::types::Bytes>()
-            .prefix_iter(&self.write_txn, table_id_bytes.as_slice())?
-        {
-            let (k, _) = iter?;
-            let decoded_k = crate::db_init::ValueToSpatialId::bytes_decode(k).unwrap();
-            v_keys_to_delete.push((decoded_k.0, decoded_k.1.to_vec(), decoded_k.2));
-        }
-        for (id, val, spatial) in v_keys_to_delete {
-            db_value.delete(&mut self.write_txn, &(id, &val, spatial))?;
+        // 1b. 値インデックスも table_id プレフィックスで全削除。
+        let value_index = self.db.value_index;
+        let vi_keys: Vec<Vec<u8>> = {
+            let mut ks = Vec::new();
+            for iter in value_index.prefix_iter(&self.write_txn, prefix.as_slice())? {
+                let (k_bytes, _) = iter?;
+                ks.push(k_bytes.to_vec());
+            }
+            ks
+        };
+        for k in vi_keys {
+            value_index.delete(&mut self.write_txn, &k)?;
         }
 
+        // 2. テーブルメタデータと ID インデックスを削除。
+        self.db
+            .tables
+            .delete(&mut self.write_txn, &(db_meta.id, table_name))?;
+        self.db
+            .table_id_index
+            .delete(&mut self.write_txn, &table.id)?;
+
+        // 3. キャッシュから除去。
         self.table_caches
             .remove(&(db_meta.id, table_name.to_string()));
 

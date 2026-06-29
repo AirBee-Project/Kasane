@@ -35,7 +35,7 @@ impl<'a> KasaneUsersRead<'a> {
 
     pub fn get_privilege(
         &self,
-        user_id: [u8; 16],
+        user_id: crate::models::id::UserId,
         db_name: &str,
     ) -> Result<Option<UserRole>, AppError> {
         if db_name.is_empty() {
@@ -49,7 +49,13 @@ impl<'a> KasaneUsersRead<'a> {
         };
 
         let privs_table = self.db.user_privileges;
-        if let Some(val) = privs_table.get(&self.read_txn, &(user_id, db_id))? {
+        if let Some(val) = privs_table.get(
+            &self.read_txn,
+            &(
+                user_id,
+                crate::models::id::DatabaseId(uuid::Uuid::from_bytes(db_id)),
+            ),
+        )? {
             Ok(UserRole::from_u8(val))
         } else {
             Ok(None)
@@ -70,20 +76,20 @@ impl<'a> KasaneUsersRead<'a> {
 
     pub fn get_user_privileges(
         &self,
-        user_id: [u8; 16],
+        user_id: crate::models::id::UserId,
     ) -> Result<Vec<(String, UserRole)>, AppError> {
         let dbs_table = self.db.databases;
         let mut db_id_to_name = std::collections::HashMap::new();
         for item in dbs_table.iter(&self.read_txn)? {
             let (k, v) = item?;
-            db_id_to_name.insert(v.id.into_bytes(), k.to_string());
+            db_id_to_name.insert(v.id, k.to_string());
         }
 
         let privs_table = self.db.user_privileges;
         let mut res = Vec::new();
         for item in privs_table
             .remap_key_type::<heed::types::Bytes>()
-            .prefix_iter(&self.read_txn, user_id.as_slice())?
+            .prefix_iter(&self.read_txn, &user_id.into_bytes())?
         {
             let (k_bytes, val) = item?;
             let (_, db_id) = crate::db_init::UserIdAndDbId::bytes_decode(k_bytes).unwrap();

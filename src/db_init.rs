@@ -4,26 +4,26 @@ use heed::{Database, Env, EnvFlags, EnvOpenOptions};
 use crate::models::users::UserMetadata;
 use crate::models::{database::DatabaseMetadata, database::table::TableMetadata};
 use crate::services::auth::hash_password;
+use kasane_logic::FlexId;
 use std::borrow::Cow;
 use uuid::Uuid;
-
 pub struct DbIdAndName;
 
 impl<'a> heed::BytesEncode<'a> for DbIdAndName {
-    type EItem = ([u8; 16], &'a str);
+    type EItem = (crate::models::id::DatabaseId, &'a str);
 
     fn bytes_encode(
         item: &'a Self::EItem,
     ) -> Result<Cow<'a, [u8]>, Box<dyn std::error::Error + Send + Sync>> {
         let mut bytes = Vec::with_capacity(16 + item.1.len());
-        bytes.extend_from_slice(&item.0);
+        bytes.extend_from_slice(&item.0.into_bytes());
         bytes.extend_from_slice(item.1.as_bytes());
         Ok(Cow::Owned(bytes))
     }
 }
 
 impl<'a> heed::BytesDecode<'a> for DbIdAndName {
-    type DItem = ([u8; 16], &'a str);
+    type DItem = (crate::models::id::DatabaseId, &'a str);
 
     fn bytes_decode(
         bytes: &'a [u8],
@@ -33,94 +33,29 @@ impl<'a> heed::BytesDecode<'a> for DbIdAndName {
         }
         let mut id = [0u8; 16];
         id.copy_from_slice(&bytes[0..16]);
+        let id = crate::models::id::DatabaseId(uuid::Uuid::from_bytes(id));
         let name = std::str::from_utf8(&bytes[16..])?;
         Ok((id, name))
-    }
-}
-
-pub struct TableIdAndSpatialId;
-
-impl<'a> heed::BytesEncode<'a> for TableIdAndSpatialId {
-    type EItem = ([u8; 16], [u8; 12]);
-
-    fn bytes_encode(
-        item: &'a Self::EItem,
-    ) -> Result<Cow<'a, [u8]>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut bytes = Vec::with_capacity(28);
-        bytes.extend_from_slice(&item.0);
-        bytes.extend_from_slice(&item.1);
-        Ok(Cow::Owned(bytes))
-    }
-}
-
-impl<'a> heed::BytesDecode<'a> for TableIdAndSpatialId {
-    type DItem = ([u8; 16], [u8; 12]);
-
-    fn bytes_decode(
-        bytes: &'a [u8],
-    ) -> Result<Self::DItem, Box<dyn std::error::Error + Send + Sync>> {
-        if bytes.len() != 28 {
-            return Err("invalid length".into());
-        }
-        let mut id = [0u8; 16];
-        id.copy_from_slice(&bytes[0..16]);
-        let mut spatial = [0u8; 12];
-        spatial.copy_from_slice(&bytes[16..28]);
-        Ok((id, spatial))
-    }
-}
-
-pub struct ValueToSpatialId;
-
-impl<'a> heed::BytesEncode<'a> for ValueToSpatialId {
-    type EItem = ([u8; 16], &'a [u8], [u8; 12]);
-
-    fn bytes_encode(
-        item: &'a Self::EItem,
-    ) -> Result<Cow<'a, [u8]>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut bytes = Vec::with_capacity(16 + item.1.len() + 12);
-        bytes.extend_from_slice(&item.0);
-        bytes.extend_from_slice(item.1);
-        bytes.extend_from_slice(&item.2);
-        Ok(Cow::Owned(bytes))
-    }
-}
-
-impl<'a> heed::BytesDecode<'a> for ValueToSpatialId {
-    type DItem = ([u8; 16], &'a [u8], [u8; 12]);
-
-    fn bytes_decode(
-        bytes: &'a [u8],
-    ) -> Result<Self::DItem, Box<dyn std::error::Error + Send + Sync>> {
-        if bytes.len() < 28 {
-            return Err("invalid length".into());
-        }
-        let mut id = [0u8; 16];
-        id.copy_from_slice(&bytes[0..16]);
-        let value = &bytes[16..bytes.len() - 12];
-        let mut spatial = [0u8; 12];
-        spatial.copy_from_slice(&bytes[bytes.len() - 12..]);
-        Ok((id, value, spatial))
     }
 }
 
 pub struct UserIdAndDbId;
 
 impl<'a> heed::BytesEncode<'a> for UserIdAndDbId {
-    type EItem = ([u8; 16], [u8; 16]);
+    type EItem = (crate::models::id::UserId, crate::models::id::DatabaseId);
 
     fn bytes_encode(
         item: &'a Self::EItem,
     ) -> Result<Cow<'a, [u8]>, Box<dyn std::error::Error + Send + Sync>> {
         let mut bytes = Vec::with_capacity(32);
-        bytes.extend_from_slice(&item.0);
-        bytes.extend_from_slice(&item.1);
+        bytes.extend_from_slice(&item.0.into_bytes());
+        bytes.extend_from_slice(&item.1.into_bytes());
         Ok(Cow::Owned(bytes))
     }
 }
 
 impl<'a> heed::BytesDecode<'a> for UserIdAndDbId {
-    type DItem = ([u8; 16], [u8; 16]);
+    type DItem = (crate::models::id::UserId, crate::models::id::DatabaseId);
 
     fn bytes_decode(
         bytes: &'a [u8],
@@ -132,20 +67,81 @@ impl<'a> heed::BytesDecode<'a> for UserIdAndDbId {
         uid.copy_from_slice(&bytes[0..16]);
         let mut dbid = [0u8; 16];
         dbid.copy_from_slice(&bytes[16..32]);
-        Ok((uid, dbid))
+        Ok((
+            crate::models::id::UserId(uuid::Uuid::from_bytes(uid)),
+            crate::models::id::DatabaseId(uuid::Uuid::from_bytes(dbid)),
+        ))
+    }
+}
+
+pub struct TableIdAndFlexId;
+
+impl<'a> heed::BytesEncode<'a> for TableIdAndFlexId {
+    type EItem = (crate::models::id::TableId, FlexId);
+
+    fn bytes_encode(
+        item: &'a Self::EItem,
+    ) -> Result<Cow<'a, [u8]>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut bytes = Vec::with_capacity(30);
+        bytes.extend_from_slice(&item.0.into_bytes());
+        bytes.extend_from_slice(&item.1.spatial_encode());
+        Ok(Cow::Owned(bytes))
+    }
+}
+
+impl<'a> heed::BytesDecode<'a> for TableIdAndFlexId {
+    type DItem = (crate::models::id::TableId, FlexId);
+
+    fn bytes_decode(
+        bytes: &'a [u8],
+    ) -> Result<Self::DItem, Box<dyn std::error::Error + Send + Sync>> {
+        if bytes.len() != 30 {
+            return Err("invalid length for TableIdAndFlexId".into());
+        }
+        let mut table_id = [0u8; 16];
+        table_id.copy_from_slice(&bytes[0..16]);
+        let table_id = crate::models::id::TableId(uuid::Uuid::from_bytes(table_id));
+
+        let mut flex_id_bytes = [0u8; 14];
+        flex_id_bytes.copy_from_slice(&bytes[16..30]);
+        let flex_id = FlexId::spatial_decode(&flex_id_bytes)?;
+
+        Ok((table_id, flex_id))
     }
 }
 
 #[derive(Clone)]
 pub struct AppDb {
+    /// LMDBの環境本体
     pub env: Env<heed::WithoutTls>,
+
+    /// データベースの一覧とメタデータを管理する
+    /// Key: データベース名 (`Str`) -> Value: `DatabaseMetadata`
     pub databases: Database<Str, SerdeBincode<DatabaseMetadata>>,
+
+    /// テーブルの一覧とメタデータを管理する
+    /// Key: `DatabaseId` と テーブル名 (`DbIdAndName`) -> Value: `TableMetadata`
     pub tables: Database<DbIdAndName, SerdeBincode<TableMetadata>>,
-    pub table_id_index: Database<SerdeBincode<[u8; 16]>, Unit>,
-    pub spatialid_to_value: Database<TableIdAndSpatialId, Bytes>,
-    pub value_to_spatialid: Database<ValueToSpatialId, Unit>,
+
+    /// `TableId` の存在確認やルックアップに用いるインデックス
+    /// Key: `TableId` -> Value: `Unit` (値なし)
+    pub table_id_index: Database<SerdeBincode<crate::models::id::TableId>, Unit>,
+
+    /// 登録済みのユーザーを管理する
+    /// Key: ユーザーID（現状は UUID などの文字列）(`Str`) -> Value: ユーザー名など (`Str`)
     pub users: Database<Str, Str>,
+
+    /// ユーザーごとのデータベースに対する権限（ロール）を管理する
+    /// Key: `UserId` と `DatabaseId` (`UserIdAndDbId`) -> Value: 権限レベル (`UserRole` を表す `u8`)
     pub user_privileges: Database<UserIdAndDbId, SerdeBincode<u8>>,
+
+    /// FlexTree
+    /// Key: `TableId` と 空間ID（`FlexId`）(`TableIdAndFlexId`) -> SpatialIdMapのバイト列(rkvy)
+    pub tables_data: Database<TableIdAndFlexId, Bytes>,
+
+    /// 値→空間の二次インデックス（値フィルタ用）。
+    /// Key 生バイト列: `table_id(16) ‖ 順序保存エンコード値(可変) ‖ flexid.spatial_encode(14)` -> 値なし
+    pub value_index: Database<Bytes, Unit>,
 }
 
 #[tracing::instrument]
@@ -158,20 +154,33 @@ pub fn initialize_database(path: &str) -> AppDb {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(10 * 1024 * 1024 * 1024);
 
-    // ランダムアクセス主体でワーキングセットが RAM を超える場合、OS の readahead が
-    // ページキャッシュを汚して逆効果になることがある。その際は環境変数で無効化できる
-    // （逐次レンジスキャン主体のワークロードでは付けない方が速いので既定は無効）。
-    let no_readahead = std::env::var("KASANE_LMDB_NO_READAHEAD")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
+    let env_bool = |name: &str| {
+        std::env::var(name)
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+    };
+
+    //LMDBの設定は全てデフォルト
+    let mut env_flags = EnvFlags::empty();
+    if env_bool("KASANE_LMDB_NO_READAHEAD") {
+        env_flags |= EnvFlags::NO_READ_AHEAD;
+    }
+    let write_map = env_bool("KASANE_LMDB_WRITE_MAP");
+    if write_map {
+        env_flags |= EnvFlags::WRITE_MAP;
+    }
+    if env_bool("KASANE_LMDB_NO_SYNC") {
+        env_flags |= EnvFlags::NO_SYNC | EnvFlags::NO_META_SYNC;
+        if write_map {
+            env_flags |= EnvFlags::MAP_ASYNC;
+        }
+    }
 
     let env = unsafe {
-        // TLS を無効化し、read トランザクションをスレッド間で共有可能にする
-        // （1つの読みスナップショットを rayon の複数ワーカーから並列に読む）。
         let mut opts = EnvOpenOptions::new().read_txn_without_tls();
-        opts.map_size(map_size).max_dbs(10);
-        if no_readahead {
-            opts.flags(EnvFlags::NO_READ_AHEAD);
+        opts.map_size(map_size).max_dbs(15);
+        if !env_flags.is_empty() {
+            opts.flags(env_flags);
         }
         opts.open(path).unwrap_or_else(|e| {
             tracing::error!("Failed to open heed Env at {}: {}", path, e);
@@ -188,15 +197,15 @@ pub fn initialize_database(path: &str) -> AppDb {
     let table_id_index = env
         .create_database(&mut write_txn, Some("table_id_index"))
         .unwrap();
-    let spatialid_to_value = env
-        .create_database(&mut write_txn, Some("spatialid_to_value"))
-        .unwrap();
-    let value_to_spatialid = env
-        .create_database(&mut write_txn, Some("value_to_spatialid"))
-        .unwrap();
     let users = env.create_database(&mut write_txn, Some("users")).unwrap();
     let user_privileges = env
         .create_database(&mut write_txn, Some("user_privileges"))
+        .unwrap();
+    let tables_data = env
+        .create_database(&mut write_txn, Some("tables_data"))
+        .unwrap();
+    let value_index = env
+        .create_database(&mut write_txn, Some("value_index"))
         .unwrap();
 
     if users.is_empty(&write_txn).unwrap() {
@@ -228,9 +237,9 @@ pub fn initialize_database(path: &str) -> AppDb {
         databases,
         tables,
         table_id_index,
-        spatialid_to_value,
-        value_to_spatialid,
         users,
         user_privileges,
+        tables_data,
+        value_index,
     }
 }

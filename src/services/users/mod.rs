@@ -116,11 +116,11 @@ pub async fn set_privilege(
         let user = repo
             .get_user(username)?
             .ok_or_else(|| AppError::NotFound("User not found".into()))?;
-        user.id.into_bytes()
+        user.id
     };
     let write_txn = app_state.db.env.write_txn()?;
     let mut repo = KasaneUsersWrite::new(write_txn, &app_state.db);
-    repo.set_privilege(user_id, db_name, req.role)?;
+    repo.set_privilege(crate::models::id::UserId(user_id), db_name, req.role)?;
     repo.commit()?;
     Ok(())
 }
@@ -136,11 +136,11 @@ pub async fn delete_privilege(
         let user = repo
             .get_user(username)?
             .ok_or_else(|| AppError::NotFound("User not found".into()))?;
-        user.id.into_bytes()
+        user.id
     };
     let write_txn = app_state.db.env.write_txn()?;
     let mut repo = KasaneUsersWrite::new(write_txn, &app_state.db);
-    repo.remove_privilege(user_id, db_name)?;
+    repo.remove_privilege(crate::models::id::UserId(user_id), db_name)?;
     repo.commit()?;
     Ok(())
 }
@@ -155,7 +155,7 @@ pub fn get_privileges(
         .get_user(username)?
         .ok_or_else(|| AppError::NotFound("User not found".into()))?;
 
-    let privs = repo.get_user_privileges(user.id.into_bytes())?;
+    let privs = repo.get_user_privileges(crate::models::id::UserId(user.id))?;
     Ok(privs
         .into_iter()
         .map(|(db_name, role)| PrivilegeInfoResponse { db_name, role })

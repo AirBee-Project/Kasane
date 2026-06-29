@@ -1,172 +1,220 @@
-use kasane_logic::{IterSingleIds, SingleId, SpatialIdSet};
-use rayon::prelude::*;
+use std::collections::HashMap;
 
+use kasane_logic::{FlexId, IterFlexIds, SpatialIdSet};
+
+use super::{shard, value_index};
+use crate::models::database::table::TableDataType;
+use crate::models::id::TableId;
 use crate::{error::AppError, repositories::KasaneDbRead};
 
-type SpatialDataResult<'txn> = Result<Option<(SingleId, &'txn [u8])>, AppError>;
-type SpatialDataListResult<'txn> = Result<Option<Vec<(SingleId, &'txn [u8])>>, AppError>;
+/// `data_get` の戻り値：`(値バイト, その値を持つ FlexId 群)` の一覧。
+type ValueGroups = Vec<(Vec<u8>, Vec<FlexId>)>;
 
-/// この件数以上の SingleId を引く場合は rayon で並列にファンアウトする。
-/// 小さなクエリではスレッド分配のオーバーヘッドが勝つため直列で処理する。
-const PARALLEL_FANOUT_THRESHOLD: usize = 512;
+/// `data_get` を 並列化する基準。
+const DATA_GET_PARALLEL_THRESHOLD: usize = 64;
 
 impl<'a> KasaneDbRead<'a> {
-    /// 空間IDごとに格納値を解決し、`decode` で復元した値を返す。
-    ///
-    /// `decode` は「ストレージ上のバイト列 → 任意の復元値」への変換関数で、
-    /// 呼び出し側（サービス層）が `restore_value` などを渡す。これにより
-    /// リポジトリ層はデータ型の解釈に依存せず、かつ **復元を txn スコープ内・
-    /// 並列ワーカー内で行える**（borrow したスライスを `Vec<u8>` に一旦コピー
-    /// せず、その場で所有値へ復元できる）。
-    pub fn data_get<T, F>(
+    /// 指定された範囲の空間IDを値ごとにグループ化して返す。
+    pub fn data_get(
         &self,
-        table_id: uuid::Uuid,
+        table_id: crate::models::id::TableId,
         ids: SpatialIdSet,
-        decode: F,
-    ) -> Result<Vec<(SingleId, T)>, AppError>
-    where
-        F: Fn(&[u8]) -> Result<T, AppError> + Sync,
-        T: Send,
-    {
-        let spatial_db = self.db.spatialid_to_value;
-        let single_ids: Vec<SingleId> = ids.iter_single_ids().collect();
+    ) -> Result<ValueGroups, AppError> {
+        let flex_ids: Vec<FlexId> = ids.iter_flex_ids().collect();
 
-        if single_ids.len() < PARALLEL_FANOUT_THRESHOLD {
-            // 直列パス: 既存の read スナップショットをそのまま使う。
-            let mut result = Vec::with_capacity(single_ids.len());
-            for single_id in &single_ids {
-                Self::lookup_one(
-                    &spatial_db,
-                    &self.read_txn,
-                    table_id,
-                    single_id,
-                    &decode,
-                    &mut result,
-                )?;
-            }
-            return Ok(result);
+        if flex_ids.len() < DATA_GET_PARALLEL_THRESHOLD {
+            let mut by_value: HashMap<Vec<u8>, Vec<FlexId>> = HashMap::new();
+            Self::resolve_query_batch(
+                &self.db.tables_data,
+                &self.read_txn,
+                table_id,
+                &flex_ids,
+                &mut by_value,
+            )?;
+            return Ok(by_value.into_iter().collect());
         }
 
-        // 並列パス: 各 lookup は独立なので rayon でファンアウトする。
-        //
-        // LMDB の read トランザクションは（NOTLS でも）スレッド間で *同時* 共有できないため、
-        // 1つの txn を共有するのではなく、ワーカーごとに自分の read txn を開く。
-        // チャンク単位に分割して txn の生成コストを償却する。
-        // 各 txn は独立スナップショットになるが、読み取りクエリでは許容できる。
+        use rayon::prelude::*;
+        let tables_data = self.db.tables_data;
         let env = &self.db.env;
-        let chunk_size = single_ids
-            .len()
-            .div_ceil(rayon::current_num_threads())
-            .max(1);
 
-        let nested = single_ids
-            .par_chunks(chunk_size)
-            .map(|chunk| -> Result<Vec<(SingleId, T)>, AppError> {
-                let txn = env.read_txn()?;
-                let mut out = Vec::with_capacity(chunk.len());
-                for single_id in chunk {
-                    Self::lookup_one(&spatial_db, &txn, table_id, single_id, &decode, &mut out)?;
-                }
-                Ok(out)
+        let chunk_size = flex_ids.len().div_ceil(rayon::current_num_threads().max(1));
+        let partials: Vec<HashMap<Vec<u8>, Vec<FlexId>>> = flex_ids
+            .par_chunks(chunk_size.max(1))
+            .map(|chunk| -> Result<HashMap<Vec<u8>, Vec<FlexId>>, AppError> {
+                let txn = env
+                    .read_txn()
+                    .map_err(|e| AppError::InternalError(e.to_string()))?;
+                let mut local: HashMap<Vec<u8>, Vec<FlexId>> = HashMap::new();
+                Self::resolve_query_batch(&tables_data, &txn, table_id, chunk, &mut local)?;
+                Ok(local)
             })
-            .collect::<Result<Vec<Vec<(SingleId, T)>>, AppError>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
 
-        let total: usize = nested.iter().map(Vec::len).sum();
-        let mut result = Vec::with_capacity(total);
-        for chunk_result in nested {
-            result.extend(chunk_result);
+        // 部分マップを値でマージ。
+        let mut by_value: HashMap<Vec<u8>, Vec<FlexId>> = HashMap::new();
+        for partial in partials {
+            for (value, mut flex_ids) in partial {
+                by_value.entry(value).or_default().append(&mut flex_ids);
+            }
         }
-        Ok(result)
+        Ok(by_value.into_iter().collect())
+    }
+}
+
+pub type DataStreamSender = tokio::sync::mpsc::Sender<Result<(Vec<u8>, Vec<FlexId>), AppError>>;
+
+impl<'a> KasaneDbRead<'a> {
+    pub fn data_get_stream(
+        &self,
+        table_id: TableId,
+        flex_ids: SpatialIdSet,
+        sender: DataStreamSender,
+    ) {
+        let tables_data = self.db.tables_data;
+        let env = self.db.env.clone();
+
+        rayon::spawn(move || {
+            let flex_ids_vec: Vec<FlexId> = flex_ids.iter_flex_ids().collect();
+            if flex_ids_vec.is_empty() {
+                return;
+            }
+
+            if flex_ids_vec.len() < 100 {
+                let txn_res = env
+                    .read_txn()
+                    .map_err(|e| AppError::InternalError(e.to_string()));
+                match txn_res {
+                    Ok(txn) => {
+                        let mut local = HashMap::new();
+                        if let Err(e) = Self::resolve_query_batch(
+                            &tables_data,
+                            &txn,
+                            table_id,
+                            &flex_ids_vec,
+                            &mut local,
+                        ) {
+                            let _ = sender.blocking_send(Err(e));
+                            return;
+                        }
+                        for (val, ids) in local {
+                            if sender.blocking_send(Ok((val, ids))).is_err() {
+                                return; // receiver dropped (limit reached or stream closed)
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = sender.blocking_send(Err(e));
+                    }
+                }
+                return;
+            }
+
+            use rayon::prelude::*;
+            let chunk_size = flex_ids_vec
+                .len()
+                .div_ceil(rayon::current_num_threads().max(1));
+
+            let _ = flex_ids_vec
+                .par_chunks(chunk_size.max(1))
+                .try_for_each(|chunk| {
+                    let txn = env.read_txn().map_err(|e| {
+                        let _ = sender.blocking_send(Err(AppError::InternalError(e.to_string())));
+                    })?;
+
+                    let mut local = HashMap::new();
+                    if let Err(e) =
+                        Self::resolve_query_batch(&tables_data, &txn, table_id, chunk, &mut local)
+                    {
+                        let _ = sender.blocking_send(Err(e));
+                        return Err(());
+                    }
+
+                    for (val, ids) in local {
+                        if sender.blocking_send(Ok((val, ids))).is_err() {
+                            return Err(());
+                        }
+                    }
+                    Ok(())
+                });
+        });
     }
 
-    /// 1つの SingleId に対して equal → parent → children の順で値を解決し、
-    /// `decode` で復元した結果を `out` に push する。
-    ///
-    /// 復元を借用スライスに対してその場で行うため、生バイト列のコピーが発生しない。
-    fn lookup_one<'txn, 'env, T, F>(
-        spatial_db: &heed::Database<crate::db_init::TableIdAndSpatialId, heed::types::Bytes>,
-        txn: &'txn heed::RoTxn<'env, heed::WithoutTls>,
-        table_id: uuid::Uuid,
-        single_id: &SingleId,
-        decode: &F,
-        out: &mut Vec<(SingleId, T)>,
-    ) -> Result<(), AppError>
-    where
-        F: Fn(&[u8]) -> Result<T, AppError>,
-    {
-        if let Some(data) = Self::overlap_equal(spatial_db, txn, table_id, single_id)? {
-            out.push((single_id.clone(), decode(data)?));
-            return Ok(());
-        }
-
-        if let Some((_, data)) = Self::overlap_parent(spatial_db, txn, table_id, single_id)? {
-            out.push((single_id.clone(), decode(data)?));
-            return Ok(());
-        }
-
-        if let Some(children) = Self::overlap_children(spatial_db, txn, table_id, single_id)? {
-            for (child, value) in children {
-                out.push((child, decode(value)?));
+    /// `queries` 内の各クエリ FlexId を解決し、`by_value`（値→FlexId群）へ蓄積する。
+    fn resolve_query_batch(
+        tables_data: &heed::Database<crate::db_init::TableIdAndFlexId, heed::types::Bytes>,
+        txn: &heed::RoTxn<heed::WithoutTls>,
+        table_id: TableId,
+        queries: &[FlexId],
+        by_value: &mut HashMap<Vec<u8>, Vec<FlexId>>,
+    ) -> Result<(), AppError> {
+        let by_leaf = shard::route_leaves_batched(tables_data, txn, table_id, queries)?;
+        for (region, queries) in by_leaf {
+            let Some(arch) = shard::load_leaf_archived(tables_data, txn, table_id, &region)? else {
+                continue;
+            };
+            for query_flex in queries {
+                for (got_flex, value) in arch.get(&query_flex) {
+                    if let Some(flex_ids) = by_value.get_mut(value) {
+                        flex_ids.push(got_flex);
+                    } else {
+                        by_value.insert(value.to_vec(), vec![got_flex]);
+                    }
+                }
             }
         }
-
         Ok(())
     }
 
-    pub(self) fn overlap_equal<'txn, 'env>(
-        spatial_db: &heed::Database<crate::db_init::TableIdAndSpatialId, heed::types::Bytes>,
-        txn: &'txn heed::RoTxn<'env, heed::WithoutTls>,
-        table_id: uuid::Uuid,
-        target: &SingleId,
-    ) -> Result<Option<&'txn [u8]>, AppError> {
-        if let Some(val) = spatial_db.get(txn, &(table_id.into_bytes(), target.spatial_encode()))? {
-            return Ok(Some(val));
-        }
-        Ok(None)
+    pub fn data_filter_eq(
+        &'a self,
+        table_id: TableId,
+        data_type: TableDataType,
+        value: &[u8],
+    ) -> Result<impl Iterator<Item = Result<FlexId, AppError>> + 'a, AppError> {
+        let prefix =
+            value_index::make_prefix(table_id, &value_index::order_preserving(data_type, value));
+
+        let iter = self
+            .db
+            .value_index
+            .prefix_iter(&self.read_txn, prefix.as_slice())?;
+
+        Ok(iter.filter_map(move |item| match item {
+            Ok((key, _)) => {
+                // 可変長値で前方一致しただけの別キーを除外（残りがちょうど flexid 14B）。
+                if key.len() != prefix.len() + 14 {
+                    return None;
+                }
+                Some(value_index::flexid_from_key(key))
+            }
+            Err(e) => Some(Err(AppError::InternalError(e.to_string()))),
+        }))
     }
 
-    pub(self) fn overlap_parent<'txn, 'env>(
-        spatial_db: &heed::Database<crate::db_init::TableIdAndSpatialId, heed::types::Bytes>,
-        txn: &'txn heed::RoTxn<'env, heed::WithoutTls>,
-        table_id: uuid::Uuid,
-        target: &SingleId,
-    ) -> SpatialDataResult<'txn> {
-        for parent in target.spatial_parents() {
-            if let Some(val) =
-                spatial_db.get(txn, &(table_id.into_bytes(), parent.spatial_encode()))?
-            {
-                return Ok(Some((parent, val)));
-            }
-        }
-        Ok(None)
-    }
+    pub fn data_filter_range(
+        &'a self,
+        table_id: TableId,
+        data_type: TableDataType,
+        lo: &[u8],
+        hi: &[u8],
+    ) -> Result<impl Iterator<Item = Result<FlexId, AppError>> + 'a, AppError> {
+        let start =
+            value_index::make_prefix(table_id, &value_index::order_preserving(data_type, lo));
+        // hi 側は flexid 部を最大化して `(hi, *)` まで含める。
+        let mut end =
+            value_index::make_prefix(table_id, &value_index::order_preserving(data_type, hi));
+        end.extend_from_slice(&[0xFF; 14]);
 
-    pub(self) fn overlap_children<'txn, 'env>(
-        spatial_db: &heed::Database<crate::db_init::TableIdAndSpatialId, heed::types::Bytes>,
-        txn: &'txn heed::RoTxn<'env, heed::WithoutTls>,
-        table_id: uuid::Uuid,
-        target: &SingleId,
-    ) -> SpatialDataListResult<'txn> {
-        let mut result = Vec::new();
+        let bounds = (
+            std::ops::Bound::Included(start.as_slice()),
+            std::ops::Bound::Included(end.as_slice()),
+        );
+        let iter = self.db.value_index.range(&self.read_txn, &bounds)?;
 
-        let start = (table_id.into_bytes(), target.spatial_encode());
-        let end = (table_id.into_bytes(), target.spatial_encode_prefix_max());
-
-        for item in spatial_db.range(txn, &(start..=end))? {
-            let (key, value) = item?;
-            let single_id_encode = key.1;
-
-            if SingleId::spatial_decode(&single_id_encode)? == *target {
-                continue;
-            }
-
-            result.push((SingleId::spatial_decode(&single_id_encode)?, value));
-        }
-
-        if result.is_empty() {
-            return Ok(None);
-        }
-
-        Ok(Some(result))
+        Ok(iter.map(|item| match item {
+            Ok((key, _)) => value_index::flexid_from_key(key),
+            Err(e) => Err(AppError::InternalError(e.to_string())),
+        }))
     }
 }

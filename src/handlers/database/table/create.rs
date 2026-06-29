@@ -13,14 +13,20 @@ use crate::{
     services::database::table::create as table_create_service,
 };
 
+/// テーブルの作成
+///
+/// 指定したデータベース内に新しいテーブルを作成します。この操作はデータベースのWrite以上の権限が必要です。
 #[utoipa::path(
     post,
     path = "/databases/{db_name}/tables",
+    params(
+        ("db_name" = String, Path, description = "データベース名", example = "example_database")
+    ),
     request_body = CreateTableRequest,
     responses(
-        (status = 201, description = "Table created"),
-        (status = 400, description = "Invalid request"),
-        (status = 409, description = "Table already exists")
+        (status = 201),
+        (status = 400, description = "リクエストが不正（パラメータエラーなど）"),
+        (status = 409, description = "同名のテーブルが既に存在する")
     ),
     security(("bearer_auth" = [])),
     tag = "tables"

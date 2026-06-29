@@ -100,7 +100,7 @@ pub async fn search_data(
     let req = Request::builder()
         .method("POST")
         .uri(format!(
-            "/databases/test_db/tables/{}/data/search",
+            "/databases/test_db/tables/{}/data/search?format=singleId",
             table_name
         ))
         .header(header::CONTENT_TYPE, "application/json")
@@ -114,7 +114,7 @@ pub async fn search_data(
     serde_json::from_slice(&body_bytes).unwrap()
 }
 
-/// `search_data` の結果JSONの先頭エントリ（`ids[0]`）のデータ値と空間IDを検証する。
+/// `search_data` の結果JSONの先頭エントリのデータ値と空間IDを検証する。
 ///
 /// # Arguments
 /// - `result_json`   - `search_data` の返り値
@@ -135,26 +135,27 @@ pub fn assert_first_entry(
     expected_data: impl Into<serde_json::Value>,
     expected_id: RawSingleId,
 ) {
-    assert_eq!(result_json["ids"][0]["data"], expected_data.into());
-    assert_eq!(
-        result_json["ids"][0]["id"]["z"],
-        serde_json::json!(expected_id.z)
-    );
-    assert_eq!(
-        result_json["ids"][0]["id"]["f"],
-        serde_json::json!(expected_id.f)
-    );
-    assert_eq!(
-        result_json["ids"][0]["id"]["x"],
-        serde_json::json!(expected_id.x)
-    );
-    assert_eq!(
-        result_json["ids"][0]["id"]["y"],
-        serde_json::json!(expected_id.y)
-    );
+    let dict = result_json["dictionary"].as_array().expect("No dictionary");
+    let data = result_json["data"].as_array().expect("No data");
+    assert!(!data.is_empty(), "Data is empty");
+
+    let group = &data[0];
+    let value_ref = group["valueRef"].as_u64().unwrap() as usize;
+    let actual_data = &dict[value_ref];
+
+    assert_eq!(actual_data, &expected_data.into());
+
+    let spatial_ids = group["spatialIds"].as_array().expect("No spatialIds");
+    assert!(!spatial_ids.is_empty(), "Spatial IDs are empty");
+
+    let first_id = &spatial_ids[0];
+    assert_eq!(first_id["z"], serde_json::json!(expected_id.z));
+    assert_eq!(first_id["f"], serde_json::json!(expected_id.f));
+    assert_eq!(first_id["x"], serde_json::json!(expected_id.x));
+    assert_eq!(first_id["y"], serde_json::json!(expected_id.y));
 }
 
-/// `search_data` で得たレスポンス JSON の `ids` 配列を `HashMap<RawSingleId, T>` に変換する。
+/// `search_data` で得たレスポンス JSON を `HashMap<RawSingleId, T>` に変換する。
 ///
 /// `T` には `serde::de::DeserializeOwned` を実装した任意の型を指定できる。
 /// `Int` レイヤーなら `i64`、`Float` レイヤーなら `f64`、`String` レイヤーなら `String` など。
@@ -176,15 +177,27 @@ pub fn to_result_map<T: DeserializeOwned>(
     body_json: &serde_json::Value,
 ) -> HashMap<RawSingleId, T> {
     let mut result_map = HashMap::new();
-    if let Some(ids) = body_json["ids"].as_array() {
-        for item in ids {
-            let id = &item["id"];
-            let z = id["z"].as_i64().unwrap() as u8;
-            let f = id["f"].as_i64().unwrap() as i32;
-            let x = id["x"].as_u64().unwrap() as u32;
-            let y = id["y"].as_u64().unwrap() as u32;
-            let data: T = serde_json::from_value(item["data"].clone()).unwrap();
-            result_map.insert(RawSingleId { z, f, x, y }, data);
+
+    if let (Some(dict), Some(data_arr)) = (
+        body_json["dictionary"].as_array(),
+        body_json["data"].as_array(),
+    ) {
+        for group in data_arr {
+            let value_ref = group["valueRef"].as_u64().unwrap() as usize;
+            let val = &dict[value_ref];
+
+            if let Some(spatial_ids) = group["spatialIds"].as_array() {
+                for item in spatial_ids {
+                    let z = item["z"].as_i64().unwrap() as u8;
+                    let f = item["f"].as_i64().unwrap() as i32;
+                    let x = item["x"].as_u64().unwrap() as u32;
+                    let y = item["y"].as_u64().unwrap() as u32;
+
+                    // value は clone() が必要（複数のIDが同じ値を参照するため）
+                    let data_clone: T = serde_json::from_value(val.clone()).unwrap();
+                    result_map.insert(RawSingleId { z, f, x, y }, data_clone);
+                }
+            }
         }
     }
     result_map

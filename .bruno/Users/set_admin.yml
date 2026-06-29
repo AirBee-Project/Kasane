@@ -1,0 +1,54 @@
+info:
+  name: set_admin
+  type: http
+  seq: 8
+  tags:
+    - Users
+
+http:
+  method: PUT
+  url: "{{baseUrl}}/users/:username/admin"
+  params:
+    - name: username
+      value: ""
+      type: path
+      description: Username
+  body:
+    type: json
+    data: |-
+      {
+        "is_global_admin": true
+      }
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 204 Response
+    description: Admin status updated successfully
+    request:
+      url: "{{baseUrl}}/users/:username/admin"
+      method: PUT
+      params:
+        - name: username
+          value: ""
+          type: path
+          description: Username
+      body:
+        type: json
+        data: |-
+          {
+            "is_global_admin": true
+          }
+    response:
+      status: 204
+      statusText: No Content
+      body:
+        type: text
+        data: ""

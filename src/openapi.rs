@@ -3,10 +3,11 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 
 use crate::models::auth::{LoginRequest, LoginResponse};
 use crate::models::database::table::data::{
-    GetDataRequest, GetDataResponse, InsertDataRequest, RemoveDataRequest,
+    GetDataQuery, GetDataRequest, GetDataResponse, InsertDataRequest, OutputFormat,
+    RemoveDataRequest,
 };
 use crate::models::database::table::{
-    CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse,
+    CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse, TableSummary,
 };
 use crate::models::database::{CreateDatabaseRequest, DatabaseInfoResponse};
 use crate::models::spatial_id::SpatialId;
@@ -77,6 +78,8 @@ impl utoipa::Modify for SecurityAddon {
         crate::handlers::database::table::data::remove::data_remove,
         // POST   /databases/{db_name}/tables/{table_name}/data/search
         crate::handlers::database::table::data::get::data_get,
+        // POST   /databases/{db_name}/tables/{table_name}/data/search/stream
+        crate::handlers::database::table::data::stream::data_get_stream,
     ),
     components(schemas(
         // Auth
@@ -97,13 +100,22 @@ impl utoipa::Modify for SecurityAddon {
         CreateTableRequest,
         TableDataType,
         TableInfoResponse,
+        TableSummary,
         TableListResponse,
-        // Data
         GetDataRequest,
         GetDataResponse,
+        GetDataQuery,
+        OutputFormat,
         InsertDataRequest,
         RemoveDataRequest,
         SpatialId,
+        crate::models::database::table::data::StreamEventSingle,
+        crate::models::database::table::data::StreamEventRange,
+        crate::models::database::table::data::StreamEventFlex,
+        crate::models::database::table::data::StreamDataEventSingle,
+        crate::models::database::table::data::StreamDataEventRange,
+        crate::models::database::table::data::StreamDataEventFlex,
+        crate::models::database::table::data::StreamDictionaryEvent,
     )),
     tags(
         (name = "Auth", description = "Authentication endpoints"),

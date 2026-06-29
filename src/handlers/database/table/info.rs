@@ -10,12 +10,19 @@ use crate::{
     services::database::table::info as table_info_service,
 };
 
+/// テーブル情報の取得
+///
+/// 指定したテーブルの詳細情報を取得します。この操作はデータベースのRead以上の権限が必要です。
 #[utoipa::path(
     get,
     path = "/databases/{db_name}/tables/{table_name}",
+    params(
+        ("db_name" = String, Path, description = "データベース名", example = "example_database"),
+        ("table_name" = String, Path, description = "テーブル名", example = "example_table")
+    ),
     responses(
-        (status = 200, description = "Table info", body = TableInfoResponse),
-        (status = 404, description = "Table not found")
+        (status = 200, body = TableInfoResponse),
+        (status = 404, description = "テーブルまたはデータベースが存在しない")
     ),
     security(("bearer_auth" = [])),
     tag = "tables"
@@ -29,7 +36,7 @@ pub async fn table_info(
         &app_state,
         &auth_user,
         &db_name,
-        crate::models::users::UserRole::Manage,
+        crate::models::users::UserRole::Read,
     )
     .await?;
 

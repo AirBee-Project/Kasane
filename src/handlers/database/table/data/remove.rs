@@ -9,13 +9,20 @@ use axum::{
     extract::{Path, State},
 };
 
+/// データの削除
+///
+/// 指定した空間IDをテーブルからを削除します。この操作はデータベースのWrite以上の権限が必要です。
 #[utoipa::path(
     delete,
     path = "/databases/{db_name}/tables/{table_name}/data",
+    params(
+        ("db_name" = String, Path, description = "データベース名", example = "example_database"),
+        ("table_name" = String, Path, description = "テーブル名", example = "example_table")
+    ),
     request_body = RemoveDataRequest,
     responses(
-        (status = 204, description = "Data removed"),
-        (status = 404, description = "Table not found")
+        (status = 204),
+        (status = 404, description = "テーブルが存在しない")
     ),
     security(("bearer_auth" = [])),
     tag = "data"

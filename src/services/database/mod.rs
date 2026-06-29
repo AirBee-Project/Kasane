@@ -22,7 +22,7 @@ pub async fn info(app_state: &AppState, name: &str) -> Result<DatabaseInfoRespon
 pub async fn list(
     app_state: &AppState,
     is_global_admin: bool,
-    user_id: [u8; 16],
+    user_id: crate::models::id::UserId,
 ) -> Result<Vec<DatabaseInfoResponse>, AppError> {
     let read_txn = app_state.db.env.read_txn()?;
 

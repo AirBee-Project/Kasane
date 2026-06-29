@@ -1,5 +1,12 @@
 pub mod common;
+pub mod compaction;
 pub mod get;
 pub mod insert;
+pub mod model;
 pub mod remove;
+pub mod shard_coverage;
+pub mod shard_merge;
+pub mod shard_split;
+pub mod stream;
 pub mod upsert;
+pub mod value_filter;

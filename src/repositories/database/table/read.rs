@@ -20,7 +20,7 @@ impl<'a> KasaneDbRead<'a> {
         };
 
         let db_tables = self.db.tables;
-        if let Some(m) = db_tables.get(&self.read_txn, &(db_meta.id.into_bytes(), table_name))? {
+        if let Some(m) = db_tables.get(&self.read_txn, &(db_meta.id, table_name))? {
             Ok(Some(Table {
                 id: m.id,
                 name: table_name.to_string(),
@@ -30,21 +30,6 @@ impl<'a> KasaneDbRead<'a> {
         } else {
             Ok(None)
         }
-    }
-
-    /// Tableの件数を取得する
-    pub fn table_count(&self, table_id: uuid::Uuid) -> Result<u64, AppError> {
-        let table_id_bytes = table_id.into_bytes();
-        let db = self
-            .db
-            .spatialid_to_value
-            .remap_key_type::<heed::types::Bytes>();
-        let mut count = 0;
-        for iter in db.prefix_iter(&self.read_txn, table_id_bytes.as_slice())? {
-            let _ = iter?;
-            count += 1;
-        }
-        Ok(count)
     }
 
     /// Tableの一覧を取得する
@@ -84,5 +69,24 @@ impl<'a> KasaneDbRead<'a> {
             });
         }
         Ok(tables)
+    }
+
+    /// テーブルが保持する[FlexId]の総数を返す。
+    pub fn table_count(&self, table_id: crate::models::id::TableId) -> Result<u64, AppError> {
+        use crate::repositories::database::table::data::shard::ShardEntry;
+
+        let mut total = 0u64;
+        for item in self
+            .db
+            .tables_data
+            .remap_key_type::<heed::types::Bytes>()
+            .prefix_iter(&self.read_txn, table_id.0.as_bytes())?
+        {
+            let (_, bytes) = item?;
+            if let Some(count) = ShardEntry::leaf_count(bytes)? {
+                total += count as u64;
+            }
+        }
+        Ok(total)
     }
 }

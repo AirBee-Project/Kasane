@@ -12,14 +12,17 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
+/// データベースの作成
+///
+/// 新しいデータベースを作成します。この操作はGlobal Admin権限が必要です。
 #[utoipa::path(
     post,
     path = "/databases",
     request_body = CreateDatabaseRequest,
     responses(
-        (status = 201, description = "Created successfully", body = DatabaseInfoResponse)
+        (status = 201, body = DatabaseInfoResponse)
     ),
-    security(("bearer_auth" = [])),
+    security(("bearer_auth" = ["global_admin"])),
     tag = "databases"
 )]
 pub async fn database_create(
@@ -39,11 +42,17 @@ pub async fn database_create(
         .into_response())
 }
 
+/// データベース情報の取得
+///
+/// 指定したデータベースの詳細情報を取得します。対象データベースのRead以上の権限が必要です。
 #[utoipa::path(
     get,
     path = "/databases/{name}",
+    params(
+        ("name" = String, Path, description = "データベース名", example = "example_database")
+    ),
     responses(
-        (status = 200, description = "Get database info", body = DatabaseInfoResponse)
+        (status = 200, body = DatabaseInfoResponse)
     ),
     security(("bearer_auth" = [])),
     tag = "databases"
@@ -64,11 +73,17 @@ pub async fn database_info(
     Ok(Json(res))
 }
 
+/// データベース一覧の取得
+///
+/// ユーザー権限に応じて、アクセス可能なデータベースの一覧を取得します。
+///
+/// - **グローバル管理者**: システム内の全データベースが見えます。
+/// - **一般ユーザー**: 自分が権限を持っているデータベースだけが見えます。
 #[utoipa::path(
     get,
     path = "/databases",
     responses(
-        (status = 200, description = "List databases", body = Vec<DatabaseInfoResponse>)
+        (status = 200, body = Vec<DatabaseInfoResponse>)
     ),
     security(("bearer_auth" = [])),
     tag = "databases"
@@ -80,19 +95,25 @@ pub async fn database_list(
     let res = crate::services::database::list(
         &app_state,
         auth_user.user.is_global_admin,
-        auth_user.user.id.into_bytes(),
+        crate::models::id::UserId(auth_user.user.id),
     )
     .await?;
     Ok(Json(res))
 }
 
+/// データベースの削除
+///
+/// 指定したデータベースを削除します。この操作はGlobal Admin権限が必要です。
 #[utoipa::path(
     delete,
     path = "/databases/{name}",
-    responses(
-        (status = 204, description = "Removed successfully")
+    params(
+        ("name" = String, Path, description = "データベース名", example = "example_database")
     ),
-    security(("bearer_auth" = [])),
+    responses(
+        (status = 204)
+    ),
+    security(("bearer_auth" = ["global_admin"])),
     tag = "databases"
 )]
 pub async fn remove_database(

@@ -10,4 +10,4 @@ pub use data_type::{JsonValueType, TableDataType};
 pub use domain::Table;
 pub use entity::TableMetadata;
 pub use request::CreateTableRequest;
-pub use response::{TableInfoResponse, TableListResponse};
+pub use response::{TableInfoResponse, TableListResponse, TableSummary};

@@ -200,7 +200,7 @@ async fn test_auth_error_codes_are_structured() {
 }
 
 #[tokio::test]
-/// グローバル管理者がデータベースを作成できるかを検証する。
+/// Global Adminがデータベースを作成できるかを検証する。
 async fn test_global_admin_privileges() {
     let test_app = PermissionTestApp::new();
     let root_token = test_app.root_token();
