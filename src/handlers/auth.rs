@@ -7,13 +7,16 @@ use crate::{
     services::auth::{dummy_verify_password, generate_jwt, verify_password},
 };
 
+/// ユーザーログインとJWTの発行
+///
+/// ユーザー名とパスワードを検証し、Bearerトークンを発行します。
 #[utoipa::path(
     post,
     path = "/auth/login",
     request_body = LoginRequest,
     responses(
-        (status = 200, description = "Login successful", body = LoginResponse),
-        (status = 401, description = "Unauthorized")
+        (status = 200, description = "ログイン成功", body = LoginResponse),
+        (status = 401, description = "認証失敗")
     ),
     tag = "Auth"
 )]

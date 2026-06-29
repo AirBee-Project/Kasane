@@ -10,11 +10,14 @@ use crate::{
     services::database::table::list as table_list_service,
 };
 
+/// テーブル一覧の取得
+///
+/// 指定したデータベース内に存在するすべてのテーブルの一覧を取得します。この操作はデータベースのRead以上の権限が必要です。
 #[utoipa::path(
     get,
     path = "/databases/{db_name}/tables",
     responses(
-        (status = 200, description = "List of tables", body = TableListResponse)
+        (status = 200, description = "テーブル一覧取得成功", body = TableListResponse)
     ),
     security(("bearer_auth" = [])),
     tag = "tables"

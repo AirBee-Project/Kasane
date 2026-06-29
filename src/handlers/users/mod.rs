@@ -15,13 +15,16 @@ use crate::{
     services::users as users_service,
 };
 
+/// ユーザー一覧の取得
+///
+/// 登録されているすべてのユーザーの一覧を取得します。この操作はグローバル管理者のみ実行可能です。
 #[utoipa::path(
     get,
     path = "/users",
     responses(
-        (status = 200, description = "List users successfully", body = [UserInfoResponse]),
+        (status = 200, description = "ユーザー一覧取得成功", body = [UserInfoResponse]),
     ),
-    security(("bearer_auth" = [])),
+    security(("bearer_auth" = ["global_admin"])),
     tag = "Users"
 )]
 pub async fn list_users(
@@ -35,15 +38,18 @@ pub async fn list_users(
     Ok(Json(users))
 }
 
+/// 新規ユーザー作成
+///
+/// 新しいユーザーを作成し、パスワードや管理者権限を設定します。この操作はグローバル管理者のみ実行可能です。
 #[utoipa::path(
     post,
     path = "/users",
     request_body = CreateUserRequest,
     responses(
-        (status = 201, description = "User created successfully"),
-        (status = 409, description = "User already exists")
+        (status = 201, description = "ユーザー作成成功"),
+        (status = 409, description = "同名のユーザーが既に存在する")
     ),
-    security(("bearer_auth" = [])),
+    security(("bearer_auth" = ["global_admin"])),
     tag = "Users"
 )]
 pub async fn create_user(
@@ -58,17 +64,20 @@ pub async fn create_user(
     Ok(StatusCode::CREATED)
 }
 
+/// ユーザーの削除
+///
+/// 指定したユーザーをシステムから完全に削除します。この操作はグローバル管理者のみ実行可能です。
 #[utoipa::path(
     delete,
     path = "/users/{username}",
     params(
-        ("username" = String, Path, description = "Username")
+        ("username" = String, Path, description = "ユーザー名")
     ),
     responses(
-        (status = 204, description = "User deleted successfully"),
-        (status = 404, description = "User not found")
+        (status = 204, description = "ユーザー削除成功"),
+        (status = 404, description = "ユーザーが存在しない")
     ),
-    security(("bearer_auth" = [])),
+    security(("bearer_auth" = ["global_admin"])),
     tag = "Users"
 )]
 pub async fn delete_user(
@@ -83,16 +92,19 @@ pub async fn delete_user(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// パスワードの更新
+///
+/// 指定したユーザーのパスワードを更新します。ユーザー本人が自分自身のパスワードを変更するか、グローバル管理者が他人のパスワードをリセットする場合に利用可能です。
 #[utoipa::path(
     put,
     path = "/users/{username}/password",
     params(
-        ("username" = String, Path, description = "Username")
+        ("username" = String, Path, description = "ユーザー名")
     ),
     request_body = UpdatePasswordRequest,
     responses(
-        (status = 204, description = "Password updated successfully"),
-        (status = 404, description = "User not found")
+        (status = 204, description = "パスワード更新成功"),
+        (status = 404, description = "ユーザーが存在しない")
     ),
     security(("bearer_auth" = [])),
     tag = "Users"
@@ -114,19 +126,22 @@ pub async fn update_password(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// グローバル管理者権限の変更
+///
+/// 指定したユーザーのグローバル管理者権限（is_global_admin）を付与または剥奪します。この操作はグローバル管理者のみ実行可能です。
 #[utoipa::path(
     put,
     path = "/users/{username}/admin",
     params(
-        ("username" = String, Path, description = "Username")
+        ("username" = String, Path, description = "ユーザー名")
     ),
     request_body = UpdateAdminRequest,
     responses(
-        (status = 204, description = "Admin status updated successfully"),
-        (status = 403, description = "Cannot modify root admin status"),
-        (status = 404, description = "User not found")
+        (status = 204, description = "管理者権限の更新成功"),
+        (status = 403, description = "rootユーザーの権限は変更不可"),
+        (status = 404, description = "ユーザーが存在しない")
     ),
-    security(("bearer_auth" = [])),
+    security(("bearer_auth" = ["global_admin"])),
     tag = "Users"
 )]
 pub async fn set_admin(
@@ -142,17 +157,20 @@ pub async fn set_admin(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// データベース権限の取得
+///
+/// 指定したユーザーが持つデータベースごとのアクセス権限（Read, Write, Admin）の一覧を取得します。この操作はグローバル管理者のみ実行可能です。
 #[utoipa::path(
     get,
     path = "/users/{username}/privileges",
     params(
-        ("username" = String, Path, description = "Username")
+        ("username" = String, Path, description = "ユーザー名")
     ),
     responses(
-        (status = 200, description = "Get privileges successfully", body = [PrivilegeInfoResponse]),
-        (status = 404, description = "User not found")
+        (status = 200, description = "権限一覧取得成功", body = [PrivilegeInfoResponse]),
+        (status = 404, description = "ユーザーが存在しない")
     ),
-    security(("bearer_auth" = [])),
+    security(("bearer_auth" = ["global_admin"])),
     tag = "Users"
 )]
 pub async fn get_privileges(
@@ -167,19 +185,22 @@ pub async fn get_privileges(
     Ok(Json(privs))
 }
 
+/// データベース権限の設定
+///
+/// 指定したユーザーに対し、特定のデータベースへのアクセス権限（Read, Write, Admin）を設定します。この操作はグローバル管理者のみ実行可能です。
 #[utoipa::path(
     put,
     path = "/users/{username}/privileges/{db_name}",
     params(
-        ("username" = String, Path, description = "Username"),
-        ("db_name" = String, Path, description = "Database name")
+        ("username" = String, Path, description = "ユーザー名"),
+        ("db_name" = String, Path, description = "データベース名")
     ),
     request_body = UpdatePrivilegeRequest,
     responses(
-        (status = 204, description = "Privilege updated successfully"),
-        (status = 404, description = "User or database not found")
+        (status = 204, description = "権限設定成功"),
+        (status = 404, description = "ユーザーまたはデータベースが存在しない")
     ),
-    security(("bearer_auth" = [])),
+    security(("bearer_auth" = ["global_admin"])),
     tag = "Users"
 )]
 pub async fn set_privilege(
@@ -195,18 +216,21 @@ pub async fn set_privilege(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// データベース権限の削除
+///
+/// 指定したユーザーから、特定のデータベースへのアクセス権限を削除（剥奪）します。この操作はグローバル管理者のみ実行可能です。
 #[utoipa::path(
     delete,
     path = "/users/{username}/privileges/{db_name}",
     params(
-        ("username" = String, Path, description = "Username"),
-        ("db_name" = String, Path, description = "Database name")
+        ("username" = String, Path, description = "ユーザー名"),
+        ("db_name" = String, Path, description = "データベース名")
     ),
     responses(
-        (status = 204, description = "Privilege deleted successfully"),
-        (status = 404, description = "User or database not found")
+        (status = 204, description = "権限削除成功"),
+        (status = 404, description = "ユーザーまたはデータベースが存在しない")
     ),
-    security(("bearer_auth" = [])),
+    security(("bearer_auth" = ["global_admin"])),
     tag = "Users"
 )]
 pub async fn delete_privilege(

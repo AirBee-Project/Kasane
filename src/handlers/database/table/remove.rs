@@ -8,12 +8,15 @@ use crate::models::users::UserRole;
 use crate::{AppState, error::AppError, services::database::table::remove as table_remove_service};
 use axum::Extension;
 
+/// テーブルの削除
+///
+/// 指定したテーブルとその中のすべてのデータを完全に削除します。この操作はデータベースのWrite以上の権限が必要です。
 #[utoipa::path(
     delete,
     path = "/databases/{db_name}/tables/{table_name}",
     responses(
-        (status = 204, description = "Table removed"),
-        (status = 404, description = "Table not found")
+        (status = 204, description = "テーブル削除成功"),
+        (status = 404, description = "テーブルが存在しない")
     ),
     security(("bearer_auth" = [])),
     tag = "tables"

@@ -14,6 +14,9 @@ use axum::{
 };
 use tokio_stream::StreamExt;
 
+/// データのストリーミング取得
+///
+/// 空間IDの配列を指定し、それらに紐づくデータをNDJSON形式のストリームとして順次取得します。この操作はデータベースのRead以上の権限が必要です。
 #[utoipa::path(
     post,
     path = "/databases/{db_name}/tables/{table_name}/data/search/stream",

@@ -10,17 +10,20 @@ use axum::{
     extract::{Path, Query, State},
 };
 
+/// データの一括取得
+///
+/// 空間IDの配列を指定し、それらに紐づくデータをJSON配列として一括で取得します。この操作はデータベースのRead以上の権限が必要です。
 #[utoipa::path(
     post,
     path = "/databases/{db_name}/tables/{table_name}/data/search",
     request_body = GetDataRequest,
     params(
-        ("format" = Option<OutputFormat>, Query, description = "Output format (singleId, rangeId, flexId)"),
-        ("limit" = Option<usize>, Query, description = "Maximum number of returned elements")
+        ("format" = Option<OutputFormat>, Query, description = "出力フォーマット (singleId, rangeId, flexId)"),
+        ("limit" = Option<usize>, Query, description = "最大取得件数")
     ),
     responses(
-        (status = 200, description = "Data retrieved", body = GetDataResponse),
-        (status = 404, description = "Table not found")
+        (status = 200, description = "データ取得成功", body = GetDataResponse),
+        (status = 404, description = "テーブルが存在しない")
     ),
     security(("bearer_auth" = [])),
     tag = "data"

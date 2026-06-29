@@ -9,13 +9,23 @@ use axum::{
     http::StatusCode,
 };
 
+/// 新規データの挿入 (Insert)
+///
+/// 空間IDの配列とデータを指定し、テーブルに**新規データとして追加**します。
+///
+/// **注意**: 指定した空間IDがすでにテーブル内に存在する場合、データの上書きは行われずエラーとなります。
+/// 「誤って既存のデータを上書きしたくない」「確実に新しいデータのみを登録したい」という厳密なユースケースに利用してください。
+///
+/// （※既存のデータを上書きしても良い場合は Upsert `/data` (PATCH) を使用してください）
+///
+/// この操作はデータベースのWrite以上の権限が必要です。
 #[utoipa::path(
     put,
     path = "/databases/{db_name}/tables/{table_name}/data",
     request_body = InsertDataRequest,
     responses(
-        (status = 200, description = "Data inserted"),
-        (status = 404, description = "Table not found")
+        (status = 200, description = "データ挿入成功"),
+        (status = 404, description = "テーブルが存在しない")
     ),
     security(("bearer_auth" = [])),
     tag = "data"
