@@ -1,11 +1,9 @@
-//! 動的シャードの構成要素。
-//!
-//! `tables_data` の各エントリ（キー = `(TableId, FlexId=シャード領域)`）は、
+//! `tables_data`のKey `(TableId, FlexId)`は、
 //! 実データを持つ **リーフ**（[`SpatialIdMap`](kasane_logic::SpatialIdMap) のバイト列）か、
 //! 分割後に子シャードのキー（領域 [`FlexId`]）を **ポインタ** として並べた **中間ノード**のいずれか。
 //!
 //! リーフが [`MAX_FLEX_ID_PER_SHARD`] を超えると分割され、親エントリは子へのポインタノードへ置き換わる。
-//! ルーティングはこのポインタを辿って対象リーフ（複数可）へ到達する。
+//! ルーティングはこのポインタを辿って対象リーフへ到達する。
 
 use heed::types::Bytes;
 use heed::{Database, RoTxn, WithoutTls};
@@ -15,11 +13,10 @@ use crate::db_init::TableIdAndFlexId;
 use crate::error::AppError;
 use crate::models::id::TableId;
 
-/// 1 シャードが保持できる [`FlexId`] 数の上限。これを超えたシャードは動的に分割される。
+/// 1つのシャードが保持できる [`FlexId`] 数の上限。これを超えたシャードは動的に分割される。
 pub const MAX_FLEX_ID_PER_SHARD: usize = 4096;
 
-/// 兄弟シャードの合算件数がこの値以下になったら統合（merge）する低ウォーターマーク。
-/// `MAX` と分けてヒステリシスを持たせ、split↔merge の往復（スラッシング）を防ぐ。
+/// 兄弟シャードの合算件数がこの値以下になったら再びmergeして1つのシャードにする。
 pub const MERGE_FLEX_ID_THRESHOLD: usize = MAX_FLEX_ID_PER_SHARD / 2;
 
 /// [`FlexId`] の `spatial_encode` のバイト長。
@@ -36,7 +33,7 @@ const LEAF_HEADER_LEN: usize = 1 + 4;
 pub enum ShardEntry {
     /// 実データ（`SpatialIdMap` の rkyv バイト列）。
     Leaf(Vec<u8>),
-    /// 子シャードの領域（=キー）へのポインタ群。
+    /// 子シャードの領域へのポインタたち。
     Pointers(Vec<FlexId>),
 }
 
@@ -128,10 +125,6 @@ impl ShardEntry {
 
 /// 複数の `flex_id` を**一度の木降下**でまとめてルーティングし、
 /// `担当リーフ領域 -> そこへ到達した flex_id 群` を返す。
-///
-/// セルごとに半球ルートから辿り直す素朴版（`O(N × 深さ)` 回の `get`、上位ノードを N 回再走査）に対し、
-/// 各ポインタノードを **1 回だけ** 訪れてセル集合を子へ振り分けるため、`get` 回数が
-/// `O(到達ノード数 + N)` に減る。粗い `flex_id` は複数リーフに振り分けられる（被覆どおり）。
 pub fn route_leaves_batched(
     tables_data: &Database<TableIdAndFlexId, Bytes>,
     txn: &RoTxn<WithoutTls>,
@@ -206,11 +199,8 @@ fn descend_batched(
     Ok(())
 }
 
-/// `region`（リーフの領域）を直接の子に持つ**親ポインタノード**を見つけ、
-/// `(親領域, 親の全子領域)` を返す。`region` がルート（半球）や、ポインタ配下でないなら `None`。
-///
-/// 兄弟 merge のために、ルートから `region` へ降りながら「`region` を直接の子に持つ
-/// ポインタノード」を特定する。
+/// `region`を直接の子に持つ**親ポインタノード**を見つけ、`(親領域, 親の全子領域)` を返す。
+/// `region`が `0/0/0/0` or `0/-1/0/0`などのルートや、ポインタ配下でないなら `None`。
 pub fn find_parent_pointer(
     tables_data: &Database<TableIdAndFlexId, Bytes>,
     txn: &RoTxn<WithoutTls>,
@@ -267,7 +257,7 @@ fn leaf_payload(entry: &[u8]) -> Result<Option<&[u8]>, AppError> {
     }
 }
 
-/// リーフ領域 `region` を **ZeroCopy archived リーダ**として開く（`Arc` 木を再構築しない）。
+/// リーフ領域 `region` を **ZeroCopy archived リーダ**として開く（`Arc`を再構築しない）。
 /// 未作成なら `Ok(None)`、ポインタノードに当たったら `Err`。読み取り専用。
 pub fn load_leaf_archived<'txn>(
     tables_data: &Database<TableIdAndFlexId, Bytes>,
@@ -277,7 +267,7 @@ pub fn load_leaf_archived<'txn>(
 ) -> Result<Option<ArchivedMap<'txn>>, AppError> {
     match tables_data.get(txn, &(table_id, region.clone()))? {
         Some(entry) => match leaf_payload(entry)? {
-            // SAFETY: 自分自身の to_bytes が書いた正当なバイト列。
+            // 自分自身の to_bytes が書いた正当なバイト列。
             Some(map_bytes) => Ok(Some(unsafe { ArchivedMap::access(map_bytes) })),
             None => Err(AppError::InternalError(
                 "routed to a pointer node".to_string(),
@@ -287,7 +277,7 @@ pub fn load_leaf_archived<'txn>(
     }
 }
 
-/// リーフ領域 `region` の [`SpatialIdMap`] をロードする。未作成なら領域に閉じた空マップを返す。
+/// リーフ領域 `region` の [`SpatialIdMap`] をロードする。未作成なら空の[`SpatialIdMap`]を作成する。
 pub fn load_leaf_map(
     tables_data: &Database<TableIdAndFlexId, Bytes>,
     txn: &RoTxn<WithoutTls>,

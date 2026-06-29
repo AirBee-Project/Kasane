@@ -9,11 +9,7 @@ use crate::models::id::TableId;
 use crate::{error::AppError, repositories::KasaneDbWrite};
 
 impl<'a> KasaneDbWrite<'a> {
-    /// リポジトリ層にデータを挿入する（既存値があっても上書き）。
-    ///
-    /// 入力は正規化済みの [`SpatialIdSet`]。`into_flex_ids()` の**圧縮 FlexId**で操作するため、
-    /// 粗い領域でも単体セルへ展開せず効率的に挿入できる。競合検証はシャード内
-    /// （[`SpatialIdMap`]）で行われる。
+    /// 空間IDにデータを書き込む。全て上書き。
     pub fn data_insert(
         &mut self,
         table_id: TableId,
@@ -34,7 +30,7 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(())
     }
 
-    /// 値が存在しないセルにのみ書き込む（Upsert）。
+    /// 空間IDにデータを書き込む。値が既に存在する場合は無視。
     pub fn data_upsert(
         &mut self,
         table_id: TableId,
@@ -48,7 +44,6 @@ impl<'a> KasaneDbWrite<'a> {
                 shard::load_leaf_map(&self.db.tables_data, &self.write_txn, table_id, &region)?;
             self.apply_leaf(table_id, data_type, region, map, &flex_ids, |m| {
                 for flex_id in &flex_ids {
-                    // 既に値があるセルは除外し、`target - 既存` のみ挿入する。
                     let occupied_set: SpatialIdSet = m.get(flex_id).map(|(f, _)| f).collect();
                     let mut target_set = SpatialIdSet::new();
                     target_set.insert(flex_id.clone());
@@ -62,7 +57,7 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(())
     }
 
-    /// 値を削除する。
+    /// 空間IDに紐づく値を削除する。
     pub fn data_remove(
         &mut self,
         table_id: TableId,
@@ -81,16 +76,13 @@ impl<'a> KasaneDbWrite<'a> {
             })?;
             affected.push(region);
         }
-
-        // remove で縮んだリーフは、兄弟と統合できるなら統合する（split の逆）。
         for region in affected {
             self.try_merge_up(table_id, data_type, region)?;
         }
         Ok(())
     }
 
-    /// `region` から親へ遡り、親ポインタノードの子（兄弟）合算が
-    /// [`MERGE_FLEX_ID_THRESHOLD`] 以下なら1つのリーフへ統合する。可能な限り上へ伝播する。
+    /// `region` から親へ遡り、親ポインタノードの子（兄弟）合算が [`MERGE_FLEX_ID_THRESHOLD`] 以下なら1つのリーフへ統合する。可能な限り上へ伝播する。
     fn try_merge_up(
         &mut self,
         table_id: TableId,
@@ -115,7 +107,7 @@ impl<'a> KasaneDbWrite<'a> {
             let mut combined = 0usize;
             let mut mergeable = true;
             for cr in &child_regions {
-                // 空領域（被覆マーカ）はキーが無く、寄与もしないのでスキップ。
+                // 空領域のKeyはそもそも存在しないのでスキップ
                 let Some(bytes) = self
                     .db
                     .tables_data
@@ -136,7 +128,6 @@ impl<'a> KasaneDbWrite<'a> {
                         }
                         child_maps.push(m);
                     }
-                    // 子がまだ分割木 → このレベルでは統合しない。
                     ShardEntry::Pointers(_) => {
                         mergeable = false;
                         break;
