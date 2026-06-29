@@ -15,6 +15,10 @@ use axum::{
 #[utoipa::path(
     delete,
     path = "/databases/{db_name}/tables/{table_name}/data",
+    params(
+        ("db_name" = String, Path, description = "データベース名", example = "example_database"),
+        ("table_name" = String, Path, description = "テーブル名", example = "example_table")
+    ),
     request_body = RemoveDataRequest,
     responses(
         (status = 204),

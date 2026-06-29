@@ -20,6 +20,10 @@ use axum::{
 #[utoipa::path(
     patch,
     path = "/databases/{db_name}/tables/{table_name}/data",
+    params(
+        ("db_name" = String, Path, description = "データベース名", example = "example_database"),
+        ("table_name" = String, Path, description = "テーブル名", example = "example_table")
+    ),
     request_body = InsertDataRequest,
     responses(
         (status = 204),

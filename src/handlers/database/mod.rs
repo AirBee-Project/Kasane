@@ -48,6 +48,9 @@ pub async fn database_create(
 #[utoipa::path(
     get,
     path = "/databases/{name}",
+    params(
+        ("name" = String, Path, description = "データベース名", example = "example_database")
+    ),
     responses(
         (status = 200, body = DatabaseInfoResponse)
     ),
@@ -104,6 +107,9 @@ pub async fn database_list(
 #[utoipa::path(
     delete,
     path = "/databases/{name}",
+    params(
+        ("name" = String, Path, description = "データベース名", example = "example_database")
+    ),
     responses(
         (status = 204)
     ),

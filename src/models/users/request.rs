@@ -5,7 +5,7 @@ use super::entity::UserRole;
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateUserRequest {
-    #[schema(example = "alice")]
+    #[schema(example = "example_user")]
     pub username: String,
     #[schema(example = "secret123")]
     pub password: String,

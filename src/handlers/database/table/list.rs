@@ -16,6 +16,9 @@ use crate::{
 #[utoipa::path(
     get,
     path = "/databases/{db_name}/tables",
+    params(
+        ("db_name" = String, Path, description = "データベース名", example = "example_database")
+    ),
     responses(
         (status = 200, body = TableListResponse)
     ),

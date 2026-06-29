@@ -123,10 +123,12 @@
           {
             "name": "db_name",
             "in": "path",
+            "description": "データベース名",
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_database"
           }
         ],
         "responses": {
@@ -158,10 +160,12 @@
           {
             "name": "db_name",
             "in": "path",
+            "description": "データベース名",
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_database"
           }
         ],
         "requestBody": {
@@ -204,18 +208,22 @@
           {
             "name": "db_name",
             "in": "path",
+            "description": "データベース名",
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_database"
           },
           {
             "name": "table_name",
             "in": "path",
+            "description": "テーブル名",
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_table"
           }
         ],
         "responses": {
@@ -250,18 +258,22 @@
           {
             "name": "db_name",
             "in": "path",
+            "description": "データベース名",
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_database"
           },
           {
             "name": "table_name",
             "in": "path",
+            "description": "テーブル名",
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_table"
           }
         ],
         "responses": {
@@ -291,18 +303,22 @@
           {
             "name": "db_name",
             "in": "path",
+            "description": "データベース名",
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_database"
           },
           {
             "name": "table_name",
             "in": "path",
+            "description": "テーブル名",
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_table"
           }
         ],
         "requestBody": {
@@ -340,18 +356,22 @@
           {
             "name": "db_name",
             "in": "path",
+            "description": "データベース名",
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_database"
           },
           {
             "name": "table_name",
             "in": "path",
+            "description": "テーブル名",
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_table"
           }
         ],
         "requestBody": {
@@ -389,18 +409,22 @@
           {
             "name": "db_name",
             "in": "path",
+            "description": "データベース名",
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_database"
           },
           {
             "name": "table_name",
             "in": "path",
+            "description": "テーブル名",
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_table"
           }
         ],
         "requestBody": {
@@ -438,9 +462,29 @@
         "operationId": "data_get",
         "parameters": [
           {
+            "name": "db_name",
+            "in": "path",
+            "description": "データベース名",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "example_database"
+          },
+          {
+            "name": "table_name",
+            "in": "path",
+            "description": "テーブル名",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "example_table"
+          },
+          {
             "name": "format",
             "in": "query",
-            "description": "出力フォーマット (singleId, rangeId, flexId)",
+            "description": "出力フォーマット(singleId, rangeId, flexId)",
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/OutputFormat"
@@ -454,22 +498,6 @@
             "schema": {
               "type": "integer",
               "minimum": 0
-            }
-          },
-          {
-            "name": "db_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "table_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
             }
           }
         ],
@@ -521,7 +549,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_database"
           },
           {
             "name": "table_name",
@@ -530,12 +559,13 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_table"
           },
           {
             "name": "format",
             "in": "query",
-            "description": "Output format (singleId, rangeId, flexId)",
+            "description": "出力フォーマット(singleId, rangeId, flexId)",
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/OutputFormat"
@@ -544,7 +574,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum number of returned elements",
+            "description": "最大取得件数",
             "required": false,
             "schema": {
               "type": "integer",
@@ -593,10 +623,12 @@
           {
             "name": "name",
             "in": "path",
+            "description": "データベース名",
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_database"
           }
         ],
         "responses": {
@@ -628,10 +660,12 @@
           {
             "name": "name",
             "in": "path",
+            "description": "データベース名",
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_database"
           }
         ],
         "responses": {
@@ -729,7 +763,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_user"
           }
         ],
         "responses": {
@@ -765,7 +800,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_user"
           }
         ],
         "requestBody": {
@@ -814,7 +850,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_user"
           }
         ],
         "requestBody": {
@@ -858,7 +895,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_user"
           }
         ],
         "responses": {
@@ -904,7 +942,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_user"
           },
           {
             "name": "db_name",
@@ -913,7 +952,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_database"
           }
         ],
         "requestBody": {
@@ -957,7 +997,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_user"
           },
           {
             "name": "db_name",
@@ -966,7 +1007,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "example_database"
           }
         ],
         "responses": {
@@ -996,7 +1038,8 @@
         ],
         "properties": {
           "name": {
-            "type": "string"
+            "type": "string",
+            "example": "example_database"
           }
         }
       },
@@ -1035,7 +1078,7 @@
         "properties": {
           "username": {
             "type": "string",
-            "example": "alice"
+            "example": "example_user"
           },
           "password": {
             "type": "string",
@@ -1241,7 +1284,8 @@
         ],
         "properties": {
           "name": {
-            "type": "string"
+            "type": "string",
+            "example": "example_database"
           }
         }
       },
@@ -1463,7 +1507,8 @@
         ],
         "properties": {
           "db_name": {
-            "type": "string"
+            "type": "string",
+            "example": "example_database"
           },
           "role": {
             "$ref": "#/components/schemas/UserRole"
@@ -1939,10 +1984,12 @@
         ],
         "properties": {
           "username": {
-            "type": "string"
+            "type": "string",
+            "example": "example_user"
           },
           "is_global_admin": {
-            "type": "boolean"
+            "type": "boolean",
+            "example": false
           }
         }
       },

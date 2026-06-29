@@ -71,7 +71,7 @@ pub async fn create_user(
     delete,
     path = "/users/{username}",
     params(
-        ("username" = String, Path, description = "ユーザー名")
+        ("username" = String, Path, description = "ユーザー名", example = "example_user")
     ),
     responses(
         (status = 204),
@@ -99,7 +99,7 @@ pub async fn delete_user(
     put,
     path = "/users/{username}/password",
     params(
-        ("username" = String, Path, description = "ユーザー名")
+        ("username" = String, Path, description = "ユーザー名", example = "example_user")
     ),
     request_body = UpdatePasswordRequest,
     responses(
@@ -133,7 +133,7 @@ pub async fn update_password(
     put,
     path = "/users/{username}/admin",
     params(
-        ("username" = String, Path, description = "ユーザー名")
+        ("username" = String, Path, description = "ユーザー名", example = "example_user")
     ),
     request_body = UpdateAdminRequest,
     responses(
@@ -164,7 +164,7 @@ pub async fn set_admin(
     get,
     path = "/users/{username}/privileges",
     params(
-        ("username" = String, Path, description = "ユーザー名")
+        ("username" = String, Path, description = "ユーザー名", example = "example_user")
     ),
     responses(
         (status = 200, body = [PrivilegeInfoResponse]),
@@ -192,8 +192,8 @@ pub async fn get_privileges(
     put,
     path = "/users/{username}/privileges/{db_name}",
     params(
-        ("username" = String, Path, description = "ユーザー名"),
-        ("db_name" = String, Path, description = "データベース名")
+        ("username" = String, Path, description = "ユーザー名", example = "example_user"),
+        ("db_name" = String, Path, description = "データベース名", example = "example_database")
     ),
     request_body = UpdatePrivilegeRequest,
     responses(
@@ -223,8 +223,8 @@ pub async fn set_privilege(
     delete,
     path = "/users/{username}/privileges/{db_name}",
     params(
-        ("username" = String, Path, description = "ユーザー名"),
-        ("db_name" = String, Path, description = "データベース名")
+        ("username" = String, Path, description = "ユーザー名", example = "example_user"),
+        ("db_name" = String, Path, description = "データベース名", example = "example_database")
     ),
     responses(
         (status = 204),

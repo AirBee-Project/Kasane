@@ -22,10 +22,10 @@ use tokio_stream::StreamExt;
     path = "/databases/{db_name}/tables/{table_name}/data/search/stream",
     request_body = GetDataRequest,
     params(
-        ("db_name" = String, Path, description = "データベース名"),
-        ("table_name" = String, Path, description = "テーブル名"),
-        ("format" = Option<OutputFormat>, Query, description = "Output format (singleId, rangeId, flexId)"),
-        ("limit" = Option<usize>, Query, description = "Maximum number of returned elements")
+        ("db_name" = String, Path, description = "データベース名", example = "example_database"),
+        ("table_name" = String, Path, description = "テーブル名", example = "example_table"),
+        ("format" = Option<OutputFormat>, Query, description = "出力フォーマット(singleId, rangeId, flexId)"),
+        ("limit" = Option<usize>, Query, description = "最大取得件数")
     ),
     responses(
         (status = 200, body = String)

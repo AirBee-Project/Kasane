@@ -82,9 +82,11 @@ paths:
       parameters:
       - name: db_name
         in: path
+        description: データベース名
         required: true
         schema:
           type: string
+        example: example_database
       responses:
         '200':
           description: ''
@@ -103,9 +105,11 @@ paths:
       parameters:
       - name: db_name
         in: path
+        description: データベース名
         required: true
         schema:
           type: string
+        example: example_database
       requestBody:
         content:
           application/json:
@@ -131,14 +135,18 @@ paths:
       parameters:
       - name: db_name
         in: path
+        description: データベース名
         required: true
         schema:
           type: string
+        example: example_database
       - name: table_name
         in: path
+        description: テーブル名
         required: true
         schema:
           type: string
+        example: example_table
       responses:
         '200':
           description: ''
@@ -159,14 +167,18 @@ paths:
       parameters:
       - name: db_name
         in: path
+        description: データベース名
         required: true
         schema:
           type: string
+        example: example_database
       - name: table_name
         in: path
+        description: テーブル名
         required: true
         schema:
           type: string
+        example: example_table
       responses:
         '204':
           description: ''
@@ -188,14 +200,18 @@ paths:
       parameters:
       - name: db_name
         in: path
+        description: データベース名
         required: true
         schema:
           type: string
+        example: example_database
       - name: table_name
         in: path
+        description: テーブル名
         required: true
         schema:
           type: string
+        example: example_table
       requestBody:
         content:
           application/json:
@@ -218,14 +234,18 @@ paths:
       parameters:
       - name: db_name
         in: path
+        description: データベース名
         required: true
         schema:
           type: string
+        example: example_database
       - name: table_name
         in: path
+        description: テーブル名
         required: true
         schema:
           type: string
+        example: example_table
       requestBody:
         content:
           application/json:
@@ -254,14 +274,18 @@ paths:
       parameters:
       - name: db_name
         in: path
+        description: データベース名
         required: true
         schema:
           type: string
+        example: example_database
       - name: table_name
         in: path
+        description: テーブル名
         required: true
         schema:
           type: string
+        example: example_table
       requestBody:
         content:
           application/json:
@@ -283,9 +307,23 @@ paths:
       description: 空間IDと値をJSON配列として一括で取得します。この操作はデータベースのRead以上の権限が必要です。
       operationId: data_get
       parameters:
+      - name: db_name
+        in: path
+        description: データベース名
+        required: true
+        schema:
+          type: string
+        example: example_database
+      - name: table_name
+        in: path
+        description: テーブル名
+        required: true
+        schema:
+          type: string
+        example: example_table
       - name: format
         in: query
-        description: 出力フォーマット (singleId, rangeId, flexId)
+        description: 出力フォーマット(singleId, rangeId, flexId)
         required: false
         schema:
           $ref: '#/components/schemas/OutputFormat'
@@ -296,16 +334,6 @@ paths:
         schema:
           type: integer
           minimum: 0
-      - name: db_name
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: table_name
-        in: path
-        required: true
-        schema:
-          type: string
       requestBody:
         content:
           application/json:
@@ -337,21 +365,23 @@ paths:
         required: true
         schema:
           type: string
+        example: example_database
       - name: table_name
         in: path
         description: テーブル名
         required: true
         schema:
           type: string
+        example: example_table
       - name: format
         in: query
-        description: Output format (singleId, rangeId, flexId)
+        description: 出力フォーマット(singleId, rangeId, flexId)
         required: false
         schema:
           $ref: '#/components/schemas/OutputFormat'
       - name: limit
         in: query
-        description: Maximum number of returned elements
+        description: 最大取得件数
         required: false
         schema:
           type: integer
@@ -381,9 +411,11 @@ paths:
       parameters:
       - name: name
         in: path
+        description: データベース名
         required: true
         schema:
           type: string
+        example: example_database
       responses:
         '200':
           description: ''
@@ -402,9 +434,11 @@ paths:
       parameters:
       - name: name
         in: path
+        description: データベース名
         required: true
         schema:
           type: string
+        example: example_database
       responses:
         '204':
           description: ''
@@ -464,6 +498,7 @@ paths:
         required: true
         schema:
           type: string
+        example: example_user
       responses:
         '204':
           description: ''
@@ -486,6 +521,7 @@ paths:
         required: true
         schema:
           type: string
+        example: example_user
       requestBody:
         content:
           application/json:
@@ -516,6 +552,7 @@ paths:
         required: true
         schema:
           type: string
+        example: example_user
       requestBody:
         content:
           application/json:
@@ -543,6 +580,7 @@ paths:
         required: true
         schema:
           type: string
+        example: example_user
       responses:
         '200':
           description: ''
@@ -571,12 +609,14 @@ paths:
         required: true
         schema:
           type: string
+        example: example_user
       - name: db_name
         in: path
         description: データベース名
         required: true
         schema:
           type: string
+        example: example_database
       requestBody:
         content:
           application/json:
@@ -604,12 +644,14 @@ paths:
         required: true
         schema:
           type: string
+        example: example_user
       - name: db_name
         in: path
         description: データベース名
         required: true
         schema:
           type: string
+        example: example_database
       responses:
         '204':
           description: ''
@@ -627,6 +669,7 @@ components:
       properties:
         name:
           type: string
+          example: example_database
     CreateTableRequest:
       type: object
       description: 時空間IDと値が対応するTableを作成する
@@ -655,7 +698,7 @@ components:
       properties:
         username:
           type: string
-          example: alice
+          example: example_user
         password:
           type: string
           example: secret123
@@ -812,6 +855,7 @@ components:
       properties:
         name:
           type: string
+          example: example_database
     FlexId:
       type: object
       required:
@@ -967,6 +1011,7 @@ components:
       properties:
         db_name:
           type: string
+          example: example_database
         role:
           $ref: '#/components/schemas/UserRole'
     RangeId:
@@ -1259,8 +1304,10 @@ components:
       properties:
         username:
           type: string
+          example: example_user
         is_global_admin:
           type: boolean
+          example: false
     UserRole:
       type: string
       enum:

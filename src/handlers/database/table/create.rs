@@ -19,6 +19,9 @@ use crate::{
 #[utoipa::path(
     post,
     path = "/databases/{db_name}/tables",
+    params(
+        ("db_name" = String, Path, description = "データベース名", example = "example_database")
+    ),
     request_body = CreateTableRequest,
     responses(
         (status = 201),

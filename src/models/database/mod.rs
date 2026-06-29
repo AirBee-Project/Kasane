@@ -7,11 +7,13 @@ pub struct DatabaseMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct DatabaseInfoResponse {
+    #[schema(example = "example_database")]
     pub name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateDatabaseRequest {
+    #[schema(example = "example_database")]
     pub name: String,
 }
 

@@ -18,7 +18,9 @@ use axum::{
     path = "/databases/{db_name}/tables/{table_name}/data/search",
     request_body = GetDataRequest,
     params(
-        ("format" = Option<OutputFormat>, Query, description = "出力フォーマット (singleId, rangeId, flexId)"),
+        ("db_name" = String, Path, description = "データベース名", example = "example_database"),
+        ("table_name" = String, Path, description = "テーブル名", example = "example_table"),
+        ("format" = Option<OutputFormat>, Query, description = "出力フォーマット(singleId, rangeId, flexId)"),
         ("limit" = Option<usize>, Query, description = "最大取得件数")
     ),
     responses(
