@@ -11,7 +11,7 @@ use axum::{
 
 /// データの削除
 ///
-/// 空間IDの配列を指定し、テーブルから対象のデータを削除します。この操作はデータベースのWrite以上の権限が必要です。
+/// 指定した空間IDをテーブルからを削除します。この操作はデータベースのWrite以上の権限が必要です。
 #[utoipa::path(
     delete,
     path = "/databases/{db_name}/tables/{table_name}/data",

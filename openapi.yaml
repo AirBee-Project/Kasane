@@ -178,14 +178,10 @@ paths:
     put:
       tags:
       - data
-      summary: 新規データの挿入 (Insert)
+      summary: データの上書き・追加
       description: |-
-        空間IDの配列とデータを指定し、テーブルに**新規データとして追加**します。
-
-        **注意**: 指定した空間IDがすでにテーブル内に存在する場合、データの上書きは行われずエラーとなります。
-        「誤って既存のデータを上書きしたくない」「確実に新しいデータのみを登録したい」という厳密なユースケースに利用してください。
-
-        （※既存のデータを上書きしても良い場合は Upsert `/data` (PATCH) を使用してください）
+        指定した空間IDに対して、指定した値を書き込みます。
+        既に値が存在する空間IDに対しては、その値を完全に上書きします。
 
         この操作はデータベースのWrite以上の権限が必要です。
       operationId: data_insert
@@ -217,7 +213,7 @@ paths:
       tags:
       - data
       summary: データの削除
-      description: 空間IDの配列を指定し、テーブルから対象のデータを削除します。この操作はデータベースのWrite以上の権限が必要です。
+      description: 指定した空間IDをテーブルからを削除します。この操作はデータベースのWrite以上の権限が必要です。
       operationId: data_remove
       parameters:
       - name: db_name
@@ -246,14 +242,12 @@ paths:
     patch:
       tags:
       - data
-      summary: データの更新・追加 (Upsert)
+      summary: データの部分追加
       description: |-
-        空間IDの配列とデータを指定し、テーブルのデータを**上書きまたは新規追加**します。
+        指定した空間IDに対して、指定した値を書き込みます。
 
-        - **指定した空間IDがすでに存在する場合**: 新しいデータで**上書き（更新）**されます。
-        - **指定した空間IDが存在しない場合**: **新規データとして追加**されます。
-
-        「既存データがあれば更新し、なければ作る」というように、IDの有無を気にせず常に最新のデータを投入したいユースケースに最適です。
+        - **指定した空間IDがすでに存在する場合**: 既存のデータは維持されます。
+        - **指定した空間IDが存在しない場合**: データが書き込まれます。
 
         この操作はデータベースのWrite以上の権限が必要です。
       operationId: data_upsert
@@ -286,7 +280,7 @@ paths:
       tags:
       - data
       summary: データの一括取得
-      description: 空間IDの配列を指定し、それらに紐づくデータをJSON配列として一括で取得します。この操作はデータベースのRead以上の権限が必要です。
+      description: 空間IDと値をJSON配列として一括で取得します。この操作はデータベースのRead以上の権限が必要です。
       operationId: data_get
       parameters:
       - name: format
@@ -334,7 +328,7 @@ paths:
       tags:
       - data
       summary: データのストリーミング取得
-      description: 空間IDの配列を指定し、それらに紐づくデータをNDJSON形式のストリームとして順次取得します。この操作はデータベースのRead以上の権限が必要です。
+      description: 空間IDと値をNDJSON形式のストリームとして順次取得します。この操作はデータベースのRead以上の権限が必要です。
       operationId: data_get_stream
       parameters:
       - name: db_name
