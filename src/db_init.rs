@@ -74,7 +74,6 @@ impl<'a> heed::BytesDecode<'a> for UserIdAndDbId {
     }
 }
 
-/// Key: (table_id: [u8; 16], flex_id: FlexId) のコーデック
 pub struct TableIdAndFlexId;
 
 impl<'a> heed::BytesEncode<'a> for TableIdAndFlexId {
@@ -161,11 +160,7 @@ pub fn initialize_database(path: &str) -> AppDb {
             .unwrap_or(false)
     };
 
-    // すべて opt-in（既定は従来挙動）。
-    // - NO_READ_AHEAD : ランダムアクセス主体で readahead を無効化。
-    // - WRITE_MAP     : 書き込み可能 mmap。書き込みスループット向上（疎ファイル肥大・ネスト txn 不可）。
-    // - NO_SYNC       : コミット毎の fsync を省く。バルク投入を大幅高速化するが耐久性は低下。
-    //                   （投入後に `env.force_sync()` で明示同期する運用を想定）
+    //LMDBの設定は全てデフォルト
     let mut env_flags = EnvFlags::empty();
     if env_bool("KASANE_LMDB_NO_READAHEAD") {
         env_flags |= EnvFlags::NO_READ_AHEAD;
@@ -176,7 +171,6 @@ pub fn initialize_database(path: &str) -> AppDb {
     }
     if env_bool("KASANE_LMDB_NO_SYNC") {
         env_flags |= EnvFlags::NO_SYNC | EnvFlags::NO_META_SYNC;
-        // MAP_ASYNC は WRITE_MAP と併用時のみ有効。
         if write_map {
             env_flags |= EnvFlags::MAP_ASYNC;
         }
