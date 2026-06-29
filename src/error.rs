@@ -241,8 +241,17 @@ impl From<heed::Error> for AppError {
         AppError::StorageError(error)
     }
 }
+
 impl From<kasane_logic::Error> for AppError {
     fn from(value: kasane_logic::Error) -> Self {
         AppError::LogicError(value)
+    }
+}
+
+impl From<serde_json::Error> for AppError {
+    fn from(error: serde_json::Error) -> Self {
+        AppError::InvalidStoredValue {
+            reason: error.to_string(),
+        }
     }
 }

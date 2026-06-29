@@ -29,10 +29,30 @@ pub struct RawRangeId {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Clone)]
+#[schema(as = FlexId)]
+#[serde(rename_all = "camelCase")]
+pub struct RawFlexId {
+    #[schema(example = 20, maximum = 30)]
+    pub f_zoomlevel: u8,
+    #[schema(example = 0)]
+    pub f_index: i32,
+    #[schema(example = 20, maximum = 30)]
+    pub x_zoomlevel: u8,
+    #[schema(example = 931386)]
+    pub x_index: u32,
+    #[schema(example = 20, maximum = 30)]
+    pub y_zoomlevel: u8,
+    #[schema(example = 412905)]
+    pub y_index: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum SpatialId {
     #[serde(rename = "singleId")]
     SingleId(RawSingleId),
     #[serde(rename = "rangeId")]
     RangeId(RawRangeId),
+    #[serde(rename = "flexId")]
+    FlexId(RawFlexId),
 }

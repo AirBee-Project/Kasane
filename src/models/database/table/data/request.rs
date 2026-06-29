@@ -10,6 +10,22 @@ pub struct GetDataRequest {
     pub zoom_level_policy: ZoomLevelPolicy,
 }
 
+#[derive(Debug, Deserialize, ToSchema, Default, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+pub enum OutputFormat {
+    SingleId,
+    #[default]
+    RangeId,
+    FlexId,
+}
+
+#[derive(Debug, Deserialize, ToSchema, Default)]
+pub struct GetDataQuery {
+    #[serde(default)]
+    pub format: OutputFormat,
+    pub limit: Option<usize>,
+}
+
 #[derive(Debug, Deserialize, ToSchema)]
 /// 空間IDの配列を指定して値を挿入する
 pub struct InsertDataRequest {

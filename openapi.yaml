@@ -246,6 +246,19 @@ paths:
       - data
       operationId: data_get
       parameters:
+      - name: format
+        in: query
+        description: Output format (singleId, rangeId, flexId)
+        required: false
+        schema:
+          $ref: '#/components/schemas/OutputFormat'
+      - name: limit
+        in: query
+        description: Maximum number of returned elements
+        required: false
+        schema:
+          type: integer
+          minimum: 0
       - name: db_name
         in: path
         required: true
@@ -536,6 +549,149 @@ components:
         is_global_admin:
           type: boolean
           example: false
+    DataGroup_FlexId:
+      type: object
+      required:
+      - valueRef
+      - spatialIds
+      properties:
+        valueRef:
+          type: integer
+          minimum: 0
+        spatialIds:
+          type: array
+          items:
+            type: object
+            required:
+            - fZoomlevel
+            - fIndex
+            - xZoomlevel
+            - xIndex
+            - yZoomlevel
+            - yIndex
+            properties:
+              fZoomlevel:
+                type: integer
+                format: int32
+                example: 20
+                maximum: 30
+                minimum: 0
+              fIndex:
+                type: integer
+                format: int32
+                example: 0
+              xZoomlevel:
+                type: integer
+                format: int32
+                example: 20
+                maximum: 30
+                minimum: 0
+              xIndex:
+                type: integer
+                format: int32
+                example: 931386
+                minimum: 0
+              yZoomlevel:
+                type: integer
+                format: int32
+                example: 20
+                maximum: 30
+                minimum: 0
+              yIndex:
+                type: integer
+                format: int32
+                example: 412905
+                minimum: 0
+    DataGroup_RangeId:
+      type: object
+      required:
+      - valueRef
+      - spatialIds
+      properties:
+        valueRef:
+          type: integer
+          minimum: 0
+        spatialIds:
+          type: array
+          items:
+            type: object
+            required:
+            - z
+            - f
+            - x
+            - y
+            properties:
+              z:
+                type: integer
+                format: int32
+                example: 20
+                maximum: 30
+                minimum: 0
+              f:
+                type: array
+                items:
+                  type: integer
+                  format: int32
+                example:
+                - 0
+                - 0
+              x:
+                type: array
+                items:
+                  type: integer
+                  format: int32
+                  minimum: 0
+                example:
+                - 931388
+                - 931390
+              y:
+                type: array
+                items:
+                  type: integer
+                  format: int32
+                  minimum: 0
+                example:
+                - 412900
+                - 412907
+    DataGroup_SingleId:
+      type: object
+      required:
+      - valueRef
+      - spatialIds
+      properties:
+        valueRef:
+          type: integer
+          minimum: 0
+        spatialIds:
+          type: array
+          items:
+            type: object
+            required:
+            - z
+            - f
+            - x
+            - y
+            properties:
+              z:
+                type: integer
+                format: int32
+                example: 20
+                maximum: 30
+                minimum: 0
+              f:
+                type: integer
+                format: int32
+                example: 0
+              x:
+                type: integer
+                format: int32
+                example: 931386
+                minimum: 0
+              y:
+                type: integer
+                format: int32
+                example: 412905
+                minimum: 0
     DatabaseInfoResponse:
       type: object
       required:
@@ -543,6 +699,58 @@ components:
       properties:
         name:
           type: string
+    FlexId:
+      type: object
+      required:
+      - fZoomlevel
+      - fIndex
+      - xZoomlevel
+      - xIndex
+      - yZoomlevel
+      - yIndex
+      properties:
+        fZoomlevel:
+          type: integer
+          format: int32
+          example: 20
+          maximum: 30
+          minimum: 0
+        fIndex:
+          type: integer
+          format: int32
+          example: 0
+        xZoomlevel:
+          type: integer
+          format: int32
+          example: 20
+          maximum: 30
+          minimum: 0
+        xIndex:
+          type: integer
+          format: int32
+          example: 931386
+          minimum: 0
+        yZoomlevel:
+          type: integer
+          format: int32
+          example: 20
+          maximum: 30
+          minimum: 0
+        yIndex:
+          type: integer
+          format: int32
+          example: 412905
+          minimum: 0
+    GetDataQuery:
+      type: object
+      properties:
+        format:
+          $ref: '#/components/schemas/OutputFormat'
+        limit:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
     GetDataRequest:
       type: object
       description: 空間IDの配列を指定して値を取得する
@@ -556,14 +764,49 @@ components:
         zoom_level_policy:
           $ref: '#/components/schemas/ZoomLevelPolicy'
     GetDataResponse:
+      oneOf:
+      - $ref: '#/components/schemas/GetDataResponseSingle'
+      - $ref: '#/components/schemas/GetDataResponseRange'
+      - $ref: '#/components/schemas/GetDataResponseFlex'
+    GetDataResponseFlex:
       type: object
       required:
-      - ids
+      - dictionary
+      - data
       properties:
-        ids:
+        dictionary:
+          type: array
+          items: {}
+        data:
           type: array
           items:
-            $ref: '#/components/schemas/SpatialData'
+            $ref: '#/components/schemas/DataGroup_FlexId'
+    GetDataResponseRange:
+      type: object
+      required:
+      - dictionary
+      - data
+      properties:
+        dictionary:
+          type: array
+          items: {}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DataGroup_RangeId'
+    GetDataResponseSingle:
+      type: object
+      required:
+      - dictionary
+      - data
+      properties:
+        dictionary:
+          type: array
+          items: {}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DataGroup_SingleId'
     InsertDataRequest:
       type: object
       description: 空間IDの配列を指定して値を挿入する
@@ -597,6 +840,12 @@ components:
       properties:
         token:
           type: string
+    OutputFormat:
+      type: string
+      enum:
+      - singleId
+      - rangeId
+      - flexId
     PrivilegeInfoResponse:
       type: object
       required:
@@ -687,15 +936,6 @@ components:
           format: int32
           example: 412905
           minimum: 0
-    SpatialData:
-      type: object
-      required:
-      - id
-      - data
-      properties:
-        id:
-          $ref: '#/components/schemas/SingleId'
-        data: {}
     SpatialId:
       oneOf:
       - allOf:
@@ -718,6 +958,16 @@ components:
               type: string
               enum:
               - rangeId
+      - allOf:
+        - $ref: '#/components/schemas/FlexId'
+        - type: object
+          required:
+          - type
+          properties:
+            type:
+              type: string
+              enum:
+              - flexId
     TableDataType:
       type: string
       description: Table内の時空間IDに付与する値の型。

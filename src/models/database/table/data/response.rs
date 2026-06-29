@@ -1,19 +1,39 @@
+use crate::models::spatial_id::{RawFlexId, RawRangeId, RawSingleId};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::models::spatial_id::RawSingleId;
-
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct GetDataResponse {
-    pub ids: Vec<SpatialData>,
+#[serde(untagged)]
+pub enum GetDataResponse {
+    Single(GetDataResponseSingle),
+    Range(GetDataResponseRange),
+    Flex(GetDataResponseFlex),
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct SpatialData {
-    // 現状ではSingleIdでしか返さない
-    // 招待的にはデータ量の圧縮のため、[RangeId]や[FlexId]を導入する
-    pub id: RawSingleId,
-    pub data: serde_json::Value,
+pub struct GetDataResponseSingle {
+    pub dictionary: Vec<serde_json::Value>,
+    pub data: Vec<DataGroup<RawSingleId>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GetDataResponseRange {
+    pub dictionary: Vec<serde_json::Value>,
+    pub data: Vec<DataGroup<RawRangeId>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GetDataResponseFlex {
+    pub dictionary: Vec<serde_json::Value>,
+    pub data: Vec<DataGroup<RawFlexId>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DataGroup<T> {
+    pub value_ref: usize,
+    pub spatial_ids: Vec<T>,
 }
