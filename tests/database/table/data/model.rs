@@ -1,11 +1,11 @@
 //! コアロジック（動的シャード分割/統合・被覆・値インデックス・件数）の
 //! ランダム差分（モデルベース）検証。
 //!
-//! 各セルに**一意な値**を割り当てて compaction を抑止し、参照モデル（オラクル）の
+//! 各セルに**一意な値**を割り当てて compaction を抑止し、参照モデル（正解の値）の
 //! `HashMap<(x,y), value>` と突き合わせながら挿入/上書き/削除をランダムに繰り返す。
 //! 各ラウンド後に次を検証する:
-//!   - `data_get`（全域）がオラクルと**完全一致**（データロス・誤値・余剰のいずれも無い）
-//!   - `table_count` == オラクル件数（リーフ件数ヘッダ集計の正しさ）
+//!   - `data_get`（全域）が正解の値と**完全一致**（データロス・誤値・余剰のいずれも無い）
+//!   - `table_count` == 正解の値件数（リーフ件数ヘッダ集計の正しさ）
 //!   - `data_filter_eq` が一意値で正しいセルを返す（値インデックスの整合）
 //!
 //! 挿入過多で `>MAX` 分割を、削除過多で `<閾値` 統合を必ず通過させ、その前後で
@@ -96,7 +96,7 @@ fn read_all(db: &kasane::db_init::AppDb, table_id: TableId) -> HashMap<(u32, u32
     actual
 }
 
-/// オラクルと DB の全状態を突き合わせる。
+/// 正解の値と DB の全状態を突き合わせる。
 fn verify(
     db: &kasane::db_init::AppDb,
     table_id: TableId,
@@ -104,7 +104,7 @@ fn verify(
     oracle: &HashMap<(u32, u32), i32>,
     rng: &mut XorShift,
 ) {
-    // 1) data_get 全域がオラクルと完全一致。
+    // 1) data_get 全域が正解の値と完全一致。
     let actual = read_all(db, table_id);
     assert_eq!(
         actual.len(),
@@ -115,7 +115,7 @@ fn verify(
     );
     assert_eq!(&actual, oracle, "data_get content diverged from the model");
 
-    // 2) table_count（ヘッダ集計）== オラクル件数。一意値なので compaction されず一致する。
+    // 2) table_count（ヘッダ集計）== 正解の値件数。一意値なので compaction されず一致する。
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), db);
     assert_eq!(
         r.table_count(table_id).unwrap(),
