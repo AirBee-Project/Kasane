@@ -160,7 +160,7 @@ impl<'a> KasaneDbWrite<'a> {
             }
 
             // 子リーフ群を親領域へ畳み込む（union。境界跨ぎの同値は compaction される）。
-            let merged = SpatialIdMap::merge_children(parent_region.clone(), child_maps)?;
+            let merged = SpatialIdMap::merge_shards(parent_region.clone(), child_maps)?;
 
             let mut new_keys = HashSet::new();
             for (f, v) in merged.iter() {
@@ -328,9 +328,9 @@ impl<'a> KasaneDbWrite<'a> {
         map: &SpatialIdMap<Vec<u8>>,
         out: &mut Vec<FlexId>,
     ) -> Result<(), AppError> {
-        // should_split が真 ⇒ シャード領域があり split_once は Some。
+        // should_split が真 ⇒ シャード領域があり split_shard は Some。
         let ((lo_r, lo), (hi_r, hi)) = map
-            .split_once()
+            .split_shard()
             .ok_or_else(|| AppError::InternalError("split on shardless map".to_string()))?;
         self.emit_child(table_id, lo_r, lo, out)?;
         self.emit_child(table_id, hi_r, hi, out)?;
@@ -364,7 +364,7 @@ impl<'a> KasaneDbWrite<'a> {
         }
         // 過大：1段だけ覗いて、圧縮（退化）か枝分かれ（実分割）かを決める。
         let ((clo_r, clo), (chi_r, chi)) = cm
-            .split_once()
+            .split_shard()
             .ok_or_else(|| AppError::InternalError("split on shardless map".to_string()))?;
         if clo.is_empty() || chi.is_empty() {
             // 退化分割：cr にポインタノードを作らず孫を out へ巻き上げる（チェーン圧縮）。
