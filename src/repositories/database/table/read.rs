@@ -71,11 +71,7 @@ impl<'a> KasaneDbRead<'a> {
         Ok(tables)
     }
 
-    /// テーブルが保持する空間ID(FlexId)の総数を返す。
-    ///
-    /// 各リーフシャードの**ヘッダに埋めた件数（u32）だけ**を読んで合算する。
-    /// `SpatialIdMap` を deserialize せず、セルを1つも展開しないため O(リーフ数)。
-    /// （O(1) にはグローバルカウンタが必要だが、現状は採用していない。）
+    /// テーブルが保持する[FlexId]の総数を返す。
     pub fn table_count(&self, table_id: crate::models::id::TableId) -> Result<u64, AppError> {
         use crate::repositories::database::table::data::shard::ShardEntry;
 
