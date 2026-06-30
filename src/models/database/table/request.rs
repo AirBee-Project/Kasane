@@ -31,6 +31,20 @@ pub enum UpdateTableConstraints {
         #[serde(skip_serializing_if = "Option::is_none")]
         max_length: Option<Option<usize>>,
     },
+    #[schema(example = json!({"type": "TinyInt", "min": 0, "max": 100}))]
+    TinyInt {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        min: Option<Option<i8>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        max: Option<Option<i8>>,
+    },
+    #[schema(example = json!({"type": "SmallInt", "min": 0, "max": 100}))]
+    SmallInt {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        min: Option<Option<i16>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        max: Option<Option<i16>>,
+    },
     #[schema(example = json!({"type": "Int", "min": 0, "max": 100}))]
     Int {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -38,12 +52,26 @@ pub enum UpdateTableConstraints {
         #[serde(skip_serializing_if = "Option::is_none")]
         max: Option<Option<i32>>,
     },
+    #[schema(example = json!({"type": "BigInt", "min": 0, "max": 100}))]
+    BigInt {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        min: Option<Option<i64>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        max: Option<Option<i64>>,
+    },
     #[schema(example = json!({"type": "Float", "min": 0.0, "max": 100.0}))]
     Float {
         #[serde(skip_serializing_if = "Option::is_none")]
         min: Option<Option<f32>>,
         #[serde(skip_serializing_if = "Option::is_none")]
         max: Option<Option<f32>>,
+    },
+    #[schema(example = json!({"type": "Double", "min": 0.0, "max": 100.0}))]
+    Double {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        min: Option<Option<f64>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        max: Option<Option<f64>>,
     },
     #[schema(example = json!({"type": "Enum", "add_choices": ["yellow"], "remove_choices": ["red"]}))]
     Enum {

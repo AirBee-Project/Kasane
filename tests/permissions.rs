@@ -497,7 +497,7 @@ async fn test_manage_user_can_set_privileges() {
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::NO_CONTENT);
 
-    // 4. manage_user tries to grant Read privilege to normal_user (should succeed)
+    // 4. manage_user tries to grant Read privilege to normal_user (should fail, only global admin can)
     let req = Request::builder()
         .method("PUT")
         .uri("/users/normal_user/privileges/test_db")
@@ -506,9 +506,9 @@ async fn test_manage_user_can_set_privileges() {
         .body(Body::from(r#"{"role": "Read"}"#))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
 
-    // 5. verify normal_user has Read privilege (as root)
+    // 5. verify normal_user does NOT have Read privilege
     let req = Request::builder()
         .method("GET")
         .uri("/users/normal_user/privileges")
@@ -518,10 +518,9 @@ async fn test_manage_user_can_set_privileges() {
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    let arr = json.as_array().unwrap();
-    assert_eq!(arr.len(), 1);
-    assert_eq!(arr[0]["db_name"], "test_db");
-    assert_eq!(arr[0]["role"], "Read");
+    
+    assert_eq!(json.as_array().unwrap().len(), 0);
+
 }
 
 #[tokio::test]

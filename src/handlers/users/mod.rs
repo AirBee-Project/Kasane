@@ -216,7 +216,7 @@ pub async fn get_privileges(
 
 /// データベース権限の設定
 ///
-/// 指定したユーザーに対し、特定のデータベースへのアクセス権限（Read, Write, Manage）を設定します。この操作はグローバル管理者、または対象データベースのManage権限を持つユーザーが実行可能です。
+/// 指定したユーザーに対し、特定のデータベースへのアクセス権限（Read, Write, Manage）を設定します。この操作はグローバル管理者のみ実行可能です。
 #[utoipa::path(
     put,
     path = "/users/{username}/privileges/{db_name}",
@@ -239,13 +239,7 @@ pub async fn set_privilege(
     Json(payload): Json<UpdatePrivilegeRequest>,
 ) -> Result<StatusCode, AppError> {
     if !auth_user.user.is_global_admin {
-        crate::middleware::auth::check_privilege(
-            &app_state,
-            &auth_user,
-            &db_name,
-            crate::models::users::UserRole::Manage,
-        )
-        .await?;
+        return Err(AuthError::RequiresGlobalAdmin.into());
     }
     users_service::set_privilege(&app_state, &username, &db_name, payload).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -253,7 +247,7 @@ pub async fn set_privilege(
 
 /// データベース権限の削除
 ///
-/// 指定したユーザーから、特定のデータベースへのアクセス権限を削除します。この操作はグローバル管理者、または対象データベースのManage権限を持つユーザーが実行可能です。
+/// 指定したユーザーから、特定のデータベースへのアクセス権限を削除します。この操作はグローバル管理者のみ実行可能です。
 #[utoipa::path(
     delete,
     path = "/users/{username}/privileges/{db_name}",
@@ -274,13 +268,7 @@ pub async fn delete_privilege(
     Path((username, db_name)): Path<(String, String)>,
 ) -> Result<StatusCode, AppError> {
     if !auth_user.user.is_global_admin {
-        crate::middleware::auth::check_privilege(
-            &app_state,
-            &auth_user,
-            &db_name,
-            crate::models::users::UserRole::Manage,
-        )
-        .await?;
+        return Err(AuthError::RequiresGlobalAdmin.into());
     }
     users_service::delete_privilege(&app_state, &username, &db_name).await?;
     Ok(StatusCode::NO_CONTENT)
