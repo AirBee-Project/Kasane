@@ -125,20 +125,20 @@ impl ShardEntry {
 
 /// 複数の `flex_id` を**一度の木降下**でまとめてルーティングし、
 /// `担当リーフ領域 -> そこへ到達した flex_id 群` を返す。
-pub fn route_leaves_batched(
+pub fn route_leaves_batched<'a>(
     tables_data: &Database<TableIdAndFlexId, Bytes>,
     txn: &RoTxn<WithoutTls>,
     table_id: TableId,
-    ids: &[FlexId],
+    ids: impl Iterator<Item = &'a FlexId>,
 ) -> Result<rustc_hash::FxHashMap<FlexId, Vec<FlexId>>, AppError> {
     // f 符号で上下半球に分け、各半球ルートから 1 回ずつ降りる。
     let mut lower = Vec::new();
     let mut upper = Vec::new();
     for f in ids {
         if f.f_index().is_negative() {
-            lower.push(f.clone());
+            lower.push(f);
         } else {
-            upper.push(f.clone());
+            upper.push(f);
         }
     }
 
@@ -164,12 +164,12 @@ pub fn route_leaves_batched(
 
 /// `region` を根として `ids` を子へ振り分けながら降り、リーフ（または未作成キー）へ到達した
 /// flex_id 群を `out` に積む。
-fn descend_batched(
+fn descend_batched<'a>(
     tables_data: &Database<TableIdAndFlexId, Bytes>,
     txn: &RoTxn<WithoutTls>,
     table_id: TableId,
     region: FlexId,
-    ids: Vec<FlexId>,
+    ids: Vec<&'a FlexId>,
     out: &mut rustc_hash::FxHashMap<FlexId, Vec<FlexId>>,
 ) -> Result<(), AppError> {
     if ids.is_empty() {
@@ -178,18 +178,22 @@ fn descend_batched(
     match tables_data.get(txn, &(table_id, region.clone()))? {
         // 未作成リーフ or 実データリーフ → ここへ到達した全 flex_id が担当。
         None => {
-            out.entry(region).or_default().extend(ids);
+            out.entry(region)
+                .or_default()
+                .extend(ids.into_iter().cloned());
         }
         Some(bytes) => match ShardEntry::child_pointers(bytes)? {
             None => {
-                out.entry(region).or_default().extend(ids);
+                out.entry(region)
+                    .or_default()
+                    .extend(ids.into_iter().cloned());
             }
             Some(children) => {
                 for child in children {
-                    let bucket: Vec<FlexId> = ids
+                    let bucket: Vec<&'a FlexId> = ids
                         .iter()
-                        .filter(|f| child.intersection(f).is_some())
-                        .cloned()
+                        .filter(|&&f| child.intersection(f).is_some())
+                        .copied()
                         .collect();
                     descend_batched(tables_data, txn, table_id, child, bucket, out)?;
                 }

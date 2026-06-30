@@ -157,7 +157,7 @@ impl<'a> KasaneDbRead<'a> {
         queries: &[FlexId],
         by_value: &mut FxHashMap<Vec<u8>, Vec<FlexId>>,
     ) -> Result<(), AppError> {
-        let by_leaf = shard::route_leaves_batched(tables_data, txn, table_id, queries)?;
+        let by_leaf = shard::route_leaves_batched(tables_data, txn, table_id, queries.iter())?;
         for (region, queries) in by_leaf {
             let Some(arch) = shard::load_leaf_archived(tables_data, txn, table_id, &region)? else {
                 continue;

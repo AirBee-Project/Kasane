@@ -1,3 +1,4 @@
+pub mod batch;
 pub mod read;
 pub mod shard;
 pub mod value_index;

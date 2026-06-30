@@ -43,3 +43,93 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(())
     }
 }
+
+impl crate::db_init::AppDb {
+    pub async fn batch_data_insert(
+        &self,
+        db_name: String,
+        table_name: String,
+        ids: Vec<crate::models::spatial_id::SpatialId>,
+        policy: crate::models::database::table::data::ZoomLevelPolicy,
+        value: serde_json::Value,
+    ) -> Result<(), crate::error::AppError> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.write_sender
+            .send(
+                crate::repositories::database::table::data::batch::WriteOp::Insert {
+                    db_name,
+                    table_name,
+                    ids,
+                    policy,
+                    value,
+                    reply: tx,
+                },
+            )
+            .await
+            .map_err(|_| {
+                crate::error::AppError::InternalError("WriteBatcher channel is closed".to_string())
+            })?;
+        rx.await.map_err(|_| {
+            crate::error::AppError::InternalError("WriteBatcher failed to reply".to_string())
+        })??;
+        Ok(())
+    }
+
+    pub async fn batch_data_upsert(
+        &self,
+        db_name: String,
+        table_name: String,
+        ids: Vec<crate::models::spatial_id::SpatialId>,
+        policy: crate::models::database::table::data::ZoomLevelPolicy,
+        value: serde_json::Value,
+    ) -> Result<(), crate::error::AppError> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.write_sender
+            .send(
+                crate::repositories::database::table::data::batch::WriteOp::Upsert {
+                    db_name,
+                    table_name,
+                    ids,
+                    policy,
+                    value,
+                    reply: tx,
+                },
+            )
+            .await
+            .map_err(|_| {
+                crate::error::AppError::InternalError("WriteBatcher channel is closed".to_string())
+            })?;
+        rx.await.map_err(|_| {
+            crate::error::AppError::InternalError("WriteBatcher failed to reply".to_string())
+        })??;
+        Ok(())
+    }
+
+    pub async fn batch_data_remove(
+        &self,
+        db_name: String,
+        table_name: String,
+        ids: Vec<crate::models::spatial_id::SpatialId>,
+        policy: crate::models::database::table::data::ZoomLevelPolicy,
+    ) -> Result<(), crate::error::AppError> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.write_sender
+            .send(
+                crate::repositories::database::table::data::batch::WriteOp::Remove {
+                    db_name,
+                    table_name,
+                    ids,
+                    policy,
+                    reply: tx,
+                },
+            )
+            .await
+            .map_err(|_| {
+                crate::error::AppError::InternalError("WriteBatcher channel is closed".to_string())
+            })?;
+        rx.await.map_err(|_| {
+            crate::error::AppError::InternalError("WriteBatcher failed to reply".to_string())
+        })??;
+        Ok(())
+    }
+}
