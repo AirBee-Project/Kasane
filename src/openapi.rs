@@ -50,6 +50,7 @@ impl utoipa::Modify for SecurityAddon {
         // Users
         crate::handlers::users::list_users,
         crate::handlers::users::create_user,
+        crate::handlers::users::get_user,
         crate::handlers::users::delete_user,
         crate::handlers::users::update_password,
         crate::handlers::users::set_admin,

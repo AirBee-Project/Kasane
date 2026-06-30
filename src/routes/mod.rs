@@ -16,7 +16,7 @@ pub fn create_router(app_state: AppState) -> Router {
         .route("/users", post(crate::handlers::users::create_user))
         .route(
             "/users/{username}",
-            delete(crate::handlers::users::delete_user),
+            delete(crate::handlers::users::delete_user).get(crate::handlers::users::get_user),
         )
         .route(
             "/users/{username}/password",

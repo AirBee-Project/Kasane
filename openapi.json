@@ -748,6 +748,49 @@
       }
     },
     "/users/{username}": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "ユーザーの個別取得",
+        "description": "指定したユーザーの基本情報を取得します。Global Adminまたはユーザー本人のみ実行可能です。",
+        "operationId": "get_user",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "description": "ユーザー名",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "example_user"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserInfoResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "権限がない（他人の情報を取得しようとした）"
+          },
+          "404": {
+            "description": "ユーザーが存在しない"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
       "delete": {
         "tags": [
           "Users"

@@ -17,6 +17,16 @@ pub fn list_users(app_state: &AppState) -> Result<Vec<UserInfoResponse>, AppErro
     Ok(users.into_iter().map(UserInfoResponse::from).collect())
 }
 
+pub fn get_user(app_state: &AppState, username: &str) -> Result<UserInfoResponse, AppError> {
+    let read_txn = app_state.db.env.read_txn()?;
+    let repo = KasaneUsersRead::new(read_txn, &app_state.db);
+    let user = repo
+        .get_user(username)?
+        .ok_or_else(|| AppError::NotFound("User not found".into()))?;
+    Ok(UserInfoResponse::from(user))
+}
+
+
 pub async fn create_user(app_state: &AppState, req: CreateUserRequest) -> Result<(), AppError> {
     crate::services::helpers::name_valid::name_valid(&req.username)?;
 
