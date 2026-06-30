@@ -6,25 +6,25 @@ edition = "2024"
 
 [dependencies]
 axum = { version = "0.8.9", features = ["macros"] }
-clap = { version = "4.5", features = ["derive"] }
+clap = { version = "4.6", features = ["derive"] }
 dotenvy = "0.15"
 kasane-logic = { git = "https://github.com/AirBee-Project/Kasane-Logic.git", features = ["persist"] }
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.52", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-utoipa = { version = "5.0", features = ["axum_extras","preserve_order"] }
+utoipa = { version = "5.5", features = ["axum_extras","preserve_order"] }
 utoipa-swagger-ui = { version = "9", features = ["axum", "vendored"] }
 tower = { version = "0.5.3", features = ["util"] }
-uuid = { version = "1.23.1", features = ["v7", "fast-rng", "serde"] }
+uuid = { version = "1.23.4", features = ["v7", "fast-rng", "serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-tower-http = { version = "0.6.1", features = ["trace"] }
+tower-http = { version = "0.7.0", features = ["trace"] }
 argon2 = "0.5.3"
 jsonwebtoken = { version = "10.4.0", features = ["rust_crypto"] }
 rand = "0.10.1"
 rand_core = { version = "0.6.4", features = ["getrandom"] }
 heed = "0.22.1"
-rayon = "1.10"
+rayon = "1.12"
 tokio-stream = { version = "0.1.18", features = ["sync"] }
 rustc-hash = "2.1.2"
 

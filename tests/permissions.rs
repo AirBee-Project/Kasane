@@ -645,3 +645,61 @@ async fn test_username_reuse_rejects_old_token() {
     create_user_and_token(&test_app.app, &root_token, "reuse_user", false).await;
     assert!(!token_is_valid(&test_app.app, &old_token).await);
 }
+
+#[tokio::test]
+/// GET /users/{username} のエンドポイントが、本人またはGlobal Adminのみに許可されているかを検証する。
+async fn test_get_user_info_authorization() {
+    let test_app = PermissionTestApp::new();
+    let root_token = test_app.root_token();
+
+    // ユーザーA（一般ユーザー）を作成
+    let user_a_token = create_user_and_token(&test_app.app, &root_token, "user_a", false).await;
+    // ユーザーB（一般ユーザー）を作成
+    let user_b_token = create_user_and_token(&test_app.app, &root_token, "user_b", false).await;
+    // ユーザーC（管理者）を作成
+    let admin_token = create_user_and_token(&test_app.app, &root_token, "admin_user", true).await;
+
+    // 1. 本人が自分自身の情報を取得できるか (200 OK)
+    let req = Request::builder()
+        .method("GET")
+        .uri("/users/user_a")
+        .header("Authorization", format!("Bearer {}", user_a_token))
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["username"], "user_a");
+    assert_eq!(json["is_global_admin"], false);
+
+    // 2. 他人（非管理者）が情報を取得しようとすると失敗するか (403 Forbidden)
+    let req = Request::builder()
+        .method("GET")
+        .uri("/users/user_a")
+        .header("Authorization", format!("Bearer {}", user_b_token))
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+    // 3. 管理者が他人の情報を取得できるか (200 OK)
+    let req = Request::builder()
+        .method("GET")
+        .uri("/users/user_a")
+        .header("Authorization", format!("Bearer {}", admin_token))
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 4. 存在しないユーザーの情報を取得しようとすると失敗するか (404 Not Found)
+    let req = Request::builder()
+        .method("GET")
+        .uri("/users/non_existent_user")
+        .header("Authorization", format!("Bearer {}", admin_token))
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}

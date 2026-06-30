@@ -92,6 +92,35 @@ pub async fn delete_user(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// ユーザーの個別取得
+///
+/// 指定したユーザーの基本情報を取得します。Global Adminまたはユーザー本人のみ実行可能です。
+#[utoipa::path(
+    get,
+    path = "/users/{username}",
+    params(
+        ("username" = String, Path, description = "ユーザー名", example = "example_user")
+    ),
+    responses(
+        (status = 200, body = UserInfoResponse),
+        (status = 403, description = "権限がない（他人の情報を取得しようとした）"),
+        (status = 404, description = "ユーザーが存在しない")
+    ),
+    security(("bearer_auth" = [])),
+    tag = "Users"
+)]
+pub async fn get_user(
+    State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(username): Path<String>,
+) -> Result<Json<UserInfoResponse>, AppError> {
+    if !auth_user.user.is_global_admin && auth_user.user.username != username {
+        return Err(AuthError::NotSelfOrAdmin.into());
+    }
+    let user = users_service::get_user(&app_state, &username)?;
+    Ok(Json(user))
+}
+
 /// パスワードの更新
 ///
 /// 指定したユーザーのパスワードを更新します。ユーザー本人が自分自身のパスワードを変更するか、Global Adminが他人のパスワードをリセットする場合に利用可能です。
