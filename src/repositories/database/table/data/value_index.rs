@@ -25,12 +25,15 @@ const FLEX_ID_LEN: usize = 14;
 pub fn order_preserving(data_type: TableDataType, value: &[u8]) -> Vec<u8> {
     let mut key = value.to_vec();
     match data_type {
-        TableDataType::Int => {
+        TableDataType::TinyInt
+        | TableDataType::SmallInt
+        | TableDataType::Int
+        | TableDataType::BigInt => {
             if let Some(b0) = key.first_mut() {
                 *b0 ^= 0x80;
             }
         }
-        TableDataType::Float => {
+        TableDataType::Float | TableDataType::Double => {
             if let Some(&b0) = key.first() {
                 if b0 & 0x80 != 0 {
                     for b in &mut key {
@@ -41,7 +44,10 @@ pub fn order_preserving(data_type: TableDataType, value: &[u8]) -> Vec<u8> {
                 }
             }
         }
-        TableDataType::Text | TableDataType::Boolean => {}
+        TableDataType::Text
+        | TableDataType::Boolean
+        | TableDataType::Enum
+        | TableDataType::Presence => {}
     }
     key
 }

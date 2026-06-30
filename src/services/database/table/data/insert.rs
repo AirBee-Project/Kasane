@@ -34,7 +34,7 @@ pub async fn insert(
             }
         };
 
-        let value = interpret_value(table.data_type, value)?;
+        let value = interpret_value(table.data_type, table.constraints.as_ref(), value)?;
         let ids = process_spatial_ids(&spatial_ids, table.max_zoom_level, &zoom_level_policy)?;
 
         tracing::debug!("Inserting {} spatial IDs", ids.count());

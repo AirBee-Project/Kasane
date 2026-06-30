@@ -465,6 +465,64 @@ async fn test_database_list_and_info_authorization() {
     assert_eq!(json.as_array().unwrap().len(), 2);
 }
 
+/// データベースのManage権限を持つユーザーが、他ユーザーへ権限を付与しようとすると拒否されることを検証する。
+#[tokio::test]
+async fn test_manage_user_can_set_privileges() {
+    let test_app = PermissionTestApp::new();
+    let root_token = test_app.root_token();
+
+    // 1. データベースを作成する
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", root_token))
+        .body(Body::from(r#"{"name": "test_db"}"#))
+        .unwrap();
+    test_app.app.clone().oneshot(req).await.unwrap();
+
+    // 2. manage_user と normal_user を作成する
+    let manage_token =
+        create_user_and_token(&test_app.app, &root_token, "manage_user", false).await;
+    let _normal_token =
+        create_user_and_token(&test_app.app, &root_token, "normal_user", false).await;
+
+    // 3. manage_user に Manage 権限を付与する（rootとして）
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/users/manage_user/privileges/test_db")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", root_token))
+        .body(Body::from(r#"{"role": "Manage"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    // 4. manage_user が normal_user に Read 権限を付与しようとする（グローバル管理者のみ可能なため失敗するはず）
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/users/normal_user/privileges/test_db")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", manage_token))
+        .body(Body::from(r#"{"role": "Read"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+    // 5. normal_user が Read 権限を持っていないことを検証する
+    let req = Request::builder()
+        .method("GET")
+        .uri("/users/normal_user/privileges")
+        .header("Authorization", format!("Bearer {}", root_token))
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(json.as_array().unwrap().len(), 0);
+}
+
 #[tokio::test]
 /// 権限を持たないユーザーがデータベース内のデータにアクセスできないかを検証する。
 async fn test_no_privileges() {
@@ -702,4 +760,110 @@ async fn test_get_user_info_authorization() {
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+/// データベースのリネーム、コピー、およびテーブルコピーにおける権限検証をテストする。
+async fn test_copy_and_rename_permissions() {
+    let test_app = PermissionTestApp::new();
+    let root_token = test_app.root_token();
+
+    // 1. データベース src_db を作成し、一般ユーザー user_a に Read 権限、user_b に Manage 権限を付与する。
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", root_token))
+        .body(Body::from(r#"{"name": "src_db"}"#))
+        .unwrap();
+    test_app.app.clone().oneshot(req).await.unwrap();
+
+    let user_a_token = create_user_and_token(&test_app.app, &root_token, "user_a", false).await;
+    let user_b_token = create_user_and_token(&test_app.app, &root_token, "user_b", false).await;
+
+    // user_a に Read 権限を付与
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/users/user_a/privileges/src_db")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", root_token))
+        .body(Body::from(r#"{"role": "Read"}"#))
+        .unwrap();
+    test_app.app.clone().oneshot(req).await.unwrap();
+
+    // user_b に Manage 権限を付与
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/users/user_b/privileges/src_db")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", root_token))
+        .body(Body::from(r#"{"role": "Manage"}"#))
+        .unwrap();
+    test_app.app.clone().oneshot(req).await.unwrap();
+
+    // 2. データベースのRename権限テスト
+    // user_a (Read) はリネームできないはず (403)
+    let req = Request::builder()
+        .method("PATCH")
+        .uri("/databases/src_db")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", user_a_token))
+        .body(Body::from(r#"{"new_name": "renamed_db"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+    // user_b (Manage) はリネームできるはず (200)
+    let req = Request::builder()
+        .method("PATCH")
+        .uri("/databases/src_db")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", user_b_token))
+        .body(Body::from(r#"{"new_name": "renamed_db"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // renamed_db に名前が変更されたので、以降は renamed_db を対象とする。
+    // user_a (Read) の権限が renamed_db に引き継がれていることを確認
+    // user_a が renamed_db/copy に POST すると、Read権限があるので 201 Created でコピーできるはず。
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/renamed_db/copy")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", user_a_token))
+        .body(Body::from(r#"{"destination_name": "copied_db"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // 3. コピー先データベース (copied_db) に対する Manage 権限自動付与の検証
+    // コピーを実行した user_a は copied_db に対する Manage 権限を持っているはず。
+    // そのため、user_a は copied_db にテーブルを作成できるはず (201)。
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/copied_db/tables")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", user_a_token))
+        .body(Body::from(
+            r#"{"name": "new_table", "data_type": "Int", "max_zoom_level": 25}"#,
+        ))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // 4. テーブルコピーの権限テスト
+    // user_b (元src_dbのManageだったがリネームされてrenamed_dbのManage) は copied_db に対する権限を持たないため、
+    // renamed_db から copied_db へのテーブルコピーは失敗するはず (copied_db の Manage 権限がないため 403)。
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/renamed_db/tables/new_table/copy")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", user_b_token))
+        .body(Body::from(
+            r#"{"destination_db_name": "copied_db", "destination_table_name": "copied_table"}"#,
+        ))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
 }

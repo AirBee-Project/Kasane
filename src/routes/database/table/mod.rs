@@ -9,7 +9,12 @@ fn table_routes() -> Router<AppState> {
         .route(
             "/{table_name}",
             get(crate::handlers::database::table::info::table_info)
+                .patch(crate::handlers::database::table::update::table_update_handler)
                 .delete(crate::handlers::database::table::remove::remove_table),
+        )
+        .route(
+            "/{table_name}/copy",
+            post(crate::handlers::database::table::copy::table_copy),
         )
         .route(
             "/",

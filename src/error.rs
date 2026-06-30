@@ -115,6 +115,9 @@ pub enum AppError {
         actual: JsonValueType,
         expected: JsonValueType,
     },
+    ConstraintViolation {
+        reason: String,
+    },
     NumericValueOutOfRange {
         actual: String,
         expected: String,
@@ -145,6 +148,7 @@ impl AppError {
             AppError::TableNotFound { .. } => StatusCode::NOT_FOUND,
             AppError::TableAlreadyExists { .. } => StatusCode::CONFLICT,
             AppError::ValueTypeMismatch { .. } => StatusCode::BAD_REQUEST,
+            AppError::ConstraintViolation { .. } => StatusCode::BAD_REQUEST,
             AppError::NumericValueOutOfRange { .. } => StatusCode::BAD_REQUEST,
             AppError::InvalidStoredValue { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             AppError::StorageError(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -166,6 +170,7 @@ impl AppError {
             AppError::TableNotFound { .. } => "table_not_found",
             AppError::TableAlreadyExists { .. } => "table_already_exists",
             AppError::ValueTypeMismatch { .. } => "value_type_mismatch",
+            AppError::ConstraintViolation { .. } => "constraint_violation",
             AppError::NumericValueOutOfRange { .. } => "numeric_value_out_of_range",
             AppError::InvalidStoredValue { .. } => "invalid_stored_value",
             AppError::StorageError(_) => "storage_error",
@@ -179,27 +184,34 @@ impl AppError {
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AppError::NotFound(msg) => write!(f, "{}", msg),
-            AppError::Auth(e) => write!(f, "{}", e),
-            AppError::InternalError(msg) => write!(f, "{}", msg),
-            AppError::Conflict(msg) => write!(f, "{}", msg),
-            AppError::DatabaseNotFound { name } => write!(f, "Database '{}' not found", name),
+            AppError::NotFound(msg) => write!(f, "Not found: {}", msg),
+            AppError::Auth(e) => write!(f, "Authentication error: {}", e),
+            AppError::InternalError(msg) => write!(f, "Internal error: {}", msg),
+            AppError::Conflict(msg) => write!(f, "Conflict error: {}", msg),
+            AppError::DatabaseNotFound { name } => {
+                write!(f, "Database '{}' not found", name)
+            }
             AppError::DatabaseAlreadyExists { name } => {
                 write!(f, "Database '{}' already exists", name)
             }
             AppError::TableNotFound { name } => write!(f, "Table '{}' not found", name),
-            AppError::TableAlreadyExists { name } => write!(f, "Table '{}' already exists", name),
-            AppError::StorageError(message) => write!(f, "{}", message),
+            AppError::TableAlreadyExists { name } => {
+                write!(f, "Table '{}' already exists", name)
+            }
+            AppError::StorageError(message) => write!(f, "Storage error: {}", message),
             AppError::InvalidName { reason } => write!(f, "Invalid name: {}", reason),
-            AppError::LogicError(error) => write!(f, "Logic Error: {}", error),
+            AppError::LogicError(error) => write!(f, "Logic error: {}", error),
             AppError::ValueTypeMismatch { actual, expected } => write!(
                 f,
-                "Value type mismatch: expected {:?}, but got {:?}",
+                "Value type mismatch: expected {:?}, got {:?}",
                 expected, actual
             ),
+            AppError::ConstraintViolation { reason } => {
+                write!(f, "Constraint violation: {}", reason)
+            }
             AppError::NumericValueOutOfRange { actual, expected } => write!(
                 f,
-                "Numeric value out of range: expected {}, but got {}",
+                "Numeric value out of range: expected {}, got {}",
                 expected, actual
             ),
             AppError::InvalidStoredValue { reason } => {
@@ -210,7 +222,7 @@ impl fmt::Display for AppError {
                 input_zoom_level,
             } => write!(
                 f,
-                "Zoom level must be <= {}, but got {}",
+                "Zoom level policy violation: expected max {}, got {}",
                 max_zoom_level, input_zoom_level
             ),
         }

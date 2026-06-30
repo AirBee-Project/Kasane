@@ -220,13 +220,15 @@ impl<'a> KasaneDbWrite<'a> {
         // 変更前の重なりリーフからインデックスキーを計算
         let mut old_keys = FxHashSet::default();
         let mut old_flex_ids = Vec::new();
-        for (f, v) in map.get_overlapping(&scan) {
-            old_keys.insert(value_index::make_key(
-                table_id,
-                &value_index::order_preserving(data_type, v),
-                &f,
-            ));
-            old_flex_ids.push(f);
+        for f_scan in scan.iter() {
+            for (f, v) in map.get_overlapping(&f_scan) {
+                old_keys.insert(value_index::make_key(
+                    table_id,
+                    &value_index::order_preserving(data_type, v),
+                    &f,
+                ));
+                old_flex_ids.push(f);
+            }
         }
 
         modify(&mut map);
@@ -236,12 +238,14 @@ impl<'a> KasaneDbWrite<'a> {
 
         // 変更後の重なりリーフからインデックスキーを計算
         let mut new_keys = FxHashSet::default();
-        for (f, v) in map.get_overlapping(&scan) {
-            new_keys.insert(value_index::make_key(
-                table_id,
-                &value_index::order_preserving(data_type, v),
-                &f,
-            ));
+        for f_scan in scan.iter() {
+            for (f, v) in map.get_overlapping(&f_scan) {
+                new_keys.insert(value_index::make_key(
+                    table_id,
+                    &value_index::order_preserving(data_type, v),
+                    &f,
+                ));
+            }
         }
 
         self.update_value_index(old_keys, new_keys)?;

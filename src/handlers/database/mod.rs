@@ -2,7 +2,9 @@ use crate::middleware::auth::AuthUser;
 use crate::{
     AppState,
     error::{AppError, AuthError},
-    models::database::{CreateDatabaseRequest, DatabaseInfoResponse},
+    models::database::{
+        CopyDatabaseRequest, CreateDatabaseRequest, DatabaseInfoResponse, UpdateDatabaseRequest,
+    },
 };
 use axum::Extension;
 use axum::{
@@ -126,6 +128,93 @@ pub async fn remove_database(
     }
     crate::services::database::remove(&app_state, db_name.as_str()).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// データベース名の変更
+///
+/// 指定したデータベースの名前を変更します。対象データベースのManage以上の権限が必要です。
+#[utoipa::path(
+    patch,
+    path = "/databases/{name}",
+    params(
+        ("name" = String, Path, description = "データベース名", example = "example_database")
+    ),
+    request_body = UpdateDatabaseRequest,
+    responses(
+        (status = 200, description = "成功")
+    ),
+    security(("bearer_auth" = [])),
+    tag = "databases"
+)]
+pub async fn database_rename(
+    State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(db_name): Path<String>,
+    Json(request): Json<UpdateDatabaseRequest>,
+) -> Result<StatusCode, AppError> {
+    crate::middleware::auth::check_privilege(
+        &app_state,
+        &auth_user,
+        &db_name,
+        crate::models::users::UserRole::Manage,
+    )
+    .await?;
+    crate::services::database::rename(&app_state, &db_name, &request.new_name).await?;
+    Ok(StatusCode::OK)
+}
+
+/// データベースのコピー
+///
+/// 指定したデータベースをコピーします。コピー元データベースに対するRead権限が必要です。
+#[utoipa::path(
+    post,
+    path = "/databases/{name}/copy",
+    params(
+        ("name" = String, Path, description = "コピー元データベース名", example = "src_db")
+    ),
+    request_body = CopyDatabaseRequest,
+    responses(
+        (status = 201, body = DatabaseInfoResponse)
+    ),
+    security(("bearer_auth" = [])),
+    tag = "databases"
+)]
+pub async fn database_copy(
+    State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(db_name): Path<String>,
+    Json(request): Json<CopyDatabaseRequest>,
+) -> Result<Response, AppError> {
+    crate::middleware::auth::check_privilege(
+        &app_state,
+        &auth_user,
+        &db_name,
+        crate::models::users::UserRole::Read,
+    )
+    .await?;
+
+    if db_name == request.destination_name {
+        return Err(AppError::Conflict(
+            "Source and destination database names must be different".to_string(),
+        ));
+    }
+
+    let user_id = if auth_user.user.is_global_admin {
+        None
+    } else {
+        Some(crate::models::id::UserId(auth_user.user.id))
+    };
+
+    let res =
+        crate::services::database::copy(&app_state, &db_name, &request.destination_name, user_id)
+            .await?;
+
+    Ok((
+        StatusCode::CREATED,
+        [(LOCATION, format!("/databases/{}", request.destination_name))],
+        Json(res),
+    )
+        .into_response())
 }
 
 pub mod table;

@@ -26,6 +26,7 @@ impl<'a> KasaneDbRead<'a> {
                 name: table_name.to_string(),
                 data_type: m.data_type,
                 max_zoom_level: m.max_zoom_level,
+                constraints: m.constraints,
             }))
         } else {
             Ok(None)
@@ -60,12 +61,13 @@ impl<'a> KasaneDbRead<'a> {
         {
             let (k_bytes, v_bytes) = iter?;
             let (_, name) = crate::db_init::DbIdAndName::bytes_decode(k_bytes).unwrap();
-            let m = heed::types::SerdeBincode::<crate::models::database::table::TableMetadata>::bytes_decode(v_bytes).unwrap();
+            let m = heed::types::SerdeJson::<crate::models::database::table::TableMetadata>::bytes_decode(v_bytes).unwrap();
             tables.push(Table {
                 id: m.id,
                 name: name.to_string(),
                 data_type: m.data_type,
                 max_zoom_level: m.max_zoom_level,
+                constraints: m.constraints,
             });
         }
         Ok(tables)

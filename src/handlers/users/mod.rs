@@ -247,7 +247,7 @@ pub async fn set_privilege(
 
 /// データベース権限の削除
 ///
-/// 指定したユーザーから、特定のデータベースへのアクセス権限を削除します。この操作はGlobal Adminのみ実行可能です。
+/// 指定したユーザーから、特定のデータベースへのアクセス権限を削除します。この操作はグローバル管理者のみ実行可能です。
 #[utoipa::path(
     delete,
     path = "/users/{username}/privileges/{db_name}",

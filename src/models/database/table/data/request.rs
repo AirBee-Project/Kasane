@@ -44,13 +44,13 @@ pub struct RemoveDataRequest {
 }
 
 #[derive(Debug, Deserialize, ToSchema, Default, Clone, Copy, PartialEq, Eq)]
-/// 各Tableのmax_zoom_levelよりも小さなIDが入力された場合の挙動を設定できる
+/// テーブルの max_zoom_level よりも大きなズームレベル値の空間IDが入力された場合の処理方針
 pub enum ZoomLevelPolicy {
     #[default]
-    ///エラーを返す
+    /// テーブルの max_zoom_level を超える空間IDが入力された場合に、エラー（400 Bad Request）を返す
     Error,
-    ///そのIDを無視する
+    /// テーブルの max_zoom_level を超える空間IDを処理対象から除外し、無視して続行する
     Ignore,
-    ///そのIDを含むmax_zoom_levelのIDに正規化する
+    /// テーブルの max_zoom_level を超える空間IDを、その範囲を内包する max_zoom_level の親空間IDに自動的に正規化して処理する
     Normalize,
 }

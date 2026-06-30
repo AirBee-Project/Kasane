@@ -42,6 +42,87 @@ async fn test_table_data_insert_single_id() {
     );
 }
 
+/// TinyInt型のデータ挿入およびその範囲外の値がバリデーションエラーになるかを検証する。
+#[tokio::test]
+async fn test_table_data_insert_tinyint() {
+    let test_app = TestApp::new();
+    test_app.create_database("test_db").await;
+    test_app
+        .create_table("test_db", "test_table", "TinyInt", 25)
+        .await;
+
+    let single_id_query =
+        serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
+
+    // Valid value
+    put_data(
+        &test_app,
+        "test_table",
+        &serde_json::json!({ "value": 127, "spatial_ids": single_id_query }),
+    )
+    .await;
+
+    let result_json = search_data(&test_app, "test_table", &single_id_query).await;
+    assert_first_entry(
+        &result_json,
+        127i64,
+        RawSingleId {
+            z: 20,
+            f: 0,
+            x: 931386,
+            y: 412905,
+        },
+    );
+
+    // Invalid value (Out of range)
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/databases/test_db/tables/test_table/data")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            serde_json::to_string(
+                &serde_json::json!({ "value": 128, "spatial_ids": single_id_query }),
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+/// Double型のデータ挿入および取得が正常に行えるかを検証する。
+#[tokio::test]
+async fn test_table_data_insert_double() {
+    let test_app = TestApp::new();
+    test_app.create_database("test_db").await;
+    test_app
+        .create_table("test_db", "test_table", "Double", 25)
+        .await;
+
+    let single_id_query =
+        serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
+
+    put_data(
+        &test_app,
+        "test_table",
+        &serde_json::json!({ "value": 9.99, "spatial_ids": single_id_query }),
+    )
+    .await;
+
+    let result_json = search_data(&test_app, "test_table", &single_id_query).await;
+    assert_first_entry(
+        &result_json,
+        9.99f64,
+        RawSingleId {
+            z: 20,
+            f: 0,
+            x: 931386,
+            y: 412905,
+        },
+    );
+}
+
 /// singleIdで指定した空間IDに、テーブルの型と一致しない値を挿入した際にエラーが返るかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_single_id_error() {
@@ -567,4 +648,184 @@ async fn test_table_data_deep_split() {
             y: 0,
         },
     );
+}
+
+#[tokio::test]
+/// Enum型のテーブルに対して、許可された値の挿入が成功することを検証する。
+async fn test_table_data_insert_enum_success() {
+    let test_app = TestApp::new();
+    test_app.create_database("test_db").await;
+
+    let create_body = serde_json::json!({
+        "name": "enum_table",
+        "data_type": "Enum",
+        "max_zoom_level": 25,
+        "constraints": {
+            "type": "Enum",
+            "choices": ["Apple", "Banana", "Orange"]
+        }
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/test_db/tables")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
+        .unwrap();
+
+    test_app.app.clone().oneshot(req).await.unwrap();
+
+    let single_id_query =
+        serde_json::json!([{ "z": 20, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
+
+    put_data(
+        &test_app,
+        "enum_table",
+        &serde_json::json!({ "value": "Banana", "spatial_ids": single_id_query }),
+    )
+    .await;
+
+    let result_json = search_data(&test_app, "enum_table", &single_id_query).await;
+    assert_first_entry(
+        &result_json,
+        "Banana".to_string(),
+        RawSingleId {
+            z: 20,
+            f: 0,
+            x: 0,
+            y: 0,
+        },
+    );
+}
+
+#[tokio::test]
+/// Enum型のテーブルに対して、許可されていない値の挿入が失敗することを検証する。
+async fn test_table_data_insert_enum_failure() {
+    let test_app = TestApp::new();
+    test_app.create_database("test_db").await;
+
+    let create_body = serde_json::json!({
+        "name": "enum_table",
+        "data_type": "Enum",
+        "max_zoom_level": 25,
+        "constraints": {
+            "type": "Enum",
+            "choices": ["Apple", "Banana", "Orange"]
+        }
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/test_db/tables")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
+        .unwrap();
+
+    test_app.app.clone().oneshot(req).await.unwrap();
+
+    let single_id_query =
+        serde_json::json!([{ "z": 20, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
+
+    let req = Request::builder()
+        .method("PUT")
+        .uri(format!("/databases/test_db/tables/{}/data", "enum_table"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            serde_json::to_string(
+                &serde_json::json!({ "value": "Grape", "spatial_ids": single_id_query }),
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+/// Presence型のテーブルに対して、null の挿入が成功することを検証する。
+async fn test_table_data_insert_presence_success() {
+    let test_app = TestApp::new();
+    test_app.create_database("test_db").await;
+
+    let create_body = serde_json::json!({
+        "name": "presence_table",
+        "data_type": "Presence",
+        "max_zoom_level": 25
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/test_db/tables")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
+        .unwrap();
+
+    test_app.app.clone().oneshot(req).await.unwrap();
+
+    let single_id_query =
+        serde_json::json!([{ "z": 20, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
+
+    put_data(
+        &test_app,
+        "presence_table",
+        &serde_json::json!({ "value": null, "spatial_ids": single_id_query }),
+    )
+    .await;
+
+    let result_json = search_data(&test_app, "presence_table", &single_id_query).await;
+
+    assert_first_entry(
+        &result_json,
+        serde_json::Value::Null,
+        RawSingleId {
+            z: 20,
+            f: 0,
+            x: 0,
+            y: 0,
+        },
+    );
+}
+
+#[tokio::test]
+/// Presence型のテーブルに対して、null 以外の値の挿入が失敗することを検証する。
+async fn test_table_data_insert_presence_failure() {
+    let test_app = TestApp::new();
+    test_app.create_database("test_db").await;
+
+    let create_body = serde_json::json!({
+        "name": "presence_table",
+        "data_type": "Presence",
+        "max_zoom_level": 25
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/test_db/tables")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
+        .unwrap();
+
+    test_app.app.clone().oneshot(req).await.unwrap();
+
+    let single_id_query =
+        serde_json::json!([{ "z": 20, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
+
+    let req = Request::builder()
+        .method("PUT")
+        .uri(format!(
+            "/databases/test_db/tables/{}/data",
+            "presence_table"
+        ))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            serde_json::to_string(
+                &serde_json::json!({ "value": "some_value", "spatial_ids": single_id_query }),
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }

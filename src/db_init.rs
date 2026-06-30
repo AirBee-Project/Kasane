@@ -121,7 +121,7 @@ pub struct AppDb {
 
     /// テーブルの一覧とメタデータを管理する
     /// Key: `DatabaseId` と テーブル名 (`DbIdAndName`) -> Value: `TableMetadata`
-    pub tables: Database<DbIdAndName, SerdeBincode<TableMetadata>>,
+    pub tables: Database<DbIdAndName, SerdeJson<TableMetadata>>,
 
     /// `TableId` の存在確認やルックアップに用いるインデックス
     /// Key: `TableId` -> Value: `Unit` (値なし)

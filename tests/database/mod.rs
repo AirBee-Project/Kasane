@@ -115,4 +115,151 @@ async fn test_remove_database() {
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
 
+/// データベースの削除時に関連するユーザー権限もクリーンアップされるかを検証する。
+#[tokio::test]
+async fn test_database_remove_cleans_up_privileges() {
+    let test_app = DbTestApp::new();
+
+    // 1. ユーザーを作成する
+    let req = Request::builder()
+        .method("POST")
+        .uri("/users")
+        .header("Content-Type", "application/json")
+        .body(Body::from(
+            r#"{"username": "test_user", "password": "password", "is_global_admin": false}"#,
+        ))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // 2. データベースを作成する
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases")
+        .header("Content-Type", "application/json")
+        .body(Body::from(r#"{"name": "test_db"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // 3. ユーザーに権限を付与する
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/users/test_user/privileges/test_db")
+        .header("Content-Type", "application/json")
+        .body(Body::from(r#"{"role": "Manage"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    // 権限が存在することを確認する
+    let req = Request::builder()
+        .method("GET")
+        .uri("/users/test_user/privileges")
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json.as_array().unwrap().len(), 1);
+
+    // 4. データベースを削除する
+    let req = Request::builder()
+        .method("DELETE")
+        .uri("/databases/test_db")
+        .body(Body::empty())
+        .unwrap();
+    test_app.app.clone().oneshot(req).await.unwrap();
+
+    // 5. 権限がクリーンアップされたことを確認する
+    let req = Request::builder()
+        .method("GET")
+        .uri("/users/test_user/privileges")
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json.as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+/// データベースの名前変更が正常に行えるかを検証する。
+async fn test_database_rename_success() {
+    let test_app = DbTestApp::new();
+
+    // 1. データベースを作成する
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases")
+        .header("Content-Type", "application/json")
+        .body(Body::from(r#"{"name": "test_db"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // 2. データベースの名前を変更する
+    let req = Request::builder()
+        .method("PATCH")
+        .uri("/databases/test_db")
+        .header("Content-Type", "application/json")
+        .body(Body::from(r#"{"new_name": "renamed_db"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 3. 変更後のデータベースが存在することを確認する
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases/renamed_db")
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 4. 変更前のデータベースが存在しないことを確認する
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases/test_db")
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+/// データベースのコピーが正常に行えるかを検証する。
+async fn test_database_copy_success() {
+    let test_app = DbTestApp::new();
+
+    // 1. コピー元データベースを作成する
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases")
+        .header("Content-Type", "application/json")
+        .body(Body::from(r#"{"name": "src_db"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // 2. データベースをコピーする
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/src_db/copy")
+        .header("Content-Type", "application/json")
+        .body(Body::from(r#"{"destination_name": "copied_db"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // 3. コピー先データベースが存在することを確認する
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases/copied_db")
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+}
+
 pub mod table;
