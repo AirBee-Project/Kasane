@@ -8,6 +8,7 @@ use crate::models::database::table::data::{
 };
 use crate::models::database::table::{
     CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse, TableSummary,
+    UpdateTableRequest,
 };
 use crate::models::database::{CreateDatabaseRequest, DatabaseInfoResponse};
 use crate::models::spatial_id::SpatialId;
@@ -69,6 +70,8 @@ impl utoipa::Modify for SecurityAddon {
         crate::handlers::database::table::list::table_list,
         // GET  /databases/{db_name}/tables/{table_name}
         crate::handlers::database::table::info::table_info,
+        // PATCH /databases/{db_name}/tables/{table_name}
+        crate::handlers::database::table::update::table_update_handler,
         // DELETE /databases/{db_name}/tables/{table_name}
         crate::handlers::database::table::remove::remove_table,
         // PUT    /databases/{db_name}/tables/{table_name}/data
@@ -99,6 +102,8 @@ impl utoipa::Modify for SecurityAddon {
         DatabaseInfoResponse,
         // Table
         CreateTableRequest,
+        UpdateTableRequest,
+        crate::models::database::table::TableConstraints,
         TableDataType,
         TableInfoResponse,
         TableSummary,

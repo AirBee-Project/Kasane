@@ -72,13 +72,14 @@ pub async fn get_stream(
 
                     if !sent_hashes.contains(&hash_val) {
                         sent_hashes.insert(hash_val);
-                        let json_value = match restore_value(data_type, &bytes) {
-                            Ok(v) => v,
-                            Err(e) => {
-                                let _ = out_sender.send(Err(e)).await;
-                                break;
-                            }
-                        };
+                        let json_value =
+                            match restore_value(data_type, table.constraints.as_ref(), &bytes) {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    let _ = out_sender.send(Err(e)).await;
+                                    break;
+                                }
+                            };
                         let dict_event = StreamDictionaryEvent {
                             value_ref: value_ref.clone(),
                             value: json_value,

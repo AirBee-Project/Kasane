@@ -58,7 +58,7 @@ pub async fn get(
             OutputFormat::SingleId => {
                 let mut data = Vec::with_capacity(groups.len());
                 for (bytes, flex_ids) in groups {
-                    let json_value = restore_value(data_type, &bytes)?;
+                    let json_value = restore_value(data_type, table.constraints.as_ref(), &bytes)?;
                     let value_ref = dictionary.len();
                     dictionary.push(json_value);
 
@@ -97,7 +97,7 @@ pub async fn get(
             OutputFormat::RangeId => {
                 let mut data = Vec::with_capacity(groups.len());
                 for (bytes, flex_ids) in groups {
-                    let json_value = restore_value(data_type, &bytes)?;
+                    let json_value = restore_value(data_type, table.constraints.as_ref(), &bytes)?;
                     let value_ref = dictionary.len();
                     dictionary.push(json_value);
 
@@ -135,7 +135,7 @@ pub async fn get(
             OutputFormat::FlexId => {
                 let mut data = Vec::with_capacity(groups.len());
                 for (bytes, flex_ids) in groups {
-                    let json_value = restore_value(data_type, &bytes)?;
+                    let json_value = restore_value(data_type, table.constraints.as_ref(), &bytes)?;
                     let value_ref = dictionary.len();
                     dictionary.push(json_value);
 

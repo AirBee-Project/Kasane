@@ -115,4 +115,71 @@ async fn test_remove_database() {
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
 
+#[tokio::test]
+async fn test_database_remove_cleans_up_privileges() {
+    let test_app = DbTestApp::new();
+
+    // 1. Create a user
+    let req = Request::builder()
+        .method("POST")
+        .uri("/users")
+        .header("Content-Type", "application/json")
+        .body(Body::from(
+            r#"{"username": "test_user", "password": "password", "is_global_admin": false}"#,
+        ))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // 2. Create a database
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases")
+        .header("Content-Type", "application/json")
+        .body(Body::from(r#"{"name": "test_db"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // 3. Grant privilege to the user
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/users/test_user/privileges/test_db")
+        .header("Content-Type", "application/json")
+        .body(Body::from(r#"{"role": "Manage"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    // Verify privilege exists
+    let req = Request::builder()
+        .method("GET")
+        .uri("/users/test_user/privileges")
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json.as_array().unwrap().len(), 1);
+
+    // 4. Delete the database
+    let req = Request::builder()
+        .method("DELETE")
+        .uri("/databases/test_db")
+        .body(Body::empty())
+        .unwrap();
+    test_app.app.clone().oneshot(req).await.unwrap();
+
+    // 5. Verify privilege is cleaned up
+    let req = Request::builder()
+        .method("GET")
+        .uri("/users/test_user/privileges")
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json.as_array().unwrap().len(), 0);
+}
+
 pub mod table;

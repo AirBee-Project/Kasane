@@ -55,10 +55,10 @@ impl<'a> KasaneDbWrite<'a> {
                 name: name.to_string(),
             });
         }
-        let _meta = {
+        let db_id = {
             let db = self.db.databases;
             if let Some(meta_data) = db.get(&self.write_txn, name)? {
-                meta_data
+                meta_data.id
             } else {
                 return Err(AppError::DatabaseNotFound {
                     name: name.to_string(),
@@ -66,9 +66,19 @@ impl<'a> KasaneDbWrite<'a> {
             }
         };
 
-        // Note: The caller is expected to delete all tables under this database
-        // before deleting the database itself, or we do it here.
-        // For simplicity, we just remove the database metadata here.
+        // データベース削除前に、関連するユーザー権限をすべて削除する。
+        // `user_privileges` は (UserId, DatabaseId) をキーにしているため、全走査して対象の DatabaseId を探す。
+        let privs_table = self.db.user_privileges;
+        let mut priv_keys_to_delete = Vec::new();
+        for item in privs_table.iter(&self.write_txn)? {
+            let (k, _) = item?;
+            if k.1 == db_id {
+                priv_keys_to_delete.push(k);
+            }
+        }
+        for k in priv_keys_to_delete {
+            privs_table.delete(&mut self.write_txn, &k)?;
+        }
 
         let db = self.db.databases;
         db.delete(&mut self.write_txn, name)?;

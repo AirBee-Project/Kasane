@@ -186,6 +186,50 @@ paths:
           description: テーブルが存在しない
       security:
       - bearer_auth: []
+    patch:
+      tags:
+      - tables
+      summary: テーブルの更新
+      description: テーブルの名前変更や値の制約を更新する。この操作はデータベースの Manage 権限が必要です。
+      operationId: table_update_handler
+      parameters:
+      - name: db_name
+        in: path
+        description: データベース名
+        required: true
+        schema:
+          type: string
+      - name: table_name
+        in: path
+        description: テーブル名
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTableRequest'
+        required: true
+      responses:
+        '200':
+          description: テーブルの更新に成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TableInfoResponse'
+        '400':
+          description: リクエストが不正（制約違反やパラメータエラーなど）
+        '401':
+          description: 認証エラー
+        '403':
+          description: 権限が不足している
+        '404':
+          description: データベースまたはテーブルが見つからない
+        '409':
+          description: 同名のテーブルが既に存在する
+      security:
+      - bearer_auth: []
   /databases/{db_name}/tables/{table_name}/data:
     put:
       tags:
@@ -627,7 +671,7 @@ paths:
       tags:
       - Users
       summary: データベース権限の設定
-      description: 指定したユーザーに対し、特定のデータベースへのアクセス権限（Read, Write, Manage）を設定します。この操作はグローバル管理者のみ実行可能です。
+      description: 指定したユーザーに対し、特定のデータベースへのアクセス権限（Read, Write, Manage）を設定します。この操作はグローバル管理者、または対象データベースのManage権限を持つユーザーが実行可能です。
       operationId: set_privilege
       parameters:
       - name: username
@@ -662,7 +706,7 @@ paths:
       tags:
       - Users
       summary: データベース権限の削除
-      description: 指定したユーザーから、特定のデータベースへのアクセス権限を削除します。この操作はGlobal Adminのみ実行可能です。
+      description: 指定したユーザーから、特定のデータベースへのアクセス権限を削除します。この操作はグローバル管理者、または対象データベースのManage権限を持つユーザーが実行可能です。
       operationId: delete_privilege
       parameters:
       - name: username
@@ -716,6 +760,11 @@ components:
           example: 25
           maximum: 30
           minimum: 0
+        constraints:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/TableConstraints'
+            description: 値に対する制約。指定しない場合は制約なしとなる。
     CreateUserRequest:
       type: object
       required:
@@ -1264,6 +1313,227 @@ components:
               type: string
               enum:
               - data
+    TableConstraints:
+      oneOf:
+      - type: object
+        description: '`Text` 型に対する制約。'
+        required:
+        - type
+        properties:
+          min_length:
+            type:
+            - integer
+            - 'null'
+            description: 最小文字数
+            minimum: 0
+          max_length:
+            type:
+            - integer
+            - 'null'
+            description: 最大文字数
+            minimum: 0
+          type:
+            type: string
+            enum:
+            - Text
+        example:
+          max_length: 100
+          min_length: 1
+          type: Text
+      - type: object
+        description: '`TinyInt` 型に対する制約。'
+        required:
+        - type
+        properties:
+          min:
+            type:
+            - integer
+            - 'null'
+            format: int32
+            description: 最小値（境界値を含む）
+          max:
+            type:
+            - integer
+            - 'null'
+            format: int32
+            description: 最大値（境界値を含む）
+          type:
+            type: string
+            enum:
+            - TinyInt
+        example:
+          max: 127
+          min: -128
+          type: TinyInt
+      - type: object
+        description: '`SmallInt` 型に対する制約。'
+        required:
+        - type
+        properties:
+          min:
+            type:
+            - integer
+            - 'null'
+            format: int32
+            description: 最小値（境界値を含む）
+          max:
+            type:
+            - integer
+            - 'null'
+            format: int32
+            description: 最大値（境界値を含む）
+          type:
+            type: string
+            enum:
+            - SmallInt
+        example:
+          max: 32767
+          min: -32768
+          type: SmallInt
+      - type: object
+        description: '`Int` 型に対する制約。'
+        required:
+        - type
+        properties:
+          min:
+            type:
+            - integer
+            - 'null'
+            format: int32
+            description: 最小値（境界値を含む）
+          max:
+            type:
+            - integer
+            - 'null'
+            format: int32
+            description: 最大値（境界値を含む）
+          type:
+            type: string
+            enum:
+            - Int
+        example:
+          max: 100
+          min: 0
+          type: Int
+      - type: object
+        description: '`BigInt` 型に対する制約。'
+        required:
+        - type
+        properties:
+          min:
+            type:
+            - integer
+            - 'null'
+            format: int64
+            description: 最小値（境界値を含む）
+          max:
+            type:
+            - integer
+            - 'null'
+            format: int64
+            description: 最大値（境界値を含む）
+          type:
+            type: string
+            enum:
+            - BigInt
+        example:
+          max: 100
+          min: 0
+          type: BigInt
+      - type: object
+        description: '`Float` 型に対する制約。'
+        required:
+        - type
+        properties:
+          min:
+            type:
+            - number
+            - 'null'
+            format: float
+            description: 最小値（境界値を含む）
+          max:
+            type:
+            - number
+            - 'null'
+            format: float
+            description: 最大値（境界値を含む）
+          type:
+            type: string
+            enum:
+            - Float
+        example:
+          max: 100.0
+          min: 0.0
+          type: Float
+      - type: object
+        description: '`Double` 型に対する制約。'
+        required:
+        - type
+        properties:
+          min:
+            type:
+            - number
+            - 'null'
+            format: double
+            description: 最小値（境界値を含む）
+          max:
+            type:
+            - number
+            - 'null'
+            format: double
+            description: 最大値（境界値を含む）
+          type:
+            type: string
+            enum:
+            - Double
+        example:
+          max: 100.0
+          min: 0.0
+          type: Double
+      - type: object
+        description: '`Enum` 型に対する制約。'
+        required:
+        - choices
+        - type
+        properties:
+          choices:
+            type: array
+            items:
+              type: string
+            description: 許容される文字列の配列
+          mapping:
+            type: object
+            description: '内部用: 文字列から整数IDへのマッピング'
+            additionalProperties:
+              type: integer
+              format: int32
+              minimum: 0
+            propertyNames:
+              type: string
+          next_id:
+            type: integer
+            format: int32
+            description: '内部用: 次に割り当てる整数ID'
+            minimum: 0
+          type:
+            type: string
+            enum:
+            - Enum
+        example:
+          choices:
+          - red
+          - blue
+          - green
+          type: Enum
+      description: |-
+        テーブルの値に対する制約。
+
+        `type` フィールドで制約の種類を指定する。指定できる種類は対象のデータ型に依存する。
+        - `Text`: 文字列の長さ制約（`min_length`, `max_length`）
+        - `Int` / `Float`: 数値の範囲制約（`min`, `max`）
+        - `Enum`: 許容される選択肢の制約（`choices`）
+
+        `Presence` および `Boolean` には制約を指定できない。
     TableDataType:
       type: string
       description: Table内の時空間IDに付与する値の型。
@@ -1272,6 +1542,12 @@ components:
       - Int
       - Float
       - Boolean
+      - Enum
+      - Presence
+      - TinyInt
+      - SmallInt
+      - BigInt
+      - Double
     TableInfoResponse:
       type: object
       description: 単一テーブルの詳細情報。保持する空間ID(FlexId)の総数 `count` を必ず含む。
@@ -1296,6 +1572,10 @@ components:
           format: int64
           example: 100
           minimum: 0
+        constraints:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/TableConstraints'
     TableListResponse:
       type: array
       items:
@@ -1318,6 +1598,10 @@ components:
           format: int32
           example: 25
           minimum: 0
+        constraints:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/TableConstraints'
     UpdateAdminRequest:
       type: object
       required:
@@ -1341,6 +1625,124 @@ components:
       properties:
         role:
           $ref: '#/components/schemas/UserRole'
+    UpdateTableConstraints:
+      oneOf:
+      - type: object
+        required:
+        - type
+        properties:
+          min_length:
+            type:
+            - integer
+            - 'null'
+            minimum: 0
+          max_length:
+            type:
+            - integer
+            - 'null'
+            minimum: 0
+          type:
+            type: string
+            enum:
+            - Text
+        example:
+          max_length: 100
+          min_length: 1
+          type: Text
+      - type: object
+        required:
+        - type
+        properties:
+          min:
+            type:
+            - integer
+            - 'null'
+            format: int32
+          max:
+            type:
+            - integer
+            - 'null'
+            format: int32
+          type:
+            type: string
+            enum:
+            - Int
+        example:
+          max: 100
+          min: 0
+          type: Int
+      - type: object
+        required:
+        - type
+        properties:
+          min:
+            type:
+            - number
+            - 'null'
+            format: float
+          max:
+            type:
+            - number
+            - 'null'
+            format: float
+          type:
+            type: string
+            enum:
+            - Float
+        example:
+          max: 100.0
+          min: 0.0
+          type: Float
+      - type: object
+        required:
+        - type
+        properties:
+          choices:
+            type:
+            - array
+            - 'null'
+            items:
+              type: string
+          add_choices:
+            type:
+            - array
+            - 'null'
+            items:
+              type: string
+          remove_choices:
+            type:
+            - array
+            - 'null'
+            items:
+              type: string
+          type:
+            type: string
+            enum:
+            - Enum
+        example:
+          add_choices:
+          - yellow
+          remove_choices:
+          - red
+          type: Enum
+    UpdateTableRequest:
+      type: object
+      description: テーブルの名前変更または制約を更新する
+      properties:
+        name:
+          type:
+          - string
+          - 'null'
+          example: example_table_renamed
+        constraints:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/UpdateTableConstraints'
+            description: 更新後の値に対する制約。指定しない場合は制約を削除する。
+        validate_existing_data:
+          type: boolean
+          default: true
+          example: true
     UserInfoResponse:
       type: object
       required:

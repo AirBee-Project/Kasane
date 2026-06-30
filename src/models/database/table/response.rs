@@ -1,4 +1,5 @@
 use super::TableDataType;
+use crate::models::database::table::data_type::TableConstraints;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -11,6 +12,8 @@ pub struct TableSummary {
     pub data_type: TableDataType,
     #[schema(example = 25)]
     pub max_zoom_level: u8,
+    #[schema(example = json!({"type": "Int", "min": 0, "max": 100}))]
+    pub constraints: Option<TableConstraints>,
 }
 
 /// 単一テーブルの詳細情報。保持する空間ID(FlexId)の総数 `count` を必ず含む。
@@ -24,6 +27,8 @@ pub struct TableInfoResponse {
     pub max_zoom_level: u8,
     #[schema(example = 100)]
     pub count: u64,
+    #[schema(example = json!({"type": "Int", "min": 0, "max": 100}))]
+    pub constraints: Option<TableConstraints>,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]

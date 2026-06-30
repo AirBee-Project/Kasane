@@ -466,6 +466,65 @@ async fn test_database_list_and_info_authorization() {
 }
 
 #[tokio::test]
+async fn test_manage_user_can_set_privileges() {
+    let test_app = PermissionTestApp::new();
+    let root_token = test_app.root_token();
+
+    // 1. Create a DB
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", root_token))
+        .body(Body::from(r#"{"name": "test_db"}"#))
+        .unwrap();
+    test_app.app.clone().oneshot(req).await.unwrap();
+
+    // 2. Create manage_user and normal_user
+    let manage_token =
+        create_user_and_token(&test_app.app, &root_token, "manage_user", false).await;
+    let _normal_token =
+        create_user_and_token(&test_app.app, &root_token, "normal_user", false).await;
+
+    // 3. Grant Manage privilege to manage_user (as root)
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/users/manage_user/privileges/test_db")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", root_token))
+        .body(Body::from(r#"{"role": "Manage"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    // 4. manage_user tries to grant Read privilege to normal_user (should succeed)
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/users/normal_user/privileges/test_db")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", manage_token))
+        .body(Body::from(r#"{"role": "Read"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    // 5. verify normal_user has Read privilege (as root)
+    let req = Request::builder()
+        .method("GET")
+        .uri("/users/normal_user/privileges")
+        .header("Authorization", format!("Bearer {}", root_token))
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let arr = json.as_array().unwrap();
+    assert_eq!(arr.len(), 1);
+    assert_eq!(arr[0]["db_name"], "test_db");
+    assert_eq!(arr[0]["role"], "Read");
+}
+
+#[tokio::test]
 /// 権限を持たないユーザーがデータベース内のデータにアクセスできないかを検証する。
 async fn test_no_privileges() {
     let test_app = PermissionTestApp::new();
