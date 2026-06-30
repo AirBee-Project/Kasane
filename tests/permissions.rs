@@ -518,9 +518,8 @@ async fn test_manage_user_can_set_privileges() {
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    
-    assert_eq!(json.as_array().unwrap().len(), 0);
 
+    assert_eq!(json.as_array().unwrap().len(), 0);
 }
 
 #[tokio::test]

@@ -145,47 +145,78 @@ impl From<TableDataType> for JsonValueType {
 impl TableConstraints {
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            TableConstraints::Text { min_length, max_length } => {
+            TableConstraints::Text {
+                min_length,
+                max_length,
+            } => {
                 if let (Some(min), Some(max)) = (min_length, max_length)
-                    && min > max {
-                        return Err(format!("最小文字数 ({}) は最大文字数 ({}) 以下である必要があります", min, max));
-                    }
+                    && min > max
+                {
+                    return Err(format!(
+                        "最小文字数 ({}) は最大文字数 ({}) 以下である必要があります",
+                        min, max
+                    ));
+                }
             }
             TableConstraints::TinyInt { min, max } => {
                 if let (Some(min), Some(max)) = (min, max)
-                    && min > max {
-                        return Err(format!("最小値 ({}) は最大値 ({}) 以下である必要があります", min, max));
-                    }
+                    && min > max
+                {
+                    return Err(format!(
+                        "最小値 ({}) は最大値 ({}) 以下である必要があります",
+                        min, max
+                    ));
+                }
             }
             TableConstraints::SmallInt { min, max } => {
                 if let (Some(min), Some(max)) = (min, max)
-                    && min > max {
-                        return Err(format!("最小値 ({}) は最大値 ({}) 以下である必要があります", min, max));
-                    }
+                    && min > max
+                {
+                    return Err(format!(
+                        "最小値 ({}) は最大値 ({}) 以下である必要があります",
+                        min, max
+                    ));
+                }
             }
             TableConstraints::Int { min, max } => {
                 if let (Some(min), Some(max)) = (min, max)
-                    && min > max {
-                        return Err(format!("最小値 ({}) は最大値 ({}) 以下である必要があります", min, max));
-                    }
+                    && min > max
+                {
+                    return Err(format!(
+                        "最小値 ({}) は最大値 ({}) 以下である必要があります",
+                        min, max
+                    ));
+                }
             }
             TableConstraints::BigInt { min, max } => {
                 if let (Some(min), Some(max)) = (min, max)
-                    && min > max {
-                        return Err(format!("最小値 ({}) は最大値 ({}) 以下である必要があります", min, max));
-                    }
+                    && min > max
+                {
+                    return Err(format!(
+                        "最小値 ({}) は最大値 ({}) 以下である必要があります",
+                        min, max
+                    ));
+                }
             }
             TableConstraints::Float { min, max } => {
                 if let (Some(min), Some(max)) = (min, max)
-                    && min > max {
-                        return Err(format!("最小値 ({}) は最大値 ({}) 以下である必要があります", min, max));
-                    }
+                    && min > max
+                {
+                    return Err(format!(
+                        "最小値 ({}) は最大値 ({}) 以下である必要があります",
+                        min, max
+                    ));
+                }
             }
             TableConstraints::Double { min, max } => {
                 if let (Some(min), Some(max)) = (min, max)
-                    && min > max {
-                        return Err(format!("最小値 ({}) は最大値 ({}) 以下である必要があります", min, max));
-                    }
+                    && min > max
+                {
+                    return Err(format!(
+                        "最小値 ({}) は最大値 ({}) 以下である必要があります",
+                        min, max
+                    ));
+                }
             }
             TableConstraints::Enum { .. } => {}
         }

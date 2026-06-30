@@ -123,9 +123,10 @@ impl<'a> KasaneDbWrite<'a> {
         }
 
         if let Some(c) = &actual_constraints
-            && let Err(msg) = c.validate() {
-                return Err(AppError::ConstraintViolation { reason: msg });
-            }
+            && let Err(msg) = c.validate()
+        {
+            return Err(AppError::ConstraintViolation { reason: msg });
+        }
 
         let meta = TableMetadata {
             id,
@@ -221,7 +222,10 @@ impl<'a> KasaneDbWrite<'a> {
                     }
                     (
                         TableDataType::TinyInt,
-                        crate::models::database::table::UpdateTableConstraints::TinyInt { min, max },
+                        crate::models::database::table::UpdateTableConstraints::TinyInt {
+                            min,
+                            max,
+                        },
                     ) => {
                         let (mut current_min, mut current_max) = match &table.constraints {
                             Some(TableConstraints::TinyInt { min, max }) => (*min, *max),
@@ -240,7 +244,10 @@ impl<'a> KasaneDbWrite<'a> {
                     }
                     (
                         TableDataType::SmallInt,
-                        crate::models::database::table::UpdateTableConstraints::SmallInt { min, max },
+                        crate::models::database::table::UpdateTableConstraints::SmallInt {
+                            min,
+                            max,
+                        },
                     ) => {
                         let (mut current_min, mut current_max) = match &table.constraints {
                             Some(TableConstraints::SmallInt { min, max }) => (*min, *max),
@@ -367,7 +374,8 @@ impl<'a> KasaneDbWrite<'a> {
                             if !mapping.contains_key(c) {
                                 if next_id == u16::MAX {
                                     return Err(AppError::ConstraintViolation {
-                                        reason: "Enumの選択肢が上限 (65535) に達しました".to_string(),
+                                        reason: "Enumの選択肢が上限 (65535) に達しました"
+                                            .to_string(),
                                     });
                                 }
                                 if next_id == 0 {
@@ -397,9 +405,10 @@ impl<'a> KasaneDbWrite<'a> {
             };
 
             if let Some(c) = &new_c
-                && let Err(msg) = c.validate() {
-                    return Err(AppError::ConstraintViolation { reason: msg });
-                }
+                && let Err(msg) = c.validate()
+            {
+                return Err(AppError::ConstraintViolation { reason: msg });
+            }
 
             table.constraints = new_c;
 

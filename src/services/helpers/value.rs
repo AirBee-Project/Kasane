@@ -11,17 +11,19 @@ fn check_numeric_constraint<T: PartialOrd + std::fmt::Display>(
     max: Option<T>,
 ) -> Result<(), AppError> {
     if let Some(min_val) = min
-        && value < min_val {
-            return Err(AppError::ConstraintViolation {
-                reason: format!("値 {} は最小値 {} を下回っています", value, min_val),
-            });
-        }
+        && value < min_val
+    {
+        return Err(AppError::ConstraintViolation {
+            reason: format!("値 {} は最小値 {} を下回っています", value, min_val),
+        });
+    }
     if let Some(max_val) = max
-        && value > max_val {
-            return Err(AppError::ConstraintViolation {
-                reason: format!("値 {} は最大値 {} を上回っています", value, max_val),
-            });
-        }
+        && value > max_val
+    {
+        return Err(AppError::ConstraintViolation {
+            reason: format!("値 {} は最大値 {} を上回っています", value, max_val),
+        });
+    }
     Ok(())
 }
 
