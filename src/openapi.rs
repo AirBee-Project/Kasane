@@ -4,7 +4,7 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use crate::models::auth::{LoginRequest, LoginResponse};
 use crate::models::database::table::data::{
     GetDataQuery, GetDataRequest, GetDataResponse, InsertDataRequest, OutputFormat,
-    RemoveDataRequest,
+    RemoveDataRequest, ZoomLevelPolicy,
 };
 use crate::models::database::table::{
     CopyTableRequest, CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse,
@@ -125,6 +125,7 @@ impl utoipa::Modify for SecurityAddon {
         OutputFormat,
         InsertDataRequest,
         RemoveDataRequest,
+        ZoomLevelPolicy,
         SpatialId,
         crate::models::database::table::data::StreamEventSingle,
         crate::models::database::table::data::StreamEventRange,

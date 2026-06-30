@@ -1975,7 +1975,7 @@ components:
       - Manage
     ZoomLevelPolicy:
       type: string
-      description: 各Tableのmax_zoom_levelよりも小さなIDが入力された場合の挙動を設定できる
+      description: テーブルの max_zoom_level よりも大きなズームレベル値の空間IDが入力された場合の処理方針
       enum:
       - Error
       - Ignore
