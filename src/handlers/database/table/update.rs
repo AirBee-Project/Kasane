@@ -3,7 +3,7 @@ use crate::{
     error::AppError,
     middleware::auth::AuthUser,
     models::{
-        database::table::{TableInfoResponse, UpdateTableRequest},
+        database::table::{TableSummary, UpdateTableRequest},
         users::UserRole,
     },
     services::database::table::table_update,
@@ -26,7 +26,7 @@ use axum::{
     ),
     request_body = UpdateTableRequest,
     responses(
-        (status = 200, description = "テーブルの更新に成功", body = TableInfoResponse),
+        (status = 200, description = "テーブルの更新に成功", body = TableSummary),
         (status = 400, description = "リクエストが不正（制約違反やパラメータエラーなど）"),
         (status = 401, description = "認証エラー"),
         (status = 403, description = "権限が不足している"),
@@ -42,7 +42,7 @@ pub async fn table_update_handler(
     Extension(auth_user): Extension<AuthUser>,
     Path((db_name, table_name)): Path<(String, String)>,
     Json(payload): Json<UpdateTableRequest>,
-) -> Result<Json<TableInfoResponse>, AppError> {
+) -> Result<Json<TableSummary>, AppError> {
     crate::middleware::auth::check_privilege(&state, &auth_user, &db_name, UserRole::Manage)
         .await?;
 

@@ -333,7 +333,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TableInfoResponse"
+                  "$ref": "#/components/schemas/TableSummary"
                 }
               }
             }

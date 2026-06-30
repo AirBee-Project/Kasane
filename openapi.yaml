@@ -217,7 +217,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TableInfoResponse'
+                $ref: '#/components/schemas/TableSummary'
         '400':
           description: リクエストが不正（制約違反やパラメータエラーなど）
         '401':
