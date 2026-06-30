@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use kasane_logic::{FlexId, IntoFlexIds, SpatialIdMap, SpatialIdSet};
 
@@ -41,17 +41,19 @@ impl<'a> KasaneDbWrite<'a> {
         data: &[u8],
     ) -> Result<(), AppError> {
         let by_leaf = self.group_by_leaf(table_id, ids.into_flex_ids())?;
+        let data_vec = data.to_vec();
         for (region, flex_ids) in by_leaf {
             let map =
                 shard::load_leaf_map(&self.db.tables_data, &self.write_txn, table_id, &region)?;
             self.apply_leaf(table_id, data_type, region, map, &flex_ids, |m| {
+                let mut target_set = SpatialIdSet::new();
                 for flex_id in &flex_ids {
                     let occupied_set: SpatialIdSet = m.get(flex_id).map(|(f, _)| f).collect();
-                    let mut target_set = SpatialIdSet::new();
+                    target_set.clear();
                     target_set.insert(flex_id.clone());
 
                     for f in (&target_set - &occupied_set).into_flex_ids() {
-                        m.insert(f, data.to_vec());
+                        m.insert(f, data_vec.clone());
                     }
                 }
             })?;
@@ -110,7 +112,6 @@ impl<'a> KasaneDbWrite<'a> {
 
             // パス圧縮により子は可変数（2 以上）。子を走査し、いずれかがポインタノードなら
             // このレベルは統合しない。全リーフ（＋空マーカ）で合算が閾値以下なら1リーフへ畳み込む。
-            let mut child_maps: Vec<SpatialIdMap<Vec<u8>>> = Vec::new();
             let mut combined = 0usize;
             let mut mergeable = true;
             for cr in &child_regions {
@@ -122,20 +123,15 @@ impl<'a> KasaneDbWrite<'a> {
                 else {
                     continue;
                 };
-                match ShardEntry::decode(bytes)? {
-                    ShardEntry::Leaf(map_bytes) => {
-                        let m = unsafe { SpatialIdMap::<Vec<u8>>::from_bytes(&map_bytes) }
-                            .map_err(|e| {
-                                AppError::InternalError(format!("rkyv deserialize: {e}"))
-                            })?;
-                        combined += m.count();
+                match ShardEntry::leaf_count(bytes)? {
+                    Some(count) => {
+                        combined += count as usize;
                         if combined > MERGE_FLEX_ID_THRESHOLD {
                             mergeable = false;
                             break;
                         }
-                        child_maps.push(m);
                     }
-                    ShardEntry::Pointers(_) => {
+                    None => {
                         mergeable = false;
                         break;
                     }
@@ -145,8 +141,18 @@ impl<'a> KasaneDbWrite<'a> {
                 break;
             }
 
+            // マージ可能確定後、子マップを実際にデシリアライズする
+            let mut child_maps: Vec<SpatialIdMap<Vec<u8>>> = Vec::new();
+            for cr in &child_regions {
+                let map =
+                    shard::load_leaf_map(&self.db.tables_data, &self.write_txn, table_id, cr)?;
+                if !map.is_empty() {
+                    child_maps.push(map);
+                }
+            }
+
             // 値インデックス用に、変更前の全子リーフのキーを集める。
-            let mut old_keys = HashSet::new();
+            let mut old_keys = FxHashSet::default();
             for m in &child_maps {
                 for (f, v) in m.iter() {
                     old_keys.insert(value_index::make_key(
@@ -160,7 +166,7 @@ impl<'a> KasaneDbWrite<'a> {
             // 子リーフ群を親領域へ畳み込む
             let merged = SpatialIdMap::merge_shards(parent_region.clone(), child_maps)?;
 
-            let mut new_keys = HashSet::new();
+            let mut new_keys = FxHashSet::default();
             for (f, v) in merged.iter() {
                 new_keys.insert(value_index::make_key(
                     table_id,
@@ -212,7 +218,7 @@ impl<'a> KasaneDbWrite<'a> {
         let mut scan: SpatialIdSet = input.iter().cloned().collect();
 
         // 変更前の重なりリーフからインデックスキーを計算
-        let mut old_keys = HashSet::new();
+        let mut old_keys = FxHashSet::default();
         let mut old_flex_ids = Vec::new();
         for (f, v) in map.get_overlapping(&scan) {
             old_keys.insert(value_index::make_key(
@@ -229,7 +235,7 @@ impl<'a> KasaneDbWrite<'a> {
         scan.extend(old_flex_ids);
 
         // 変更後の重なりリーフからインデックスキーを計算
-        let mut new_keys = HashSet::new();
+        let mut new_keys = FxHashSet::default();
         for (f, v) in map.get_overlapping(&scan) {
             new_keys.insert(value_index::make_key(
                 table_id,
@@ -254,8 +260,8 @@ impl<'a> KasaneDbWrite<'a> {
     /// キャッシュ効率が高いため、削除・追加ともにキーを昇順にソートしてから適用する。
     fn update_value_index(
         &mut self,
-        old_keys: HashSet<Vec<u8>>,
-        new_keys: HashSet<Vec<u8>>,
+        old_keys: FxHashSet<Vec<u8>>,
+        new_keys: FxHashSet<Vec<u8>>,
     ) -> Result<(), AppError> {
         let mut to_delete: Vec<&Vec<u8>> = old_keys.difference(&new_keys).collect();
         to_delete.sort_unstable();
@@ -277,7 +283,7 @@ impl<'a> KasaneDbWrite<'a> {
         &self,
         table_id: TableId,
         flex_ids: impl Iterator<Item = FlexId>,
-    ) -> Result<HashMap<FlexId, Vec<FlexId>>, AppError> {
+    ) -> Result<FxHashMap<FlexId, Vec<FlexId>>, AppError> {
         let ids: Vec<FlexId> = flex_ids.collect();
         shard::route_leaves_batched(&self.db.tables_data, &self.write_txn, table_id, &ids)
     }

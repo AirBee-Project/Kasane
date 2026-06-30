@@ -56,13 +56,13 @@ pub async fn get(
 
         match query_format {
             OutputFormat::SingleId => {
-                let mut data = Vec::new();
+                let mut data = Vec::with_capacity(groups.len());
                 for (bytes, flex_ids) in groups {
                     let json_value = restore_value(data_type, &bytes)?;
                     let value_ref = dictionary.len();
                     dictionary.push(json_value);
 
-                    let mut spatial_ids = Vec::new();
+                    let mut spatial_ids = Vec::with_capacity(flex_ids.len());
                     for flex_id in flex_ids {
                         for single_id in flex_id.into_single_ids() {
                             if let Some(left) = limit_left.as_mut() {
@@ -95,13 +95,13 @@ pub async fn get(
                 }))
             }
             OutputFormat::RangeId => {
-                let mut data = Vec::new();
+                let mut data = Vec::with_capacity(groups.len());
                 for (bytes, flex_ids) in groups {
                     let json_value = restore_value(data_type, &bytes)?;
                     let value_ref = dictionary.len();
                     dictionary.push(json_value);
 
-                    let mut spatial_ids = Vec::new();
+                    let mut spatial_ids = Vec::with_capacity(flex_ids.len());
                     for flex_id in flex_ids {
                         if let Some(left) = limit_left.as_mut() {
                             if *left == 0 {
@@ -133,13 +133,13 @@ pub async fn get(
                 }))
             }
             OutputFormat::FlexId => {
-                let mut data = Vec::new();
+                let mut data = Vec::with_capacity(groups.len());
                 for (bytes, flex_ids) in groups {
                     let json_value = restore_value(data_type, &bytes)?;
                     let value_ref = dictionary.len();
                     dictionary.push(json_value);
 
-                    let mut spatial_ids = Vec::new();
+                    let mut spatial_ids = Vec::with_capacity(flex_ids.len());
                     for flex_id in flex_ids {
                         if let Some(left) = limit_left.as_mut() {
                             if *left == 0 {

@@ -154,6 +154,11 @@ pub fn initialize_database(path: &str) -> AppDb {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(10 * 1024 * 1024 * 1024);
 
+    let max_readers = std::env::var("KASANE_LMDB_MAX_READERS")
+        .ok()
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(1024);
+
     let env_bool = |name: &str| {
         std::env::var(name)
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
@@ -178,7 +183,7 @@ pub fn initialize_database(path: &str) -> AppDb {
 
     let env = unsafe {
         let mut opts = EnvOpenOptions::new().read_txn_without_tls();
-        opts.map_size(map_size).max_dbs(15);
+        opts.map_size(map_size).max_dbs(15).max_readers(max_readers);
         if !env_flags.is_empty() {
             opts.flags(env_flags);
         }

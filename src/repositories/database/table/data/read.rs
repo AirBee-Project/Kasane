@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use kasane_logic::{FlexId, IterFlexIds, SpatialIdSet};
 
@@ -10,13 +10,13 @@ use crate::{error::AppError, repositories::KasaneDbRead};
 /// `data_get` の戻り値：`(値バイト, その値を持つ FlexId 群)` の一覧。
 type ValueGroups = Vec<(Vec<u8>, Vec<FlexId>)>;
 
-type ValueMap = HashMap<Vec<u8>, Vec<FlexId>>;
+type ValueMap = FxHashMap<Vec<u8>, Vec<FlexId>>;
 
 /// `data_get` を 並列化する基準。
-const DATA_GET_PARALLEL_THRESHOLD: usize = 64;
+const DATA_GET_PARALLEL_THRESHOLD: usize = 500;
 
 /// `data_get_stream` を Rayon で並列化する基準。
-const DATA_GET_STREAM_PARALLEL_THRESHOLD: usize = 100;
+const DATA_GET_STREAM_PARALLEL_THRESHOLD: usize = 1000;
 
 impl<'a> KasaneDbRead<'a> {
     /// 指定された範囲の空間IDを値ごとにグループ化して返す。
@@ -28,7 +28,7 @@ impl<'a> KasaneDbRead<'a> {
         let flex_ids: Vec<FlexId> = ids.iter_flex_ids().collect();
 
         if flex_ids.len() < DATA_GET_PARALLEL_THRESHOLD {
-            let mut by_value: HashMap<Vec<u8>, Vec<FlexId>> = HashMap::new();
+            let mut by_value: FxHashMap<Vec<u8>, Vec<FlexId>> = FxHashMap::default();
             Self::resolve_query_batch(
                 &self.db.tables_data,
                 &self.read_txn,
@@ -44,20 +44,22 @@ impl<'a> KasaneDbRead<'a> {
         let env = &self.db.env;
 
         let chunk_size = flex_ids.len().div_ceil(rayon::current_num_threads().max(1));
-        let partials: Vec<HashMap<Vec<u8>, Vec<FlexId>>> = flex_ids
+        let partials: Vec<FxHashMap<Vec<u8>, Vec<FlexId>>> = flex_ids
             .par_chunks(chunk_size.max(1))
-            .map(|chunk| -> Result<HashMap<Vec<u8>, Vec<FlexId>>, AppError> {
-                let txn = env
-                    .read_txn()
-                    .map_err(|e| AppError::InternalError(e.to_string()))?;
-                let mut local: HashMap<Vec<u8>, Vec<FlexId>> = HashMap::new();
-                Self::resolve_query_batch(&tables_data, &txn, table_id, chunk, &mut local)?;
-                Ok(local)
-            })
+            .map(
+                |chunk| -> Result<FxHashMap<Vec<u8>, Vec<FlexId>>, AppError> {
+                    let txn = env
+                        .read_txn()
+                        .map_err(|e| AppError::InternalError(e.to_string()))?;
+                    let mut local: FxHashMap<Vec<u8>, Vec<FlexId>> = FxHashMap::default();
+                    Self::resolve_query_batch(&tables_data, &txn, table_id, chunk, &mut local)?;
+                    Ok(local)
+                },
+            )
             .collect::<Result<Vec<_>, _>>()?;
 
         // 部分マップを値でマージ。
-        let mut by_value: HashMap<Vec<u8>, Vec<FlexId>> = HashMap::new();
+        let mut by_value: FxHashMap<Vec<u8>, Vec<FlexId>> = FxHashMap::default();
         for partial in partials {
             for (value, mut flex_ids) in partial {
                 by_value.entry(value).or_default().append(&mut flex_ids);
@@ -94,7 +96,7 @@ impl<'a> KasaneDbRead<'a> {
                         return;
                     }
                 };
-                let mut local = HashMap::new();
+                let mut local = FxHashMap::default();
                 if let Err(e) = Self::resolve_query_batch(
                     &tables_data,
                     &txn,
@@ -124,7 +126,7 @@ impl<'a> KasaneDbRead<'a> {
                     let txn = env
                         .read_txn()
                         .map_err(|e| AppError::InternalError(e.to_string()))?;
-                    let mut local = ValueMap::new();
+                    let mut local = ValueMap::default();
                     Self::resolve_query_batch(&tables_data, &txn, table_id, chunk, &mut local)?;
                     Ok(local)
                 })
@@ -153,7 +155,7 @@ impl<'a> KasaneDbRead<'a> {
         txn: &heed::RoTxn<heed::WithoutTls>,
         table_id: TableId,
         queries: &[FlexId],
-        by_value: &mut HashMap<Vec<u8>, Vec<FlexId>>,
+        by_value: &mut FxHashMap<Vec<u8>, Vec<FlexId>>,
     ) -> Result<(), AppError> {
         let by_leaf = shard::route_leaves_batched(tables_data, txn, table_id, queries)?;
         for (region, queries) in by_leaf {
