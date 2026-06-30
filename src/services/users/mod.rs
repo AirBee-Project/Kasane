@@ -26,7 +26,6 @@ pub fn get_user(app_state: &AppState, username: &str) -> Result<UserInfoResponse
     Ok(UserInfoResponse::from(user))
 }
 
-
 pub async fn create_user(app_state: &AppState, req: CreateUserRequest) -> Result<(), AppError> {
     crate::services::helpers::name_valid::name_valid(&req.username)?;
 
