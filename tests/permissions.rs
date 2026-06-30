@@ -471,7 +471,7 @@ async fn test_manage_user_can_set_privileges() {
     let test_app = PermissionTestApp::new();
     let root_token = test_app.root_token();
 
-    // 1. Create a DB
+    // 1. データベースを作成する
     let req = Request::builder()
         .method("POST")
         .uri("/databases")
@@ -481,13 +481,13 @@ async fn test_manage_user_can_set_privileges() {
         .unwrap();
     test_app.app.clone().oneshot(req).await.unwrap();
 
-    // 2. Create manage_user and normal_user
+    // 2. manage_user と normal_user を作成する
     let manage_token =
         create_user_and_token(&test_app.app, &root_token, "manage_user", false).await;
     let _normal_token =
         create_user_and_token(&test_app.app, &root_token, "normal_user", false).await;
 
-    // 3. Grant Manage privilege to manage_user (as root)
+    // 3. manage_user に Manage 権限を付与する（rootとして）
     let req = Request::builder()
         .method("PUT")
         .uri("/users/manage_user/privileges/test_db")
@@ -498,7 +498,7 @@ async fn test_manage_user_can_set_privileges() {
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::NO_CONTENT);
 
-    // 4. manage_user tries to grant Read privilege to normal_user (should fail, only global admin can)
+    // 4. manage_user が normal_user に Read 権限を付与しようとする（グローバル管理者のみ可能なため失敗するはず）
     let req = Request::builder()
         .method("PUT")
         .uri("/users/normal_user/privileges/test_db")
@@ -509,7 +509,7 @@ async fn test_manage_user_can_set_privileges() {
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
 
-    // 5. verify normal_user does NOT have Read privilege
+    // 5. normal_user が Read 権限を持っていないことを検証する
     let req = Request::builder()
         .method("GET")
         .uri("/users/normal_user/privileges")

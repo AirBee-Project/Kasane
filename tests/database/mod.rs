@@ -120,7 +120,7 @@ async fn test_remove_database() {
 async fn test_database_remove_cleans_up_privileges() {
     let test_app = DbTestApp::new();
 
-    // 1. Create a user
+    // 1. ユーザーを作成する
     let req = Request::builder()
         .method("POST")
         .uri("/users")
@@ -132,7 +132,7 @@ async fn test_database_remove_cleans_up_privileges() {
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
-    // 2. Create a database
+    // 2. データベースを作成する
     let req = Request::builder()
         .method("POST")
         .uri("/databases")
@@ -142,7 +142,7 @@ async fn test_database_remove_cleans_up_privileges() {
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
-    // 3. Grant privilege to the user
+    // 3. ユーザーに権限を付与する
     let req = Request::builder()
         .method("PUT")
         .uri("/users/test_user/privileges/test_db")
@@ -152,7 +152,7 @@ async fn test_database_remove_cleans_up_privileges() {
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::NO_CONTENT);
 
-    // Verify privilege exists
+    // 権限が存在することを確認する
     let req = Request::builder()
         .method("GET")
         .uri("/users/test_user/privileges")
@@ -163,7 +163,7 @@ async fn test_database_remove_cleans_up_privileges() {
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json.as_array().unwrap().len(), 1);
 
-    // 4. Delete the database
+    // 4. データベースを削除する
     let req = Request::builder()
         .method("DELETE")
         .uri("/databases/test_db")
@@ -171,7 +171,7 @@ async fn test_database_remove_cleans_up_privileges() {
         .unwrap();
     test_app.app.clone().oneshot(req).await.unwrap();
 
-    // 5. Verify privilege is cleaned up
+    // 5. 権限がクリーンアップされたことを確認する
     let req = Request::builder()
         .method("GET")
         .uri("/users/test_user/privileges")
@@ -188,7 +188,7 @@ async fn test_database_remove_cleans_up_privileges() {
 async fn test_database_rename_success() {
     let test_app = DbTestApp::new();
 
-    // 1. Create a database
+    // 1. データベースを作成する
     let req = Request::builder()
         .method("POST")
         .uri("/databases")
@@ -198,7 +198,7 @@ async fn test_database_rename_success() {
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
-    // 2. Rename the database
+    // 2. データベースの名前を変更する
     let req = Request::builder()
         .method("PATCH")
         .uri("/databases/test_db")
@@ -208,7 +208,7 @@ async fn test_database_rename_success() {
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
 
-    // 3. Verify renamed database exists
+    // 3. 変更後のデータベースが存在することを確認する
     let req = Request::builder()
         .method("GET")
         .uri("/databases/renamed_db")
@@ -217,7 +217,7 @@ async fn test_database_rename_success() {
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
 
-    // 4. Verify old database does not exist
+    // 4. 変更前のデータベースが存在しないことを確認する
     let req = Request::builder()
         .method("GET")
         .uri("/databases/test_db")
@@ -232,7 +232,7 @@ async fn test_database_rename_success() {
 async fn test_database_copy_success() {
     let test_app = DbTestApp::new();
 
-    // 1. Create source database
+    // 1. コピー元データベースを作成する
     let req = Request::builder()
         .method("POST")
         .uri("/databases")
@@ -242,7 +242,7 @@ async fn test_database_copy_success() {
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
-    // 2. Copy the database
+    // 2. データベースをコピーする
     let req = Request::builder()
         .method("POST")
         .uri("/databases/src_db/copy")
@@ -252,7 +252,7 @@ async fn test_database_copy_success() {
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
-    // 3. Verify copied database exists
+    // 3. コピー先データベースが存在することを確認する
     let req = Request::builder()
         .method("GET")
         .uri("/databases/copied_db")
