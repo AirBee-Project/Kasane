@@ -42,6 +42,7 @@ async fn test_table_data_insert_single_id() {
     );
 }
 
+/// TinyInt型のデータ挿入およびその範囲外の値がバリデーションエラーになるかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_tinyint() {
     let test_app = TestApp::new();
@@ -90,6 +91,7 @@ async fn test_table_data_insert_tinyint() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
+/// Double型のデータ挿入および取得が正常に行えるかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_double() {
     let test_app = TestApp::new();

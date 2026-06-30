@@ -94,4 +94,41 @@ pub async fn remove(app_state: &AppState, name: &str) -> Result<(), AppError> {
     .map_err(|e| AppError::InternalError(e.to_string()))?
 }
 
+pub async fn rename(app_state: &AppState, name: &str, new_name: &str) -> Result<(), AppError> {
+    let app_state = app_state.clone();
+    let name = name.to_string();
+    let new_name = new_name.to_string();
+
+    tokio::task::spawn_blocking(move || -> Result<(), AppError> {
+        let write_txn = app_state.db.env.write_txn()?;
+        let mut db = crate::repositories::KasaneDbWrite::new(write_txn, &app_state.db);
+        db.database_rename(&name, &new_name)?;
+        db.commit()?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| AppError::InternalError(e.to_string()))?
+}
+
+pub async fn copy(
+    app_state: &AppState,
+    name: &str,
+    destination_name: &str,
+    user_id: Option<crate::models::id::UserId>,
+) -> Result<DatabaseInfoResponse, AppError> {
+    let app_state = app_state.clone();
+    let name = name.to_string();
+    let destination_name = destination_name.to_string();
+
+    tokio::task::spawn_blocking(move || -> Result<DatabaseInfoResponse, AppError> {
+        let write_txn = app_state.db.env.write_txn()?;
+        let mut db = crate::repositories::KasaneDbWrite::new(write_txn, &app_state.db);
+        let res = db.database_copy(&name, &destination_name, user_id)?;
+        db.commit()?;
+        Ok(res)
+    })
+    .await
+    .map_err(|e| AppError::InternalError(e.to_string()))?
+}
+
 pub mod table;

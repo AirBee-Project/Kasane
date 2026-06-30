@@ -361,6 +361,65 @@
         ]
       }
     },
+    "/databases/{db_name}/tables/{table_name}/copy": {
+      "post": {
+        "tags": [
+          "tables"
+        ],
+        "summary": "テーブルのコピー",
+        "description": "指定したテーブルを別のデータベース、または同じデータベース内に異なる名前でコピーします。\nコピー元データベースに対するRead権限と、コピー先データベースに対するManage権限が必要です。",
+        "operationId": "table_copy",
+        "parameters": [
+          {
+            "name": "db_name",
+            "in": "path",
+            "description": "コピー元データベース名",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "src_db"
+          },
+          {
+            "name": "table_name",
+            "in": "path",
+            "description": "コピー元テーブル名",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "src_table"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyTableRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TableSummary"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/databases/{db_name}/tables/{table_name}/data": {
       "put": {
         "tags": [
@@ -748,6 +807,95 @@
             "bearer_auth": [
               "global_admin"
             ]
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "databases"
+        ],
+        "summary": "データベース名の変更",
+        "description": "指定したデータベースの名前を変更します。対象データベースのManage以上の権限が必要です。",
+        "operationId": "database_rename",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "データベース名",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "example_database"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDatabaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/databases/{name}/copy": {
+      "post": {
+        "tags": [
+          "databases"
+        ],
+        "summary": "データベースのコピー",
+        "description": "指定したデータベースをコピーします。コピー元データベースに対するRead権限が必要です。",
+        "operationId": "database_copy",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "コピー元データベース名",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "src_db"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyDatabaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseInfoResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
           }
         ]
       }
@@ -1144,6 +1292,38 @@
   },
   "components": {
     "schemas": {
+      "CopyDatabaseRequest": {
+        "type": "object",
+        "required": [
+          "destination_name"
+        ],
+        "properties": {
+          "destination_name": {
+            "type": "string",
+            "example": "example_database_copy"
+          }
+        }
+      },
+      "CopyTableRequest": {
+        "type": "object",
+        "description": "テーブルのコピーを行う",
+        "required": [
+          "destination_table_name"
+        ],
+        "properties": {
+          "destination_db_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "destination_database"
+          },
+          "destination_table_name": {
+            "type": "string",
+            "example": "destination_table"
+          }
+        }
+      },
       "CreateDatabaseRequest": {
         "type": "object",
         "required": [
@@ -2429,6 +2609,18 @@
           "is_global_admin": {
             "type": "boolean",
             "example": false
+          }
+        }
+      },
+      "UpdateDatabaseRequest": {
+        "type": "object",
+        "required": [
+          "new_name"
+        ],
+        "properties": {
+          "new_name": {
+            "type": "string",
+            "example": "example_database_renamed"
           }
         }
       },

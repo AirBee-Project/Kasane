@@ -195,214 +195,7 @@ impl<'a> KasaneDbWrite<'a> {
         if let Some(nc_opt) = new_constraints {
             let new_c = match nc_opt {
                 None => None,
-                Some(nc) => match (&table.data_type, nc) {
-                    (
-                        TableDataType::Text,
-                        crate::models::database::table::UpdateTableConstraints::Text {
-                            min_length,
-                            max_length,
-                        },
-                    ) => {
-                        let (mut current_min, mut current_max) = match &table.constraints {
-                            Some(TableConstraints::Text {
-                                min_length,
-                                max_length,
-                            }) => (*min_length, *max_length),
-                            _ => (None, None),
-                        };
-                        if let Some(v) = min_length {
-                            current_min = v;
-                        }
-                        if let Some(v) = max_length {
-                            current_max = v;
-                        }
-                        Some(TableConstraints::Text {
-                            min_length: current_min,
-                            max_length: current_max,
-                        })
-                    }
-                    (
-                        TableDataType::TinyInt,
-                        crate::models::database::table::UpdateTableConstraints::TinyInt {
-                            min,
-                            max,
-                        },
-                    ) => {
-                        let (mut current_min, mut current_max) = match &table.constraints {
-                            Some(TableConstraints::TinyInt { min, max }) => (*min, *max),
-                            _ => (None, None),
-                        };
-                        if let Some(v) = min {
-                            current_min = v;
-                        }
-                        if let Some(v) = max {
-                            current_max = v;
-                        }
-                        Some(TableConstraints::TinyInt {
-                            min: current_min,
-                            max: current_max,
-                        })
-                    }
-                    (
-                        TableDataType::SmallInt,
-                        crate::models::database::table::UpdateTableConstraints::SmallInt {
-                            min,
-                            max,
-                        },
-                    ) => {
-                        let (mut current_min, mut current_max) = match &table.constraints {
-                            Some(TableConstraints::SmallInt { min, max }) => (*min, *max),
-                            _ => (None, None),
-                        };
-                        if let Some(v) = min {
-                            current_min = v;
-                        }
-                        if let Some(v) = max {
-                            current_max = v;
-                        }
-                        Some(TableConstraints::SmallInt {
-                            min: current_min,
-                            max: current_max,
-                        })
-                    }
-                    (
-                        TableDataType::Int,
-                        crate::models::database::table::UpdateTableConstraints::Int { min, max },
-                    ) => {
-                        let (mut current_min, mut current_max) = match &table.constraints {
-                            Some(TableConstraints::Int { min, max }) => (*min, *max),
-                            _ => (None, None),
-                        };
-                        if let Some(v) = min {
-                            current_min = v;
-                        }
-                        if let Some(v) = max {
-                            current_max = v;
-                        }
-                        Some(TableConstraints::Int {
-                            min: current_min,
-                            max: current_max,
-                        })
-                    }
-                    (
-                        TableDataType::BigInt,
-                        crate::models::database::table::UpdateTableConstraints::BigInt { min, max },
-                    ) => {
-                        let (mut current_min, mut current_max) = match &table.constraints {
-                            Some(TableConstraints::BigInt { min, max }) => (*min, *max),
-                            _ => (None, None),
-                        };
-                        if let Some(v) = min {
-                            current_min = v;
-                        }
-                        if let Some(v) = max {
-                            current_max = v;
-                        }
-                        Some(TableConstraints::BigInt {
-                            min: current_min,
-                            max: current_max,
-                        })
-                    }
-                    (
-                        TableDataType::Float,
-                        crate::models::database::table::UpdateTableConstraints::Float { min, max },
-                    ) => {
-                        let (mut current_min, mut current_max) = match &table.constraints {
-                            Some(TableConstraints::Float { min, max }) => (*min, *max),
-                            _ => (None, None),
-                        };
-                        if let Some(v) = min {
-                            current_min = v;
-                        }
-                        if let Some(v) = max {
-                            current_max = v;
-                        }
-                        Some(TableConstraints::Float {
-                            min: current_min,
-                            max: current_max,
-                        })
-                    }
-                    (
-                        TableDataType::Double,
-                        crate::models::database::table::UpdateTableConstraints::Double { min, max },
-                    ) => {
-                        let (mut current_min, mut current_max) = match &table.constraints {
-                            Some(TableConstraints::Double { min, max }) => (*min, *max),
-                            _ => (None, None),
-                        };
-                        if let Some(v) = min {
-                            current_min = v;
-                        }
-                        if let Some(v) = max {
-                            current_max = v;
-                        }
-                        Some(TableConstraints::Double {
-                            min: current_min,
-                            max: current_max,
-                        })
-                    }
-                    (
-                        TableDataType::Enum,
-                        crate::models::database::table::UpdateTableConstraints::Enum {
-                            choices,
-                            add_choices,
-                            remove_choices,
-                        },
-                    ) => {
-                        let (mut current_choices, mut mapping, mut next_id) =
-                            match table.constraints.take() {
-                                Some(TableConstraints::Enum {
-                                    choices,
-                                    mapping,
-                                    next_id,
-                                }) => (choices, mapping, next_id),
-                                _ => (Vec::new(), std::collections::HashMap::new(), 1),
-                            };
-                        if let Some(new_choices) = choices {
-                            current_choices = new_choices;
-                        }
-                        if let Some(adds) = add_choices {
-                            for add in adds {
-                                if !current_choices.contains(&add) {
-                                    current_choices.push(add);
-                                }
-                            }
-                        }
-                        if let Some(removes) = remove_choices {
-                            current_choices.retain(|c| !removes.contains(c));
-                        }
-                        for c in &current_choices {
-                            if !mapping.contains_key(c) {
-                                if next_id == u16::MAX {
-                                    return Err(AppError::ConstraintViolation {
-                                        reason: "Enum choices reached maximum limit (65535)"
-                                            .to_string(),
-                                    });
-                                }
-                                if next_id == 0 {
-                                    next_id = 1;
-                                }
-                                mapping.insert(c.clone(), next_id);
-                                next_id += 1;
-                            }
-                        }
-                        Some(TableConstraints::Enum {
-                            choices: current_choices,
-                            mapping,
-                            next_id,
-                        })
-                    }
-                    (TableDataType::Presence, _) => {
-                        return Err(AppError::ConstraintViolation {
-                            reason: "Presence type cannot have constraints".to_string(),
-                        });
-                    }
-                    (_, _) => {
-                        return Err(AppError::ConstraintViolation {
-                            reason: "Constraint type does not match data type".to_string(),
-                        });
-                    }
-                },
+                Some(nc) => self.merge_constraints(&table.data_type, &table.constraints, nc)?,
             };
 
             if let Some(c) = &new_c
@@ -414,40 +207,11 @@ impl<'a> KasaneDbWrite<'a> {
             table.constraints = new_c;
 
             if validate_existing_data {
-                let tables_data = self
-                    .db
-                    .tables_data
-                    .remap_types::<heed::types::Bytes, heed::types::Bytes>();
-                let prefix = table.id.into_bytes();
-
-                for iter in tables_data.prefix_iter(&self.write_txn, prefix.as_slice())? {
-                    let (_, v_bytes) = iter?;
-                    use crate::repositories::database::table::data::shard::ShardEntry;
-                    match ShardEntry::decode(v_bytes)? {
-                        ShardEntry::Leaf(map_bytes) => {
-                            let map = unsafe {
-                                kasane_logic::SpatialIdMap::<Vec<u8>>::from_bytes(&map_bytes)
-                            }
-                            .map_err(|e| {
-                                AppError::InternalError(format!("rkyv deserialize: {}", e))
-                            })?;
-                            for (_, stored_val) in map.iter() {
-                                let bytes = stored_val.as_slice();
-                                let restored_json = crate::services::helpers::value::restore_value(
-                                    table.data_type,
-                                    table.constraints.as_ref(),
-                                    bytes,
-                                )?;
-                                crate::services::helpers::value::interpret_value(
-                                    table.data_type,
-                                    table.constraints.as_ref(),
-                                    restored_json,
-                                )?;
-                            }
-                        }
-                        ShardEntry::Pointers(_) => {}
-                    }
-                }
+                self.validate_table_existing_data(
+                    table.id,
+                    table.data_type,
+                    table.constraints.as_ref(),
+                )?;
             }
         }
 
@@ -469,6 +233,252 @@ impl<'a> KasaneDbWrite<'a> {
             .insert((db_meta.id, table.name.clone()), meta);
 
         Ok(table)
+    }
+
+    fn merge_constraints(
+        &self,
+        data_type: &TableDataType,
+        current_constraints: &Option<TableConstraints>,
+        nc: crate::models::database::table::UpdateTableConstraints,
+    ) -> Result<Option<TableConstraints>, AppError> {
+        match (data_type, nc) {
+            (
+                TableDataType::Text,
+                crate::models::database::table::UpdateTableConstraints::Text {
+                    min_length,
+                    max_length,
+                },
+            ) => {
+                let (mut current_min, mut current_max) = match current_constraints {
+                    Some(TableConstraints::Text {
+                        min_length,
+                        max_length,
+                    }) => (*min_length, *max_length),
+                    _ => (None, None),
+                };
+                if let Some(v) = min_length {
+                    current_min = v;
+                }
+                if let Some(v) = max_length {
+                    current_max = v;
+                }
+                Ok(Some(TableConstraints::Text {
+                    min_length: current_min,
+                    max_length: current_max,
+                }))
+            }
+            (
+                TableDataType::TinyInt,
+                crate::models::database::table::UpdateTableConstraints::TinyInt { min, max },
+            ) => {
+                let (mut current_min, mut current_max) = match current_constraints {
+                    Some(TableConstraints::TinyInt { min, max }) => (*min, *max),
+                    _ => (None, None),
+                };
+                if let Some(v) = min {
+                    current_min = v;
+                }
+                if let Some(v) = max {
+                    current_max = v;
+                }
+                Ok(Some(TableConstraints::TinyInt {
+                    min: current_min,
+                    max: current_max,
+                }))
+            }
+            (
+                TableDataType::SmallInt,
+                crate::models::database::table::UpdateTableConstraints::SmallInt { min, max },
+            ) => {
+                let (mut current_min, mut current_max) = match current_constraints {
+                    Some(TableConstraints::SmallInt { min, max }) => (*min, *max),
+                    _ => (None, None),
+                };
+                if let Some(v) = min {
+                    current_min = v;
+                }
+                if let Some(v) = max {
+                    current_max = v;
+                }
+                Ok(Some(TableConstraints::SmallInt {
+                    min: current_min,
+                    max: current_max,
+                }))
+            }
+            (
+                TableDataType::Int,
+                crate::models::database::table::UpdateTableConstraints::Int { min, max },
+            ) => {
+                let (mut current_min, mut current_max) = match current_constraints {
+                    Some(TableConstraints::Int { min, max }) => (*min, *max),
+                    _ => (None, None),
+                };
+                if let Some(v) = min {
+                    current_min = v;
+                }
+                if let Some(v) = max {
+                    current_max = v;
+                }
+                Ok(Some(TableConstraints::Int {
+                    min: current_min,
+                    max: current_max,
+                }))
+            }
+            (
+                TableDataType::BigInt,
+                crate::models::database::table::UpdateTableConstraints::BigInt { min, max },
+            ) => {
+                let (mut current_min, mut current_max) = match current_constraints {
+                    Some(TableConstraints::BigInt { min, max }) => (*min, *max),
+                    _ => (None, None),
+                };
+                if let Some(v) = min {
+                    current_min = v;
+                }
+                if let Some(v) = max {
+                    current_max = v;
+                }
+                Ok(Some(TableConstraints::BigInt {
+                    min: current_min,
+                    max: current_max,
+                }))
+            }
+            (
+                TableDataType::Float,
+                crate::models::database::table::UpdateTableConstraints::Float { min, max },
+            ) => {
+                let (mut current_min, mut current_max) = match current_constraints {
+                    Some(TableConstraints::Float { min, max }) => (*min, *max),
+                    _ => (None, None),
+                };
+                if let Some(v) = min {
+                    current_min = v;
+                }
+                if let Some(v) = max {
+                    current_max = v;
+                }
+                Ok(Some(TableConstraints::Float {
+                    min: current_min,
+                    max: current_max,
+                }))
+            }
+            (
+                TableDataType::Double,
+                crate::models::database::table::UpdateTableConstraints::Double { min, max },
+            ) => {
+                let (mut current_min, mut current_max) = match current_constraints {
+                    Some(TableConstraints::Double { min, max }) => (*min, *max),
+                    _ => (None, None),
+                };
+                if let Some(v) = min {
+                    current_min = v;
+                }
+                if let Some(v) = max {
+                    current_max = v;
+                }
+                Ok(Some(TableConstraints::Double {
+                    min: current_min,
+                    max: current_max,
+                }))
+            }
+            (
+                TableDataType::Enum,
+                crate::models::database::table::UpdateTableConstraints::Enum {
+                    choices,
+                    add_choices,
+                    remove_choices,
+                },
+            ) => {
+                let (mut current_choices, mut mapping, mut next_id) = match current_constraints {
+                    Some(TableConstraints::Enum {
+                        choices,
+                        mapping,
+                        next_id,
+                    }) => (choices.clone(), mapping.clone(), *next_id),
+                    _ => (Vec::new(), std::collections::HashMap::new(), 1),
+                };
+                if let Some(new_choices) = choices {
+                    current_choices = new_choices;
+                }
+                if let Some(adds) = add_choices {
+                    for add in adds {
+                        if !current_choices.contains(&add) {
+                            current_choices.push(add);
+                        }
+                    }
+                }
+                if let Some(removes) = remove_choices {
+                    current_choices.retain(|c| !removes.contains(c));
+                }
+                for c in &current_choices {
+                    if !mapping.contains_key(c) {
+                        if next_id == u16::MAX {
+                            return Err(AppError::ConstraintViolation {
+                                reason: "Enum choices reached maximum limit (65535)".to_string(),
+                            });
+                        }
+                        if next_id == 0 {
+                            next_id = 1;
+                        }
+                        mapping.insert(c.clone(), next_id);
+                        next_id += 1;
+                    }
+                }
+                Ok(Some(TableConstraints::Enum {
+                    choices: current_choices,
+                    mapping,
+                    next_id,
+                }))
+            }
+            (TableDataType::Presence, _) => Err(AppError::ConstraintViolation {
+                reason: "Presence type cannot have constraints".to_string(),
+            }),
+            (_, _) => Err(AppError::ConstraintViolation {
+                reason: "Constraint type does not match data type".to_string(),
+            }),
+        }
+    }
+
+    fn validate_table_existing_data(
+        &self,
+        table_id: crate::models::id::TableId,
+        data_type: TableDataType,
+        constraints: Option<&TableConstraints>,
+    ) -> Result<(), AppError> {
+        let tables_data = self
+            .db
+            .tables_data
+            .remap_types::<heed::types::Bytes, heed::types::Bytes>();
+        let prefix = table_id.into_bytes();
+
+        for iter in tables_data.prefix_iter(&self.write_txn, prefix.as_slice())? {
+            let (_, v_bytes) = iter?;
+            use crate::repositories::database::table::data::shard::ShardEntry;
+            match ShardEntry::decode(v_bytes)? {
+                ShardEntry::Leaf(map_bytes) => {
+                    let map =
+                        unsafe { kasane_logic::SpatialIdMap::<Vec<u8>>::from_bytes(&map_bytes) }
+                            .map_err(|e| {
+                                AppError::InternalError(format!("rkyv deserialize: {}", e))
+                            })?;
+                    for (_, stored_val) in map.iter() {
+                        let bytes = stored_val.as_slice();
+                        let restored_json = crate::services::helpers::value::restore_value(
+                            data_type,
+                            constraints,
+                            bytes,
+                        )?;
+                        crate::services::helpers::value::interpret_value(
+                            data_type,
+                            constraints,
+                            restored_json,
+                        )?;
+                    }
+                }
+                ShardEntry::Pointers(_) => {}
+            }
+        }
+        Ok(())
     }
 
     /// Tableを削除する。
@@ -536,5 +546,130 @@ impl<'a> KasaneDbWrite<'a> {
             .remove(&(db_meta.id, table_name.to_string()));
 
         Ok(())
+    }
+
+    /// Tableをコピーする。
+    pub fn table_copy(
+        &mut self,
+        src_db_name: &str,
+        src_table_name: &str,
+        dest_db_name: &str,
+        dest_table_name: &str,
+    ) -> Result<Table, AppError> {
+        // 1. コピー元データベースの存在確認
+        let src_db_meta = {
+            let db = self.db.databases;
+            db.get(&self.write_txn, src_db_name)?
+                .ok_or_else(|| AppError::DatabaseNotFound {
+                    name: src_db_name.to_string(),
+                })?
+        };
+
+        // 2. コピー元テーブルの存在確認
+        let src_table_meta = {
+            let db = self.db.tables;
+            db.get(&self.write_txn, &(src_db_meta.id, src_table_name))?
+                .ok_or_else(|| AppError::TableNotFound {
+                    name: src_table_name.to_string(),
+                })?
+        };
+
+        // 3. コピー先データベースの存在確認
+        let dest_db_meta = {
+            let db = self.db.databases;
+            db.get(&self.write_txn, dest_db_name)?
+                .ok_or_else(|| AppError::DatabaseNotFound {
+                    name: dest_db_name.to_string(),
+                })?
+        };
+
+        // 4. コピー先テーブルの重複確認
+        let db_tables = self.db.tables;
+        if db_tables
+            .get(&self.write_txn, &(dest_db_meta.id, dest_table_name))?
+            .is_some()
+        {
+            return Err(AppError::TableAlreadyExists {
+                name: dest_table_name.to_string(),
+            });
+        }
+
+        // コピー先テーブル名の妥当性検証
+        crate::services::helpers::name_valid::name_valid(dest_table_name)?;
+
+        // 5. 新しい TableId を生成
+        let db_index = self.db.table_id_index;
+        let mut dest_table_id = crate::models::id::TableId(uuid::Uuid::now_v7());
+        loop {
+            if db_index.get(&self.write_txn, &dest_table_id)?.is_none() {
+                break;
+            }
+            dest_table_id = crate::models::id::TableId(uuid::Uuid::now_v7());
+        }
+
+        // 6. 新しい TableMetadata を構成
+        let dest_table_meta = TableMetadata {
+            id: dest_table_id,
+            data_type: src_table_meta.data_type,
+            max_zoom_level: src_table_meta.max_zoom_level,
+            constraints: src_table_meta.constraints.clone(),
+        };
+
+        // 7. 新しいテーブルメタデータと ID インデックスを書き込み
+        db_tables.put(
+            &mut self.write_txn,
+            &(dest_db_meta.id, dest_table_name),
+            &dest_table_meta,
+        )?;
+        db_index.put(&mut self.write_txn, &dest_table_id, &())?;
+
+        // 8. tables_data のデータを全コピー
+        let tables_data = self
+            .db
+            .tables_data
+            .remap_types::<heed::types::Bytes, heed::types::Bytes>();
+        let src_prefix = src_table_meta.id.into_bytes();
+
+        let mut data_to_insert = Vec::new();
+        for iter in tables_data.prefix_iter(&self.write_txn, src_prefix.as_slice())? {
+            let (k_bytes, v_bytes) = iter?;
+            if k_bytes.len() == 30 {
+                let mut dest_k_bytes = k_bytes.to_vec();
+                dest_k_bytes[0..16].copy_from_slice(&dest_table_id.into_bytes());
+                data_to_insert.push((dest_k_bytes, v_bytes.to_vec()));
+            }
+        }
+        for (k, v) in data_to_insert {
+            tables_data.put(&mut self.write_txn, &k, &v)?;
+        }
+
+        // 9. value_index のデータを全コピー
+        let value_index = self.db.value_index;
+        let mut index_to_insert = Vec::new();
+        for iter in value_index.prefix_iter(&self.write_txn, src_prefix.as_slice())? {
+            let (k_bytes, _) = iter?;
+            if k_bytes.len() >= 16 {
+                let mut dest_k_bytes = k_bytes.to_vec();
+                dest_k_bytes[0..16].copy_from_slice(&dest_table_id.into_bytes());
+                index_to_insert.push(dest_k_bytes);
+            }
+        }
+        for k in index_to_insert {
+            value_index.put(&mut self.write_txn, &k, &())?;
+        }
+
+        // 10. キャッシュの更新
+        self.table_caches.insert(
+            (dest_db_meta.id, dest_table_name.to_string()),
+            dest_table_meta,
+        );
+
+        Ok(Table {
+            id: dest_table_id,
+            name: dest_table_name.to_string(),
+            data_type: src_table_meta.data_type,
+            max_zoom_level: src_table_meta.max_zoom_level,
+            constraints: src_table_meta.constraints,
+        })
     }
 }

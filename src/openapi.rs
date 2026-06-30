@@ -7,10 +7,12 @@ use crate::models::database::table::data::{
     RemoveDataRequest,
 };
 use crate::models::database::table::{
-    CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse, TableSummary,
-    UpdateTableRequest,
+    CopyTableRequest, CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse,
+    TableSummary, UpdateTableRequest,
 };
-use crate::models::database::{CreateDatabaseRequest, DatabaseInfoResponse};
+use crate::models::database::{
+    CopyDatabaseRequest, CreateDatabaseRequest, DatabaseInfoResponse, UpdateDatabaseRequest,
+};
 use crate::models::spatial_id::SpatialId;
 use crate::models::users::{
     CreateUserRequest, PrivilegeInfoResponse, UpdateAdminRequest, UpdatePasswordRequest,
@@ -66,12 +68,18 @@ impl utoipa::Modify for SecurityAddon {
         crate::handlers::database::database_info,
         // DELETE /databases/{name}
         crate::handlers::database::remove_database,
+        // PATCH /databases/{name}
+        crate::handlers::database::database_rename,
+        // POST /databases/{name}/copy
+        crate::handlers::database::database_copy,
         crate::handlers::database::table::create::table_create,
         crate::handlers::database::table::list::table_list,
         // GET  /databases/{db_name}/tables/{table_name}
         crate::handlers::database::table::info::table_info,
         // PATCH /databases/{db_name}/tables/{table_name}
         crate::handlers::database::table::update::table_update_handler,
+        // POST /databases/{db_name}/tables/{table_name}/copy
+        crate::handlers::database::table::copy::table_copy,
         // DELETE /databases/{db_name}/tables/{table_name}
         crate::handlers::database::table::remove::remove_table,
         // PUT    /databases/{db_name}/tables/{table_name}/data
@@ -99,10 +107,13 @@ impl utoipa::Modify for SecurityAddon {
         UserRole,
         // Database
         CreateDatabaseRequest,
+        UpdateDatabaseRequest,
+        CopyDatabaseRequest,
         DatabaseInfoResponse,
         // Table
         CreateTableRequest,
         UpdateTableRequest,
+        CopyTableRequest,
         crate::models::database::table::TableConstraints,
         TableDataType,
         TableInfoResponse,
