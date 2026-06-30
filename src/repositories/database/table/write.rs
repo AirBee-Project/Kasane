@@ -92,22 +92,40 @@ impl<'a> KasaneDbWrite<'a> {
         }
 
         let mut actual_constraints = constraints.clone();
-        if let Some(TableConstraints::Enum {
-            choices,
-            mapping,
-            next_id,
-        }) = &mut actual_constraints
-        {
-            for c in choices.iter() {
-                if !mapping.contains_key(c) {
-                    if *next_id == 0 {
-                        *next_id = 1;
+        if data_type == TableDataType::Enum {
+            match &mut actual_constraints {
+                Some(TableConstraints::Enum {
+                    choices,
+                    mapping,
+                    next_id,
+                }) => {
+                    for c in choices.iter() {
+                        if !mapping.contains_key(c) {
+                            if *next_id == u16::MAX {
+                                return Err(AppError::ConstraintViolation {
+                                    reason: "Enumの選択肢が上限 (65535) に達しました".to_string(),
+                                });
+                            }
+                            if *next_id == 0 {
+                                *next_id = 1;
+                            }
+                            mapping.insert(c.clone(), *next_id);
+                            *next_id += 1;
+                        }
                     }
-                    mapping.insert(c.clone(), *next_id);
-                    *next_id += 1;
+                }
+                _ => {
+                    return Err(AppError::ConstraintViolation {
+                        reason: "Enum型には制約 (choices) が必須です".to_string(),
+                    });
                 }
             }
         }
+
+        if let Some(c) = &actual_constraints
+            && let Err(msg) = c.validate() {
+                return Err(AppError::ConstraintViolation { reason: msg });
+            }
 
         let meta = TableMetadata {
             id,
@@ -347,6 +365,11 @@ impl<'a> KasaneDbWrite<'a> {
                         }
                         for c in &current_choices {
                             if !mapping.contains_key(c) {
+                                if next_id == u16::MAX {
+                                    return Err(AppError::ConstraintViolation {
+                                        reason: "Enumの選択肢が上限 (65535) に達しました".to_string(),
+                                    });
+                                }
                                 if next_id == 0 {
                                     next_id = 1;
                                 }
@@ -372,6 +395,11 @@ impl<'a> KasaneDbWrite<'a> {
                     }
                 },
             };
+
+            if let Some(c) = &new_c
+                && let Err(msg) = c.validate() {
+                    return Err(AppError::ConstraintViolation { reason: msg });
+                }
 
             table.constraints = new_c;
 
