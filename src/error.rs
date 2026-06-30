@@ -184,43 +184,45 @@ impl AppError {
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AppError::NotFound(msg) => write!(f, "見つかりません: {}", msg),
-            AppError::Auth(e) => write!(f, "認証エラー: {}", e),
-            AppError::InternalError(msg) => write!(f, "内部エラー: {}", msg),
-            AppError::Conflict(msg) => write!(f, "競合エラー: {}", msg),
+            AppError::NotFound(msg) => write!(f, "Not found: {}", msg),
+            AppError::Auth(e) => write!(f, "Authentication error: {}", e),
+            AppError::InternalError(msg) => write!(f, "Internal error: {}", msg),
+            AppError::Conflict(msg) => write!(f, "Conflict error: {}", msg),
             AppError::DatabaseNotFound { name } => {
-                write!(f, "データベース '{}' が見つかりません", name)
+                write!(f, "Database '{}' not found", name)
             }
             AppError::DatabaseAlreadyExists { name } => {
-                write!(f, "データベース '{}' は既に存在します", name)
+                write!(f, "Database '{}' already exists", name)
             }
-            AppError::TableNotFound { name } => write!(f, "テーブル '{}' が見つかりません", name),
+            AppError::TableNotFound { name } => write!(f, "Table '{}' not found", name),
             AppError::TableAlreadyExists { name } => {
-                write!(f, "テーブル '{}' は既に存在します", name)
+                write!(f, "Table '{}' already exists", name)
             }
-            AppError::StorageError(message) => write!(f, "ストレージエラー: {}", message),
-            AppError::InvalidName { reason } => write!(f, "無効な名前: {}", reason),
-            AppError::LogicError(error) => write!(f, "ロジックエラー: {}", error),
+            AppError::StorageError(message) => write!(f, "Storage error: {}", message),
+            AppError::InvalidName { reason } => write!(f, "Invalid name: {}", reason),
+            AppError::LogicError(error) => write!(f, "Logic error: {}", error),
             AppError::ValueTypeMismatch { actual, expected } => write!(
                 f,
-                "値の型が一致しません: {:?} を想定していましたが、{:?} が指定されました",
+                "Value type mismatch: expected {:?}, got {:?}",
                 expected, actual
             ),
-            AppError::ConstraintViolation { reason } => write!(f, "制約違反: {}", reason),
+            AppError::ConstraintViolation { reason } => {
+                write!(f, "Constraint violation: {}", reason)
+            }
             AppError::NumericValueOutOfRange { actual, expected } => write!(
                 f,
-                "数値が範囲外です: {} を想定していましたが、{} が指定されました",
+                "Numeric value out of range: expected {}, got {}",
                 expected, actual
             ),
             AppError::InvalidStoredValue { reason } => {
-                write!(f, "保存された値が無効です: {}", reason)
+                write!(f, "Invalid stored value: {}", reason)
             }
             AppError::ZoomLevelPolicy {
                 max_zoom_level,
                 input_zoom_level,
             } => write!(
                 f,
-                "ズームレベルは {} 以下である必要がありますが、{} が指定されました",
+                "Zoom level policy violation: expected max {}, got {}",
                 max_zoom_level, input_zoom_level
             ),
         }

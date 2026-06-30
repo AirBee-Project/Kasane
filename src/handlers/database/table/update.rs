@@ -6,7 +6,7 @@ use crate::{
         database::table::{TableSummary, UpdateTableRequest},
         users::UserRole,
     },
-    services::database::table::table_update,
+    services::database::table::update as table_update_service,
 };
 use axum::{
     Extension, Json,
@@ -46,7 +46,7 @@ pub async fn table_update_handler(
     crate::middleware::auth::check_privilege(&state, &auth_user, &db_name, UserRole::Manage)
         .await?;
 
-    let result = table_update(
+    let result = table_update_service::table_update(
         state.clone(),
         &db_name,
         &table_name,

@@ -5,6 +5,7 @@ use crate::{
     models::database::table::{JsonValueType, TableConstraints, TableDataType},
 };
 
+/// ユーザーから送られてきた数値データが、テーブルに設定された min (最小値) と max (最大値) の範囲内に収まっているかを検証する共通のヘルパー関数
 fn check_numeric_constraint<T: PartialOrd + std::fmt::Display>(
     value: T,
     min: Option<T>,
@@ -14,14 +15,14 @@ fn check_numeric_constraint<T: PartialOrd + std::fmt::Display>(
         && value < min_val
     {
         return Err(AppError::ConstraintViolation {
-            reason: format!("値 {} は最小値 {} を下回っています", value, min_val),
+            reason: format!("Value {} is less than minimum {}", value, min_val),
         });
     }
     if let Some(max_val) = max
         && value > max_val
     {
         return Err(AppError::ConstraintViolation {
-            reason: format!("値 {} は最大値 {} を上回っています", value, max_val),
+            reason: format!("Value {} is greater than maximum {}", value, max_val),
         });
     }
     Ok(())
@@ -168,7 +169,7 @@ pub fn interpret_value(
                     {
                         return Err(AppError::ConstraintViolation {
                             reason: format!(
-                                "文字列の長さ {} は最小長 {} を下回っています",
+                                "String length {} is less than minimum length {}",
                                 chars_count, min
                             ),
                         });
@@ -178,7 +179,7 @@ pub fn interpret_value(
                     {
                         return Err(AppError::ConstraintViolation {
                             reason: format!(
-                                "文字列の長さ {} は最大長 {} を上回っています",
+                                "String length {} is greater than maximum length {}",
                                 chars_count, max
                             ),
                         });
@@ -193,7 +194,7 @@ pub fn interpret_value(
                     if !choices.contains(&v) {
                         return Err(AppError::ConstraintViolation {
                             reason: format!(
-                                "値 '{}' は許可された選択肢に含まれていません: {:?}",
+                                "Value '{}' is not among allowed choices: {:?}",
                                 v, choices
                             ),
                         });
@@ -203,12 +204,12 @@ pub fn interpret_value(
                     } else {
                         // APIから与えられたchoicesには存在するが、マッピングに無い場合は内部エラー
                         Err(AppError::InvalidStoredValue {
-                            reason: format!("Enum値 '{}' の内部マッピングが見つかりません", v),
+                            reason: format!("Internal mapping not found for enum value '{}'", v),
                         })
                     }
                 } else {
                     Err(AppError::ConstraintViolation {
-                        reason: "Enum型には制約 (choices) が必須です".to_string(),
+                        reason: "Enum type requires 'choices' constraint".to_string(),
                     })
                 }
             } else {
@@ -287,11 +288,11 @@ pub fn restore_value(
                     }
                 }
                 Err(AppError::InvalidStoredValue {
-                    reason: format!("enum ID {} はマッピングに存在しません", id),
+                    reason: format!("Enum ID {} not found in mapping", id),
                 })
             } else {
                 Err(AppError::InvalidStoredValue {
-                    reason: "Enum制約が設定されていないため値を復元できません".to_string(),
+                    reason: "Cannot restore enum value because constraints are not set".to_string(),
                 })
             }
         }

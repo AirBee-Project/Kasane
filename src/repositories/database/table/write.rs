@@ -103,7 +103,8 @@ impl<'a> KasaneDbWrite<'a> {
                         if !mapping.contains_key(c) {
                             if *next_id == u16::MAX {
                                 return Err(AppError::ConstraintViolation {
-                                    reason: "Enumの選択肢が上限 (65535) に達しました".to_string(),
+                                    reason: "Enum choices reached maximum limit (65535)"
+                                        .to_string(),
                                 });
                             }
                             if *next_id == 0 {
@@ -116,7 +117,7 @@ impl<'a> KasaneDbWrite<'a> {
                 }
                 _ => {
                     return Err(AppError::ConstraintViolation {
-                        reason: "Enum型には制約 (choices) が必須です".to_string(),
+                        reason: "Enum type requires 'choices' constraint".to_string(),
                     });
                 }
             }
@@ -374,7 +375,7 @@ impl<'a> KasaneDbWrite<'a> {
                             if !mapping.contains_key(c) {
                                 if next_id == u16::MAX {
                                     return Err(AppError::ConstraintViolation {
-                                        reason: "Enumの選択肢が上限 (65535) に達しました"
+                                        reason: "Enum choices reached maximum limit (65535)"
                                             .to_string(),
                                     });
                                 }
@@ -393,12 +394,12 @@ impl<'a> KasaneDbWrite<'a> {
                     }
                     (TableDataType::Presence, _) => {
                         return Err(AppError::ConstraintViolation {
-                            reason: "Presence型には制約を指定できません".to_string(),
+                            reason: "Presence type cannot have constraints".to_string(),
                         });
                     }
                     (_, _) => {
                         return Err(AppError::ConstraintViolation {
-                            reason: "制約の型がデータ型と一致しません".to_string(),
+                            reason: "Constraint type does not match data type".to_string(),
                         });
                     }
                 },

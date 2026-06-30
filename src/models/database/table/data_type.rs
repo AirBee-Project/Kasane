@@ -153,7 +153,7 @@ impl TableConstraints {
                     && min > max
                 {
                     return Err(format!(
-                        "最小文字数 ({}) は最大文字数 ({}) 以下である必要があります",
+                        "min_length ({}) must be less than or equal to max_length ({})",
                         min, max
                     ));
                 }
@@ -163,7 +163,7 @@ impl TableConstraints {
                     && min > max
                 {
                     return Err(format!(
-                        "最小値 ({}) は最大値 ({}) 以下である必要があります",
+                        "min ({}) must be less than or equal to max ({})",
                         min, max
                     ));
                 }
@@ -173,7 +173,7 @@ impl TableConstraints {
                     && min > max
                 {
                     return Err(format!(
-                        "最小値 ({}) は最大値 ({}) 以下である必要があります",
+                        "min ({}) must be less than or equal to max ({})",
                         min, max
                     ));
                 }
@@ -183,7 +183,7 @@ impl TableConstraints {
                     && min > max
                 {
                     return Err(format!(
-                        "最小値 ({}) は最大値 ({}) 以下である必要があります",
+                        "min ({}) must be less than or equal to max ({})",
                         min, max
                     ));
                 }
@@ -193,7 +193,7 @@ impl TableConstraints {
                     && min > max
                 {
                     return Err(format!(
-                        "最小値 ({}) は最大値 ({}) 以下である必要があります",
+                        "min ({}) must be less than or equal to max ({})",
                         min, max
                     ));
                 }
@@ -203,7 +203,7 @@ impl TableConstraints {
                     && min > max
                 {
                     return Err(format!(
-                        "最小値 ({}) は最大値 ({}) 以下である必要があります",
+                        "min ({}) must be less than or equal to max ({})",
                         min, max
                     ));
                 }
@@ -213,7 +213,7 @@ impl TableConstraints {
                     && min > max
                 {
                     return Err(format!(
-                        "最小値 ({}) は最大値 ({}) 以下である必要があります",
+                        "min ({}) must be less than or equal to max ({})",
                         min, max
                     ));
                 }

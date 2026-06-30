@@ -68,6 +68,9 @@ impl<'a> KasaneDbWrite<'a> {
 
         // データベース削除前に、関連するユーザー権限をすべて削除する。
         // `user_privileges` は (UserId, DatabaseId) をキーにしているため、全走査して対象の DatabaseId を探す。
+
+        // Todo:全探索を防ぐべき。PrefixにするとKeyが長くなってしまうので、逆引きのTableを整備すればよい。
+        // データベースとTableはそんなに変化がないので逆引きがあっても問題ない。いつかやる
         let privs_table = self.db.user_privileges;
         let mut priv_keys_to_delete = Vec::new();
         for item in privs_table.iter(&self.write_txn)? {

@@ -104,14 +104,14 @@ async fn test_table_data_insert_double() {
     put_data(
         &test_app,
         "test_table",
-        &serde_json::json!({ "value": 3.1415926535, "spatial_ids": single_id_query }),
+        &serde_json::json!({ "value": 9.99, "spatial_ids": single_id_query }),
     )
     .await;
 
     let result_json = search_data(&test_app, "test_table", &single_id_query).await;
     assert_first_entry(
         &result_json,
-        3.1415926535f64,
+        9.99f64,
         RawSingleId {
             z: 20,
             f: 0,
