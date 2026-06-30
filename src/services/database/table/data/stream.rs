@@ -13,7 +13,7 @@ use crate::{
     services::helpers::{spatial_ids::process_spatial_ids, value::restore_value},
 };
 use kasane_logic::{FlexId, IntoSingleIds, RangeId};
-use std::collections::HashSet;
+use rustc_hash::FxHashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -51,7 +51,7 @@ pub async fn get_stream(
 
     let format = query.format;
     let mut limit_left = query.limit;
-    let mut sent_hashes: HashSet<u64> = HashSet::new();
+    let mut sent_hashes: FxHashSet<u64> = FxHashSet::default();
 
     let (out_sender, out_receiver) = mpsc::channel::<Result<String, AppError>>(100);
 

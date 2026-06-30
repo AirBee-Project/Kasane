@@ -130,7 +130,7 @@ pub fn route_leaves_batched(
     txn: &RoTxn<WithoutTls>,
     table_id: TableId,
     ids: &[FlexId],
-) -> Result<std::collections::HashMap<FlexId, Vec<FlexId>>, AppError> {
+) -> Result<rustc_hash::FxHashMap<FlexId, Vec<FlexId>>, AppError> {
     // f 符号で上下半球に分け、各半球ルートから 1 回ずつ降りる。
     let mut lower = Vec::new();
     let mut upper = Vec::new();
@@ -142,7 +142,7 @@ pub fn route_leaves_batched(
         }
     }
 
-    let mut out: std::collections::HashMap<FlexId, Vec<FlexId>> = std::collections::HashMap::new();
+    let mut out: rustc_hash::FxHashMap<FlexId, Vec<FlexId>> = rustc_hash::FxHashMap::default();
     descend_batched(
         tables_data,
         txn,
@@ -170,7 +170,7 @@ fn descend_batched(
     table_id: TableId,
     region: FlexId,
     ids: Vec<FlexId>,
-    out: &mut std::collections::HashMap<FlexId, Vec<FlexId>>,
+    out: &mut rustc_hash::FxHashMap<FlexId, Vec<FlexId>>,
 ) -> Result<(), AppError> {
     if ids.is_empty() {
         return Ok(());
