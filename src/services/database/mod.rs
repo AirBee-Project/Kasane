@@ -52,31 +52,46 @@ pub async fn list(
 
 pub async fn create(app_state: &AppState, name: &str) -> Result<DatabaseInfoResponse, AppError> {
     crate::services::helpers::name_valid::name_valid(name)?;
-    let write_txn = app_state.db.env.write_txn()?;
-    let mut db = crate::repositories::KasaneDbWrite::new(write_txn, &app_state.db);
-    let res = db.database_create(name)?;
-    db.commit()?;
-    Ok(res)
+
+    let app_state = app_state.clone();
+    let name = name.to_string();
+
+    tokio::task::spawn_blocking(move || -> Result<DatabaseInfoResponse, AppError> {
+        let write_txn = app_state.db.env.write_txn()?;
+        let mut db = crate::repositories::KasaneDbWrite::new(write_txn, &app_state.db);
+        let res = db.database_create(&name)?;
+        db.commit()?;
+        Ok(res)
+    })
+    .await
+    .map_err(|e| AppError::InternalError(e.to_string()))?
 }
 
 pub async fn remove(app_state: &AppState, name: &str) -> Result<(), AppError> {
-    let tables = {
-        let read_txn = app_state.db.env.read_txn()?;
-        let db = crate::repositories::KasaneDbRead::new(read_txn, &app_state.db);
-        db.table_list(name)?
-    };
+    let app_state = app_state.clone();
+    let name = name.to_string();
 
-    let write_txn = app_state.db.env.write_txn()?;
-    let mut db = crate::repositories::KasaneDbWrite::new(write_txn, &app_state.db);
+    tokio::task::spawn_blocking(move || -> Result<(), AppError> {
+        let tables = {
+            let read_txn = app_state.db.env.read_txn()?;
+            let db = crate::repositories::KasaneDbRead::new(read_txn, &app_state.db);
+            db.table_list(&name)?
+        };
 
-    // First, list all tables and remove them
-    for table in tables {
-        db.table_remove(name, &table.name)?;
-    }
+        let write_txn = app_state.db.env.write_txn()?;
+        let mut db = crate::repositories::KasaneDbWrite::new(write_txn, &app_state.db);
 
-    db.database_remove(name)?;
-    db.commit()?;
-    Ok(())
+        // First, list all tables and remove them
+        for table in tables {
+            db.table_remove(&name, &table.name)?;
+        }
+
+        db.database_remove(&name)?;
+        db.commit()?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| AppError::InternalError(e.to_string()))?
 }
 
 pub mod table;

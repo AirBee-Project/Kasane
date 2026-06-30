@@ -10,8 +10,13 @@ use crate::{error::AppError, repositories::KasaneDbRead};
 /// `data_get` の戻り値：`(値バイト, その値を持つ FlexId 群)` の一覧。
 type ValueGroups = Vec<(Vec<u8>, Vec<FlexId>)>;
 
+type ValueMap = HashMap<Vec<u8>, Vec<FlexId>>;
+
 /// `data_get` を 並列化する基準。
 const DATA_GET_PARALLEL_THRESHOLD: usize = 64;
+
+/// `data_get_stream` を Rayon で並列化する基準。
+const DATA_GET_STREAM_PARALLEL_THRESHOLD: usize = 100;
 
 impl<'a> KasaneDbRead<'a> {
     /// 指定された範囲の空間IDを値ごとにグループ化して返す。
@@ -74,37 +79,35 @@ impl<'a> KasaneDbRead<'a> {
         let tables_data = self.db.tables_data;
         let env = self.db.env.clone();
 
-        rayon::spawn(move || {
+        tokio::task::spawn_blocking(move || {
             let flex_ids_vec: Vec<FlexId> = flex_ids.iter_flex_ids().collect();
             if flex_ids_vec.is_empty() {
                 return;
             }
 
-            if flex_ids_vec.len() < 100 {
-                let txn_res = env
-                    .read_txn()
-                    .map_err(|e| AppError::InternalError(e.to_string()));
-                match txn_res {
-                    Ok(txn) => {
-                        let mut local = HashMap::new();
-                        if let Err(e) = Self::resolve_query_batch(
-                            &tables_data,
-                            &txn,
-                            table_id,
-                            &flex_ids_vec,
-                            &mut local,
-                        ) {
-                            let _ = sender.blocking_send(Err(e));
-                            return;
-                        }
-                        for (val, ids) in local {
-                            if sender.blocking_send(Ok((val, ids))).is_err() {
-                                return; // receiver dropped (limit reached or stream closed)
-                            }
-                        }
-                    }
+            // 小規模: 単一スレッドで解決し逐次送信。
+            if flex_ids_vec.len() < DATA_GET_STREAM_PARALLEL_THRESHOLD {
+                let txn = match env.read_txn() {
+                    Ok(txn) => txn,
                     Err(e) => {
-                        let _ = sender.blocking_send(Err(e));
+                        let _ = sender.blocking_send(Err(AppError::InternalError(e.to_string())));
+                        return;
+                    }
+                };
+                let mut local = HashMap::new();
+                if let Err(e) = Self::resolve_query_batch(
+                    &tables_data,
+                    &txn,
+                    table_id,
+                    &flex_ids_vec,
+                    &mut local,
+                ) {
+                    let _ = sender.blocking_send(Err(e));
+                    return;
+                }
+                for (val, ids) in local {
+                    if sender.blocking_send(Ok((val, ids))).is_err() {
+                        return; // receiver dropped (limit reached or stream closed)
                     }
                 }
                 return;
@@ -115,28 +118,32 @@ impl<'a> KasaneDbRead<'a> {
                 .len()
                 .div_ceil(rayon::current_num_threads().max(1));
 
-            let _ = flex_ids_vec
+            let partials: Result<Vec<ValueMap>, AppError> = flex_ids_vec
                 .par_chunks(chunk_size.max(1))
-                .try_for_each(|chunk| {
-                    let txn = env.read_txn().map_err(|e| {
-                        let _ = sender.blocking_send(Err(AppError::InternalError(e.to_string())));
-                    })?;
+                .map(|chunk| {
+                    let txn = env
+                        .read_txn()
+                        .map_err(|e| AppError::InternalError(e.to_string()))?;
+                    let mut local = ValueMap::new();
+                    Self::resolve_query_batch(&tables_data, &txn, table_id, chunk, &mut local)?;
+                    Ok(local)
+                })
+                .collect();
 
-                    let mut local = HashMap::new();
-                    if let Err(e) =
-                        Self::resolve_query_batch(&tables_data, &txn, table_id, chunk, &mut local)
-                    {
-                        let _ = sender.blocking_send(Err(e));
-                        return Err(());
-                    }
-
-                    for (val, ids) in local {
-                        if sender.blocking_send(Ok((val, ids))).is_err() {
-                            return Err(());
+            match partials {
+                Ok(partials) => {
+                    for partial in partials {
+                        for (val, ids) in partial {
+                            if sender.blocking_send(Ok((val, ids))).is_err() {
+                                return; // receiver dropped
+                            }
                         }
                     }
-                    Ok(())
-                });
+                }
+                Err(e) => {
+                    let _ = sender.blocking_send(Err(e));
+                }
+            }
         });
     }
 
