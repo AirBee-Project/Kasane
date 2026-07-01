@@ -190,7 +190,12 @@ paths:
       tags:
       - tables
       summary: テーブルの更新
-      description: テーブルの名前変更や値の制約を更新する。この操作はデータベースの Manage 権限が必要です。
+      description: |-
+        テーブルの名前変更や値の制約を更新します。この操作はデータベースの Manage 権限が必要です。
+
+        制約を変更する際、既存のデータが新しい制約に適合しているかを検証する挙動を `validate_existing_data` フラグで制御できます。
+        - `true`（デフォルト）の場合、既存データが新しい制約に違反していればエラーとして更新を却下します。
+        - `false` の場合、既存データのチェックをスキップして高速に変更を適用します（不整合なデータが残る可能性があります）。
       operationId: table_update_handler
       parameters:
       - name: db_name
@@ -219,7 +224,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/TableSummary'
         '400':
-          description: リクエストが不正（制約違反やパラメータエラーなど）
+          description: リクエストが不正（パラメータエラー、または validate_existing_data=true の状態で既存データが新しい制約に違反した場合）
         '401':
           description: 認証エラー
         '403':
@@ -246,14 +251,14 @@ paths:
         required: true
         schema:
           type: string
-        example: src_db
+        example: source_database
       - name: table_name
         in: path
         description: コピー元テーブル名
         required: true
         schema:
           type: string
-        example: src_table
+        example: source_table
       requestBody:
         content:
           application/json:
@@ -559,6 +564,14 @@ paths:
       responses:
         '200':
           description: 成功
+        '400':
+          description: リクエストが不正（パラメータエラー、または新しいデータベース名が不正）
+        '403':
+          description: 権限不足（Manage権限がない場合）
+        '404':
+          description: 変更元のデータベースが存在しない
+        '409':
+          description: 変更後のデータベース名がすでに存在する
       security:
       - bearer_auth: []
   /databases/{name}/copy:
@@ -575,7 +588,7 @@ paths:
         required: true
         schema:
           type: string
-        example: src_db
+        example: source_database
       requestBody:
         content:
           application/json:
@@ -1997,6 +2010,11 @@ components:
             description: 更新後の値に対する制約。指定しない場合は制約を削除する。
         validate_existing_data:
           type: boolean
+          description: |-
+            既存データが新しい制約を満たしているか検証するかどうか。
+
+            - `true` (デフォルト): 既存データが新しい制約に違反している場合、更新を却下してエラー (400) を返します。
+            - `false`: 既存データの走査をスキップして即座に変更を適用します。高速に変更できますが、制約に適合しない不整合なデータが残るリスクがあります。
           default: true
           example: true
     UserInfoResponse:

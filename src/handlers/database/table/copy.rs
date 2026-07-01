@@ -22,8 +22,8 @@ use crate::{
     post,
     path = "/databases/{db_name}/tables/{table_name}/copy",
     params(
-        ("db_name" = String, Path, description = "コピー元データベース名", example = "src_db"),
-        ("table_name" = String, Path, description = "コピー元テーブル名", example = "src_table")
+        ("db_name" = String, Path, description = "コピー元データベース名", example = "source_database"),
+        ("table_name" = String, Path, description = "コピー元テーブル名", example = "source_table")
     ),
     request_body = CopyTableRequest,
     responses(

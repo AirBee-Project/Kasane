@@ -92,6 +92,10 @@ pub struct UpdateTableRequest {
     /// 更新後の値に対する制約。指定しない場合は制約を削除する。
     #[schema(example = json!({"type": "Int", "min": 0, "max": 100}))]
     pub constraints: Option<UpdateTableConstraints>,
+    /// 既存データが新しい制約を満たしているか検証するかどうか。
+    ///
+    /// - `true` (デフォルト): 既存データが新しい制約に違反している場合、更新を却下してエラー (400) を返します。
+    /// - `false`: 既存データの走査をスキップして即座に変更を適用します。高速に変更できますが、制約に適合しない不整合なデータが残るリスクがあります。
     #[serde(default = "default_validate_existing_data")]
     #[schema(example = true, default = true)]
     pub validate_existing_data: bool,

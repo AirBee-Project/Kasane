@@ -141,7 +141,11 @@ pub async fn remove_database(
     ),
     request_body = UpdateDatabaseRequest,
     responses(
-        (status = 200, description = "成功")
+        (status = 200, description = "成功"),
+        (status = 400, description = "リクエストが不正（パラメータエラー、または新しいデータベース名が不正）"),
+        (status = 403, description = "権限不足（Manage権限がない場合）"),
+        (status = 404, description = "変更元のデータベースが存在しない"),
+        (status = 409, description = "変更後のデータベース名がすでに存在する")
     ),
     security(("bearer_auth" = [])),
     tag = "databases"
@@ -170,7 +174,7 @@ pub async fn database_rename(
     post,
     path = "/databases/{name}/copy",
     params(
-        ("name" = String, Path, description = "コピー元データベース名", example = "src_db")
+        ("name" = String, Path, description = "コピー元データベース名", example = "source_database")
     ),
     request_body = CopyDatabaseRequest,
     responses(
