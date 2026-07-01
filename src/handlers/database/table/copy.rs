@@ -27,7 +27,11 @@ use crate::{
     ),
     request_body = CopyTableRequest,
     responses(
-        (status = 200, body = TableSummary, description = "成功")
+        (status = 200, body = TableSummary, description = "成功"),
+        (status = 400, description = "リクエストが不正（パラメータエラー、または不正なテーブル名）"),
+        (status = 403, description = "権限不足（コピー元DBのRead権限、またはコピー先DBのManage権限がない場合）"),
+        (status = 404, description = "コピー元データベース、コピー元テーブル、またはコピー先データベースが存在しない"),
+        (status = 409, description = "コピー先テーブルがすでに存在する")
     ),
     security(("bearer_auth" = [])),
     tag = "tables"
@@ -38,7 +42,7 @@ pub async fn table_copy(
     Extension(auth_user): Extension<AuthUser>,
     Json(request): Json<CopyTableRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let dest_db_name = request.destination_db_name.as_deref().unwrap_or(&db_name);
+    let dest_db_name = request.copy_db_name.as_deref().unwrap_or(&db_name);
 
     // 1. コピー元データベースのRead権限チェック
     crate::middleware::auth::check_privilege(&app_state, &auth_user, &db_name, UserRole::Read)
@@ -58,7 +62,7 @@ pub async fn table_copy(
         &db_name,
         &table_name,
         dest_db_name,
-        &request.destination_table_name,
+        &request.copy_table_name,
     )
     .await?;
 

@@ -86,17 +86,17 @@ pub async fn rename(app_state: &AppState, name: &str, new_name: &str) -> Result<
 pub async fn copy(
     app_state: &AppState,
     name: &str,
-    destination_name: &str,
+    copy_name: &str,
     user_id: Option<crate::models::id::UserId>,
 ) -> Result<DatabaseInfoResponse, AppError> {
     let app_state = app_state.clone();
     let name = name.to_string();
-    let destination_name = destination_name.to_string();
+    let copy_name = copy_name.to_string();
 
     tokio::task::spawn_blocking(move || {
         app_state
             .db
-            .write(|db| db.database_copy(&name, &destination_name, user_id))
+            .write(|db| db.database_copy(&name, &copy_name, user_id))
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?

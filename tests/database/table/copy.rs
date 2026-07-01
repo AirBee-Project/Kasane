@@ -28,7 +28,7 @@ async fn test_table_copy_success_same_db() {
 
     // テーブルをコピー
     let copy_body = serde_json::json!({
-        "destination_table_name": "copied_table"
+        "copy_table_name": "copied_table"
     });
     let req = Request::builder()
         .method("POST")

@@ -865,7 +865,7 @@ async fn test_copy_and_rename_permissions() {
         .uri("/databases/renamed_db/copy")
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", user_a_token))
-        .body(Body::from(r#"{"destination_name": "copied_db"}"#))
+        .body(Body::from(r#"{"copy_name": "copied_db"}"#))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
@@ -894,7 +894,7 @@ async fn test_copy_and_rename_permissions() {
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", user_b_token))
         .body(Body::from(
-            r#"{"destination_db_name": "copied_db", "destination_table_name": "copied_table"}"#,
+            r#"{"copy_db_name": "copied_db", "copy_table_name": "copied_table"}"#,
         ))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();

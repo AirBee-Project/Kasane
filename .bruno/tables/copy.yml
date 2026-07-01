@@ -19,8 +19,8 @@ http:
     type: json
     data: |-
       {
-        "destination_db_name": "destination_database",
-        "destination_table_name": "destination_table"
+        "copy_db_name": "example_database",
+        "copy_table_name": "example_table_copy"
       }
   auth:
     type: bearer
@@ -49,8 +49,8 @@ examples:
         type: json
         data: |-
           {
-            "destination_db_name": "dest_db",
-            "destination_table_name": "dest_table"
+            "copy_db_name": "dest_db",
+            "copy_table_name": "dest_table"
           }
     response:
       status: 200

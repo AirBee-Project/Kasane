@@ -100,8 +100,8 @@ pub struct UpdateTableRequest {
 #[derive(Debug, serde::Deserialize, ToSchema)]
 /// テーブルのコピーを行う
 pub struct CopyTableRequest {
-    #[schema(example = "destination_database")]
-    pub destination_db_name: Option<String>,
-    #[schema(example = "destination_table")]
-    pub destination_table_name: String,
+    #[schema(example = "example_database")]
+    pub copy_db_name: Option<String>,
+    #[schema(example = "example_table_copy")]
+    pub copy_table_name: String,
 }

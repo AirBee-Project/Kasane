@@ -247,7 +247,7 @@ async fn test_database_copy_success() {
         .method("POST")
         .uri("/databases/src_db/copy")
         .header("Content-Type", "application/json")
-        .body(Body::from(r#"{"destination_name": "copied_db"}"#))
+        .body(Body::from(r#"{"copy_name": "copied_db"}"#))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);

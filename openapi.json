@@ -411,6 +411,18 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "リクエストが不正（パラメータエラー、または不正なテーブル名）"
+          },
+          "403": {
+            "description": "権限不足（コピー元DBのRead権限、またはコピー先DBのManage権限がない場合）"
+          },
+          "404": {
+            "description": "コピー元データベース、コピー元テーブル、またはコピー先データベースが存在しない"
+          },
+          "409": {
+            "description": "コピー先テーブルがすでに存在する"
           }
         },
         "security": [
@@ -1322,10 +1334,10 @@
       "CopyDatabaseRequest": {
         "type": "object",
         "required": [
-          "destination_name"
+          "copy_name"
         ],
         "properties": {
-          "destination_name": {
+          "copy_name": {
             "type": "string",
             "example": "example_database_copy"
           }
@@ -1335,19 +1347,19 @@
         "type": "object",
         "description": "テーブルのコピーを行う",
         "required": [
-          "destination_table_name"
+          "copy_table_name"
         ],
         "properties": {
-          "destination_db_name": {
+          "copy_db_name": {
             "type": [
               "string",
               "null"
             ],
-            "example": "destination_database"
+            "example": "example_database"
           },
-          "destination_table_name": {
+          "copy_table_name": {
             "type": "string",
-            "example": "destination_table"
+            "example": "example_table_copy"
           }
         }
       },

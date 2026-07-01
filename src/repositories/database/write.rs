@@ -134,11 +134,11 @@ impl<'a> KasaneDbWrite<'a> {
     pub fn database_copy(
         &mut self,
         src_db_name: &str,
-        dest_db_name: &str,
+        copy_name: &str,
         user_id: Option<crate::models::id::UserId>,
     ) -> Result<DatabaseInfoResponse, AppError> {
         // コピー先データベース名の妥当性検証
-        crate::services::helpers::name_valid::name_valid(dest_db_name)?;
+        crate::services::helpers::name_valid::name_valid(copy_name)?;
 
         // 1. コピー元データベースの存在確認
         let src_db_meta = {
@@ -150,20 +150,20 @@ impl<'a> KasaneDbWrite<'a> {
         };
 
         // 2. コピー先データベースがすでに存在するかチェック
-        if self.database_info(dest_db_name)?.is_some() {
+        if self.database_info(copy_name)?.is_some() {
             return Err(AppError::DatabaseAlreadyExists {
-                name: dest_db_name.to_string(),
+                name: copy_name.to_string(),
             });
         }
 
         // 3. コピー先データベースを作成
-        let dest_db_id = crate::models::id::DatabaseId(Uuid::now_v7());
-        let dest_meta = DatabaseMetadata { id: dest_db_id };
+        let copy_db_id = crate::models::id::DatabaseId(Uuid::now_v7());
+        let copy_meta = DatabaseMetadata { id: copy_db_id };
 
         let db = self.db.databases;
-        db.put(&mut self.write_txn, dest_db_name, &dest_meta)?;
+        db.put(&mut self.write_txn, copy_name, &copy_meta)?;
         self.database_caches
-            .insert(dest_db_name.to_string(), dest_meta);
+            .insert(copy_name.to_string(), copy_meta);
 
         // 4. コピー元データベース内の全テーブル名を取得
         let db_tables = self.db.tables;
@@ -184,7 +184,7 @@ impl<'a> KasaneDbWrite<'a> {
 
         // 5. 各テーブルをコピー
         for table_name in table_names {
-            self.table_copy(src_db_name, &table_name, dest_db_name, &table_name)?;
+            self.table_copy(src_db_name, &table_name, copy_name, &table_name)?;
         }
 
         // 6. コピー実行ユーザーに対して新しいデータベースの Manage 権限を自動付与
@@ -192,13 +192,13 @@ impl<'a> KasaneDbWrite<'a> {
             let privs_table = self.db.user_privileges;
             privs_table.put(
                 &mut self.write_txn,
-                &(uid, dest_db_id),
+                &(uid, copy_db_id),
                 &(crate::models::users::UserRole::Manage as u8),
             )?;
         }
 
         Ok(DatabaseInfoResponse {
-            name: dest_db_name.to_string(),
+            name: copy_name.to_string(),
         })
     }
 }
