@@ -589,6 +589,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DatabaseInfoResponse'
+        '400':
+          description: リクエストが不正（パラメータエラー、または不正なデータベース名）
+        '403':
+          description: 権限不足（コピー元DBのRead権限がない場合）
+        '404':
+          description: コピー元データベースが存在しない
+        '409':
+          description: コピー先データベース、またはコピー元と同名のデータベースがすでに存在する
       security:
       - bearer_auth: []
   /system/info:
