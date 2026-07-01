@@ -814,7 +814,7 @@
         "tags": [
           "databases"
         ],
-        "summary": "データベース名の変更",
+        "summary": "データベース名の更新",
         "description": "指定したデータベースの名前を変更します。対象データベースのManage以上の権限が必要です。",
         "operationId": "database_rename",
         "parameters": [
@@ -888,6 +888,33 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DatabaseInfoResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/system/info": {
+      "get": {
+        "tags": [
+          "crate::handlers::system"
+        ],
+        "summary": "サーバーのステータスとバージョン情報を取得する。",
+        "description": "ログイン済みのユーザーであれば誰でもアクセス可能です。",
+        "operationId": "get_system_info",
+        "responses": {
+          "200": {
+            "description": "Status and version retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemInfoResponse"
                 }
               }
             }
@@ -2197,6 +2224,23 @@
           }
         ]
       },
+      "SystemInfoResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "version"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "サーバーのステータス（通常は \"ok\"）"
+          },
+          "version": {
+            "type": "string",
+            "description": "サーバーのバージョン"
+          }
+        }
+      },
       "TableConstraints": {
         "oneOf": [
           {
@@ -3024,6 +3068,10 @@
     {
       "name": "data",
       "description": "Data manipulation operations"
+    },
+    {
+      "name": "system",
+      "description": "System information endpoints"
     }
   ]
 }

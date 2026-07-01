@@ -1,5 +1,5 @@
 info:
-  name: database_rename
+  name: database_update
   type: http
   seq: 5
   tags:

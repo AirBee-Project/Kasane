@@ -130,7 +130,7 @@ pub async fn remove_database(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// データベース名の変更
+/// データベース名の更新
 ///
 /// 指定したデータベースの名前を変更します。対象データベースのManage以上の権限が必要です。
 #[utoipa::path(

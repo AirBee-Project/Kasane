@@ -218,7 +218,20 @@ impl TableConstraints {
                     ));
                 }
             }
-            TableConstraints::Enum { .. } => {}
+            TableConstraints::Enum { choices, .. } => {
+                for c in choices {
+                    if c.is_empty() {
+                        return Err("Enum choice cannot be empty".to_string());
+                    }
+                    let count = c.chars().count();
+                    if count > 255 {
+                        return Err(format!(
+                            "Enum choice '{}' exceeds maximum length of 255 characters (actual: {})",
+                            c, count
+                        ));
+                    }
+                }
+            }
         }
         Ok(())
     }

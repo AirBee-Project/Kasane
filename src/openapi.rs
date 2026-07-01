@@ -50,6 +50,8 @@ impl utoipa::Modify for SecurityAddon {
     paths(
         // Auth
         crate::handlers::auth::login,
+        // System
+        crate::handlers::system::get_system_info,
         // Users
         crate::handlers::users::list_users,
         crate::handlers::users::create_user,
@@ -97,6 +99,8 @@ impl utoipa::Modify for SecurityAddon {
         // Auth
         LoginRequest,
         LoginResponse,
+        // System
+        crate::models::system::SystemInfoResponse,
         // Users
         CreateUserRequest,
         UserInfoResponse,
@@ -140,7 +144,9 @@ impl utoipa::Modify for SecurityAddon {
         (name = "Users", description = "User management operations"),
         (name = "databases", description = "Database operations"),
         (name = "tables", description = "Table operations"),
-        (name = "data", description = "Data manipulation operations")
+        (name = "data", description = "Data manipulation operations"),
+        (name = "system", description = "System information endpoints")
+
     )
 )]
 pub struct ApiDoc;
