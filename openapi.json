@@ -903,7 +903,7 @@
     "/system/info": {
       "get": {
         "tags": [
-          "crate::handlers::system"
+          "system"
         ],
         "summary": "サーバーのステータスとバージョン情報を取得する。",
         "description": "ログイン済みのユーザーであれば誰でもアクセス可能です。",
@@ -3071,7 +3071,7 @@
     },
     {
       "name": "system",
-      "description": "System information endpoints"
+      "description": "System operations"
     }
   ]
 }

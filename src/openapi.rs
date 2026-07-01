@@ -145,8 +145,7 @@ impl utoipa::Modify for SecurityAddon {
         (name = "databases", description = "Database operations"),
         (name = "tables", description = "Table operations"),
         (name = "data", description = "Data manipulation operations"),
-        (name = "system", description = "System information endpoints")
-
+        (name = "system", description = "System operations")
     )
 )]
 pub struct ApiDoc;

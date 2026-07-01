@@ -12,7 +12,8 @@ use axum::Json;
     ),
     security(
         ("bearer_auth" = [])
-    )
+    ),
+    tag = "system"
 )]
 pub async fn get_system_info() -> Json<SystemInfoResponse> {
     Json(SystemInfoResponse {
