@@ -6,11 +6,6 @@ use kasane_logic::SpatialIdSet;
 use tokio::sync::{mpsc, oneshot};
 
 /// 書き込みバッチャーへ渡す**検証済み**の書き込み要求。
-///
-/// テーブル存在確認・値の解釈（型/制約）・空間IDのズーム解決といった
-/// 「失敗し得るユーザ入力検証」はすべて enqueue 前（サービス層）で完了させておく。
-/// これにより本 op の適用（`data_*`）はほぼ無謬となり、あるリクエストの検証失敗が
-/// 同一バッチ内の無関係な正常リクエストを巻き添えでロールバックさせる問題を防ぐ。
 pub enum WriteOp {
     Insert {
         table_id: TableId,
@@ -152,7 +147,8 @@ pub fn process_batch(db: &crate::db_init::AppDb, ops: Vec<WriteOp>) {
         }
     } else {
         let _ = db_write.abort();
-        // 失敗した op には自身のエラーを、それ以外には「巻き添え abort」を返す。
+        // 失敗した op には自身のエラーを、それ以外には巻き添えで発生した`abort`を返す。
+        // 他のリクエストの巻き添えで`abort`するケースはなく、LMDBのレイヤーのエラーにより`abort`するため、ほとんど発生することはない
         for (reply, res) in replies.into_iter().zip(results) {
             let err = res
                 .err()
