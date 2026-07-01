@@ -1,33 +1,48 @@
 use crate::error::AppError;
-use crate::models::database::table::data::ZoomLevelPolicy;
-use crate::models::spatial_id::SpatialId;
+use crate::models::database::table::TableDataType;
+use crate::models::id::TableId;
 use crate::repositories::KasaneDbWrite;
+use kasane_logic::SpatialIdSet;
 use tokio::sync::{mpsc, oneshot};
 
+/// 書き込みバッチャーへ渡す**検証済み**の書き込み要求。
+///
+/// テーブル存在確認・値の解釈（型/制約）・空間IDのズーム解決といった
+/// 「失敗し得るユーザ入力検証」はすべて enqueue 前（サービス層）で完了させておく。
+/// これにより本 op の適用（`data_*`）はほぼ無謬となり、あるリクエストの検証失敗が
+/// 同一バッチ内の無関係な正常リクエストを巻き添えでロールバックさせる問題を防ぐ。
 pub enum WriteOp {
     Insert {
-        db_name: String,
-        table_name: String,
-        ids: Vec<SpatialId>,
-        policy: ZoomLevelPolicy,
-        value: serde_json::Value,
+        table_id: TableId,
+        data_type: TableDataType,
+        ids: SpatialIdSet,
+        value: Vec<u8>,
         reply: oneshot::Sender<Result<(), AppError>>,
     },
     Upsert {
-        db_name: String,
-        table_name: String,
-        ids: Vec<SpatialId>,
-        policy: ZoomLevelPolicy,
-        value: serde_json::Value,
+        table_id: TableId,
+        data_type: TableDataType,
+        ids: SpatialIdSet,
+        value: Vec<u8>,
         reply: oneshot::Sender<Result<(), AppError>>,
     },
     Remove {
-        db_name: String,
-        table_name: String,
-        ids: Vec<SpatialId>,
-        policy: ZoomLevelPolicy,
+        table_id: TableId,
+        data_type: TableDataType,
+        ids: SpatialIdSet,
         reply: oneshot::Sender<Result<(), AppError>>,
     },
+}
+
+impl WriteOp {
+    /// バッチ処理を諦めるときに、各 op の応答チャネルだけを取り出す。
+    fn into_reply(self) -> oneshot::Sender<Result<(), AppError>> {
+        match self {
+            WriteOp::Insert { reply, .. }
+            | WriteOp::Upsert { reply, .. }
+            | WriteOp::Remove { reply, .. } => reply,
+        }
+    }
 }
 
 pub fn spawn_batcher() -> (mpsc::Sender<WriteOp>, mpsc::Receiver<WriteOp>) {
@@ -57,7 +72,15 @@ pub fn run_batcher(db: crate::db_init::AppDb, mut rx: mpsc::Receiver<WriteOp>) {
                 }
             }
 
-            process_batch(&db, batch);
+            // 1バッチの処理中に panic しても、ライタスレッド自体は落とさない。
+            // （落とすと write_sender は生きたまま受信側だけ消え、以降の全書き込みが恒久的に失敗する）
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                process_batch(&db, batch);
+            }));
+            if result.is_err() {
+                // panic 時、当該バッチの reply は drop され呼び出し側は RecvError を受け取る。
+                tracing::error!("write batcher panicked while processing a batch; continuing");
+            }
         }
     });
 }
@@ -68,12 +91,9 @@ pub fn process_batch(db: &crate::db_init::AppDb, ops: Vec<WriteOp>) {
         Err(e) => {
             let err_msg = format!("Failed to begin WriteTxn: {}", e);
             for op in ops {
-                let reply = match op {
-                    WriteOp::Insert { reply, .. } => reply,
-                    WriteOp::Upsert { reply, .. } => reply,
-                    WriteOp::Remove { reply, .. } => reply,
-                };
-                let _ = reply.send(Err(AppError::InternalError(err_msg.clone())));
+                let _ = op
+                    .into_reply()
+                    .send(Err(AppError::InternalError(err_msg.clone())));
             }
             return;
         }
@@ -86,37 +106,31 @@ pub fn process_batch(db: &crate::db_init::AppDb, ops: Vec<WriteOp>) {
     for op in ops {
         let (res, reply) = match op {
             WriteOp::Insert {
-                db_name,
-                table_name,
+                table_id,
+                data_type,
                 ids,
-                policy,
                 value,
                 reply,
-            } => {
-                let r = handle_insert(&mut db_write, &db_name, &table_name, &ids, &policy, value);
-                (r, reply)
-            }
+            } => (
+                db_write.data_insert(table_id, data_type, ids, &value),
+                reply,
+            ),
             WriteOp::Upsert {
-                db_name,
-                table_name,
+                table_id,
+                data_type,
                 ids,
-                policy,
                 value,
                 reply,
-            } => {
-                let r = handle_upsert(&mut db_write, &db_name, &table_name, &ids, &policy, value);
-                (r, reply)
-            }
-            WriteOp::Remove {
-                db_name,
-                table_name,
-                ids,
-                policy,
+            } => (
+                db_write.data_upsert(table_id, data_type, ids, &value),
                 reply,
-            } => {
-                let r = handle_remove(&mut db_write, &db_name, &table_name, &ids, &policy);
-                (r, reply)
-            }
+            ),
+            WriteOp::Remove {
+                table_id,
+                data_type,
+                ids,
+                reply,
+            } => (db_write.data_remove(table_id, data_type, ids), reply),
         };
         results.push(res);
         replies.push(reply);
@@ -138,6 +152,7 @@ pub fn process_batch(db: &crate::db_init::AppDb, ops: Vec<WriteOp>) {
         }
     } else {
         let _ = db_write.abort();
+        // 失敗した op には自身のエラーを、それ以外には「巻き添え abort」を返す。
         for (reply, res) in replies.into_iter().zip(results) {
             let err = res
                 .err()
@@ -145,94 +160,4 @@ pub fn process_batch(db: &crate::db_init::AppDb, ops: Vec<WriteOp>) {
             let _ = reply.send(Err(err));
         }
     }
-}
-
-fn handle_insert(
-    db: &mut KasaneDbWrite,
-    db_name: &str,
-    table_name: &str,
-    spatial_ids: &[SpatialId],
-    policy: &ZoomLevelPolicy,
-    value: serde_json::Value,
-) -> Result<(), AppError> {
-    let table = match db.table_info(db_name, table_name)? {
-        Some(v) => v,
-        None => {
-            return Err(AppError::TableNotFound {
-                name: table_name.to_string(),
-            });
-        }
-    };
-
-    let parsed_value = crate::services::helpers::value::interpret_value(
-        table.data_type,
-        table.constraints.as_ref(),
-        value,
-    )?;
-    let ids = crate::services::helpers::spatial_ids::process_spatial_ids(
-        spatial_ids,
-        table.max_zoom_level,
-        policy,
-    )?;
-
-    db.data_insert(table.id, table.data_type, ids, &parsed_value)?;
-    Ok(())
-}
-
-fn handle_upsert(
-    db: &mut KasaneDbWrite,
-    db_name: &str,
-    table_name: &str,
-    spatial_ids: &[SpatialId],
-    policy: &ZoomLevelPolicy,
-    value: serde_json::Value,
-) -> Result<(), AppError> {
-    let table = match db.table_info(db_name, table_name)? {
-        Some(v) => v,
-        None => {
-            return Err(AppError::TableNotFound {
-                name: table_name.to_string(),
-            });
-        }
-    };
-
-    let parsed_value = crate::services::helpers::value::interpret_value(
-        table.data_type,
-        table.constraints.as_ref(),
-        value,
-    )?;
-    let ids = crate::services::helpers::spatial_ids::process_spatial_ids(
-        spatial_ids,
-        table.max_zoom_level,
-        policy,
-    )?;
-
-    db.data_upsert(table.id, table.data_type, ids, &parsed_value)?;
-    Ok(())
-}
-
-fn handle_remove(
-    db: &mut KasaneDbWrite,
-    db_name: &str,
-    table_name: &str,
-    spatial_ids: &[SpatialId],
-    policy: &ZoomLevelPolicy,
-) -> Result<(), AppError> {
-    let table = match db.table_info(db_name, table_name)? {
-        Some(v) => v,
-        None => {
-            return Err(AppError::TableNotFound {
-                name: table_name.to_string(),
-            });
-        }
-    };
-
-    let ids = crate::services::helpers::spatial_ids::process_spatial_ids(
-        spatial_ids,
-        table.max_zoom_level,
-        policy,
-    )?;
-
-    db.data_remove(table.id, table.data_type, ids)?;
-    Ok(())
 }

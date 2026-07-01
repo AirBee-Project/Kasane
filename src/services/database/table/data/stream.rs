@@ -9,7 +9,6 @@ use crate::{
         },
         spatial_id::{RawFlexId, RawRangeId, RawSingleId, SpatialId},
     },
-    repositories::KasaneDbRead,
     services::helpers::{spatial_ids::process_spatial_ids, value::restore_value},
 };
 use kasane_logic::{FlexId, IntoSingleIds, RangeId};
@@ -26,28 +25,27 @@ pub async fn get_stream(
     zoom_level_policy: &ZoomLevelPolicy,
     query: &GetDataQuery,
 ) -> Result<impl tokio_stream::Stream<Item = Result<String, AppError>> + use<>, AppError> {
-    let read_txn = app_state.db.env.read_txn()?;
-    let db = KasaneDbRead::new(read_txn, &app_state.db);
-    let table = match db.table_info(db_name, table_name) {
-        Ok(Some(v)) => v,
-        Ok(None) => {
-            tracing::debug!("Table not found: {}", table_name);
-            return Err(AppError::TableNotFound {
-                name: table_name.to_string(),
-            });
-        }
-        Err(e) => {
-            tracing::error!("Failed to get table info for '{}': {}", table_name, e);
-            return Err(e);
-        }
-    };
-    let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
-    tracing::debug!("Searching {} spatial IDs for streaming", ids.count());
-
-    let data_type = table.data_type;
-
     let (sender, mut receiver) = mpsc::channel::<Result<(Vec<u8>, Vec<FlexId>), AppError>>(100);
-    db.data_get_stream(table.id, ids, sender);
+
+    let (data_type, constraints) = app_state.db.read(|db| {
+        let table = match db.table_info(db_name, table_name) {
+            Ok(Some(v)) => v,
+            Ok(None) => {
+                tracing::debug!("Table not found: {}", table_name);
+                return Err(AppError::TableNotFound {
+                    name: table_name.to_string(),
+                });
+            }
+            Err(e) => {
+                tracing::error!("Failed to get table info for '{}': {}", table_name, e);
+                return Err(e);
+            }
+        };
+        let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
+        tracing::debug!("Searching {} spatial IDs for streaming", ids.count());
+        db.data_get_stream(table.id, ids, sender);
+        Ok((table.data_type, table.constraints))
+    })?;
 
     let format = query.format;
     let mut limit_left = query.limit;
@@ -73,7 +71,7 @@ pub async fn get_stream(
                     if !sent_hashes.contains(&hash_val) {
                         sent_hashes.insert(hash_val);
                         let json_value =
-                            match restore_value(data_type, table.constraints.as_ref(), &bytes) {
+                            match restore_value(data_type, constraints.as_ref(), &bytes) {
                                 Ok(v) => v,
                                 Err(e) => {
                                     let _ = out_sender.send(Err(e)).await;

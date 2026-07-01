@@ -1,7 +1,7 @@
 info:
-  name: data_get_stream
+  name: get_stream
   type: http
-  seq: 5
+  seq: 2
   tags:
     - data
 
@@ -19,7 +19,7 @@ http:
       value: ""
       type: path
     - name: format
-      value: "RangeId"
+      value: RangeId
       type: query
     - name: limit
       value: ""

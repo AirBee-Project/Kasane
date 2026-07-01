@@ -1,7 +1,7 @@
 info:
-  name: table_update
+  name: update
   type: http
-  seq: 5
+  seq: 4
   tags:
     - tables
 
@@ -45,10 +45,10 @@ examples:
       method: PATCH
       params:
         - name: db_name
-          value: "test_db"
+          value: test_db
           type: path
         - name: table_name
-          value: "example_table"
+          value: example_table
           type: path
       body:
         type: json

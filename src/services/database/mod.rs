@@ -1,13 +1,8 @@
-use crate::{
-    AppState, error::AppError, models::database::DatabaseInfoResponse,
-    repositories::users::KasaneUsersRead,
-};
+use crate::{AppState, error::AppError, models::database::DatabaseInfoResponse};
 use std::collections::HashSet;
 
 pub async fn info(app_state: &AppState, name: &str) -> Result<DatabaseInfoResponse, AppError> {
-    let read_txn = app_state.db.env.read_txn()?;
-    let db = crate::repositories::KasaneDbRead::new(read_txn, &app_state.db);
-    match db.database_info(name)? {
+    match app_state.db.read(|r| r.database_info(name))? {
         Some(info) => Ok(info),
         None => Err(AppError::DatabaseNotFound {
             name: name.to_string(),
@@ -24,26 +19,19 @@ pub async fn list(
     is_global_admin: bool,
     user_id: crate::models::id::UserId,
 ) -> Result<Vec<DatabaseInfoResponse>, AppError> {
-    let read_txn = app_state.db.env.read_txn()?;
-
     if is_global_admin {
-        let db = crate::repositories::KasaneDbRead::new(read_txn, &app_state.db);
-        return db.database_list();
+        return app_state.db.read(|r| r.database_list());
     }
 
     // 一般ユーザーは権限を持つデータベースのみ閲覧可能
-    let users_repo = KasaneUsersRead::new(read_txn, &app_state.db);
-    let accessible: HashSet<String> = users_repo
-        .get_user_privileges(user_id)?
+    let accessible: HashSet<String> = app_state
+        .db
+        .read_users(|repo| repo.get_user_privileges(user_id))?
         .into_iter()
         .map(|(db_name, _role)| db_name)
         .collect();
 
-    drop(users_repo);
-
-    let read_txn = app_state.db.env.read_txn()?;
-    let db = crate::repositories::KasaneDbRead::new(read_txn, &app_state.db);
-    let all = db.database_list()?;
+    let all = app_state.db.read(|r| r.database_list())?;
     Ok(all
         .into_iter()
         .filter(|info| accessible.contains(&info.name))
@@ -56,15 +44,9 @@ pub async fn create(app_state: &AppState, name: &str) -> Result<DatabaseInfoResp
     let app_state = app_state.clone();
     let name = name.to_string();
 
-    tokio::task::spawn_blocking(move || -> Result<DatabaseInfoResponse, AppError> {
-        let write_txn = app_state.db.env.write_txn()?;
-        let mut db = crate::repositories::KasaneDbWrite::new(write_txn, &app_state.db);
-        let res = db.database_create(&name)?;
-        db.commit()?;
-        Ok(res)
-    })
-    .await
-    .map_err(|e| AppError::InternalError(e.to_string()))?
+    tokio::task::spawn_blocking(move || app_state.db.write(|db| db.database_create(&name)))
+        .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?
 }
 
 pub async fn remove(app_state: &AppState, name: &str) -> Result<(), AppError> {
@@ -72,23 +54,16 @@ pub async fn remove(app_state: &AppState, name: &str) -> Result<(), AppError> {
     let name = name.to_string();
 
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
-        let tables = {
-            let read_txn = app_state.db.env.read_txn()?;
-            let db = crate::repositories::KasaneDbRead::new(read_txn, &app_state.db);
-            db.table_list(&name)?
-        };
+        let tables = app_state.db.read(|r| r.table_list(&name))?;
 
-        let write_txn = app_state.db.env.write_txn()?;
-        let mut db = crate::repositories::KasaneDbWrite::new(write_txn, &app_state.db);
-
-        // First, list all tables and remove them
-        for table in tables {
-            db.table_remove(&name, &table.name)?;
-        }
-
-        db.database_remove(&name)?;
-        db.commit()?;
-        Ok(())
+        app_state.db.write(|db| {
+            // First, list all tables and remove them
+            for table in tables {
+                db.table_remove(&name, &table.name)?;
+            }
+            db.database_remove(&name)?;
+            Ok(())
+        })
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?
@@ -99,12 +74,10 @@ pub async fn rename(app_state: &AppState, name: &str, new_name: &str) -> Result<
     let name = name.to_string();
     let new_name = new_name.to_string();
 
-    tokio::task::spawn_blocking(move || -> Result<(), AppError> {
-        let write_txn = app_state.db.env.write_txn()?;
-        let mut db = crate::repositories::KasaneDbWrite::new(write_txn, &app_state.db);
-        db.database_rename(&name, &new_name)?;
-        db.commit()?;
-        Ok(())
+    tokio::task::spawn_blocking(move || {
+        app_state
+            .db
+            .write(|db| db.database_rename(&name, &new_name))
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?
@@ -120,12 +93,10 @@ pub async fn copy(
     let name = name.to_string();
     let destination_name = destination_name.to_string();
 
-    tokio::task::spawn_blocking(move || -> Result<DatabaseInfoResponse, AppError> {
-        let write_txn = app_state.db.env.write_txn()?;
-        let mut db = crate::repositories::KasaneDbWrite::new(write_txn, &app_state.db);
-        let res = db.database_copy(&name, &destination_name, user_id)?;
-        db.commit()?;
-        Ok(res)
+    tokio::task::spawn_blocking(move || {
+        app_state
+            .db
+            .write(|db| db.database_copy(&name, &destination_name, user_id))
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?

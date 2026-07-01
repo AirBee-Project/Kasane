@@ -1,7 +1,7 @@
 info:
-  name: Data
+  name: privilege
   type: folder
-  seq: 5
+  seq: 6
 
 request:
   auth: inherit

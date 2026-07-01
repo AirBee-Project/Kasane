@@ -1,15 +1,15 @@
 info:
-  name: database_info
+  name: list
   type: http
-  seq: 3
+  seq: 1
   tags:
-    - databases
+    - tables
 
 http:
   method: GET
-  url: "{{baseUrl}}/databases/:name"
+  url: "{{baseUrl}}/databases/:db_name/tables"
   params:
-    - name: name
+    - name: db_name
       value: ""
       type: path
   auth:
@@ -24,12 +24,12 @@ settings:
 
 examples:
   - name: 200 Response
-    description: Get database info
+    description: List of tables
     request:
-      url: "{{baseUrl}}/databases/:name"
+      url: "{{baseUrl}}/databases/:db_name/tables"
       method: GET
       params:
-        - name: name
+        - name: db_name
           value: ""
           type: path
     response:
@@ -41,6 +41,11 @@ examples:
       body:
         type: json
         data: |-
-          {
-            "name": ""
-          }
+          [
+            {
+              "name": "example_table",
+              "data_type": "Text",
+              "max_zoom_level": 25,
+              "count": 0
+            }
+          ]

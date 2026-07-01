@@ -1,13 +1,13 @@
 info:
-  name: list_users
+  name: info
   type: http
   seq: 1
   tags:
-    - Users
+    - System
 
 http:
   method: GET
-  url: "{{baseUrl}}/users"
+  url: "{{baseUrl}}/system/info"
   auth:
     type: bearer
     token: "{{accessToken}}"
@@ -20,9 +20,9 @@ settings:
 
 examples:
   - name: 200 Response
-    description: List users successfully
+    description: Get system info successfully
     request:
-      url: "{{baseUrl}}/users"
+      url: "{{baseUrl}}/system/info"
       method: GET
     response:
       status: 200
@@ -33,9 +33,7 @@ examples:
       body:
         type: json
         data: |-
-          [
-            {
-              "username": "",
-              "is_global_admin": false
-            }
-          ]
+          {
+            "status": "ok",
+            "version": "0.1.0"
+          }

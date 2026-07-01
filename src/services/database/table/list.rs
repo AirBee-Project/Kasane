@@ -5,16 +5,15 @@ use crate::{
 };
 
 pub async fn list(app_state: &AppState, db_name: &str) -> Result<TableListResponse, AppError> {
-    let read_txn = app_state.db.env.read_txn()?;
-    let db = crate::repositories::KasaneDbRead::new(read_txn, &app_state.db);
-    let mut response_tables = Vec::new();
-    for table in db.table_list(db_name)? {
-        response_tables.push(TableSummary {
+    let tables = app_state.db.read(|db| db.table_list(db_name))?;
+    let response_tables = tables
+        .into_iter()
+        .map(|table| TableSummary {
             name: table.name,
             data_type: table.data_type,
             max_zoom_level: table.max_zoom_level,
             constraints: table.constraints,
-        });
-    }
+        })
+        .collect();
     Ok(TableListResponse(response_tables))
 }

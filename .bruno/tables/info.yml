@@ -1,12 +1,12 @@
 info:
-  name: remove_table
+  name: info
   type: http
-  seq: 4
+  seq: 2
   tags:
     - tables
 
 http:
-  method: DELETE
+  method: GET
   url: "{{baseUrl}}/databases/:db_name/tables/:table_name"
   params:
     - name: db_name
@@ -26,11 +26,11 @@ settings:
   maxRedirects: 5
 
 examples:
-  - name: 204 Response
-    description: Table removed
+  - name: 200 Response
+    description: Table info
     request:
       url: "{{baseUrl}}/databases/:db_name/tables/:table_name"
-      method: DELETE
+      method: GET
       params:
         - name: db_name
           value: ""
@@ -39,16 +39,25 @@ examples:
           value: ""
           type: path
     response:
-      status: 204
-      statusText: No Content
+      status: 200
+      statusText: OK
+      headers:
+        - name: Content-Type
+          value: application/json
       body:
-        type: text
-        data: ""
+        type: json
+        data: |-
+          {
+            "name": "example_table",
+            "data_type": "Text",
+            "max_zoom_level": 25,
+            "count": 0
+          }
   - name: 404 Response
     description: Table not found
     request:
       url: "{{baseUrl}}/databases/:db_name/tables/:table_name"
-      method: DELETE
+      method: GET
       params:
         - name: db_name
           value: ""

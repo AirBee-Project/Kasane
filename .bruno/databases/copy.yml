@@ -1,5 +1,5 @@
 info:
-  name: database_copy
+  name: copy
   type: http
   seq: 6
   tags:
@@ -36,7 +36,7 @@ examples:
       method: POST
       params:
         - name: name
-          value: "source_db"
+          value: source_db
           type: path
       body:
         type: json

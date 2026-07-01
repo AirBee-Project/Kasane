@@ -1,5 +1,5 @@
 info:
-  name: database_list
+  name: list
   type: http
   seq: 1
   tags:

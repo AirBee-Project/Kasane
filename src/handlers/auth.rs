@@ -25,10 +25,11 @@ pub async fn login(
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, AppError> {
     let token = tokio::task::spawn_blocking(move || -> Result<String, AppError> {
-        let read_txn = app_state.db.env.read_txn()?;
-        let repo = crate::repositories::users::KasaneUsersRead::new(read_txn, &app_state.db);
+        let meta = app_state
+            .db
+            .read_users(|repo| repo.get_user_meta(&payload.username))?;
 
-        let meta = match repo.get_user_meta(&payload.username)? {
+        let meta = match meta {
             Some(meta) => meta,
             None => {
                 // ユーザーが存在しなくても実在時と同等の計算コストをかけ、
@@ -41,8 +42,6 @@ pub async fn login(
         if !verify_password(&payload.password, &meta.password_hash)? {
             return Err(AuthError::InvalidCredentials.into());
         }
-
-        drop(repo);
 
         generate_jwt(&app_state, &payload.username)
     })

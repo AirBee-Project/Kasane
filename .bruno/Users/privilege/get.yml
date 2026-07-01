@@ -1,20 +1,18 @@
 info:
-  name: table_info
+  name: get
   type: http
-  seq: 3
+  seq: 6
   tags:
-    - tables
+    - Users
 
 http:
   method: GET
-  url: "{{baseUrl}}/databases/:db_name/tables/:table_name"
+  url: "{{baseUrl}}/users/:username/privileges"
   params:
-    - name: db_name
+    - name: username
       value: ""
       type: path
-    - name: table_name
-      value: ""
-      type: path
+      description: Username
   auth:
     type: bearer
     token: "{{accessToken}}"
@@ -27,17 +25,15 @@ settings:
 
 examples:
   - name: 200 Response
-    description: Table info
+    description: Get privileges successfully
     request:
-      url: "{{baseUrl}}/databases/:db_name/tables/:table_name"
+      url: "{{baseUrl}}/users/:username/privileges"
       method: GET
       params:
-        - name: db_name
+        - name: username
           value: ""
           type: path
-        - name: table_name
-          value: ""
-          type: path
+          description: Username
     response:
       status: 200
       statusText: OK
@@ -47,24 +43,22 @@ examples:
       body:
         type: json
         data: |-
-          {
-            "name": "example_table",
-            "data_type": "Text",
-            "max_zoom_level": 25,
-            "count": 0
-          }
+          [
+            {
+              "db_name": "",
+              "role": "Read"
+            }
+          ]
   - name: 404 Response
-    description: Table not found
+    description: User not found
     request:
-      url: "{{baseUrl}}/databases/:db_name/tables/:table_name"
+      url: "{{baseUrl}}/users/:username/privileges"
       method: GET
       params:
-        - name: db_name
+        - name: username
           value: ""
           type: path
-        - name: table_name
-          value: ""
-          type: path
+          description: Username
     response:
       status: 404
       statusText: Not Found

@@ -1,17 +1,13 @@
 info:
-  name: table_list
+  name: list
   type: http
   seq: 1
   tags:
-    - tables
+    - Users
 
 http:
   method: GET
-  url: "{{baseUrl}}/databases/:db_name/tables"
-  params:
-    - name: db_name
-      value: ""
-      type: path
+  url: "{{baseUrl}}/users"
   auth:
     type: bearer
     token: "{{accessToken}}"
@@ -24,14 +20,10 @@ settings:
 
 examples:
   - name: 200 Response
-    description: List of tables
+    description: List users successfully
     request:
-      url: "{{baseUrl}}/databases/:db_name/tables"
+      url: "{{baseUrl}}/users"
       method: GET
-      params:
-        - name: db_name
-          value: ""
-          type: path
     response:
       status: 200
       statusText: OK
@@ -43,9 +35,7 @@ examples:
         data: |-
           [
             {
-              "name": "example_table",
-              "data_type": "Text",
-              "max_zoom_level": 25,
-              "count": 0
+              "username": "",
+              "is_global_admin": false
             }
           ]

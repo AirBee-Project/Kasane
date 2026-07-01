@@ -38,10 +38,9 @@ pub async fn require_auth(
     let user = match user_opt {
         Some(u) => u,
         None => {
-            let read_txn = app_state.db.env.read_txn()?;
-            let repo = crate::repositories::users::KasaneUsersRead::new(read_txn, &app_state.db);
-            let user = repo
-                .get_user(&claims.sub)?
+            let user = app_state
+                .db
+                .read_users(|repo| repo.get_user(&claims.sub))?
                 .ok_or(AppError::Auth(AuthError::TokenRevoked))?;
 
             app_state
@@ -82,11 +81,9 @@ pub async fn check_privilege(
         return Ok(());
     }
 
-    let role = {
-        let read_txn = app_state.db.env.read_txn()?;
-        let repo = crate::repositories::users::KasaneUsersRead::new(read_txn, &app_state.db);
-        repo.get_privilege(crate::models::id::UserId(auth_user.user.id), db_name)?
-    };
+    let role = app_state.db.read_users(|repo| {
+        repo.get_privilege(crate::models::id::UserId(auth_user.user.id), db_name)
+    })?;
 
     if let Some(r) = role
         && r as u8 >= required_role as u8

@@ -1,7 +1,7 @@
 info:
-  name: get_user
+  name: get
   type: http
-  seq: 9
+  seq: 2
   tags:
     - Users
 
@@ -31,7 +31,7 @@ examples:
       method: GET
       params:
         - name: username
-          value: "alice"
+          value: alice
           type: path
           description: Username
     response:
@@ -54,7 +54,7 @@ examples:
       method: GET
       params:
         - name: username
-          value: "unknown"
+          value: unknown
           type: path
           description: Username
     response:

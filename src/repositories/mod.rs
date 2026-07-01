@@ -44,92 +44,142 @@ impl<'a> KasaneDbWrite<'a> {
     }
 }
 
+use crate::error::AppError;
+use crate::models::database::table::TableDataType;
+use crate::models::id::TableId;
+use crate::repositories::database::table::data::batch::WriteOp;
+use crate::repositories::users::{KasaneUsersRead, KasaneUsersWrite};
+use kasane_logic::SpatialIdSet;
+
 impl crate::db_init::AppDb {
+    /// 読み取りトランザクションを開き、リポジトリ越しに処理を実行して閉じる。
+    /// heed の txn 型を上位（サービス/ハンドラ）へ露出させないための境界。
+    pub fn read<T>(
+        &self,
+        f: impl FnOnce(&KasaneDbRead<'_>) -> Result<T, AppError>,
+    ) -> Result<T, AppError> {
+        let txn = self.env.read_txn()?;
+        f(&KasaneDbRead::new(txn, self))
+    }
+
+    /// 書き込みトランザクションを開き、処理が成功したら commit、失敗したら abort する。
+    ///
+    /// 注意：データ書き込み（insert/upsert/remove）は [`Self::batch_data_insert`] 等の
+    /// バッチャー経由を使うこと。本メソッドはメタデータ書き込み（DB/テーブル/ユーザー）向け。
+    pub fn write<T>(
+        &self,
+        f: impl FnOnce(&mut KasaneDbWrite<'_>) -> Result<T, AppError>,
+    ) -> Result<T, AppError> {
+        let mut w = KasaneDbWrite::new(self.env.write_txn()?, self);
+        match f(&mut w) {
+            Ok(out) => {
+                w.commit()?;
+                Ok(out)
+            }
+            // エラー時は commit せず w を drop すると、RwTxn は自動で abort される。
+            Err(e) => Err(e),
+        }
+    }
+
+    /// ユーザー用リポジトリの読み取り版。
+    pub fn read_users<T>(
+        &self,
+        f: impl FnOnce(&KasaneUsersRead<'_>) -> Result<T, AppError>,
+    ) -> Result<T, AppError> {
+        let txn = self.env.read_txn()?;
+        f(&KasaneUsersRead::new(txn, self))
+    }
+
+    /// ユーザー用リポジトリの書き込み版。成功時 commit、失敗時 abort。
+    pub fn write_users<T>(
+        &self,
+        f: impl FnOnce(&mut KasaneUsersWrite<'_>) -> Result<T, AppError>,
+    ) -> Result<T, AppError> {
+        let mut w = KasaneUsersWrite::new(self.env.write_txn()?, self);
+        match f(&mut w) {
+            Ok(out) => {
+                w.commit()?;
+                Ok(out)
+            }
+            // エラー時は commit せず w を drop すると、RwTxn は自動で abort される。
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn enqueue_write(
+        &self,
+        op: WriteOp,
+        rx: tokio::sync::oneshot::Receiver<Result<(), AppError>>,
+    ) -> Result<(), AppError> {
+        self.write_sender
+            .send(op)
+            .await
+            .map_err(|_| AppError::InternalError("WriteBatcher channel is closed".to_string()))?;
+        rx.await
+            .map_err(|_| AppError::InternalError("WriteBatcher failed to reply".to_string()))?
+    }
+
+    /// 検証済みの insert をバッチャーへ投入し、コミット完了まで待つ。
     pub async fn batch_data_insert(
         &self,
-        db_name: String,
-        table_name: String,
-        ids: Vec<crate::models::spatial_id::SpatialId>,
-        policy: crate::models::database::table::data::ZoomLevelPolicy,
-        value: serde_json::Value,
-    ) -> Result<(), crate::error::AppError> {
+        table_id: TableId,
+        data_type: TableDataType,
+        ids: SpatialIdSet,
+        value: Vec<u8>,
+    ) -> Result<(), AppError> {
         let (tx, rx) = tokio::sync::oneshot::channel();
-        self.write_sender
-            .send(
-                crate::repositories::database::table::data::batch::WriteOp::Insert {
-                    db_name,
-                    table_name,
-                    ids,
-                    policy,
-                    value,
-                    reply: tx,
-                },
-            )
-            .await
-            .map_err(|_| {
-                crate::error::AppError::InternalError("WriteBatcher channel is closed".to_string())
-            })?;
-        rx.await.map_err(|_| {
-            crate::error::AppError::InternalError("WriteBatcher failed to reply".to_string())
-        })??;
-        Ok(())
+        self.enqueue_write(
+            WriteOp::Insert {
+                table_id,
+                data_type,
+                ids,
+                value,
+                reply: tx,
+            },
+            rx,
+        )
+        .await
     }
 
+    /// 検証済みの upsert をバッチャーへ投入し、コミット完了まで待つ。
     pub async fn batch_data_upsert(
         &self,
-        db_name: String,
-        table_name: String,
-        ids: Vec<crate::models::spatial_id::SpatialId>,
-        policy: crate::models::database::table::data::ZoomLevelPolicy,
-        value: serde_json::Value,
-    ) -> Result<(), crate::error::AppError> {
+        table_id: TableId,
+        data_type: TableDataType,
+        ids: SpatialIdSet,
+        value: Vec<u8>,
+    ) -> Result<(), AppError> {
         let (tx, rx) = tokio::sync::oneshot::channel();
-        self.write_sender
-            .send(
-                crate::repositories::database::table::data::batch::WriteOp::Upsert {
-                    db_name,
-                    table_name,
-                    ids,
-                    policy,
-                    value,
-                    reply: tx,
-                },
-            )
-            .await
-            .map_err(|_| {
-                crate::error::AppError::InternalError("WriteBatcher channel is closed".to_string())
-            })?;
-        rx.await.map_err(|_| {
-            crate::error::AppError::InternalError("WriteBatcher failed to reply".to_string())
-        })??;
-        Ok(())
+        self.enqueue_write(
+            WriteOp::Upsert {
+                table_id,
+                data_type,
+                ids,
+                value,
+                reply: tx,
+            },
+            rx,
+        )
+        .await
     }
 
+    /// 検証済みの remove をバッチャーへ投入し、コミット完了まで待つ。
     pub async fn batch_data_remove(
         &self,
-        db_name: String,
-        table_name: String,
-        ids: Vec<crate::models::spatial_id::SpatialId>,
-        policy: crate::models::database::table::data::ZoomLevelPolicy,
-    ) -> Result<(), crate::error::AppError> {
+        table_id: TableId,
+        data_type: TableDataType,
+        ids: SpatialIdSet,
+    ) -> Result<(), AppError> {
         let (tx, rx) = tokio::sync::oneshot::channel();
-        self.write_sender
-            .send(
-                crate::repositories::database::table::data::batch::WriteOp::Remove {
-                    db_name,
-                    table_name,
-                    ids,
-                    policy,
-                    reply: tx,
-                },
-            )
-            .await
-            .map_err(|_| {
-                crate::error::AppError::InternalError("WriteBatcher channel is closed".to_string())
-            })?;
-        rx.await.map_err(|_| {
-            crate::error::AppError::InternalError("WriteBatcher failed to reply".to_string())
-        })??;
-        Ok(())
+        self.enqueue_write(
+            WriteOp::Remove {
+                table_id,
+                data_type,
+                ids,
+                reply: tx,
+            },
+            rx,
+        )
+        .await
     }
 }

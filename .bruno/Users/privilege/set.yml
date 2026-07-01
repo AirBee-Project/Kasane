@@ -1,12 +1,12 @@
 info:
-  name: delete_privilege
+  name: set
   type: http
   seq: 7
   tags:
     - Users
 
 http:
-  method: DELETE
+  method: PUT
   url: "{{baseUrl}}/users/:username/privileges/:db_name"
   params:
     - name: username
@@ -17,6 +17,12 @@ http:
       value: ""
       type: path
       description: Database name
+  body:
+    type: json
+    data: |-
+      {
+        "role": "Read"
+      }
   auth:
     type: bearer
     token: "{{accessToken}}"
@@ -29,10 +35,10 @@ settings:
 
 examples:
   - name: 204 Response
-    description: Privilege deleted successfully
+    description: Privilege updated successfully
     request:
       url: "{{baseUrl}}/users/:username/privileges/:db_name"
-      method: DELETE
+      method: PUT
       params:
         - name: username
           value: ""
@@ -42,6 +48,12 @@ examples:
           value: ""
           type: path
           description: Database name
+      body:
+        type: json
+        data: |-
+          {
+            "role": "Read"
+          }
     response:
       status: 204
       statusText: No Content
@@ -52,7 +64,7 @@ examples:
     description: User or database not found
     request:
       url: "{{baseUrl}}/users/:username/privileges/:db_name"
-      method: DELETE
+      method: PUT
       params:
         - name: username
           value: ""
@@ -62,6 +74,12 @@ examples:
           value: ""
           type: path
           description: Database name
+      body:
+        type: json
+        data: |-
+          {
+            "role": "Read"
+          }
     response:
       status: 404
       statusText: Not Found

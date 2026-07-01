@@ -1,12 +1,12 @@
 info:
-  name: data_remove
+  name: upsert
   type: http
-  seq: 2
+  seq: 5
   tags:
     - data
 
 http:
-  method: DELETE
+  method: PATCH
   url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
   params:
     - name: db_name
@@ -19,6 +19,7 @@ http:
     type: json
     data: |-
       {
+        "value": "SampleData",
         "spatial_ids": [{"type":"singleId","z":23,"f":0,"x":7451089,"y":3303245}],
         "zoom_level_policy": "Error"
       }
@@ -34,10 +35,10 @@ settings:
 
 examples:
   - name: 204 Response
-    description: Data removed
+    description: Data upserted
     request:
       url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
-      method: DELETE
+      method: PATCH
       params:
         - name: db_name
           value: ""
@@ -49,6 +50,7 @@ examples:
         type: json
         data: |-
           {
+            "value": "SampleData",
             "spatial_ids": [{"type":"singleId","z":23,"f":0,"x":7451089,"y":3303245}],
             "zoom_level_policy": "Error"
           }
@@ -62,7 +64,7 @@ examples:
     description: Table not found
     request:
       url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
-      method: DELETE
+      method: PATCH
       params:
         - name: db_name
           value: ""
@@ -74,6 +76,7 @@ examples:
         type: json
         data: |-
           {
+            "value": "SampleData",
             "spatial_ids": [{"type":"singleId","z":23,"f":0,"x":7451089,"y":3303245}],
             "zoom_level_policy": "Error"
           }

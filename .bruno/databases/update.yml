@@ -1,7 +1,7 @@
 info:
-  name: database_update
+  name: update
   type: http
-  seq: 5
+  seq: 4
   tags:
     - databases
 
@@ -36,7 +36,7 @@ examples:
       method: PATCH
       params:
         - name: name
-          value: "old_database_name"
+          value: old_database_name
           type: path
       body:
         type: json

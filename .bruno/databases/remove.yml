@@ -1,7 +1,7 @@
 info:
-  name: remove_database
+  name: remove
   type: http
-  seq: 4
+  seq: 5
   tags:
     - databases
 
