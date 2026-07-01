@@ -1,0 +1,73 @@
+info:
+  name: table_copy
+  type: http
+  seq: 6
+  tags:
+    - tables
+
+http:
+  method: POST
+  url: "{{baseUrl}}/databases/:db_name/tables/:table_name/copy"
+  params:
+    - name: db_name
+      value: ""
+      type: path
+    - name: table_name
+      value: ""
+      type: path
+  body:
+    type: json
+    data: |-
+      {
+        "destination_db_name": "destination_database",
+        "destination_table_name": "destination_table"
+      }
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 200 Response
+    description: Table copied successfully
+    request:
+      url: "{{baseUrl}}/databases/:db_name/tables/:table_name/copy"
+      method: POST
+      params:
+        - name: db_name
+          value: "source_db"
+          type: path
+        - name: table_name
+          value: "source_table"
+          type: path
+      body:
+        type: json
+        data: |-
+          {
+            "destination_db_name": "dest_db",
+            "destination_table_name": "dest_table"
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "name": "dest_table",
+            "data_type": "Int",
+            "max_zoom_level": 25,
+            "constraints": {
+              "type": "Int",
+              "min": 0,
+              "max": 100
+            }
+          }

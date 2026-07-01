@@ -1,0 +1,65 @@
+info:
+  name: get_user
+  type: http
+  seq: 9
+  tags:
+    - Users
+
+http:
+  method: GET
+  url: "{{baseUrl}}/users/:username"
+  params:
+    - name: username
+      value: ""
+      type: path
+      description: Username
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 200 Response
+    description: User retrieved successfully
+    request:
+      url: "{{baseUrl}}/users/:username"
+      method: GET
+      params:
+        - name: username
+          value: "alice"
+          type: path
+          description: Username
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "username": "alice",
+            "is_global_admin": false
+          }
+  - name: 404 Response
+    description: User not found
+    request:
+      url: "{{baseUrl}}/users/:username"
+      method: GET
+      params:
+        - name: username
+          value: "unknown"
+          type: path
+          description: Username
+    response:
+      status: 404
+      statusText: Not Found
+      body:
+        type: text
+        data: ""
