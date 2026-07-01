@@ -1,7 +1,7 @@
 info:
-  name: database_create
+  name: create
   type: http
-  seq: 2
+  seq: 3
   tags:
     - databases
 

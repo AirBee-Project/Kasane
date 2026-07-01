@@ -1,13 +1,17 @@
 info:
-  name: database_list
+  name: info
   type: http
-  seq: 1
+  seq: 2
   tags:
     - databases
 
 http:
   method: GET
-  url: "{{baseUrl}}/databases"
+  url: "{{baseUrl}}/databases/:name"
+  params:
+    - name: name
+      value: ""
+      type: path
   auth:
     type: bearer
     token: "{{accessToken}}"
@@ -20,10 +24,14 @@ settings:
 
 examples:
   - name: 200 Response
-    description: List databases
+    description: Get database info
     request:
-      url: "{{baseUrl}}/databases"
+      url: "{{baseUrl}}/databases/:name"
       method: GET
+      params:
+        - name: name
+          value: ""
+          type: path
     response:
       status: 200
       statusText: OK
@@ -33,8 +41,6 @@ examples:
       body:
         type: json
         data: |-
-          [
-            {
-              "name": ""
-            }
-          ]
+          {
+            "name": ""
+          }

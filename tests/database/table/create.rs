@@ -151,3 +151,73 @@ async fn test_create_table_max_zoom_level_boundary_ok() {
     let response = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
 }
+
+#[tokio::test]
+/// ENUM型のテーブル作成時に、選択肢の文字列長さが制限(最大255文字、空文字禁止)に従っているか検証する。
+async fn test_create_table_enum_choice_length_limits() {
+    let test_app = TestApp::new();
+    test_app.create_database("test_db").await;
+
+    // 1. 256文字の選択肢（エラーになるべき）
+    let long_choice = "a".repeat(256);
+    let create_body_too_long = serde_json::json!({
+        "name": "too_long_enum",
+        "data_type": "Enum",
+        "max_zoom_level": 25,
+        "constraints": {
+            "type": "Enum",
+            "choices": [long_choice]
+        }
+    });
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/test_db/tables")
+        .header("Content-Type", "application/json")
+        .body(Body::from(
+            serde_json::to_string(&create_body_too_long).unwrap(),
+        ))
+        .unwrap();
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // 2. 空文字の選択肢（エラーになるべき）
+    let create_body_empty = serde_json::json!({
+        "name": "empty_enum",
+        "data_type": "Enum",
+        "max_zoom_level": 25,
+        "constraints": {
+            "type": "Enum",
+            "choices": [""]
+        }
+    });
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/test_db/tables")
+        .header("Content-Type", "application/json")
+        .body(Body::from(
+            serde_json::to_string(&create_body_empty).unwrap(),
+        ))
+        .unwrap();
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // 3. 255文字の選択肢（成功するべき）
+    let border_choice = "a".repeat(255);
+    let create_body_ok = serde_json::json!({
+        "name": "ok_enum",
+        "data_type": "Enum",
+        "max_zoom_level": 25,
+        "constraints": {
+            "type": "Enum",
+            "choices": [border_choice]
+        }
+    });
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/test_db/tables")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&create_body_ok).unwrap()))
+        .unwrap();
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+}

@@ -130,7 +130,7 @@ pub async fn remove_database(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// データベース名の変更
+/// データベース名の更新
 ///
 /// 指定したデータベースの名前を変更します。対象データベースのManage以上の権限が必要です。
 #[utoipa::path(
@@ -141,7 +141,11 @@ pub async fn remove_database(
     ),
     request_body = UpdateDatabaseRequest,
     responses(
-        (status = 200, description = "成功")
+        (status = 200, description = "成功"),
+        (status = 400, description = "リクエストが不正（パラメータエラー、または新しいデータベース名が不正）"),
+        (status = 403, description = "権限不足（Manage権限がない場合）"),
+        (status = 404, description = "変更元のデータベースが存在しない"),
+        (status = 409, description = "変更後のデータベース名がすでに存在する")
     ),
     security(("bearer_auth" = [])),
     tag = "databases"
@@ -170,11 +174,15 @@ pub async fn database_rename(
     post,
     path = "/databases/{name}/copy",
     params(
-        ("name" = String, Path, description = "コピー元データベース名", example = "src_db")
+        ("name" = String, Path, description = "コピー元データベース名", example = "source_database")
     ),
     request_body = CopyDatabaseRequest,
     responses(
-        (status = 201, body = DatabaseInfoResponse)
+        (status = 201, body = DatabaseInfoResponse),
+        (status = 400, description = "リクエストが不正（パラメータエラー、または不正なデータベース名）"),
+        (status = 403, description = "権限不足（コピー元DBのRead権限がない場合）"),
+        (status = 404, description = "コピー元データベースが存在しない"),
+        (status = 409, description = "コピー先データベース、またはコピー元と同名のデータベースがすでに存在する")
     ),
     security(("bearer_auth" = [])),
     tag = "databases"
@@ -193,7 +201,7 @@ pub async fn database_copy(
     )
     .await?;
 
-    if db_name == request.destination_name {
+    if db_name == request.copy_name {
         return Err(AppError::Conflict(
             "Source and destination database names must be different".to_string(),
         ));
@@ -206,12 +214,11 @@ pub async fn database_copy(
     };
 
     let res =
-        crate::services::database::copy(&app_state, &db_name, &request.destination_name, user_id)
-            .await?;
+        crate::services::database::copy(&app_state, &db_name, &request.copy_name, user_id).await?;
 
     Ok((
         StatusCode::CREATED,
-        [(LOCATION, format!("/databases/{}", request.destination_name))],
+        [(LOCATION, format!("/databases/{}", request.copy_name))],
         Json(res),
     )
         .into_response())

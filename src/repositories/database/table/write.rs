@@ -553,8 +553,8 @@ impl<'a> KasaneDbWrite<'a> {
         &mut self,
         src_db_name: &str,
         src_table_name: &str,
-        dest_db_name: &str,
-        dest_table_name: &str,
+        copy_db_name: &str,
+        copy_table_name: &str,
     ) -> Result<Table, AppError> {
         // 1. コピー元データベースの存在確認
         let src_db_meta = {
@@ -575,41 +575,41 @@ impl<'a> KasaneDbWrite<'a> {
         };
 
         // 3. コピー先データベースの存在確認
-        let dest_db_meta = {
+        let copy_db_meta = {
             let db = self.db.databases;
-            db.get(&self.write_txn, dest_db_name)?
+            db.get(&self.write_txn, copy_db_name)?
                 .ok_or_else(|| AppError::DatabaseNotFound {
-                    name: dest_db_name.to_string(),
+                    name: copy_db_name.to_string(),
                 })?
         };
 
         // 4. コピー先テーブルの重複確認
         let db_tables = self.db.tables;
         if db_tables
-            .get(&self.write_txn, &(dest_db_meta.id, dest_table_name))?
+            .get(&self.write_txn, &(copy_db_meta.id, copy_table_name))?
             .is_some()
         {
             return Err(AppError::TableAlreadyExists {
-                name: dest_table_name.to_string(),
+                name: copy_table_name.to_string(),
             });
         }
 
         // コピー先テーブル名の妥当性検証
-        crate::services::helpers::name_valid::name_valid(dest_table_name)?;
+        crate::services::helpers::name_valid::name_valid(copy_table_name)?;
 
         // 5. 新しい TableId を生成
         let db_index = self.db.table_id_index;
-        let mut dest_table_id = crate::models::id::TableId(uuid::Uuid::now_v7());
+        let mut copy_table_id = crate::models::id::TableId(uuid::Uuid::now_v7());
         loop {
-            if db_index.get(&self.write_txn, &dest_table_id)?.is_none() {
+            if db_index.get(&self.write_txn, &copy_table_id)?.is_none() {
                 break;
             }
-            dest_table_id = crate::models::id::TableId(uuid::Uuid::now_v7());
+            copy_table_id = crate::models::id::TableId(uuid::Uuid::now_v7());
         }
 
         // 6. 新しい TableMetadata を構成
-        let dest_table_meta = TableMetadata {
-            id: dest_table_id,
+        let copy_table_meta = TableMetadata {
+            id: copy_table_id,
             data_type: src_table_meta.data_type,
             max_zoom_level: src_table_meta.max_zoom_level,
             constraints: src_table_meta.constraints.clone(),
@@ -618,10 +618,10 @@ impl<'a> KasaneDbWrite<'a> {
         // 7. 新しいテーブルメタデータと ID インデックスを書き込み
         db_tables.put(
             &mut self.write_txn,
-            &(dest_db_meta.id, dest_table_name),
-            &dest_table_meta,
+            &(copy_db_meta.id, copy_table_name),
+            &copy_table_meta,
         )?;
-        db_index.put(&mut self.write_txn, &dest_table_id, &())?;
+        db_index.put(&mut self.write_txn, &copy_table_id, &())?;
 
         // 8. tables_data のデータを全コピー
         let tables_data = self
@@ -635,7 +635,7 @@ impl<'a> KasaneDbWrite<'a> {
             let (k_bytes, v_bytes) = iter?;
             if k_bytes.len() == 30 {
                 let mut dest_k_bytes = k_bytes.to_vec();
-                dest_k_bytes[0..16].copy_from_slice(&dest_table_id.into_bytes());
+                dest_k_bytes[0..16].copy_from_slice(&copy_table_id.into_bytes());
                 data_to_insert.push((dest_k_bytes, v_bytes.to_vec()));
             }
         }
@@ -650,7 +650,7 @@ impl<'a> KasaneDbWrite<'a> {
             let (k_bytes, _) = iter?;
             if k_bytes.len() >= 16 {
                 let mut dest_k_bytes = k_bytes.to_vec();
-                dest_k_bytes[0..16].copy_from_slice(&dest_table_id.into_bytes());
+                dest_k_bytes[0..16].copy_from_slice(&copy_table_id.into_bytes());
                 index_to_insert.push(dest_k_bytes);
             }
         }
@@ -660,13 +660,13 @@ impl<'a> KasaneDbWrite<'a> {
 
         // 10. キャッシュの更新
         self.table_caches.insert(
-            (dest_db_meta.id, dest_table_name.to_string()),
-            dest_table_meta,
+            (copy_db_meta.id, copy_table_name.to_string()),
+            copy_table_meta,
         );
 
         Ok(Table {
-            id: dest_table_id,
-            name: dest_table_name.to_string(),
+            id: copy_table_id,
+            name: copy_table_name.to_string(),
             data_type: src_table_meta.data_type,
             max_zoom_level: src_table_meta.max_zoom_level,
             constraints: src_table_meta.constraints,

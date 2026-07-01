@@ -1,6 +1,4 @@
-use crate::{
-    AppState, error::AppError, models::database::table::TableSummary, repositories::KasaneDbWrite,
-};
+use crate::{AppState, error::AppError, models::database::table::TableSummary};
 
 pub async fn table_update(
     state: AppState,
@@ -10,20 +8,15 @@ pub async fn table_update(
     new_constraints: Option<Option<crate::models::database::table::UpdateTableConstraints>>,
     validate_existing_data: bool,
 ) -> Result<TableSummary, AppError> {
-    let mut txn = KasaneDbWrite::new(
-        state.db.env.write_txn().map_err(AppError::StorageError)?,
-        &state.db,
-    );
-
-    let table = txn.table_update(
-        db_name,
-        table_name,
-        new_name,
-        new_constraints,
-        validate_existing_data,
-    )?;
-
-    txn.commit()?;
+    let table = state.db.write(|txn| {
+        txn.table_update(
+            db_name,
+            table_name,
+            new_name,
+            new_constraints,
+            validate_existing_data,
+        )
+    })?;
 
     Ok(TableSummary {
         name: table.name,

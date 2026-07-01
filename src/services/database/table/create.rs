@@ -19,18 +19,16 @@ pub async fn create(
     let db_name = db_name.to_string();
     let table_name = table_name.to_string();
 
-    tokio::task::spawn_blocking(move || -> Result<Table, AppError> {
-        let write_txn = app_state.db.env.write_txn()?;
-        let mut db = crate::repositories::KasaneDbWrite::new(write_txn, &app_state.db);
-        let res = db.table_create(
-            &db_name,
-            &table_name,
-            req.data_type,
-            req.max_zoom_level,
-            req.constraints,
-        )?;
-        db.commit()?;
-        Ok(res)
+    tokio::task::spawn_blocking(move || {
+        app_state.db.write(|db| {
+            db.table_create(
+                &db_name,
+                &table_name,
+                req.data_type,
+                req.max_zoom_level,
+                req.constraints,
+            )
+        })
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?

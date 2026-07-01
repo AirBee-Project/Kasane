@@ -8,7 +8,6 @@ use crate::{
         },
         spatial_id::{RawFlexId, RawRangeId, RawSingleId, SpatialId},
     },
-    repositories::KasaneDbRead,
     services::helpers::{spatial_ids::process_spatial_ids, value::restore_value},
 };
 use kasane_logic::{IntoSingleIds, RangeId};
@@ -30,26 +29,26 @@ pub async fn get(
     let query_limit = query.limit;
 
     tokio::task::spawn_blocking(move || {
-        let read_txn = app_state.db.env.read_txn()?;
-        let db = KasaneDbRead::new(read_txn, &app_state.db);
-        let table = match db.table_info(&db_name, &table_name) {
-            Ok(Some(v)) => v,
-            Ok(None) => {
-                tracing::debug!("Table not found: {}", table_name);
-                return Err(AppError::TableNotFound {
-                    name: table_name.clone(),
-                });
-            }
-            Err(e) => {
-                tracing::error!("Failed to get table info for '{}': {}", table_name, e);
-                return Err(e);
-            }
-        };
-        let ids = process_spatial_ids(&spatial_ids, table.max_zoom_level, &zoom_level_policy)?;
-        tracing::debug!("Searching {} spatial IDs", ids.count());
+        let (data_type, constraints, groups) = app_state.db.read(|db| {
+            let table = match db.table_info(&db_name, &table_name) {
+                Ok(Some(v)) => v,
+                Ok(None) => {
+                    tracing::debug!("Table not found: {}", table_name);
+                    return Err(AppError::TableNotFound {
+                        name: table_name.clone(),
+                    });
+                }
+                Err(e) => {
+                    tracing::error!("Failed to get table info for '{}': {}", table_name, e);
+                    return Err(e);
+                }
+            };
+            let ids = process_spatial_ids(&spatial_ids, table.max_zoom_level, &zoom_level_policy)?;
+            tracing::debug!("Searching {} spatial IDs", ids.count());
 
-        let data_type = table.data_type;
-        let groups = db.data_get(table.id, ids)?;
+            let groups = db.data_get(table.id, ids)?;
+            Ok((table.data_type, table.constraints, groups))
+        })?;
 
         let mut dictionary = Vec::new();
         let mut limit_left = query_limit;
@@ -58,7 +57,7 @@ pub async fn get(
             OutputFormat::SingleId => {
                 let mut data = Vec::with_capacity(groups.len());
                 for (bytes, flex_ids) in groups {
-                    let json_value = restore_value(data_type, table.constraints.as_ref(), &bytes)?;
+                    let json_value = restore_value(data_type, constraints.as_ref(), &bytes)?;
                     let value_ref = dictionary.len();
                     dictionary.push(json_value);
 
@@ -97,7 +96,7 @@ pub async fn get(
             OutputFormat::RangeId => {
                 let mut data = Vec::with_capacity(groups.len());
                 for (bytes, flex_ids) in groups {
-                    let json_value = restore_value(data_type, table.constraints.as_ref(), &bytes)?;
+                    let json_value = restore_value(data_type, constraints.as_ref(), &bytes)?;
                     let value_ref = dictionary.len();
                     dictionary.push(json_value);
 
@@ -135,7 +134,7 @@ pub async fn get(
             OutputFormat::FlexId => {
                 let mut data = Vec::with_capacity(groups.len());
                 for (bytes, flex_ids) in groups {
-                    let json_value = restore_value(data_type, table.constraints.as_ref(), &bytes)?;
+                    let json_value = restore_value(data_type, constraints.as_ref(), &bytes)?;
                     let value_ref = dictionary.len();
                     dictionary.push(json_value);
 

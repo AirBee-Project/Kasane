@@ -1,17 +1,23 @@
 info:
-  name: remove_database
+  name: update
   type: http
   seq: 4
   tags:
     - databases
 
 http:
-  method: DELETE
+  method: PATCH
   url: "{{baseUrl}}/databases/:name"
   params:
     - name: name
       value: ""
       type: path
+  body:
+    type: json
+    data: |-
+      {
+        "new_name": "example_database_renamed"
+      }
   auth:
     type: bearer
     token: "{{accessToken}}"
@@ -23,18 +29,24 @@ settings:
   maxRedirects: 5
 
 examples:
-  - name: 204 Response
-    description: Removed successfully
+  - name: 200 Response
+    description: Database renamed successfully
     request:
       url: "{{baseUrl}}/databases/:name"
-      method: DELETE
+      method: PATCH
       params:
         - name: name
-          value: ""
+          value: old_database_name
           type: path
+      body:
+        type: json
+        data: |-
+          {
+            "new_name": "new_database_name"
+          }
     response:
-      status: 204
-      statusText: No Content
+      status: 200
+      statusText: OK
       body:
         type: text
         data: ""

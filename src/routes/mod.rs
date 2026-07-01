@@ -12,6 +12,10 @@ use tower_http::trace::TraceLayer;
 
 pub fn create_router(app_state: AppState) -> Router {
     let protected_router = Router::new()
+        .route(
+            "/system/info",
+            get(crate::handlers::system::get_system_info),
+        )
         .route("/users", get(crate::handlers::users::list_users))
         .route("/users", post(crate::handlers::users::create_user))
         .route(

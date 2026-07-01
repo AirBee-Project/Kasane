@@ -1,0 +1,51 @@
+info:
+  name: list
+  type: http
+  seq: 1
+  tags:
+    - tables
+
+http:
+  method: GET
+  url: "{{baseUrl}}/databases/:db_name/tables"
+  params:
+    - name: db_name
+      value: ""
+      type: path
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 200 Response
+    description: List of tables
+    request:
+      url: "{{baseUrl}}/databases/:db_name/tables"
+      method: GET
+      params:
+        - name: db_name
+          value: ""
+          type: path
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          [
+            {
+              "name": "example_table",
+              "data_type": "Text",
+              "max_zoom_level": 25,
+              "count": 0
+            }
+          ]

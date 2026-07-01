@@ -5,23 +5,19 @@ use crate::{
         CreateUserRequest, PrivilegeInfoResponse, UpdatePasswordRequest, UpdatePrivilegeRequest,
         UserInfoResponse, UserMetadata,
     },
-    repositories::users::{KasaneUsersRead, KasaneUsersWrite},
     services::auth::hash_password,
 };
 use uuid::Uuid;
 
 pub fn list_users(app_state: &AppState) -> Result<Vec<UserInfoResponse>, AppError> {
-    let read_txn = app_state.db.env.read_txn()?;
-    let repo = KasaneUsersRead::new(read_txn, &app_state.db);
-    let users = repo.get_all_users()?;
+    let users = app_state.db.read_users(|repo| repo.get_all_users())?;
     Ok(users.into_iter().map(UserInfoResponse::from).collect())
 }
 
 pub fn get_user(app_state: &AppState, username: &str) -> Result<UserInfoResponse, AppError> {
-    let read_txn = app_state.db.env.read_txn()?;
-    let repo = KasaneUsersRead::new(read_txn, &app_state.db);
-    let user = repo
-        .get_user(username)?
+    let user = app_state
+        .db
+        .read_users(|repo| repo.get_user(username))?
         .ok_or_else(|| AppError::NotFound("User not found".into()))?;
     Ok(UserInfoResponse::from(user))
 }
@@ -39,11 +35,9 @@ pub async fn create_user(app_state: &AppState, req: CreateUserRequest) -> Result
             is_global_admin: req.is_global_admin,
             token_version: 0,
         };
-        let write_txn = app_state.db.env.write_txn()?;
-        let mut repo = KasaneUsersWrite::new(write_txn, &app_state.db);
-        repo.create_user(&req.username, &meta)?;
-        repo.commit()?;
-        Ok(())
+        app_state
+            .db
+            .write_users(|repo| repo.create_user(&req.username, &meta))
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?
@@ -57,12 +51,10 @@ pub async fn delete_user(app_state: &AppState, username: &str) -> Result<(), App
     let state = app_state.clone();
     let username_owned = username.to_string();
 
-    tokio::task::spawn_blocking(move || -> Result<(), AppError> {
-        let write_txn = state.db.env.write_txn()?;
-        let mut repo = KasaneUsersWrite::new(write_txn, &state.db);
-        repo.delete_user(&username_owned)?;
-        repo.commit()?;
-        Ok(())
+    tokio::task::spawn_blocking(move || {
+        state
+            .db
+            .write_users(|repo| repo.delete_user(&username_owned))
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))??;
@@ -82,22 +74,18 @@ pub async fn update_password(
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
         let hash = hash_password(&req.password)?;
 
-        let meta = {
-            let read_txn = state.db.env.read_txn()?;
-            let repo = KasaneUsersRead::new(read_txn, &state.db);
-            repo.get_user_meta(&username_owned)?
-                .ok_or_else(|| AppError::NotFound("User not found".into()))?
-        };
+        let meta = state
+            .db
+            .read_users(|repo| repo.get_user_meta(&username_owned))?
+            .ok_or_else(|| AppError::NotFound("User not found".into()))?;
 
         let mut new_meta = meta;
         new_meta.password_hash = hash;
         new_meta.token_version = new_meta.token_version.wrapping_add(1);
 
-        let write_txn = state.db.env.write_txn()?;
-        let mut repo = KasaneUsersWrite::new(write_txn, &state.db);
-        repo.update_user_meta(&username_owned, &new_meta)?;
-        repo.commit()?;
-        Ok(())
+        state
+            .db
+            .write_users(|repo| repo.update_user_meta(&username_owned, &new_meta))
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))??;
@@ -120,22 +108,18 @@ pub async fn set_admin(
     let username_owned = username.to_string();
 
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
-        let meta = {
-            let read_txn = state.db.env.read_txn()?;
-            let repo = KasaneUsersRead::new(read_txn, &state.db);
-            repo.get_user_meta(&username_owned)?
-                .ok_or_else(|| AppError::NotFound("User not found".into()))?
-        };
+        let meta = state
+            .db
+            .read_users(|repo| repo.get_user_meta(&username_owned))?
+            .ok_or_else(|| AppError::NotFound("User not found".into()))?;
 
         let mut new_meta = meta;
         new_meta.is_global_admin = is_global_admin;
         new_meta.token_version = new_meta.token_version.wrapping_add(1);
 
-        let write_txn = state.db.env.write_txn()?;
-        let mut repo = KasaneUsersWrite::new(write_txn, &state.db);
-        repo.update_user_meta(&username_owned, &new_meta)?;
-        repo.commit()?;
-        Ok(())
+        state
+            .db
+            .write_users(|repo| repo.update_user_meta(&username_owned, &new_meta))
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))??;
@@ -155,19 +139,15 @@ pub async fn set_privilege(
     let db_name = db_name.to_string();
 
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
-        let user_id = {
-            let read_txn = app_state.db.env.read_txn()?;
-            let repo = KasaneUsersRead::new(read_txn, &app_state.db);
-            let user = repo
-                .get_user(&username)?
-                .ok_or_else(|| AppError::NotFound("User not found".into()))?;
-            user.id
-        };
-        let write_txn = app_state.db.env.write_txn()?;
-        let mut repo = KasaneUsersWrite::new(write_txn, &app_state.db);
-        repo.set_privilege(crate::models::id::UserId(user_id), &db_name, req.role)?;
-        repo.commit()?;
-        Ok(())
+        let user_id = app_state
+            .db
+            .read_users(|repo| repo.get_user(&username))?
+            .ok_or_else(|| AppError::NotFound("User not found".into()))?
+            .id;
+
+        app_state.db.write_users(|repo| {
+            repo.set_privilege(crate::models::id::UserId(user_id), &db_name, req.role)
+        })
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?
@@ -183,19 +163,15 @@ pub async fn delete_privilege(
     let db_name = db_name.to_string();
 
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
-        let user_id = {
-            let read_txn = app_state.db.env.read_txn()?;
-            let repo = KasaneUsersRead::new(read_txn, &app_state.db);
-            let user = repo
-                .get_user(&username)?
-                .ok_or_else(|| AppError::NotFound("User not found".into()))?;
-            user.id
-        };
-        let write_txn = app_state.db.env.write_txn()?;
-        let mut repo = KasaneUsersWrite::new(write_txn, &app_state.db);
-        repo.remove_privilege(crate::models::id::UserId(user_id), &db_name)?;
-        repo.commit()?;
-        Ok(())
+        let user_id = app_state
+            .db
+            .read_users(|repo| repo.get_user(&username))?
+            .ok_or_else(|| AppError::NotFound("User not found".into()))?
+            .id;
+
+        app_state
+            .db
+            .write_users(|repo| repo.remove_privilege(crate::models::id::UserId(user_id), &db_name))
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?
@@ -205,13 +181,12 @@ pub fn get_privileges(
     app_state: &AppState,
     username: &str,
 ) -> Result<Vec<PrivilegeInfoResponse>, AppError> {
-    let read_txn = app_state.db.env.read_txn()?;
-    let repo = KasaneUsersRead::new(read_txn, &app_state.db);
-    let user = repo
-        .get_user(username)?
-        .ok_or_else(|| AppError::NotFound("User not found".into()))?;
-
-    let privs = repo.get_user_privileges(crate::models::id::UserId(user.id))?;
+    let privs = app_state.db.read_users(|repo| {
+        let user = repo
+            .get_user(username)?
+            .ok_or_else(|| AppError::NotFound("User not found".into()))?;
+        repo.get_user_privileges(crate::models::id::UserId(user.id))
+    })?;
     Ok(privs
         .into_iter()
         .map(|(db_name, role)| PrivilegeInfoResponse { db_name, role })

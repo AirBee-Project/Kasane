@@ -1,0 +1,60 @@
+info:
+  name: copy
+  type: http
+  seq: 6
+  tags:
+    - databases
+
+http:
+  method: POST
+  url: "{{baseUrl}}/databases/:name/copy"
+  params:
+    - name: name
+      value: ""
+      type: path
+  body:
+    type: json
+    data: |-
+      {
+        "copy_name": "example_database_copy"
+      }
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 201 Response
+    description: Database copied successfully
+    request:
+      url: "{{baseUrl}}/databases/:name/copy"
+      method: POST
+      params:
+        - name: name
+          value: source_db
+          type: path
+      body:
+        type: json
+        data: |-
+          {
+            "copy_name": "dest_db"
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - name: Content-Type
+          value: application/json
+        - name: Location
+          value: /databases/dest_db
+      body:
+        type: json
+        data: |-
+          {
+            "name": "dest_db"
+          }

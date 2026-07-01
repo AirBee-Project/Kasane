@@ -1,27 +1,26 @@
 info:
-  name: set_privilege
+  name: remove
   type: http
-  seq: 6
+  seq: 4
   tags:
-    - Users
+    - data
 
 http:
-  method: PUT
-  url: "{{baseUrl}}/users/:username/privileges/:db_name"
+  method: DELETE
+  url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
   params:
-    - name: username
-      value: ""
-      type: path
-      description: Username
     - name: db_name
       value: ""
       type: path
-      description: Database name
+    - name: table_name
+      value: ""
+      type: path
   body:
     type: json
     data: |-
       {
-        "role": "Read"
+        "spatial_ids": [{"type":"singleId","z":23,"f":0,"x":7451089,"y":3303245}],
+        "zoom_level_policy": "Error"
       }
   auth:
     type: bearer
@@ -35,24 +34,23 @@ settings:
 
 examples:
   - name: 204 Response
-    description: Privilege updated successfully
+    description: Data removed
     request:
-      url: "{{baseUrl}}/users/:username/privileges/:db_name"
-      method: PUT
+      url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
+      method: DELETE
       params:
-        - name: username
-          value: ""
-          type: path
-          description: Username
         - name: db_name
           value: ""
           type: path
-          description: Database name
+        - name: table_name
+          value: ""
+          type: path
       body:
         type: json
         data: |-
           {
-            "role": "Read"
+            "spatial_ids": [{"type":"singleId","z":23,"f":0,"x":7451089,"y":3303245}],
+            "zoom_level_policy": "Error"
           }
     response:
       status: 204
@@ -61,24 +59,23 @@ examples:
         type: text
         data: ""
   - name: 404 Response
-    description: User or database not found
+    description: Table not found
     request:
-      url: "{{baseUrl}}/users/:username/privileges/:db_name"
-      method: PUT
+      url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
+      method: DELETE
       params:
-        - name: username
-          value: ""
-          type: path
-          description: Username
         - name: db_name
           value: ""
           type: path
-          description: Database name
+        - name: table_name
+          value: ""
+          type: path
       body:
         type: json
         data: |-
           {
-            "role": "Read"
+            "spatial_ids": [{"type":"singleId","z":23,"f":0,"x":7451089,"y":3303245}],
+            "zoom_level_policy": "Error"
           }
     response:
       status: 404

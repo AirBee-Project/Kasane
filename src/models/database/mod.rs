@@ -26,7 +26,7 @@ pub struct UpdateDatabaseRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CopyDatabaseRequest {
     #[schema(example = "example_database_copy")]
-    pub destination_name: String,
+    pub copy_name: String,
 }
 
 pub mod table;

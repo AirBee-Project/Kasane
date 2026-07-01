@@ -1,13 +1,13 @@
 info:
-  name: data_insert
+  name: get
   type: http
   seq: 1
   tags:
     - data
 
 http:
-  method: PUT
-  url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
+  method: POST
+  url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data/search"
   params:
     - name: db_name
       value: ""
@@ -15,11 +15,16 @@ http:
     - name: table_name
       value: ""
       type: path
+    - name: format
+      value: RangeId
+      type: query
+    - name: limit
+      value: ""
+      type: query
   body:
     type: json
     data: |-
       {
-        "value": "SampleData",
         "spatial_ids": [{"type":"singleId","z":23,"f":0,"x":7451089,"y":3303245}],
         "zoom_level_policy": "Error"
       }
@@ -35,10 +40,10 @@ settings:
 
 examples:
   - name: 200 Response
-    description: Data inserted
+    description: Data retrieved
     request:
-      url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
-      method: PUT
+      url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data/search"
+      method: POST
       params:
         - name: db_name
           value: ""
@@ -50,21 +55,36 @@ examples:
         type: json
         data: |-
           {
-            "value": "SampleData",
             "spatial_ids": [{"type":"singleId","z":23,"f":0,"x":7451089,"y":3303245}],
             "zoom_level_policy": "Error"
           }
     response:
       status: 200
       statusText: OK
+      headers:
+        - name: Content-Type
+          value: application/json
       body:
-        type: text
-        data: ""
+        type: json
+        data: |-
+          {
+            "ids": [
+              {
+                "id": {
+                  "z": 20,
+                  "f": 0,
+                  "x": 931386,
+                  "y": 412905
+                },
+                "data": ""
+              }
+            ]
+          }
   - name: 404 Response
     description: Table not found
     request:
-      url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data"
-      method: PUT
+      url: "{{baseUrl}}/databases/:db_name/tables/:table_name/data/search"
+      method: POST
       params:
         - name: db_name
           value: ""
@@ -76,7 +96,6 @@ examples:
         type: json
         data: |-
           {
-            "value": "SampleData",
             "spatial_ids": [{"type":"singleId","z":23,"f":0,"x":7451089,"y":3303245}],
             "zoom_level_policy": "Error"
           }

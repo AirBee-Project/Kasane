@@ -1,5 +1,6 @@
 pub mod common;
 pub mod compaction;
+pub mod concurrency;
 pub mod get;
 pub mod insert;
 pub mod model;

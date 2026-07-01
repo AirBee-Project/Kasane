@@ -10,7 +10,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::AppState;
 use crate::error::{AppError, AuthError};
 use crate::models::auth::Claims;
-use crate::repositories::users::KasaneUsersRead;
 
 /// プロセス全体で共有する JWT 署名鍵。
 static JWT_SECRET: OnceLock<Vec<u8>> = OnceLock::new();
@@ -68,12 +67,10 @@ pub fn dummy_verify_password(password: &str) {
 
 /// 指定ユーザーの最新メタデータ（UUID・トークン世代）を読み込み、JWT を発行する。
 pub fn generate_jwt(app_state: &AppState, username: &str) -> Result<String, AppError> {
-    let meta = {
-        let read_txn = app_state.db.env.read_txn()?;
-        let repo = KasaneUsersRead::new(read_txn, &app_state.db);
-        repo.get_user_meta(username)?
-            .ok_or_else(|| AppError::NotFound("User not found".to_string()))?
-    };
+    let meta = app_state
+        .db
+        .read_users(|repo| repo.get_user_meta(username))?
+        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
     let expiration = SystemTime::now()
         .duration_since(UNIX_EPOCH)

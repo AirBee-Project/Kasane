@@ -1,20 +1,18 @@
 info:
-  name: remove_table
+  name: remove
   type: http
-  seq: 4
+  seq: 5
   tags:
-    - tables
+    - Users
 
 http:
   method: DELETE
-  url: "{{baseUrl}}/databases/:db_name/tables/:table_name"
+  url: "{{baseUrl}}/users/:username"
   params:
-    - name: db_name
+    - name: username
       value: ""
       type: path
-    - name: table_name
-      value: ""
-      type: path
+      description: Username
   auth:
     type: bearer
     token: "{{accessToken}}"
@@ -27,17 +25,15 @@ settings:
 
 examples:
   - name: 204 Response
-    description: Table removed
+    description: User deleted successfully
     request:
-      url: "{{baseUrl}}/databases/:db_name/tables/:table_name"
+      url: "{{baseUrl}}/users/:username"
       method: DELETE
       params:
-        - name: db_name
+        - name: username
           value: ""
           type: path
-        - name: table_name
-          value: ""
-          type: path
+          description: Username
     response:
       status: 204
       statusText: No Content
@@ -45,17 +41,15 @@ examples:
         type: text
         data: ""
   - name: 404 Response
-    description: Table not found
+    description: User not found
     request:
-      url: "{{baseUrl}}/databases/:db_name/tables/:table_name"
+      url: "{{baseUrl}}/users/:username"
       method: DELETE
       params:
-        - name: db_name
+        - name: username
           value: ""
           type: path
-        - name: table_name
-          value: ""
-          type: path
+          description: Username
     response:
       status: 404
       statusText: Not Found

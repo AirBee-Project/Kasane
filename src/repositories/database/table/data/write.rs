@@ -215,11 +215,11 @@ impl<'a> KasaneDbWrite<'a> {
     where
         F: FnOnce(&mut SpatialIdMap<Vec<u8>>),
     {
-        let mut scan: SpatialIdSet = input.iter().cloned().collect();
+        let scan: SpatialIdSet = input.iter().cloned().collect();
 
         // 変更前の重なりリーフからインデックスキーを計算
         let mut old_keys = FxHashSet::default();
-        let mut old_flex_ids = Vec::new();
+        let mut pre_modify_scan = scan.clone();
         for f_scan in scan.iter() {
             for (f, v) in map.get_overlapping(&f_scan) {
                 old_keys.insert(value_index::make_key(
@@ -227,18 +227,15 @@ impl<'a> KasaneDbWrite<'a> {
                     &value_index::order_preserving(data_type, v),
                     &f,
                 ));
-                old_flex_ids.push(f);
+                pre_modify_scan.insert(f);
             }
         }
 
         modify(&mut map);
 
-        // 再スキャン範囲 = 入力 ∪ 旧リーフ領域（分割で生じた残りリーフも拾う）。
-        scan.extend(old_flex_ids);
-
         // 変更後の重なりリーフからインデックスキーを計算
         let mut new_keys = FxHashSet::default();
-        for f_scan in scan.iter() {
+        for f_scan in pre_modify_scan.iter() {
             for (f, v) in map.get_overlapping(&f_scan) {
                 new_keys.insert(value_index::make_key(
                     table_id,
@@ -289,7 +286,7 @@ impl<'a> KasaneDbWrite<'a> {
         flex_ids: impl Iterator<Item = FlexId>,
     ) -> Result<FxHashMap<FlexId, Vec<FlexId>>, AppError> {
         let ids: Vec<FlexId> = flex_ids.collect();
-        shard::route_leaves_batched(&self.db.tables_data, &self.write_txn, table_id, &ids)
+        shard::route_leaves_batched(&self.db.tables_data, &self.write_txn, table_id, ids.iter())
     }
 
     /// 変更されたリーフ（シャード）をデータベースに保存する。

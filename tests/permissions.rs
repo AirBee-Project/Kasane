@@ -705,6 +705,39 @@ async fn test_username_reuse_rejects_old_token() {
 }
 
 #[tokio::test]
+/// ログイン済みユーザーがサーバーのステータスとバージョン情報を取得できるか検証する。
+/// 未ログインの場合は 401 (missing_token) で拒否されること。
+async fn test_get_system_info() {
+    let test_app = PermissionTestApp::new();
+    let root_token = test_app.root_token();
+
+    // 1. 未ログイン（ヘッダーなし）→ 401 Unauthorized (missing_token)
+    let req = Request::builder()
+        .method("GET")
+        .uri("/system/info")
+        .body(Body::empty())
+        .unwrap();
+    let (status, code) = status_and_code(test_app.app.clone().oneshot(req).await.unwrap()).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(code, "missing_token");
+
+    // 2. ログイン済み（rootユーザー）→ 200 OK
+    let req = Request::builder()
+        .method("GET")
+        .uri("/system/info")
+        .header("Authorization", format!("Bearer {}", root_token))
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["status"], "ok");
+    assert_eq!(json["version"], env!("CARGO_PKG_VERSION"));
+}
+
+#[tokio::test]
 /// GET /users/{username} のエンドポイントが、本人またはGlobal Adminのみに許可されているかを検証する。
 async fn test_get_user_info_authorization() {
     let test_app = PermissionTestApp::new();
@@ -832,7 +865,7 @@ async fn test_copy_and_rename_permissions() {
         .uri("/databases/renamed_db/copy")
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", user_a_token))
-        .body(Body::from(r#"{"destination_name": "copied_db"}"#))
+        .body(Body::from(r#"{"copy_name": "copied_db"}"#))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
@@ -861,7 +894,7 @@ async fn test_copy_and_rename_permissions() {
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", user_b_token))
         .body(Body::from(
-            r#"{"destination_db_name": "copied_db", "destination_table_name": "copied_table"}"#,
+            r#"{"copy_db_name": "copied_db", "copy_table_name": "copied_table"}"#,
         ))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();
