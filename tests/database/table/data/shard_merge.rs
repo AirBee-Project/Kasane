@@ -9,7 +9,7 @@ use kasane::db_init::initialize_database;
 use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
 use kasane::repositories::{KasaneDbRead, KasaneDbWrite};
-use kasane_logic::{IntoSingleIds, RangeId, SingleId, SpatialIdSet};
+use kasane_logic::{IterFlexIds, RangeId, SingleId, SpatialIdSet};
 
 /// このテーブルのシャードキー数と、ポインタノードの有無を返す。
 fn shard_stats(db: &kasane::db_init::AppDb, table_id: TableId) -> (usize, bool) {
@@ -85,8 +85,8 @@ fn siblings_merge_after_mass_remove() {
     for (value, flex_ids) in got {
         assert_eq!(value, b"v".to_vec());
         for flex_id in flex_ids {
-            for sid in flex_id.into_single_ids() {
-                xs.insert(sid.x());
+            for sid in flex_id.iter_flex_ids() {
+                xs.insert(sid.x_index());
             }
         }
     }

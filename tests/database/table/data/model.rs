@@ -17,7 +17,7 @@ use kasane::db_init::initialize_database;
 use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
 use kasane::repositories::{KasaneDbRead, KasaneDbWrite};
-use kasane_logic::{IntoSingleIds, RangeId, SingleId, SpatialIdSet};
+use kasane_logic::{IterSingleIds, RangeId, SingleId, SpatialIdSet};
 
 /// 依存を増やさないための決定的 RNG（xorshift64）。
 struct XorShift(u64);
@@ -81,7 +81,7 @@ fn read_all(db: &kasane::db_init::AppDb, table_id: TableId) -> HashMap<(u32, u32
     for (value, flex_ids) in got {
         let v = dec(&value);
         for flex_id in flex_ids {
-            for sid in flex_id.into_single_ids() {
+            for sid in flex_id.iter_single_ids() {
                 // 一意値なので 1 セルへ展開されるはず。重複は二重被覆のバグを示す。
                 let prev = actual.insert((sid.x(), sid.y()), v);
                 assert!(
@@ -136,7 +136,11 @@ fn verify(
                 .collect::<Result<Vec<_>, _>>()
                 .unwrap()
                 .into_iter()
-                .flat_map(|f| f.into_single_ids().map(|s| (s.x(), s.y())))
+                .flat_map(|f| {
+                    f.iter_single_ids()
+                        .map(|s| (s.x(), s.y()))
+                        .collect::<Vec<_>>()
+                })
                 .collect();
             assert_eq!(
                 hits,

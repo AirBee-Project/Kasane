@@ -9,7 +9,7 @@ use kasane::db_init::initialize_database;
 use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
 use kasane::repositories::{KasaneDbRead, KasaneDbWrite};
-use kasane_logic::{IntoSingleIds, SingleId, SpatialIdSet};
+use kasane_logic::{IterSingleIds, SingleId, SpatialIdSet};
 
 /// i32 を `interpret_value` と同じ格納形式（ビッグエンディアン）へ。
 fn enc(v: i32) -> Vec<u8> {
@@ -20,7 +20,12 @@ fn enc(v: i32) -> Vec<u8> {
 fn xs(flex_ids: &[kasane_logic::FlexId]) -> HashSet<u32> {
     flex_ids
         .iter()
-        .flat_map(|f| f.clone().into_single_ids().map(|s| s.x()))
+        .flat_map(|f| {
+            f.clone()
+                .iter_single_ids()
+                .map(|s| s.x())
+                .collect::<Vec<_>>()
+        })
         .collect()
 }
 

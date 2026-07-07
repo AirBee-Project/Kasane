@@ -10,7 +10,7 @@ use crate::{
     },
     services::helpers::{spatial_ids::process_spatial_ids, value::restore_value},
 };
-use kasane_logic::{IntoSingleIds, RangeId};
+use kasane_logic::{IterSingleIds, RangeId};
 
 pub async fn get(
     app_state: &AppState,
@@ -63,7 +63,7 @@ pub async fn get(
 
                     let mut spatial_ids = Vec::with_capacity(flex_ids.len());
                     for flex_id in flex_ids {
-                        for single_id in flex_id.into_single_ids() {
+                        for single_id in flex_id.iter_single_ids() {
                             if let Some(left) = limit_left.as_mut() {
                                 if *left == 0 {
                                     break;

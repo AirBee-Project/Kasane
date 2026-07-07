@@ -11,7 +11,7 @@ use kasane::db_init::initialize_database;
 use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
 use kasane::repositories::{KasaneDbRead, KasaneDbWrite};
-use kasane_logic::{IntoSingleIds, RangeId, SingleId, SpatialIdSet};
+use kasane_logic::{IterSingleIds, RangeId, SingleId, SpatialIdSet};
 
 #[test]
 #[ignore]
@@ -72,7 +72,7 @@ fn dynamic_shard_splits_and_reads_back() {
     for (value, flex_ids) in got {
         assert_eq!(value, b"v".to_vec());
         for flex_id in flex_ids {
-            for sid in flex_id.into_single_ids() {
+            for sid in flex_id.iter_single_ids() {
                 xs.insert(sid.x());
             }
         }

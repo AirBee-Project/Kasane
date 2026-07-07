@@ -11,7 +11,7 @@ use crate::{
     },
     services::helpers::{spatial_ids::process_spatial_ids, value::restore_value},
 };
-use kasane_logic::{FlexId, IntoSingleIds, RangeId};
+use kasane_logic::{FlexId, IterSingleIds, RangeId};
 use rustc_hash::FxHashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use tokio::sync::mpsc;
@@ -107,7 +107,7 @@ pub async fn get_stream(
                         OutputFormat::SingleId => {
                             let mut spatial_ids = Vec::new();
                             for flex_id in flex_ids {
-                                for single_id in flex_id.into_single_ids() {
+                                for single_id in flex_id.iter_single_ids() {
                                     if let Some(left) = limit_left.as_mut() {
                                         if *left == 0 {
                                             break;

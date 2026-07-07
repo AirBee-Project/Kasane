@@ -1,7 +1,7 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use kasane::models::spatial_id::RawSingleId;
-use kasane_logic::{IntoSingleIds, IterSingleIds, RangeId, SingleId};
+use kasane_logic::{IterSingleIds, RangeId, SingleId};
 use tower::ServiceExt;
 
 use crate::database::table::common::TestApp;
@@ -399,7 +399,7 @@ async fn test_table_data_insert_range_id() {
 
     let mut answer: Vec<SingleId> = RangeId::new(20, [0, 100], [931380, 931386], [412900, 412905])
         .unwrap()
-        .into_single_ids()
+        .iter_single_ids()
         .collect();
 
     let mut result: Vec<SingleId> = result_map

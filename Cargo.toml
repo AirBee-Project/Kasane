@@ -7,7 +7,7 @@ edition = "2024"
 axum = { version = "0.8.9", features = ["macros"] }
 clap = { version = "4.6", features = ["derive"] }
 dotenvy = "0.15"
-kasane-logic = { git = "https://github.com/AirBee-Project/Kasane-Logic.git", features = ["persist"] }
+kasane-logic = { git = "https://github.com/AirBee-Project/Kasane-Logic.git", features = ["persist"], branch="feat/temporal-id"}
 tokio = { version = "1.52", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -20,7 +20,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tower-http = { version = "0.7.0", features = ["trace"] }
 argon2 = "0.5.3"
 jsonwebtoken = { version = "10.4.0", features = ["rust_crypto"] }
-rand = "0.10.1"
+rand = "0.10.2"
 rand_core = { version = "0.6.4", features = ["getrandom"] }
 heed = "0.22.1"
 rayon = "1.12"
