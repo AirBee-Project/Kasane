@@ -42,6 +42,7 @@ pub fn create_router(app_state: AppState) -> Router {
             "/users/{username}/privileges/{db_name}",
             delete(crate::handlers::users::delete_privilege),
         )
+        .route("/query", post(crate::handlers::query::execute_query))
         .nest("/databases", database::routes())
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),

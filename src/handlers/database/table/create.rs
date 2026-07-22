@@ -29,7 +29,7 @@ use crate::{
         (status = 409, description = "同名のテーブルが既に存在する")
     ),
     security(("bearer_auth" = [])),
-    tag = "tables"
+    tag = "Tables"
 )]
 pub async fn table_create(
     Path(db_name): Path<String>,

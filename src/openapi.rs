@@ -94,6 +94,8 @@ impl utoipa::Modify for SecurityAddon {
         crate::handlers::database::table::data::get::data_get,
         // POST   /databases/{db_name}/tables/{table_name}/data/search/stream
         crate::handlers::database::table::data::stream::data_get_stream,
+        // POST   /query
+        crate::handlers::query::execute_query,
     ),
     components(schemas(
         // Auth
@@ -138,14 +140,22 @@ impl utoipa::Modify for SecurityAddon {
         crate::models::database::table::data::StreamDataEventRange,
         crate::models::database::table::data::StreamDataEventFlex,
         crate::models::database::table::data::StreamDictionaryEvent,
+        // Query
+        crate::models::query::ExecuteQueryRequest,
+        crate::models::query::QueryNode,
+        crate::models::query::MergePolicyKind,
+        crate::models::query::FilterMode,
+        crate::models::query::ValueConvert,
+        crate::models::query::ValueConvertEntry,
     )),
     tags(
         (name = "Auth", description = "Authentication endpoints"),
         (name = "Users", description = "User management operations"),
-        (name = "databases", description = "Database operations"),
-        (name = "tables", description = "Table operations"),
-        (name = "data", description = "Data manipulation operations"),
-        (name = "system", description = "System operations")
+        (name = "Databases", description = "Database operations"),
+        (name = "Tables", description = "Table operations"),
+        (name = "Data", description = "Data manipulation operations"),
+        (name = "Query", description = "Cross-table query execution"),
+        (name = "System", description = "System operations"),
     )
 )]
 pub struct ApiDoc;

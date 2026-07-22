@@ -1,7 +1,7 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use kasane::models::spatial_id::RawSingleId;
-use kasane_logic::{IntoSingleIds, IterSingleIds, RangeId, SingleId};
+use kasane_logic::{RangeId, SingleId};
 use tower::ServiceExt;
 
 use crate::database::table::common::TestApp;
@@ -322,7 +322,7 @@ async fn test_table_data_insert_range_id_overwrite() {
         })
         .collect();
     let binding = RangeId::new(18, [0, 0], [232846, 232850], [103226, 103240]).unwrap();
-    let mut answer: Vec<SingleId> = binding.iter_single_ids().collect();
+    let mut answer: Vec<SingleId> = binding.single_ids().collect();
 
     answer.sort();
     result.sort();
@@ -351,7 +351,7 @@ async fn test_table_data_insert_range_id_overwrite() {
         })
         .collect();
     let binding = RangeId::new(18, [0, 0], [232846, 232850], [103226, 103240]).unwrap();
-    let mut answer: Vec<SingleId> = binding.iter_single_ids().collect();
+    let mut answer: Vec<SingleId> = binding.single_ids().collect();
 
     answer.sort();
     result.sort();
@@ -399,7 +399,7 @@ async fn test_table_data_insert_range_id() {
 
     let mut answer: Vec<SingleId> = RangeId::new(20, [0, 100], [931380, 931386], [412900, 412905])
         .unwrap()
-        .into_single_ids()
+        .single_ids()
         .collect();
 
     let mut result: Vec<SingleId> = result_map

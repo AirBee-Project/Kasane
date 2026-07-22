@@ -1,6 +1,6 @@
 use rustc_hash::FxHashMap;
 
-use kasane_logic::{FlexId, IterFlexIds, SpatialIdSet};
+use kasane_logic::{FlexId, SpatialIdSet};
 
 use super::{shard, value_index};
 use crate::models::database::table::TableDataType;
@@ -25,7 +25,7 @@ impl<'a> KasaneDbRead<'a> {
         table_id: crate::models::id::TableId,
         ids: SpatialIdSet,
     ) -> Result<ValueGroups, AppError> {
-        let flex_ids: Vec<FlexId> = ids.iter_flex_ids().collect();
+        let flex_ids: Vec<FlexId> = ids.flex_ids().collect();
 
         if flex_ids.len() < DATA_GET_PARALLEL_THRESHOLD {
             let mut by_value: FxHashMap<Vec<u8>, Vec<FlexId>> = FxHashMap::default();
@@ -82,7 +82,7 @@ impl<'a> KasaneDbRead<'a> {
         let env = self.db.env.clone();
 
         tokio::task::spawn_blocking(move || {
-            let flex_ids_vec: Vec<FlexId> = flex_ids.iter_flex_ids().collect();
+            let flex_ids_vec: Vec<FlexId> = flex_ids.flex_ids().collect();
             if flex_ids_vec.is_empty() {
                 return;
             }

@@ -13,7 +13,7 @@ use kasane::db_init::initialize_database;
 use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
 use kasane::repositories::{KasaneDbRead, KasaneDbWrite};
-use kasane_logic::{IntoSingleIds, RangeId, SpatialIdSet};
+use kasane_logic::{RangeId, SpatialIdSet};
 
 const Z: u8 = 20;
 
@@ -46,7 +46,7 @@ fn filter_cells(db: &kasane::db_init::AppDb, table_id: TableId, v: i32) -> HashS
         .collect::<Result<Vec<_>, _>>()
         .unwrap()
         .into_iter()
-        .flat_map(|f| f.into_single_ids().map(|s| (s.x(), s.y())))
+        .flat_map(|f| f.single_ids().map(|s| (s.x(), s.y())))
         .collect()
 }
 
@@ -65,7 +65,7 @@ fn read_rect(
     for (value, flex_ids) in got {
         let v = i32::from_be_bytes(value.as_slice().try_into().unwrap());
         for f in flex_ids {
-            for s in f.into_single_ids() {
+            for s in f.single_ids() {
                 out.insert((s.x(), s.y()), v);
             }
         }

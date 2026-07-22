@@ -1,6 +1,6 @@
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use kasane_logic::{FlexId, IntoFlexIds, SpatialIdMap, SpatialIdSet};
+use kasane_logic::{FlexId, SpatialIdMap, SpatialIdSet};
 
 use super::shard::{self, MAX_FLEX_ID_PER_SHARD, MERGE_FLEX_ID_THRESHOLD, ShardEntry};
 use super::value_index;
@@ -18,7 +18,7 @@ impl<'a> KasaneDbWrite<'a> {
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
-        let by_leaf = self.group_by_leaf(table_id, ids.into_flex_ids())?;
+        let by_leaf = self.group_by_leaf(table_id, ids.flex_ids())?;
         for (region, flex_ids) in by_leaf {
             let map =
                 shard::load_leaf_map(&self.db.tables_data, &self.write_txn, table_id, &region)?;
@@ -40,7 +40,7 @@ impl<'a> KasaneDbWrite<'a> {
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
-        let by_leaf = self.group_by_leaf(table_id, ids.into_flex_ids())?;
+        let by_leaf = self.group_by_leaf(table_id, ids.flex_ids())?;
         let data_vec = data.to_vec();
         for (region, flex_ids) in by_leaf {
             let map =
@@ -52,7 +52,7 @@ impl<'a> KasaneDbWrite<'a> {
                     target_set.clear();
                     target_set.insert(flex_id.clone());
 
-                    for f in (&target_set - &occupied_set).into_flex_ids() {
+                    for f in (&target_set - &occupied_set).flex_ids() {
                         m.insert(f, data_vec.clone());
                     }
                 }
@@ -69,7 +69,7 @@ impl<'a> KasaneDbWrite<'a> {
         data_type: TableDataType,
         ids: SpatialIdSet,
     ) -> Result<(), AppError> {
-        let by_leaf = self.group_by_leaf(table_id, ids.into_flex_ids())?;
+        let by_leaf = self.group_by_leaf(table_id, ids.flex_ids())?;
         let mut affected: Vec<FlexId> = Vec::new();
         for (region, flex_ids) in by_leaf {
             let map =
