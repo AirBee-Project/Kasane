@@ -144,7 +144,7 @@ impl utoipa::Modify for SecurityAddon {
         crate::models::query::ExecuteQueryRequest,
         crate::models::query::QueryNode,
         crate::models::query::MergePolicyKind,
-        crate::models::query::FilterMode,
+        crate::models::query::FilterCondition,
         crate::models::query::ValueConvert,
         crate::models::query::ValueConvertEntry,
     )),

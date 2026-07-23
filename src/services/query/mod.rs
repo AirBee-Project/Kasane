@@ -19,7 +19,7 @@ use crate::{
             Table, TableDataType,
             data::{GetDataQuery, GetDataResponse, OutputFormat},
         },
-        query::{ExecuteQueryRequest, FilterMode, QueryNode, ValueConvert},
+        query::{ExecuteQueryRequest, FilterCondition, QueryNode, ValueConvert},
     },
     repositories::database::table::data::query_source::TableSource,
     services::helpers::{data_response, spatial_ids::process_spatial_ids, value::interpret_value},
@@ -56,85 +56,6 @@ fn resolve_tables(app_state: &AppState, node: &QueryNode) -> Result<ResolvedTabl
         Ok(())
     })?;
     Ok(tables)
-}
-
-/// クエリ結果の値型を決める。
-///
-/// 明示指定があればそれを使う。無い場合は「変換表を持たない全ソースの `data_type` が
-/// 一致していること」を条件に推論する。変換表を使うクエリでは推論できないため明示が必要。
-fn resolve_value_type(
-    request: &ExecuteQueryRequest,
-    tables: &ResolvedTables,
-) -> Result<TableDataType, AppError> {
-    if let Some(explicit) = request.value_type {
-        return Ok(explicit);
-    }
-
-    let mut converted_exists = false;
-    let mut inferred: Option<TableDataType> = None;
-    collect_source_types(&request.query, tables, &mut inferred, &mut converted_exists)?;
-
-    match inferred {
-        Some(t) if !converted_exists => Ok(t),
-        _ => Err(AppError::ConstraintViolation {
-            reason: "cannot infer the query value type; specify `value_type` explicitly \
-                     (required when a source uses a conversion table)"
-                .to_string(),
-        }),
-    }
-}
-
-/// 変換表を持たないソースの `data_type` が全て一致するかを調べる。
-fn collect_source_types(
-    node: &QueryNode,
-    tables: &ResolvedTables,
-    inferred: &mut Option<TableDataType>,
-    converted_exists: &mut bool,
-) -> Result<(), AppError> {
-    match node {
-        QueryNode::Source {
-            database,
-            table,
-            convert,
-        } => {
-            if convert.is_some() {
-                *converted_exists = true;
-                return Ok(());
-            }
-            let meta = &tables[&(database.clone(), table.clone())];
-            match inferred {
-                None => *inferred = Some(meta.data_type),
-                Some(existing) if *existing != meta.data_type => {
-                    return Err(AppError::ConstraintViolation {
-                        reason: format!(
-                            "sources have different data types ({:?} and {:?}); \
-                             specify `value_type` and give each source a conversion table",
-                            existing, meta.data_type
-                        ),
-                    });
-                }
-                Some(_) => {}
-            }
-            Ok(())
-        }
-        QueryNode::Merge { left, right, .. } => {
-            collect_source_types(left, tables, inferred, converted_exists)?;
-            collect_source_types(right, tables, inferred, converted_exists)
-        }
-        QueryNode::ShiftX { input, .. }
-        | QueryNode::ShiftY { input, .. }
-        | QueryNode::ShiftF { input, .. }
-        | QueryNode::ZoomOut { input, .. }
-        | QueryNode::ExtrudeX { input, .. }
-        | QueryNode::ExtrudeY { input, .. }
-        | QueryNode::ExtrudeF { input, .. }
-        | QueryNode::FalloffLinearX { input, .. }
-        | QueryNode::FalloffLinearY { input, .. }
-        | QueryNode::FalloffLinearF { input, .. }
-        | QueryNode::FilterValues { input, .. } => {
-            collect_source_types(input, tables, inferred, converted_exists)
-        }
-    }
 }
 
 /// 参照テーブルの `max_zoom_level` の最小値。対象領域の解決に使う。
@@ -176,152 +97,256 @@ fn build_decoder<V: QueryValue>(
     }))
 }
 
-/// Kasane の DSL を Kasane-Logic の AST へ翻訳する。
-fn translate<V: QueryValue>(
-    app_state: &AppState,
-    node: &QueryNode,
-    tables: &ResolvedTables,
-) -> Result<ValueQuery<V>, AppError> {
-    match node {
-        QueryNode::Source {
-            database,
-            table,
-            convert,
-        } => {
-            let meta = &tables[&(database.clone(), table.clone())];
-            let decode = build_decoder::<V>(meta, convert.as_ref())?;
-            Ok(TableSource::<V>::new(
-                app_state.db.env.clone(),
-                app_state.db.tables_data,
-                meta.id,
-                decode,
-            )
-            .query())
+/// ASTの翻訳とコンテキスト解決機能を提供する拡張トレイト。
+pub trait QueryNodeExt {
+    /// クエリ結果の値型を推論（または明示指定から決定）する。
+    fn resolve_value_type(
+        &self,
+        tables: &ResolvedTables,
+        explicit: Option<TableDataType>,
+    ) -> Result<TableDataType, AppError>;
+
+    /// 変換表を持たないソースの `data_type` が全て一致するかを調べる内部メソッド。
+    fn collect_source_types(
+        &self,
+        tables: &ResolvedTables,
+        inferred: &mut Option<TableDataType>,
+        converted_exists: &mut bool,
+    ) -> Result<(), AppError>;
+
+    /// Kasane の DSL を Kasane-Logic の AST へ翻訳する。
+    fn translate<V: QueryValue>(
+        &self,
+        app_state: &AppState,
+        tables: &ResolvedTables,
+    ) -> Result<ValueQuery<V>, AppError>;
+}
+
+impl QueryNodeExt for QueryNode {
+    fn resolve_value_type(
+        &self,
+        tables: &ResolvedTables,
+        explicit: Option<TableDataType>,
+    ) -> Result<TableDataType, AppError> {
+        if let Some(explicit) = explicit {
+            return Ok(explicit);
         }
 
-        QueryNode::ShiftX { input, z, index } => {
-            Ok(translate::<V>(app_state, input, tables)?.shift_x(*z, *index))
+        let mut converted_exists = false;
+        let mut inferred: Option<TableDataType> = None;
+        self.collect_source_types(tables, &mut inferred, &mut converted_exists)?;
+
+        match inferred {
+            Some(t) if !converted_exists => Ok(t),
+            _ => Err(AppError::ConstraintViolation {
+                reason: "cannot infer the query value type; specify `value_type` explicitly \
+                         (required when a source uses a conversion table)"
+                    .to_string(),
+            }),
         }
-        QueryNode::ShiftY { input, z, index } => {
-            Ok(translate::<V>(app_state, input, tables)?.shift_y(*z, *index))
-        }
-        QueryNode::ShiftF { input, z, index } => {
-            Ok(translate::<V>(app_state, input, tables)?.shift_f(*z, *index))
-        }
+    }
 
-        QueryNode::ZoomOut { input, z, policy } => {
-            V::zoom_out(translate::<V>(app_state, input, tables)?, *z, *policy)
-        }
-
-        QueryNode::ExtrudeX {
-            input,
-            z,
-            start,
-            end,
-            policy,
-        } => V::extrude_x(
-            translate::<V>(app_state, input, tables)?,
-            *z,
-            *start,
-            *end,
-            *policy,
-        ),
-        QueryNode::ExtrudeY {
-            input,
-            z,
-            start,
-            end,
-            policy,
-        } => V::extrude_y(
-            translate::<V>(app_state, input, tables)?,
-            *z,
-            *start,
-            *end,
-            *policy,
-        ),
-        QueryNode::ExtrudeF {
-            input,
-            z,
-            start,
-            end,
-            policy,
-        } => V::extrude_f(
-            translate::<V>(app_state, input, tables)?,
-            *z,
-            *start,
-            *end,
-            *policy,
-        ),
-
-        QueryNode::FalloffLinearX {
-            input,
-            z,
-            radius,
-            policy,
-        } => V::falloff_x(
-            translate::<V>(app_state, input, tables)?,
-            *z,
-            *radius,
-            *policy,
-        ),
-        QueryNode::FalloffLinearY {
-            input,
-            z,
-            radius,
-            policy,
-        } => V::falloff_y(
-            translate::<V>(app_state, input, tables)?,
-            *z,
-            *radius,
-            *policy,
-        ),
-        QueryNode::FalloffLinearF {
-            input,
-            z,
-            radius,
-            policy,
-        } => V::falloff_f(
-            translate::<V>(app_state, input, tables)?,
-            *z,
-            *radius,
-            *policy,
-        ),
-
-        QueryNode::Merge {
-            left,
-            right,
-            default,
-            policy,
-        } => V::merge(
-            translate::<V>(app_state, left, tables)?,
-            translate::<V>(app_state, right, tables)?,
-            V::from_json(default)?,
-            *policy,
-        ),
-
-        QueryNode::FilterValues {
-            input,
-            mode,
-            value,
-            min,
-            max,
-        } => {
-            let q = translate::<V>(app_state, input, tables)?;
-            let parse = |v: &Option<serde_json::Value>| -> Result<Option<V>, AppError> {
-                v.as_ref().map(V::from_json).transpose()
-            };
-            Ok(match mode {
-                FilterMode::Equals => {
-                    let target = value
-                        .as_ref()
-                        .ok_or_else(|| AppError::ConstraintViolation {
-                            reason: "filterValues with mode 'equals' requires `value`".to_string(),
-                        })?;
-                    q.retain_value_eq(V::from_json(target)?)
+    fn collect_source_types(
+        &self,
+        tables: &ResolvedTables,
+        inferred: &mut Option<TableDataType>,
+        converted_exists: &mut bool,
+    ) -> Result<(), AppError> {
+        match self {
+            QueryNode::Source {
+                database,
+                table,
+                convert,
+            } => {
+                if convert.is_some() {
+                    *converted_exists = true;
+                    return Ok(());
                 }
-                FilterMode::InRange => q.retain_value_in_range(parse(min)?, parse(max)?),
-                FilterMode::NotInRange => q.retain_value_not_in_range(parse(min)?, parse(max)?),
-            })
+                let meta = &tables[&(database.clone(), table.clone())];
+                match inferred {
+                    None => *inferred = Some(meta.data_type),
+                    Some(existing) if *existing != meta.data_type => {
+                        return Err(AppError::ConstraintViolation {
+                            reason: format!(
+                                "sources have different data types ({:?} and {:?}); \
+                                 specify `value_type` and give each source a conversion table",
+                                existing, meta.data_type
+                            ),
+                        });
+                    }
+                    Some(_) => {}
+                }
+                Ok(())
+            }
+            QueryNode::Merge { left, right, .. } => {
+                left.collect_source_types(tables, inferred, converted_exists)?;
+                right.collect_source_types(tables, inferred, converted_exists)
+            }
+            QueryNode::ShiftX { input, .. }
+            | QueryNode::ShiftY { input, .. }
+            | QueryNode::ShiftF { input, .. }
+            | QueryNode::ZoomOut { input, .. }
+            | QueryNode::ExtrudeX { input, .. }
+            | QueryNode::ExtrudeY { input, .. }
+            | QueryNode::ExtrudeF { input, .. }
+            | QueryNode::FalloffLinearX { input, .. }
+            | QueryNode::FalloffLinearY { input, .. }
+            | QueryNode::FalloffLinearF { input, .. }
+            | QueryNode::FilterValues { input, .. } => {
+                input.collect_source_types(tables, inferred, converted_exists)
+            }
+        }
+    }
+
+    fn translate<V: QueryValue>(
+        &self,
+        app_state: &AppState,
+        tables: &ResolvedTables,
+    ) -> Result<ValueQuery<V>, AppError> {
+        match self {
+            QueryNode::Source {
+                database,
+                table,
+                convert,
+            } => {
+                let meta = &tables[&(database.clone(), table.clone())];
+                let decode = build_decoder::<V>(meta, convert.as_ref())?;
+                Ok(TableSource::<V>::new(
+                    app_state.db.env.clone(),
+                    app_state.db.tables_data,
+                    meta.id,
+                    decode,
+                )
+                .query())
+            }
+
+            QueryNode::ShiftX { input, z, index } => {
+                Ok(input.translate::<V>(app_state, tables)?.shift_x(*z, *index))
+            }
+            QueryNode::ShiftY { input, z, index } => {
+                Ok(input.translate::<V>(app_state, tables)?.shift_y(*z, *index))
+            }
+            QueryNode::ShiftF { input, z, index } => {
+                Ok(input.translate::<V>(app_state, tables)?.shift_f(*z, *index))
+            }
+
+            QueryNode::ZoomOut { input, z, policy } => {
+                V::zoom_out(input.translate::<V>(app_state, tables)?, *z, *policy)
+            }
+
+            QueryNode::ExtrudeX {
+                input,
+                z,
+                start,
+                end,
+                policy,
+            } => V::extrude_x(
+                input.translate::<V>(app_state, tables)?,
+                *z,
+                *start,
+                *end,
+                *policy,
+            ),
+            QueryNode::ExtrudeY {
+                input,
+                z,
+                start,
+                end,
+                policy,
+            } => V::extrude_y(
+                input.translate::<V>(app_state, tables)?,
+                *z,
+                *start,
+                *end,
+                *policy,
+            ),
+            QueryNode::ExtrudeF {
+                input,
+                z,
+                start,
+                end,
+                policy,
+            } => V::extrude_f(
+                input.translate::<V>(app_state, tables)?,
+                *z,
+                *start,
+                *end,
+                *policy,
+            ),
+
+            QueryNode::FalloffLinearX {
+                input,
+                z,
+                radius,
+                policy,
+            } => V::falloff_x(
+                input.translate::<V>(app_state, tables)?,
+                *z,
+                *radius,
+                *policy,
+            ),
+            QueryNode::FalloffLinearY {
+                input,
+                z,
+                radius,
+                policy,
+            } => V::falloff_y(
+                input.translate::<V>(app_state, tables)?,
+                *z,
+                *radius,
+                *policy,
+            ),
+            QueryNode::FalloffLinearF {
+                input,
+                z,
+                radius,
+                policy,
+            } => V::falloff_f(
+                input.translate::<V>(app_state, tables)?,
+                *z,
+                *radius,
+                *policy,
+            ),
+
+            QueryNode::Merge {
+                left,
+                right,
+                default,
+                policy,
+            } => V::merge(
+                left.translate::<V>(app_state, tables)?,
+                right.translate::<V>(app_state, tables)?,
+                V::from_json(default)?,
+                *policy,
+            ),
+
+            QueryNode::FilterValues { input, condition } => {
+                let q = input.translate::<V>(app_state, tables)?;
+                let parse = |v: &Option<serde_json::Value>| -> Result<Option<V>, AppError> {
+                    v.as_ref().map(V::from_json).transpose()
+                };
+                Ok(match condition {
+                    FilterCondition::Equals { value } => q.filter_eq(V::from_json(value)?),
+                    FilterCondition::InRange { min, max } => {
+                        let start = parse(min)?
+                            .map(core::ops::Bound::Included)
+                            .unwrap_or(core::ops::Bound::Unbounded);
+                        let end = parse(max)?
+                            .map(core::ops::Bound::Included)
+                            .unwrap_or(core::ops::Bound::Unbounded);
+                        q.filter_in((start, end))
+                    }
+                    FilterCondition::NotInRange { min, max } => {
+                        let start = parse(min)?
+                            .map(core::ops::Bound::Included)
+                            .unwrap_or(core::ops::Bound::Unbounded);
+                        let end = parse(max)?
+                            .map(core::ops::Bound::Included)
+                            .unwrap_or(core::ops::Bound::Unbounded);
+                        q.filter_not_in((start, end))
+                    }
+                })
+            }
         }
     }
 }
@@ -339,7 +364,9 @@ pub async fn execute(
     // LMDB 読み取りと演算はいずれも同期ブロッキング処理のため、async ワーカーを塞がない。
     tokio::task::spawn_blocking(move || -> Result<GetDataResponse, AppError> {
         let tables = resolve_tables(&app_state, &request.query)?;
-        let value_type = resolve_value_type(&request, &tables)?;
+        let value_type = request
+            .query
+            .resolve_value_type(&tables, request.value_type)?;
 
         // 作業木は単一の値型で組まれるため、ここで値型ごとに単型化する。
         match value_type {
@@ -387,7 +414,7 @@ fn run<V: QueryValue>(
         return data_response::build(empty, format, limit, |v| Ok(v.to_json()));
     }
 
-    let ast = translate::<V>(app_state, &request.query, tables)?;
+    let ast = request.query.translate::<V>(app_state, tables)?;
     tracing::debug!(
         "Executing query over {} source table(s), {} target region(s)",
         tables.len(),

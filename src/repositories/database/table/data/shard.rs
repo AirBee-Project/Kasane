@@ -174,7 +174,7 @@ pub fn route_leaves_for_range(
 ) -> Result<Vec<FlexId>, AppError> {
     let mut out = Vec::new();
     for root in [FlexId::LOWER_MAX, FlexId::UPPER_MAX] {
-        if kasane_logic::intersects_flex_range(&root, range) {
+        if root.intersects_range(range) {
             descend_range(tables_data, txn, table_id, root, range, &mut out)?;
         }
     }
@@ -199,7 +199,7 @@ fn descend_range(
         None => out.push(region),
         Some(children) => {
             for child in children {
-                if kasane_logic::intersects_flex_range(&child, range) {
+                if child.intersects_range(range) {
                     descend_range(tables_data, txn, table_id, child, range, out)?;
                 }
             }

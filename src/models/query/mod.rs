@@ -37,16 +37,26 @@ pub enum MergePolicyKind {
     Difference,
 }
 
-/// 値フィルタの条件種別。
-#[derive(Debug, Deserialize, ToSchema, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum FilterMode {
+/// 値フィルタの条件。
+#[derive(Debug, Deserialize, ToSchema, Clone)]
+#[serde(tag = "mode", rename_all = "camelCase")]
+pub enum FilterCondition {
     /// `value` に一致するセルだけを残す
-    Equals,
+    Equals { value: serde_json::Value },
     /// 値が `min..=max`（閉区間）に入るセルだけを残す
-    InRange,
+    InRange {
+        #[serde(default)]
+        min: Option<serde_json::Value>,
+        #[serde(default)]
+        max: Option<serde_json::Value>,
+    },
     /// 値が `min..=max`（閉区間）に入るセルを取り除く
-    NotInRange,
+    NotInRange {
+        #[serde(default)]
+        min: Option<serde_json::Value>,
+        #[serde(default)]
+        max: Option<serde_json::Value>,
+    },
 }
 
 /// 格納値からクエリの値型への変換表。
@@ -90,14 +100,8 @@ pub enum QueryNode {
     FilterValues {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
-        mode: FilterMode,
-        /// `equals` では対象の値、範囲指定では下限（閉区間・省略で無制限）
-        #[serde(default)]
-        value: Option<serde_json::Value>,
-        #[serde(default)]
-        min: Option<serde_json::Value>,
-        #[serde(default)]
-        max: Option<serde_json::Value>,
+        #[serde(flatten)]
+        condition: FilterCondition,
     },
 
     /// X方向へ平行移動する
