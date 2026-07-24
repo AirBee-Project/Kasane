@@ -376,15 +376,15 @@ async fn supports_float_tables() {
     assert_eq!(result["dictionary"][0], serde_json::json!(9.5));
 }
 
-/// BigInt テーブルにもクエリを適用できる。
+/// 64bit 相当の大きな整数値にもクエリを適用できる（`Int` = i64）。
 #[tokio::test]
-async fn supports_bigint_tables() {
+async fn supports_large_int_values() {
     let app = TestApp::new();
     app.create_database("test_db").await;
     seed(
         &app,
         "t_big",
-        "BigInt",
+        "Int",
         &[
             (778000, serde_json::json!(1_000_000_000_000i64)),
             (778001, serde_json::json!(1i64)),

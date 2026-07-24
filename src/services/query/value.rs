@@ -1,13 +1,21 @@
-//! クエリで扱う値型の抽象。
+//! アプリ全体で使う値型の抽象（`Value` trait）。
 //!
-//! Kasane-Logic の作業木は単一の値型で組まれるため、テーブルの `data_type` ごとに
-//! 具体型へ単型化する。演算子・`MergePolicy` の適用可否は型ごとに異なり、
+//! テーブルの `data_type` は実行時の値だが、Kasane-Logic の作業木や格納・復元は
+//! 具体的な Rust 型で行うため、`data_type` → 具体型の単型化を [`for_value_type!`] の
+//! 1 箇所に集約する。各具体型は [`Value`] を実装し、
 //!
+//! - 格納バイト列 ⇄ 値（[`Value::decoder`] / [`Value::encode`]）
+//! - JSON ⇄ 値（[`Value::from_json`] / [`Value::to_json`]）
+//! - クエリ演算子（`zoom_out` などと `MergePolicy` の適用可否）
+//!
+//! を型ごとに一手に引き受ける。`search`（格納値の復元）と `query`（演算結果）は
+//! いずれもこの trait を通すので、型ごとの処理を二重に書かずに済む。
+//!
+//! 演算子・`MergePolicy` の適用可否は 2 階層：
 //! - 全型: `Overwrite` / `KeepExisting` / `Max` / `Min`（`Ord` があればよい）
-//! - 数値型: 加えて `Sum` / `Difference` と `falloffLinear*`
-//! - `From<u16>` を持つ数値型(i32/i64/浮動小数): 加えて `Average`
+//! - 数値型（`Int` = i64 / `Float` = f64）: 加えて `Sum` / `Difference` / `Average` と `falloffLinear*`
 //!
-//! という3階層になっている。使えない組合せは 400 を返す。
+//! 使えない組合せは 400 を返す。
 
 use core::cmp::Ordering;
 use std::collections::HashMap;
@@ -21,7 +29,7 @@ use kasane_logic::{
 use crate::{
     error::AppError,
     models::{
-        database::table::{JsonValueType, Table, TableConstraints, TableDataType},
+        database::table::{JsonValueType, TableConstraints, TableDataType},
         query::MergePolicyKind,
     },
 };
@@ -32,70 +40,81 @@ pub type ValueQuery<V> = Query<FlexTreeCore<V>>;
 /// 格納バイト列を値へ復元するデコーダ。`None` を返したセルは結果から除外される。
 pub type Decoder<V> = Arc<dyn Fn(&[u8]) -> Option<V> + Send + Sync>;
 
+/// `TableDataType` を対応する具体型へ単型化し、`$func::<V>(..)` を呼ぶ。
+///
+/// 「実行時の型 → コンパイル時の型」の分岐はここ 1 箇所だけ。型を増減するときも
+/// この match だけを直せばよい。
+#[macro_export]
+macro_rules! for_value_type {
+    ($dt:expr, $func:ident $(, $arg:expr)* $(,)?) => {{
+        use $crate::models::database::table::TableDataType;
+        match $dt {
+            TableDataType::Int => $func::<i64>($($arg),*),
+            TableDataType::Float => $func::<$crate::services::query::value::OrderedFloat>($($arg),*),
+            TableDataType::Text | TableDataType::Enum => $func::<String>($($arg),*),
+            TableDataType::Boolean => $func::<bool>($($arg),*),
+            TableDataType::Presence => $func::<()>($($arg),*),
+        }
+    }};
+}
+
 // ---------------------------------------------------------------------------
 // 浮動小数の Ord ラッパー
 // ---------------------------------------------------------------------------
 
-/// 浮動小数を `Ord` にするラッパーを定義する。
+/// 浮動小数（f64）を `Ord` にするラッパー。
 ///
 /// [`CellValue`] は `Ord` を要求するが浮動小数は `PartialOrd` しか持たないため、
 /// `total_cmp` による全順序を与える（NaN でも panic しない）。
-macro_rules! define_ordered_float {
-    ($name:ident, $inner:ty) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Default)]
-        pub struct $name(pub $inner);
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct OrderedFloat(pub f64);
 
-        impl Eq for $name {}
-        impl Ord for $name {
-            fn cmp(&self, other: &Self) -> Ordering {
-                self.0.total_cmp(&other.0)
-            }
-        }
-        impl PartialOrd for $name {
-            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-                Some(self.cmp(other))
-            }
-        }
-        impl core::ops::Mul for $name {
-            type Output = Self;
-            fn mul(self, rhs: Self) -> Self {
-                $name(self.0 * rhs.0)
-            }
-        }
-        impl core::ops::Div for $name {
-            type Output = Self;
-            fn div(self, rhs: Self) -> Self {
-                $name(self.0 / rhs.0)
-            }
-        }
-        impl core::ops::Sub for $name {
-            type Output = Self;
-            fn sub(self, rhs: Self) -> Self {
-                $name(self.0 - rhs.0)
-            }
-        }
-        impl kasane_logic::merge_policy::saturating_add::Add for $name {
-            fn saturating_add(self, rhs: Self) -> Self {
-                $name(self.0 + rhs.0)
-            }
-        }
-        impl From<u16> for $name {
-            fn from(v: u16) -> Self {
-                $name(v as $inner)
-            }
-        }
-        // `falloffLinear*` は `TryFrom<u32>` を要求するが、浮動小数への変換は必ず成功する。
-        // `From` を実装すれば標準のブランケット実装経由で `TryFrom` も満たされる。
-        impl From<u32> for $name {
-            fn from(v: u32) -> Self {
-                $name(v as $inner)
-            }
-        }
-    };
+impl Eq for OrderedFloat {}
+impl Ord for OrderedFloat {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.total_cmp(&other.0)
+    }
 }
-
-define_ordered_float!(OrderedF32, f32);
-define_ordered_float!(OrderedF64, f64);
+impl PartialOrd for OrderedFloat {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl core::ops::Mul for OrderedFloat {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self {
+        OrderedFloat(self.0 * rhs.0)
+    }
+}
+impl core::ops::Div for OrderedFloat {
+    type Output = Self;
+    fn div(self, rhs: Self) -> Self {
+        OrderedFloat(self.0 / rhs.0)
+    }
+}
+impl core::ops::Sub for OrderedFloat {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self {
+        OrderedFloat(self.0 - rhs.0)
+    }
+}
+impl kasane_logic::merge_policy::saturating_add::Add for OrderedFloat {
+    fn saturating_add(self, rhs: Self) -> Self {
+        OrderedFloat(self.0 + rhs.0)
+    }
+}
+impl From<u16> for OrderedFloat {
+    fn from(v: u16) -> Self {
+        OrderedFloat(v as f64)
+    }
+}
+// `falloffLinear*` は `TryFrom<u32>` を要求するが、浮動小数への変換は必ず成功する。
+// `From` を実装すれば標準のブランケット実装経由で `TryFrom` も満たされる。
+impl From<u32> for OrderedFloat {
+    fn from(v: u32) -> Self {
+        OrderedFloat(v as f64)
+    }
+}
 
 // ---------------------------------------------------------------------------
 // エラー
@@ -113,11 +132,15 @@ fn unsupported_policy(policy: MergePolicyKind, value_type: &str) -> AppError {
     }
 }
 
-fn incompatible_source(table: &Table, value_type: &str) -> AppError {
+/// 変換表なしのソースの `data_type` がクエリ値型に合わないときのエラー。
+pub fn incompatible_source(
+    table: &crate::models::database::table::Table,
+    value_type: &str,
+) -> AppError {
     AppError::ConstraintViolation {
         reason: format!(
-            "table '{}' is {:?} but the query value type is {}; add a `convert` table to this source",
-            table.name, table.data_type, value_type
+            "table '{}' is {:?} but the query value type is {value_type}; add a `convert` table to this source",
+            table.name, table.data_type
         ),
     }
 }
@@ -141,25 +164,56 @@ fn type_mismatch(value: &serde_json::Value, expected: JsonValueType) -> AppError
     }
 }
 
+/// `min`/`max` 範囲の検証（境界を含む）。
+fn check_range<T: PartialOrd + std::fmt::Display>(
+    value: &T,
+    min: Option<T>,
+    max: Option<T>,
+) -> Result<(), AppError> {
+    if let Some(min) = min
+        && *value < min
+    {
+        return Err(AppError::ConstraintViolation {
+            reason: format!("Value {value} is less than minimum {min}"),
+        });
+    }
+    if let Some(max) = max
+        && *value > max
+    {
+        return Err(AppError::ConstraintViolation {
+            reason: format!("Value {value} is greater than maximum {max}"),
+        });
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
-// QueryValue
+// Value
 // ---------------------------------------------------------------------------
 
-/// クエリで扱える値型。
-pub trait QueryValue: CellValue + Ord + 'static {
+/// アプリで扱える値型。格納・復元・JSON 変換・クエリ演算を型ごとに引き受ける。
+pub trait Value: CellValue + Ord + 'static {
     /// エラーメッセージ用の型名。
     fn type_name() -> &'static str;
 
-    /// このテーブルの格納値を `Self` へ復元するデコーダを返す。
+    /// この `data_type` の格納値を、変換表なしで `Self` として解釈できるか。
     ///
-    /// 型が合わなければ `Err`。`Enum` のように復元に制約情報が要る型もあるため、
-    /// バイト列だけでなくテーブル定義を受け取る。
-    fn decoder(table: &Table) -> Result<Decoder<Self>, AppError>;
+    /// `for_value_type!` の分岐と一致させる（`Text` と `Enum` はともに `String`）。
+    fn accepts(data_type: TableDataType) -> bool;
+
+    /// このテーブルの格納バイト列を `Self` へ復元するデコーダを返す。
+    ///
+    /// `Enum` のように復元に制約情報（ID→文字列の対応）が要る型もあるため制約を受け取り、
+    /// 逆引き表などの前計算を 1 度だけ行ったクロージャを返す。`None` を返したセルは除外。
+    fn decoder(constraints: Option<&TableConstraints>) -> Result<Decoder<Self>, AppError>;
+
+    /// `Self` を格納バイト列へ符号化する（`constraints` の範囲・選択肢検証込み）。
+    fn encode(&self, constraints: Option<&TableConstraints>) -> Result<Vec<u8>, AppError>;
 
     /// レスポンス用の JSON へ。
     fn to_json(&self) -> serde_json::Value;
 
-    /// リクエスト中のリテラル（フィルタ境界・merge の既定値・変換表の値）から作る。
+    /// リクエスト中のリテラル（挿入値・フィルタ境界・merge の既定値・変換表の値）から作る。
     fn from_json(value: &serde_json::Value) -> Result<Self, AppError>;
 
     fn zoom_out(
@@ -230,7 +284,7 @@ pub trait QueryValue: CellValue + Ord + 'static {
 // ポリシーのディスパッチ（値 -> 型）
 // ---------------------------------------------------------------------------
 
-/// 全型で使えるポリシーのみを受け付ける。
+/// 全型で使えるポリシー（`Ord` があればよい）。
 macro_rules! dispatch_ord {
     ($ty:ty, $q:expr, $method:ident ( $($args:expr),* ), $policy:expr) => {
         match $policy {
@@ -238,29 +292,14 @@ macro_rules! dispatch_ord {
             MergePolicyKind::KeepExisting => Ok($q.$method($($args,)* KeepExisting)),
             MergePolicyKind::Max => Ok($q.$method($($args,)* Max)),
             MergePolicyKind::Min => Ok($q.$method($($args,)* Min)),
-            other => Err(unsupported_policy(other, <$ty as QueryValue>::type_name())),
+            other => Err(unsupported_policy(other, <$ty as Value>::type_name())),
         }
     };
 }
 
-/// 数値型（`Average` は `From<u16>` が要るため除く）。
-macro_rules! dispatch_numeric {
-    ($ty:ty, $q:expr, $method:ident ( $($args:expr),* ), $policy:expr) => {
-        match $policy {
-            MergePolicyKind::Overwrite => Ok($q.$method($($args,)* Overwrite)),
-            MergePolicyKind::KeepExisting => Ok($q.$method($($args,)* KeepExisting)),
-            MergePolicyKind::Max => Ok($q.$method($($args,)* Max)),
-            MergePolicyKind::Min => Ok($q.$method($($args,)* Min)),
-            MergePolicyKind::Sum => Ok($q.$method($($args,)* Sum)),
-            MergePolicyKind::Difference => Ok($q.$method($($args,)* Difference)),
-            other => Err(unsupported_policy(other, <$ty as QueryValue>::type_name())),
-        }
-    };
-}
-
-/// `Average` まで含めた全ポリシー。
+/// 数値型で使える全ポリシー。
 macro_rules! dispatch_full {
-    ($q:expr, $method:ident ( $($args:expr),* ), $policy:expr) => {
+    ($ty:ty, $q:expr, $method:ident ( $($args:expr),* ), $policy:expr) => {
         match $policy {
             MergePolicyKind::Overwrite => Ok($q.$method($($args,)* Overwrite)),
             MergePolicyKind::KeepExisting => Ok($q.$method($($args,)* KeepExisting)),
@@ -274,7 +313,7 @@ macro_rules! dispatch_full {
 }
 
 // ---------------------------------------------------------------------------
-// impl 生成マクロ
+// op 生成マクロ
 // ---------------------------------------------------------------------------
 
 /// 演算子メソッド群を、指定のポリシーディスパッチで生成する。
@@ -355,150 +394,170 @@ macro_rules! impl_falloff {
     };
 }
 
-/// `Average` を含む全ポリシー用に、`$ty` を無視するラッパー。
-macro_rules! dispatch_full_ty {
-    ($ty:ty, $q:expr, $method:ident ( $($args:expr),* ), $policy:expr) => {
-        dispatch_full!($q, $method($($args),*), $policy)
-    };
-}
+// ---------------------------------------------------------------------------
+// 数値型
+// ---------------------------------------------------------------------------
 
-/// 固定長ビッグエンディアン整数のデコーダ。
-macro_rules! int_decoder {
-    ($ty:ty, $n:expr) => {
-        |bytes: &[u8]| <[u8; $n]>::try_from(bytes).ok().map(<$ty>::from_be_bytes)
-    };
-}
+impl Value for i64 {
+    fn type_name() -> &'static str {
+        "Int"
+    }
 
-/// 整数型の `QueryValue` 実装を生成する。
-macro_rules! impl_int_query_value {
-    ($ty:ty, $name:expr, $data_type:expr, $n:expr, $dispatch:ident) => {
-        impl QueryValue for $ty {
-            fn type_name() -> &'static str {
-                $name
-            }
+    fn accepts(data_type: TableDataType) -> bool {
+        data_type == TableDataType::Int
+    }
 
-            fn decoder(table: &Table) -> Result<Decoder<Self>, AppError> {
-                if table.data_type != $data_type {
-                    return Err(incompatible_source(table, $name));
-                }
-                Ok(Arc::new(int_decoder!($ty, $n)))
-            }
+    fn decoder(_constraints: Option<&TableConstraints>) -> Result<Decoder<Self>, AppError> {
+        Ok(Arc::new(|bytes: &[u8]| {
+            <[u8; 8]>::try_from(bytes).ok().map(i64::from_be_bytes)
+        }))
+    }
 
-            fn to_json(&self) -> serde_json::Value {
-                serde_json::Value::from(*self)
-            }
-
-            fn from_json(value: &serde_json::Value) -> Result<Self, AppError> {
-                value
-                    .as_i64()
-                    .and_then(|v| <$ty>::try_from(v).ok())
-                    .ok_or_else(|| AppError::NumericValueOutOfRange {
-                        actual: value.to_string(),
-                        expected: $name.to_string(),
-                    })
-            }
-
-            impl_ops!($ty, $dispatch);
-            impl_falloff!($ty, $dispatch);
+    fn encode(&self, constraints: Option<&TableConstraints>) -> Result<Vec<u8>, AppError> {
+        if let Some(TableConstraints::Int { min, max }) = constraints {
+            check_range(self, *min, *max)?;
         }
-    };
+        Ok(self.to_be_bytes().to_vec())
+    }
+
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::Value::from(*self)
+    }
+
+    fn from_json(value: &serde_json::Value) -> Result<Self, AppError> {
+        value
+            .as_i64()
+            .ok_or_else(|| AppError::NumericValueOutOfRange {
+                actual: value.to_string(),
+                expected: "Int".to_string(),
+            })
+    }
+
+    impl_ops!(i64, dispatch_full);
+    impl_falloff!(i64, dispatch_full);
 }
 
-/// 浮動小数型の `QueryValue` 実装を生成する。
-macro_rules! impl_float_query_value {
-    ($ty:ty, $inner:ty, $name:expr, $data_type:expr, $n:expr) => {
-        impl QueryValue for $ty {
-            fn type_name() -> &'static str {
-                $name
-            }
+impl Value for OrderedFloat {
+    fn type_name() -> &'static str {
+        "Float"
+    }
 
-            fn decoder(table: &Table) -> Result<Decoder<Self>, AppError> {
-                if table.data_type != $data_type {
-                    return Err(incompatible_source(table, $name));
-                }
-                Ok(Arc::new(|bytes: &[u8]| {
-                    <[u8; $n]>::try_from(bytes)
-                        .ok()
-                        .map(|b| Self(<$inner>::from_be_bytes(b)))
-                }))
-            }
+    fn accepts(data_type: TableDataType) -> bool {
+        data_type == TableDataType::Float
+    }
 
-            fn to_json(&self) -> serde_json::Value {
-                serde_json::Number::from_f64(self.0 as f64)
-                    .map(serde_json::Value::Number)
-                    .unwrap_or(serde_json::Value::Null)
-            }
+    fn decoder(_constraints: Option<&TableConstraints>) -> Result<Decoder<Self>, AppError> {
+        Ok(Arc::new(|bytes: &[u8]| {
+            <[u8; 8]>::try_from(bytes)
+                .ok()
+                .map(|b| OrderedFloat(f64::from_be_bytes(b)))
+        }))
+    }
 
-            fn from_json(value: &serde_json::Value) -> Result<Self, AppError> {
-                let v = value
-                    .as_f64()
-                    .ok_or_else(|| AppError::NumericValueOutOfRange {
-                        actual: value.to_string(),
-                        expected: $name.to_string(),
-                    })? as $inner;
-                if v.is_finite() {
-                    Ok(Self(v))
-                } else {
-                    Err(AppError::NumericValueOutOfRange {
-                        actual: value.to_string(),
-                        expected: concat!("finite ", $name).to_string(),
-                    })
-                }
-            }
-
-            impl_ops!($ty, dispatch_full_ty);
-            impl_falloff!($ty, dispatch_full_ty);
+    fn encode(&self, constraints: Option<&TableConstraints>) -> Result<Vec<u8>, AppError> {
+        if let Some(TableConstraints::Float { min, max }) = constraints {
+            check_range(&self.0, *min, *max)?;
         }
-    };
+        Ok(self.0.to_be_bytes().to_vec())
+    }
+
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::Number::from_f64(self.0)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null)
+    }
+
+    fn from_json(value: &serde_json::Value) -> Result<Self, AppError> {
+        let v = value
+            .as_f64()
+            .ok_or_else(|| AppError::NumericValueOutOfRange {
+                actual: value.to_string(),
+                expected: "Float".to_string(),
+            })?;
+        if v.is_finite() {
+            Ok(OrderedFloat(v))
+        } else {
+            Err(AppError::NumericValueOutOfRange {
+                actual: value.to_string(),
+                expected: "finite Float".to_string(),
+            })
+        }
+    }
+
+    impl_ops!(OrderedFloat, dispatch_full);
+    impl_falloff!(OrderedFloat, dispatch_full);
 }
-
-// 整数: TinyInt / SmallInt は `From<u16>` を持たないため Average を使えない。
-impl_int_query_value!(i8, "TinyInt", TableDataType::TinyInt, 1, dispatch_numeric);
-impl_int_query_value!(
-    i16,
-    "SmallInt",
-    TableDataType::SmallInt,
-    2,
-    dispatch_numeric
-);
-impl_int_query_value!(i32, "Int", TableDataType::Int, 4, dispatch_full_ty);
-impl_int_query_value!(i64, "BigInt", TableDataType::BigInt, 8, dispatch_full_ty);
-
-// 浮動小数
-impl_float_query_value!(OrderedF32, f32, "Float", TableDataType::Float, 4);
-impl_float_query_value!(OrderedF64, f64, "Double", TableDataType::Double, 8);
 
 // ---------------------------------------------------------------------------
 // 非数値型
 // ---------------------------------------------------------------------------
 
-impl QueryValue for String {
+impl Value for String {
     fn type_name() -> &'static str {
         "Text"
     }
 
-    /// `Text` はそのまま UTF-8 として、`Enum` は制約の対応表から文字列へ復元する。
-    fn decoder(table: &Table) -> Result<Decoder<Self>, AppError> {
-        match table.data_type {
-            TableDataType::Text => Ok(Arc::new(|bytes: &[u8]| {
+    fn accepts(data_type: TableDataType) -> bool {
+        matches!(data_type, TableDataType::Text | TableDataType::Enum)
+    }
+
+    /// `Enum`（制約あり）は ID→文字列の対応表から、それ以外は UTF-8 として復元する。
+    fn decoder(constraints: Option<&TableConstraints>) -> Result<Decoder<Self>, AppError> {
+        if let Some(TableConstraints::Enum { mapping, .. }) = constraints {
+            // 格納は u16 ID なので、ID -> 文字列の逆引きを 1 度だけ作る。
+            let reverse: HashMap<u16, String> =
+                mapping.iter().map(|(k, &v)| (v, k.clone())).collect();
+            Ok(Arc::new(move |bytes: &[u8]| {
+                let id = u16::from_be_bytes(<[u8; 2]>::try_from(bytes).ok()?);
+                reverse.get(&id).cloned()
+            }))
+        } else {
+            Ok(Arc::new(|bytes: &[u8]| {
                 core::str::from_utf8(bytes).ok().map(|s| s.to_string())
-            })),
-            TableDataType::Enum => {
-                let Some(TableConstraints::Enum { mapping, .. }) = table.constraints.as_ref()
-                else {
-                    return Err(AppError::InvalidStoredValue {
-                        reason: format!("table '{}' is Enum but has no choice mapping", table.name),
+            }))
+        }
+    }
+
+    /// `Enum`（制約あり）は選択肢を検証して u16 ID へ、それ以外は長さを検証して UTF-8 へ。
+    fn encode(&self, constraints: Option<&TableConstraints>) -> Result<Vec<u8>, AppError> {
+        match constraints {
+            Some(TableConstraints::Enum {
+                choices, mapping, ..
+            }) => {
+                if !choices.contains(self) {
+                    return Err(AppError::ConstraintViolation {
+                        reason: format!("Value '{self}' is not among allowed choices: {choices:?}"),
                     });
-                };
-                // 格納は u16 ID なので、ID -> 文字列の逆引きを作っておく。
-                let reverse: HashMap<u16, String> =
-                    mapping.iter().map(|(k, &v)| (v, k.clone())).collect();
-                Ok(Arc::new(move |bytes: &[u8]| {
-                    let id = u16::from_be_bytes(<[u8; 2]>::try_from(bytes).ok()?);
-                    reverse.get(&id).cloned()
-                }))
+                }
+                mapping
+                    .get(self)
+                    .map(|id| id.to_be_bytes().to_vec())
+                    .ok_or_else(|| AppError::InvalidStoredValue {
+                        reason: format!("Internal mapping not found for enum value '{self}'"),
+                    })
             }
-            _ => Err(incompatible_source(table, "Text")),
+            Some(TableConstraints::Text {
+                min_length,
+                max_length,
+            }) => {
+                let len = self.chars().count();
+                if let Some(min) = min_length
+                    && len < *min
+                {
+                    return Err(AppError::ConstraintViolation {
+                        reason: format!("String length {len} is less than minimum length {min}"),
+                    });
+                }
+                if let Some(max) = max_length
+                    && len > *max
+                {
+                    return Err(AppError::ConstraintViolation {
+                        reason: format!("String length {len} is greater than maximum length {max}"),
+                    });
+                }
+                Ok(self.clone().into_bytes())
+            }
+            _ => Ok(self.clone().into_bytes()),
         }
     }
 
@@ -516,20 +575,25 @@ impl QueryValue for String {
     impl_ops!(String, dispatch_ord);
 }
 
-impl QueryValue for bool {
+impl Value for bool {
     fn type_name() -> &'static str {
         "Boolean"
     }
 
-    fn decoder(table: &Table) -> Result<Decoder<Self>, AppError> {
-        if table.data_type != TableDataType::Boolean {
-            return Err(incompatible_source(table, "Boolean"));
-        }
+    fn accepts(data_type: TableDataType) -> bool {
+        data_type == TableDataType::Boolean
+    }
+
+    fn decoder(_constraints: Option<&TableConstraints>) -> Result<Decoder<Self>, AppError> {
         Ok(Arc::new(|bytes: &[u8]| match bytes {
             [0] => Some(false),
             [1] => Some(true),
             _ => None,
         }))
+    }
+
+    fn encode(&self, _constraints: Option<&TableConstraints>) -> Result<Vec<u8>, AppError> {
+        Ok(vec![*self as u8])
     }
 
     fn to_json(&self) -> serde_json::Value {
@@ -546,19 +610,24 @@ impl QueryValue for bool {
 }
 
 /// `Presence`（値を持たず、空間IDの存在だけを表す型）。
-impl QueryValue for () {
+impl Value for () {
     fn type_name() -> &'static str {
         "Presence"
     }
 
-    fn decoder(table: &Table) -> Result<Decoder<Self>, AppError> {
-        if table.data_type != TableDataType::Presence {
-            return Err(incompatible_source(table, "Presence"));
-        }
+    fn accepts(data_type: TableDataType) -> bool {
+        data_type == TableDataType::Presence
+    }
+
+    fn decoder(_constraints: Option<&TableConstraints>) -> Result<Decoder<Self>, AppError> {
         // 格納は 0 バイト。存在すれば値は常に「無」。
         Ok(Arc::new(
             |bytes: &[u8]| if bytes.is_empty() { Some(()) } else { None },
         ))
+    }
+
+    fn encode(&self, _constraints: Option<&TableConstraints>) -> Result<Vec<u8>, AppError> {
+        Ok(Vec::new())
     }
 
     fn to_json(&self) -> serde_json::Value {

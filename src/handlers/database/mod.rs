@@ -25,7 +25,7 @@ use axum::{
         (status = 201, body = DatabaseInfoResponse)
     ),
     security(("bearer_auth" = ["global_admin"])),
-    tag = "databases"
+    tag = "Databases"
 )]
 pub async fn database_create(
     State(app_state): State<AppState>,
@@ -57,7 +57,7 @@ pub async fn database_create(
         (status = 200, body = DatabaseInfoResponse)
     ),
     security(("bearer_auth" = [])),
-    tag = "databases"
+    tag = "Databases"
 )]
 pub async fn database_info(
     State(app_state): State<AppState>,
@@ -88,7 +88,7 @@ pub async fn database_info(
         (status = 200, body = Vec<DatabaseInfoResponse>)
     ),
     security(("bearer_auth" = [])),
-    tag = "databases"
+    tag = "Databases"
 )]
 pub async fn database_list(
     State(app_state): State<AppState>,
@@ -116,7 +116,7 @@ pub async fn database_list(
         (status = 204)
     ),
     security(("bearer_auth" = ["global_admin"])),
-    tag = "databases"
+    tag = "Databases"
 )]
 pub async fn remove_database(
     State(app_state): State<AppState>,
@@ -148,7 +148,7 @@ pub async fn remove_database(
         (status = 409, description = "変更後のデータベース名がすでに存在する")
     ),
     security(("bearer_auth" = [])),
-    tag = "databases"
+    tag = "Databases"
 )]
 pub async fn database_rename(
     State(app_state): State<AppState>,
@@ -185,7 +185,7 @@ pub async fn database_rename(
         (status = 409, description = "コピー先データベース、またはコピー元と同名のデータベースがすでに存在する")
     ),
     security(("bearer_auth" = [])),
-    tag = "databases"
+    tag = "Databases"
 )]
 pub async fn database_copy(
     State(app_state): State<AppState>,

@@ -4,7 +4,7 @@ info:
   description: ''
   license:
     name: ''
-  version: 0.3.0
+  version: 0.3.1
 paths:
   /auth/login:
     post:
@@ -31,7 +31,7 @@ paths:
   /databases:
     get:
       tags:
-      - databases
+      - Databases
       summary: データベース一覧の取得
       description: |-
         ユーザー権限に応じて、アクセス可能なデータベースの一覧を取得します。
@@ -52,7 +52,7 @@ paths:
       - bearer_auth: []
     post:
       tags:
-      - databases
+      - Databases
       summary: データベースの作成
       description: 新しいデータベースを作成します。この操作はGlobal Admin権限が必要です。
       operationId: database_create
@@ -500,7 +500,7 @@ paths:
   /databases/{name}:
     get:
       tags:
-      - databases
+      - Databases
       summary: データベース情報の取得
       description: 指定したデータベースの詳細情報を取得します。対象データベースのRead以上の権限が必要です。
       operationId: database_info
@@ -523,7 +523,7 @@ paths:
       - bearer_auth: []
     delete:
       tags:
-      - databases
+      - Databases
       summary: データベースの削除
       description: 指定したデータベースを削除します。この操作はGlobal Admin権限が必要です。
       operationId: remove_database
@@ -543,7 +543,7 @@ paths:
         - global_admin
     patch:
       tags:
-      - databases
+      - Databases
       summary: データベース名の更新
       description: 指定したデータベースの名前を変更します。対象データベースのManage以上の権限が必要です。
       operationId: database_rename
@@ -577,7 +577,7 @@ paths:
   /databases/{name}/copy:
     post:
       tags:
-      - databases
+      - Databases
       summary: データベースのコピー
       description: 指定したデータベースをコピーします。コピー元データベースに対するRead権限が必要です。
       operationId: database_copy
@@ -620,10 +620,6 @@ paths:
       description: |-
         複数のテーブルを対象にクエリ式を評価し、指定した空間IDの結果を取得します。
         クエリ式が参照する**すべてのデータベース**に対して Read 以上の権限が必要です。
-
-        現状の制約:
-        - 参照する全テーブルの `data_type` が同一である必要があります
-        - `Int` 型のテーブルのみ対応しています
       operationId: execute_query
       parameters:
       - name: format
@@ -1147,6 +1143,12 @@ components:
         `POST /query` のリクエストボディ。
 
         `search` と同じ空間ID指定に、実行するクエリ式（`query`）を足した形。
+
+        下の例は「点で持つ熱源テーブル `sensors.heat_sources`（`Int`）を、高度方向へ引き延ばし、
+        XY 方向に線形減衰させて影響圏を作り、ズームアウトで粗く平均集約する」パイプライン。
+        Kasane-Logic のビルダーで書くと
+        `source.extrude_f(25, 0, 50, Max).falloff_linear_x(25, 3, Max).falloff_linear_y(25, 3, Max).zoom_out(23, Average)`
+        に相当する（内側の演算が先に適用され、`query` は外側=最後の演算がルートになる木で表す）。
       required:
       - spatial_ids
       - query
@@ -1170,13 +1172,81 @@ components:
         query:
           $ref: '#/components/schemas/QueryNode'
           description: 実行するクエリ式
-    FilterMode:
-      type: string
-      description: 値フィルタの条件種別。
-      enum:
-      - equals
-      - inRange
-      - notInRange
+      example:
+        query:
+          input:
+            input:
+              input:
+                end: 50
+                input:
+                  database: sensors
+                  table: heat_sources
+                  type: source
+                policy: max
+                start: 0
+                type: extrudeF
+                z: 25
+              policy: max
+              radius: 3
+              type: falloffLinearX
+              z: 25
+            policy: max
+            radius: 3
+            type: falloffLinearY
+            z: 25
+          policy: average
+          type: zoomOut
+          z: 23
+        spatial_ids:
+        - f:
+          - 0
+          - 0
+          type: rangeId
+          x:
+          - 7300000
+          - 7300063
+          y:
+          - 3276800
+          - 3276863
+          z: 23
+        value_type: Int
+        zoom_level_policy: Normalize
+    FilterCondition:
+      oneOf:
+      - type: object
+        description: '`value` に一致するセルだけを残す'
+        required:
+        - value
+        - mode
+        properties:
+          value: {}
+          mode:
+            type: string
+            enum:
+            - equals
+      - type: object
+        description: 値が `min..=max`（閉区間）に入るセルだけを残す
+        required:
+        - mode
+        properties:
+          min: {}
+          max: {}
+          mode:
+            type: string
+            enum:
+            - inRange
+      - type: object
+        description: 値が `min..=max`（閉区間）に入るセルを取り除く
+        required:
+        - mode
+        properties:
+          min: {}
+          max: {}
+          mode:
+            type: string
+            enum:
+            - notInRange
+      description: 値フィルタの条件。
     FlexId:
       type: object
       required:
@@ -1385,25 +1455,24 @@ components:
             type: string
             enum:
             - source
-      - type: object
+      - allOf:
+        - $ref: '#/components/schemas/FilterCondition'
+        - type: object
+          required:
+          - input
+          properties:
+            input:
+              $ref: '#/components/schemas/QueryNode'
+        - type: object
+          description: 値の条件でセルを絞り込む。空間的な形は変えない。
+          required:
+          - type
+          properties:
+            type:
+              type: string
+              enum:
+              - filterValues
         description: 値の条件でセルを絞り込む。空間的な形は変えない。
-        required:
-        - input
-        - mode
-        - type
-        properties:
-          input:
-            $ref: '#/components/schemas/QueryNode'
-          mode:
-            $ref: '#/components/schemas/FilterMode'
-          value:
-            description: '`equals` では対象の値、範囲指定では下限（閉区間・省略で無制限）'
-          min: {}
-          max: {}
-          type:
-            type: string
-            enum:
-            - filterValues
       - type: object
         description: X方向へ平行移動する
         required:
@@ -1940,56 +2009,6 @@ components:
           min_length: 1
           type: Text
       - type: object
-        description: '`TinyInt` 型に対する制約。'
-        required:
-        - type
-        properties:
-          min:
-            type:
-            - integer
-            - 'null'
-            format: int32
-            description: 最小値（境界値を含む）
-          max:
-            type:
-            - integer
-            - 'null'
-            format: int32
-            description: 最大値（境界値を含む）
-          type:
-            type: string
-            enum:
-            - TinyInt
-        example:
-          max: 127
-          min: -128
-          type: TinyInt
-      - type: object
-        description: '`SmallInt` 型に対する制約。'
-        required:
-        - type
-        properties:
-          min:
-            type:
-            - integer
-            - 'null'
-            format: int32
-            description: 最小値（境界値を含む）
-          max:
-            type:
-            - integer
-            - 'null'
-            format: int32
-            description: 最大値（境界値を含む）
-          type:
-            type: string
-            enum:
-            - SmallInt
-        example:
-          max: 32767
-          min: -32768
-          type: SmallInt
-      - type: object
         description: '`Int` 型に対する制約。'
         required:
         - type
@@ -1998,13 +2017,13 @@ components:
             type:
             - integer
             - 'null'
-            format: int32
+            format: int64
             description: 最小値（境界値を含む）
           max:
             type:
             - integer
             - 'null'
-            format: int32
+            format: int64
             description: 最大値（境界値を含む）
           type:
             type: string
@@ -2015,31 +2034,6 @@ components:
           min: 0
           type: Int
       - type: object
-        description: '`BigInt` 型に対する制約。'
-        required:
-        - type
-        properties:
-          min:
-            type:
-            - integer
-            - 'null'
-            format: int64
-            description: 最小値（境界値を含む）
-          max:
-            type:
-            - integer
-            - 'null'
-            format: int64
-            description: 最大値（境界値を含む）
-          type:
-            type: string
-            enum:
-            - BigInt
-        example:
-          max: 100
-          min: 0
-          type: BigInt
-      - type: object
         description: '`Float` 型に対する制約。'
         required:
         - type
@@ -2048,13 +2042,13 @@ components:
             type:
             - number
             - 'null'
-            format: float
+            format: double
             description: 最小値（境界値を含む）
           max:
             type:
             - number
             - 'null'
-            format: float
+            format: double
             description: 最大値（境界値を含む）
           type:
             type: string
@@ -2064,31 +2058,6 @@ components:
           max: 100.0
           min: 0.0
           type: Float
-      - type: object
-        description: '`Double` 型に対する制約。'
-        required:
-        - type
-        properties:
-          min:
-            type:
-            - number
-            - 'null'
-            format: double
-            description: 最小値（境界値を含む）
-          max:
-            type:
-            - number
-            - 'null'
-            format: double
-            description: 最大値（境界値を含む）
-          type:
-            type: string
-            enum:
-            - Double
-        example:
-          max: 100.0
-          min: 0.0
-          type: Double
       - type: object
         description: '`Enum` 型に対する制約。'
         required:
@@ -2143,10 +2112,6 @@ components:
       - Boolean
       - Enum
       - Presence
-      - TinyInt
-      - SmallInt
-      - BigInt
-      - Double
     TableInfoResponse:
       type: object
       description: 単一テーブルの詳細情報。保持する空間ID(FlexId)の総数 `count` を必ず含む。
@@ -2264,56 +2229,12 @@ components:
             type:
             - integer
             - 'null'
-            format: int32
+            format: int64
           max:
             type:
             - integer
             - 'null'
-            format: int32
-          type:
-            type: string
-            enum:
-            - TinyInt
-        example:
-          max: 100
-          min: 0
-          type: TinyInt
-      - type: object
-        required:
-        - type
-        properties:
-          min:
-            type:
-            - integer
-            - 'null'
-            format: int32
-          max:
-            type:
-            - integer
-            - 'null'
-            format: int32
-          type:
-            type: string
-            enum:
-            - SmallInt
-        example:
-          max: 100
-          min: 0
-          type: SmallInt
-      - type: object
-        required:
-        - type
-        properties:
-          min:
-            type:
-            - integer
-            - 'null'
-            format: int32
-          max:
-            type:
-            - integer
-            - 'null'
-            format: int32
+            format: int64
           type:
             type: string
             enum:
@@ -2328,36 +2249,14 @@ components:
         properties:
           min:
             type:
-            - integer
-            - 'null'
-            format: int64
-          max:
-            type:
-            - integer
-            - 'null'
-            format: int64
-          type:
-            type: string
-            enum:
-            - BigInt
-        example:
-          max: 100
-          min: 0
-          type: BigInt
-      - type: object
-        required:
-        - type
-        properties:
-          min:
-            type:
             - number
             - 'null'
-            format: float
+            format: double
           max:
             type:
             - number
             - 'null'
-            format: float
+            format: double
           type:
             type: string
             enum:
@@ -2366,28 +2265,6 @@ components:
           max: 100.0
           min: 0.0
           type: Float
-      - type: object
-        required:
-        - type
-        properties:
-          min:
-            type:
-            - number
-            - 'null'
-            format: double
-          max:
-            type:
-            - number
-            - 'null'
-            format: double
-          type:
-            type: string
-            enum:
-            - Double
-        example:
-          max: 100.0
-          min: 0.0
-          type: Double
       - type: object
         required:
         - type

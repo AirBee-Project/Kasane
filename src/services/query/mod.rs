@@ -14,6 +14,7 @@ use kasane_logic::{RangeId, Source};
 use crate::{
     AppState,
     error::AppError,
+    for_value_type,
     models::{
         database::table::{
             Table, TableDataType,
@@ -25,7 +26,7 @@ use crate::{
     services::helpers::{data_response, spatial_ids::process_spatial_ids, value::interpret_value},
 };
 
-use value::{Decoder, OrderedF32, OrderedF64, QueryValue, ValueQuery};
+use value::{Decoder, Value, ValueQuery};
 
 /// 解決済みのテーブルメタデータ表（`(database, table)` -> `Table`）。
 type ResolvedTables = HashMap<(String, String), Table>;
@@ -58,12 +59,18 @@ fn resolve_tables(app_state: &AppState, node: &QueryNode) -> Result<ResolvedTabl
     Ok(tables)
 }
 
-/// 参照テーブルの `max_zoom_level` の最小値。対象領域の解決に使う。
-fn min_zoom(tables: &ResolvedTables) -> u8 {
+/// 参照テーブルの `max_zoom_level` の最大値（最も細かいテーブルの解像度）。
+///
+/// 対象空間IDの解像度上限に使う。最小値（最も粗いテーブル）に合わせると、細かいテーブルに
+/// 本来入る空間IDまで `Error` で弾かれたり `Normalize` で粗く丸められたりして解像度が潰れる。
+/// 最も細かい解像度を上限にすれば、粗いテーブルもその領域を内包するリーフの値として正しく
+/// 寄与する（`descend_range` / `get_range`）ため、情報を落とさずに済む。
+/// 単一テーブル参照時は search 系 API と同じくそのテーブルの `max_zoom_level` に一致する。
+fn max_zoom(tables: &ResolvedTables) -> u8 {
     tables
         .values()
         .map(|t| t.max_zoom_level)
-        .min()
+        .max()
         .expect("resolve_tables rejects empty source sets")
 }
 
@@ -72,13 +79,16 @@ fn min_zoom(tables: &ResolvedTables) -> u8 {
 /// 変換表が無い場合、そのテーブルの `data_type` は `V` と一致していなければならない。
 /// 変換表がある場合は、`from` を**そのテーブルの格納形式へエンコードした結果**を鍵にする
 /// （保存時とまったく同じ符号化を使うので、型ごとの比較を書き分けずに済む）。
-fn build_decoder<V: QueryValue>(
+fn build_decoder<V: Value>(
     table: &Table,
     convert: Option<&ValueConvert>,
 ) -> Result<Decoder<V>, AppError> {
     let Some(convert) = convert else {
-        // 変換表が無い場合は、そのテーブルの格納形式から直接復元できなければエラー。
-        return V::decoder(table);
+        // 変換表が無い場合は、そのテーブルの格納形式が V と一致していなければならない。
+        if !V::accepts(table.data_type) {
+            return Err(value::incompatible_source(table, V::type_name()));
+        }
+        return V::decoder(table.constraints.as_ref());
     };
 
     let mut map: HashMap<Vec<u8>, V> = HashMap::with_capacity(convert.entries.len());
@@ -115,7 +125,7 @@ pub trait QueryNodeExt {
     ) -> Result<(), AppError>;
 
     /// Kasane の DSL を Kasane-Logic の AST へ翻訳する。
-    fn translate<V: QueryValue>(
+    fn translate<V: Value>(
         &self,
         app_state: &AppState,
         tables: &ResolvedTables,
@@ -198,7 +208,7 @@ impl QueryNodeExt for QueryNode {
         }
     }
 
-    fn translate<V: QueryValue>(
+    fn translate<V: Value>(
         &self,
         app_state: &AppState,
         tables: &ResolvedTables,
@@ -369,28 +379,16 @@ pub async fn execute(
             .resolve_value_type(&tables, request.value_type)?;
 
         // 作業木は単一の値型で組まれるため、ここで値型ごとに単型化する。
-        match value_type {
-            TableDataType::TinyInt => run::<i8>(&app_state, &request, &tables, format, limit),
-            TableDataType::SmallInt => run::<i16>(&app_state, &request, &tables, format, limit),
-            TableDataType::Int => run::<i32>(&app_state, &request, &tables, format, limit),
-            TableDataType::BigInt => run::<i64>(&app_state, &request, &tables, format, limit),
-            TableDataType::Float => run::<OrderedF32>(&app_state, &request, &tables, format, limit),
-            TableDataType::Double => {
-                run::<OrderedF64>(&app_state, &request, &tables, format, limit)
-            }
-            // Enum は格納こそ ID だが、クエリ上は選択肢の文字列として扱う。
-            TableDataType::Text | TableDataType::Enum => {
-                run::<String>(&app_state, &request, &tables, format, limit)
-            }
-            TableDataType::Boolean => run::<bool>(&app_state, &request, &tables, format, limit),
-            TableDataType::Presence => run::<()>(&app_state, &request, &tables, format, limit),
-        }
+        // Enum は格納こそ ID だが、クエリ上は選択肢の文字列（String）として扱う。
+        for_value_type!(
+            value_type, run, &app_state, &request, &tables, format, limit
+        )
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?
 }
 
-fn run<V: QueryValue>(
+fn run<V: Value>(
     app_state: &AppState,
     request: &ExecuteQueryRequest,
     tables: &ResolvedTables,
@@ -399,7 +397,7 @@ fn run<V: QueryValue>(
 ) -> Result<GetDataResponse, AppError> {
     let targets = process_spatial_ids(
         &request.spatial_ids,
-        min_zoom(tables),
+        max_zoom(tables),
         &request.zoom_level_policy,
     )?;
 

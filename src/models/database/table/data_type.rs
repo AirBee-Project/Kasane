@@ -7,9 +7,9 @@ use utoipa::ToSchema;
 pub enum TableDataType {
     /// 文字列
     Text = 0,
-    /// 32ビット符号付き整数
+    /// 64ビット符号付き整数
     Int = 1,
-    /// 32ビット浮動小数点数
+    /// 64ビット浮動小数点数
     Float = 2,
     /// 真偽値
     Boolean = 3,
@@ -17,14 +17,6 @@ pub enum TableDataType {
     Enum = 4,
     /// 空間IDの存在のみを示す（制約や値を持たない）
     Presence = 5,
-    /// 8ビット符号付き整数 (MySQL TINYINT相当)
-    TinyInt = 6,
-    /// 16ビット符号付き整数 (MySQL SMALLINT相当)
-    SmallInt = 7,
-    /// 64ビット符号付き整数 (MySQL BIGINT相当)
-    BigInt = 8,
-    /// 64ビット浮動小数点数 (MySQL DOUBLE相当)
-    Double = 9,
 }
 
 /// テーブルの値に対する制約。
@@ -48,39 +40,9 @@ pub enum TableConstraints {
         #[serde(skip_serializing_if = "Option::is_none")]
         max_length: Option<usize>,
     },
-    /// `TinyInt` 型に対する制約。
-    #[schema(example = json!({"type": "TinyInt", "min": -128, "max": 127}))]
-    TinyInt {
-        /// 最小値（境界値を含む）
-        #[serde(skip_serializing_if = "Option::is_none")]
-        min: Option<i8>,
-        /// 最大値（境界値を含む）
-        #[serde(skip_serializing_if = "Option::is_none")]
-        max: Option<i8>,
-    },
-    /// `SmallInt` 型に対する制約。
-    #[schema(example = json!({"type": "SmallInt", "min": -32768, "max": 32767}))]
-    SmallInt {
-        /// 最小値（境界値を含む）
-        #[serde(skip_serializing_if = "Option::is_none")]
-        min: Option<i16>,
-        /// 最大値（境界値を含む）
-        #[serde(skip_serializing_if = "Option::is_none")]
-        max: Option<i16>,
-    },
     /// `Int` 型に対する制約。
     #[schema(example = json!({"type": "Int", "min": 0, "max": 100}))]
     Int {
-        /// 最小値（境界値を含む）
-        #[serde(skip_serializing_if = "Option::is_none")]
-        min: Option<i32>,
-        /// 最大値（境界値を含む）
-        #[serde(skip_serializing_if = "Option::is_none")]
-        max: Option<i32>,
-    },
-    /// `BigInt` 型に対する制約。
-    #[schema(example = json!({"type": "BigInt", "min": 0, "max": 100}))]
-    BigInt {
         /// 最小値（境界値を含む）
         #[serde(skip_serializing_if = "Option::is_none")]
         min: Option<i64>,
@@ -91,16 +53,6 @@ pub enum TableConstraints {
     /// `Float` 型に対する制約。
     #[schema(example = json!({"type": "Float", "min": 0.0, "max": 100.0}))]
     Float {
-        /// 最小値（境界値を含む）
-        #[serde(skip_serializing_if = "Option::is_none")]
-        min: Option<f32>,
-        /// 最大値（境界値を含む）
-        #[serde(skip_serializing_if = "Option::is_none")]
-        max: Option<f32>,
-    },
-    /// `Double` 型に対する制約。
-    #[schema(example = json!({"type": "Double", "min": 0.0, "max": 100.0}))]
-    Double {
         /// 最小値（境界値を含む）
         #[serde(skip_serializing_if = "Option::is_none")]
         min: Option<f64>,
@@ -130,12 +82,7 @@ impl From<TableDataType> for JsonValueType {
     fn from(value: TableDataType) -> Self {
         match value {
             TableDataType::Text | TableDataType::Enum => JsonValueType::String,
-            TableDataType::TinyInt
-            | TableDataType::SmallInt
-            | TableDataType::Int
-            | TableDataType::BigInt
-            | TableDataType::Float
-            | TableDataType::Double => JsonValueType::Number,
+            TableDataType::Int | TableDataType::Float => JsonValueType::Number,
             TableDataType::Boolean => JsonValueType::Bool,
             TableDataType::Presence => JsonValueType::Null,
         }
@@ -158,26 +105,6 @@ impl TableConstraints {
                     ));
                 }
             }
-            TableConstraints::TinyInt { min, max } => {
-                if let (Some(min), Some(max)) = (min, max)
-                    && min > max
-                {
-                    return Err(format!(
-                        "min ({}) must be less than or equal to max ({})",
-                        min, max
-                    ));
-                }
-            }
-            TableConstraints::SmallInt { min, max } => {
-                if let (Some(min), Some(max)) = (min, max)
-                    && min > max
-                {
-                    return Err(format!(
-                        "min ({}) must be less than or equal to max ({})",
-                        min, max
-                    ));
-                }
-            }
             TableConstraints::Int { min, max } => {
                 if let (Some(min), Some(max)) = (min, max)
                     && min > max
@@ -188,27 +115,7 @@ impl TableConstraints {
                     ));
                 }
             }
-            TableConstraints::BigInt { min, max } => {
-                if let (Some(min), Some(max)) = (min, max)
-                    && min > max
-                {
-                    return Err(format!(
-                        "min ({}) must be less than or equal to max ({})",
-                        min, max
-                    ));
-                }
-            }
             TableConstraints::Float { min, max } => {
-                if let (Some(min), Some(max)) = (min, max)
-                    && min > max
-                {
-                    return Err(format!(
-                        "min ({}) must be less than or equal to max ({})",
-                        min, max
-                    ));
-                }
-            }
-            TableConstraints::Double { min, max } => {
                 if let (Some(min), Some(max)) = (min, max)
                     && min > max
                 {

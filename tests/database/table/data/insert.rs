@@ -42,14 +42,31 @@ async fn test_table_data_insert_single_id() {
     );
 }
 
-/// TinyInt型のデータ挿入およびその範囲外の値がバリデーションエラーになるかを検証する。
+/// Int型の範囲制約（min/max）が挿入時に検証されるかを確認する。
 #[tokio::test]
-async fn test_table_data_insert_tinyint() {
+async fn test_table_data_insert_int_range_constraint() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", "test_table", "TinyInt", 25)
-        .await;
+
+    // min/max 付きの Int テーブルを作る（create_table ヘルパは制約を取らないので生リクエスト）。
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/test_db/tables")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            serde_json::json!({
+                "name": "test_table",
+                "data_type": "Int",
+                "max_zoom_level": 25,
+                "constraints": { "type": "Int", "min": -128, "max": 127 }
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    assert_eq!(
+        test_app.app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::CREATED
+    );
 
     let single_id_query =
         serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
@@ -91,13 +108,13 @@ async fn test_table_data_insert_tinyint() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
-/// Double型のデータ挿入および取得が正常に行えるかを検証する。
+/// Float型のデータ挿入および取得が正常に行えるかを検証する。
 #[tokio::test]
-async fn test_table_data_insert_double() {
+async fn test_table_data_insert_float() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "test_table", "Double", 25)
+        .create_table("test_db", "test_table", "Float", 25)
         .await;
 
     let single_id_query =

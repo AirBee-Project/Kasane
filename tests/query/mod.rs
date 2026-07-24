@@ -196,6 +196,72 @@ async fn query_merge_across_two_databases() {
     assert_eq!(values(&result), vec![15], "10 + 5 = 15 が返るはず");
 }
 
+/// 解像度の異なるテーブルを混在させても、上限は「最も細かいテーブル」に合わせる。
+///
+/// 細かいテーブル(zoom25)の解像度で問い合わせても弾かれず（旧実装は最も粗いテーブルに
+/// 合わせていたため、デフォルトの `Error` policy で 400 になっていた）、
+/// 粗いテーブル(zoom20)はその領域を内包するセルの値として正しく寄与する。
+#[tokio::test]
+async fn query_uses_finest_table_resolution() {
+    let test_app = TestApp::new();
+    test_app.create_database("test_db").await;
+    test_app
+        .create_table("test_db", "fine_table", "Int", 25)
+        .await;
+    test_app.create_database("coarse_db").await;
+    test_app
+        .create_table("coarse_db", "coarse_table", "Int", 20)
+        .await;
+
+    // 細かいテーブルへ zoom25 のセルへ 10 を置く。
+    let fine_id =
+        serde_json::json!({ "z": 25, "f": 0, "x": 620000, "y": 500000, "type": "singleId" });
+    put_data(
+        &test_app,
+        "fine_table",
+        &serde_json::json!({ "value": 10, "spatial_ids": [fine_id] }),
+    )
+    .await;
+
+    // 粗いテーブルへ、その zoom25 セルをちょうど内包する zoom20 の親セル
+    // (620000 >> 5 = 19375, 500000 >> 5 = 15625) へ 5 を置く。
+    let coarse_id =
+        serde_json::json!({ "z": 20, "f": 0, "x": 19375, "y": 15625, "type": "singleId" });
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/databases/coarse_db/tables/coarse_table/data")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            serde_json::json!({ "value": 5, "spatial_ids": [coarse_id] }).to_string(),
+        ))
+        .unwrap();
+    assert_eq!(
+        test_app.app.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::OK
+    );
+
+    // zoom25 の空間IDで merge クエリを実行（policy は既定の Error）。
+    let (status, result) = post_query(
+        &test_app,
+        &serde_json::json!({
+            "spatial_ids": [fine_id],
+            "query": {
+                "type": "merge",
+                "left":  { "type": "source", "database": "test_db",   "table": "fine_table" },
+                "right": { "type": "source", "database": "coarse_db", "table": "coarse_table" },
+                "default": 0,
+                "policy": "sum"
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+
+    // 400 にならず、細かい解像度で 10 + (内包する粗いセルの) 5 = 15 が返る。
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    assert_eq!(values(&result), vec![15]);
+}
+
 /// data_type が異なるテーブルを混在させると 400 で拒否される。
 #[tokio::test]
 async fn query_rejects_mixed_data_types() {

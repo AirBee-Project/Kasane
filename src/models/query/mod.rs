@@ -234,7 +234,49 @@ impl QueryNode {
 /// `POST /query` のリクエストボディ。
 ///
 /// `search` と同じ空間ID指定に、実行するクエリ式（`query`）を足した形。
+///
+/// 下の例は「点で持つ熱源テーブル `sensors.heat_sources`（`Int`）を、高度方向へ引き延ばし、
+/// XY 方向に線形減衰させて影響圏を作り、ズームアウトで粗く平均集約する」パイプライン。
+/// Kasane-Logic のビルダーで書くと
+/// `source.extrude_f(25, 0, 50, Max).falloff_linear_x(25, 3, Max).falloff_linear_y(25, 3, Max).zoom_out(23, Average)`
+/// に相当する（内側の演算が先に適用され、`query` は外側=最後の演算がルートになる木で表す）。
 #[derive(Debug, Deserialize, ToSchema)]
+#[schema(example = json!({
+    "value_type": "Int",
+    "zoom_level_policy": "Normalize",
+    "spatial_ids": [
+        { "type": "rangeId", "z": 23, "f": [0, 0], "x": [7300000, 7300063], "y": [3276800, 3276863] }
+    ],
+    "query": {
+        "type": "zoomOut",
+        "z": 23,
+        "policy": "average",
+        "input": {
+            "type": "falloffLinearY",
+            "z": 25,
+            "radius": 3,
+            "policy": "max",
+            "input": {
+                "type": "falloffLinearX",
+                "z": 25,
+                "radius": 3,
+                "policy": "max",
+                "input": {
+                    "type": "extrudeF",
+                    "z": 25,
+                    "start": 0,
+                    "end": 50,
+                    "policy": "max",
+                    "input": {
+                        "type": "source",
+                        "database": "sensors",
+                        "table": "heat_sources"
+                    }
+                }
+            }
+        }
+    }
+}))]
 pub struct ExecuteQueryRequest {
     /// クエリ結果の値型。
     ///
