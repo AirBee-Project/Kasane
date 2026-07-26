@@ -566,6 +566,99 @@ async fn test_no_privileges() {
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
 }
 
+#[tokio::test]
+/// `/query` はクエリ式が参照する**すべてのデータベース**に Read 以上の権限を要求する。
+/// 一部のソースにしか権限が無い場合は、他のソースにデータがあっても 403 で拒否されなければならない。
+async fn test_query_authorization() {
+    let test_app = PermissionTestApp::new();
+    let root_token = test_app.root_token();
+
+    // Setup two DBs, each with a table and data, using root.
+    for (db, table) in [("db_a", "t_a"), ("db_b", "t_b")] {
+        let req = Request::builder()
+            .method("POST")
+            .uri("/databases")
+            .header("Authorization", format!("Bearer {}", root_token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(format!(r#"{{"name": "{}"}}"#, db)))
+            .unwrap();
+        assert_eq!(
+            test_app.app.clone().oneshot(req).await.unwrap().status(),
+            StatusCode::CREATED
+        );
+
+        let req = Request::builder()
+            .method("POST")
+            .uri(format!("/databases/{}/tables", db))
+            .header("Authorization", format!("Bearer {}", root_token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(format!(
+                r#"{{"name": "{}", "data_type": "Int", "max_zoom_level": 5}}"#,
+                table
+            )))
+            .unwrap();
+        assert_eq!(
+            test_app.app.clone().oneshot(req).await.unwrap().status(),
+            StatusCode::CREATED
+        );
+
+        let req = Request::builder()
+            .method("PUT")
+            .uri(format!("/databases/{}/tables/{}/data", db, table))
+            .header("Authorization", format!("Bearer {}", root_token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"value": 10, "spatial_ids": [{ "z": 0, "f": 0, "x": 0, "y": 0, "type": "singleId" }]}"#))
+            .unwrap();
+        assert_eq!(
+            test_app.app.clone().oneshot(req).await.unwrap().status(),
+            StatusCode::OK
+        );
+    }
+
+    // User only has Read on db_a.
+    let user_token = create_user_and_token(&test_app.app, &root_token, "query_user", false).await;
+    grant_privilege(&test_app.app, &root_token, "query_user", "db_a", "Read").await;
+
+    // Querying db_a alone is allowed.
+    let req = Request::builder()
+        .method("POST")
+        .uri("/query")
+        .header("Authorization", format!("Bearer {}", user_token))
+        .header("Content-Type", "application/json")
+        .body(Body::from(
+            r#"{
+            "spatial_ids": [{ "z": 0, "f": 0, "x": 0, "y": 0, "type": "singleId" }],
+            "query": { "type": "source", "database": "db_a", "table": "t_a" }
+        }"#,
+        ))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // A query merging db_a (readable) with db_b (no privilege) must be rejected,
+    // even though the db_a source alone would be allowed.
+    let req = Request::builder()
+        .method("POST")
+        .uri("/query")
+        .header("Authorization", format!("Bearer {}", user_token))
+        .header("Content-Type", "application/json")
+        .body(Body::from(
+            r#"{
+            "spatial_ids": [{ "z": 0, "f": 0, "x": 0, "y": 0, "type": "singleId" }],
+            "query": {
+                "type": "merge",
+                "left":  { "type": "source", "database": "db_a", "table": "t_a" },
+                "right": { "type": "source", "database": "db_b", "table": "t_b" },
+                "default": 0,
+                "policy": "sum"
+            }
+        }"#,
+        ))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+}
+
 /// 指定ユーザーのトークンが有効か（データベース一覧を取得できるか）を検証する。
 async fn token_is_valid(app: &axum::Router, token: &str) -> bool {
     let req = Request::builder()

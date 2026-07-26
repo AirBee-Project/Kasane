@@ -23,7 +23,7 @@ use axum::Extension;
         (status = 404, description = "テーブルが存在しない")
     ),
     security(("bearer_auth" = [])),
-    tag = "tables"
+    tag = "Tables"
 )]
 pub async fn remove_table(
     State(app_state): State<AppState>,

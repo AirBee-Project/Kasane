@@ -31,7 +31,7 @@ use tokio_stream::StreamExt;
         (status = 200, body = String)
     ),
     security(("bearer_auth" = [])),
-    tag = "data"
+    tag = "Data"
 )]
 pub async fn data_get_stream(
     State(app_state): State<AppState>,

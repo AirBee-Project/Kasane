@@ -73,7 +73,7 @@ impl<'a> KasaneDbRead<'a> {
         Ok(tables)
     }
 
-    /// テーブルが保持する[FlexId]の総数を返す。
+    /// テーブルが保持する [`FlexId`](kasane_logic::FlexId) の総数を返す。
     pub fn table_count(&self, table_id: crate::models::id::TableId) -> Result<u64, AppError> {
         use crate::repositories::database::table::data::shard::ShardEntry;
 

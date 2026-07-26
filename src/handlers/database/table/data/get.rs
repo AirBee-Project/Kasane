@@ -28,7 +28,7 @@ use axum::{
         (status = 404, description = "テーブルが存在しない")
     ),
     security(("bearer_auth" = [])),
-    tag = "data"
+    tag = "Data"
 )]
 pub async fn data_get(
     State(app_state): State<AppState>,

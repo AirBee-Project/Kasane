@@ -25,7 +25,7 @@ use crate::{
         (status = 404, description = "テーブルまたはデータベースが存在しない")
     ),
     security(("bearer_auth" = [])),
-    tag = "tables"
+    tag = "Tables"
 )]
 pub async fn table_info(
     State(app_state): State<AppState>,

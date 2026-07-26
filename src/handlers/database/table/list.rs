@@ -23,7 +23,7 @@ use crate::{
         (status = 200, body = TableListResponse)
     ),
     security(("bearer_auth" = [])),
-    tag = "tables"
+    tag = "Tables"
 )]
 pub async fn table_list(
     State(app_state): State<AppState>,

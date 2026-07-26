@@ -26,6 +26,47 @@ pub fn resolve_zoom(
     }
 }
 
+/// リクエストの空間IDを、解像度を丸めずにそのまま集合へ変換する。
+///
+/// `/query` 用。テーブルの `max_zoom_level` は「そのテーブルが**保存**する最小セル」の
+/// 制約であって、クエリ**結果**の解像度とは別物なので、ここでは上限を掛けない。
+/// `shiftX` / `falloffLinear*` / `extrude*` は引数 `z` の粒度までセルを細分しうるため、
+/// 入力テーブルの保存粒度で要求領域を丸めると、クエリ自身が生成したセルを
+/// 指名できなくなる。
+///
+/// ズームレベルの絶対上限（[`ZoomLevel::MAX`](kasane_logic::ZoomLevel)）は
+/// `SingleId::new` などのコンストラクタが従来どおり検証する。
+pub fn to_spatial_id_set(ids: &[SpatialId]) -> Result<SpatialIdSet, AppError> {
+    let mut result = SpatialIdSet::new();
+
+    for spatial_id in ids {
+        match spatial_id {
+            SpatialId::SingleId(s) => {
+                result.insert(SingleId::new(s.z, s.f, s.x, s.y)?);
+            }
+            SpatialId::RangeId(r) => {
+                result.insert(RangeId::new(r.z, r.f, r.x, r.y)?);
+            }
+            SpatialId::FlexId(f) => {
+                result.insert(kasane_logic::FlexId::new(
+                    f.f_zoomlevel,
+                    f.f_index,
+                    f.x_zoomlevel,
+                    f.x_index,
+                    f.y_zoomlevel,
+                    f.y_index,
+                )?);
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+/// リクエストの空間IDを、テーブルの `max_zoom_level` で丸めながら集合へ変換する。
+///
+/// `max_zoom_level` より細かい空間IDの扱いは `policy` に従う。保存粒度がそのまま
+/// 意味を持つ API（`/data` の取得・挿入・削除）向け。
 pub fn process_spatial_ids(
     ids: &[SpatialId],
     max_zoom_level: u8,

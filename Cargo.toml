@@ -1,6 +1,6 @@
 [package]
 name = "kasane"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 
 [dependencies]
@@ -26,6 +26,7 @@ heed = "0.22.1"
 rayon = "1.12"
 tokio-stream = { version = "0.1.18", features = ["sync"] }
 rustc-hash = "2.1.2"
+mimalloc = "0.1.43"
 
 [dev-dependencies]
 http-body-util = "0.1.3"

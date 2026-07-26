@@ -2,15 +2,11 @@ use crate::{
     AppState,
     error::AppError,
     models::{
-        database::table::data::{
-            DataGroup, GetDataQuery, GetDataResponse, GetDataResponseFlex, GetDataResponseRange,
-            GetDataResponseSingle, OutputFormat, ZoomLevelPolicy,
-        },
-        spatial_id::{RawFlexId, RawRangeId, RawSingleId, SpatialId},
+        database::table::data::{GetDataQuery, GetDataResponse, ZoomLevelPolicy},
+        spatial_id::SpatialId,
     },
-    services::helpers::{spatial_ids::process_spatial_ids, value::restore_value},
+    services::helpers::{data_response, spatial_ids::process_spatial_ids, value::restore_value},
 };
-use kasane_logic::{IntoSingleIds, RangeId};
 
 pub async fn get(
     app_state: &AppState,
@@ -50,127 +46,9 @@ pub async fn get(
             Ok((table.data_type, table.constraints, groups))
         })?;
 
-        let mut dictionary = Vec::new();
-        let mut limit_left = query_limit;
-
-        match query_format {
-            OutputFormat::SingleId => {
-                let mut data = Vec::with_capacity(groups.len());
-                for (bytes, flex_ids) in groups {
-                    let json_value = restore_value(data_type, constraints.as_ref(), &bytes)?;
-                    let value_ref = dictionary.len();
-                    dictionary.push(json_value);
-
-                    let mut spatial_ids = Vec::with_capacity(flex_ids.len());
-                    for flex_id in flex_ids {
-                        for single_id in flex_id.into_single_ids() {
-                            if let Some(left) = limit_left.as_mut() {
-                                if *left == 0 {
-                                    break;
-                                }
-                                *left -= 1;
-                            }
-                            spatial_ids.push(RawSingleId {
-                                z: single_id.z(),
-                                f: single_id.f(),
-                                x: single_id.x(),
-                                y: single_id.y(),
-                            });
-                        }
-                    }
-                    if !spatial_ids.is_empty() {
-                        data.push(DataGroup {
-                            value_ref,
-                            spatial_ids,
-                        });
-                    }
-                    if limit_left == Some(0) {
-                        break;
-                    }
-                }
-                Ok(GetDataResponse::Single(GetDataResponseSingle {
-                    dictionary,
-                    data,
-                }))
-            }
-            OutputFormat::RangeId => {
-                let mut data = Vec::with_capacity(groups.len());
-                for (bytes, flex_ids) in groups {
-                    let json_value = restore_value(data_type, constraints.as_ref(), &bytes)?;
-                    let value_ref = dictionary.len();
-                    dictionary.push(json_value);
-
-                    let mut spatial_ids = Vec::with_capacity(flex_ids.len());
-                    for flex_id in flex_ids {
-                        if let Some(left) = limit_left.as_mut() {
-                            if *left == 0 {
-                                break;
-                            }
-                            *left -= 1;
-                        }
-                        let range_id = RangeId::from(&flex_id);
-                        spatial_ids.push(RawRangeId {
-                            z: range_id.z(),
-                            f: range_id.f(),
-                            x: range_id.x(),
-                            y: range_id.y(),
-                        });
-                    }
-                    if !spatial_ids.is_empty() {
-                        data.push(DataGroup {
-                            value_ref,
-                            spatial_ids,
-                        });
-                    }
-                    if limit_left == Some(0) {
-                        break;
-                    }
-                }
-                Ok(GetDataResponse::Range(GetDataResponseRange {
-                    dictionary,
-                    data,
-                }))
-            }
-            OutputFormat::FlexId => {
-                let mut data = Vec::with_capacity(groups.len());
-                for (bytes, flex_ids) in groups {
-                    let json_value = restore_value(data_type, constraints.as_ref(), &bytes)?;
-                    let value_ref = dictionary.len();
-                    dictionary.push(json_value);
-
-                    let mut spatial_ids = Vec::with_capacity(flex_ids.len());
-                    for flex_id in flex_ids {
-                        if let Some(left) = limit_left.as_mut() {
-                            if *left == 0 {
-                                break;
-                            }
-                            *left -= 1;
-                        }
-                        spatial_ids.push(RawFlexId {
-                            f_zoomlevel: flex_id.f_zoomlevel(),
-                            f_index: flex_id.f_index(),
-                            x_zoomlevel: flex_id.x_zoomlevel(),
-                            x_index: flex_id.x_index(),
-                            y_zoomlevel: flex_id.y_zoomlevel(),
-                            y_index: flex_id.y_index(),
-                        });
-                    }
-                    if !spatial_ids.is_empty() {
-                        data.push(DataGroup {
-                            value_ref,
-                            spatial_ids,
-                        });
-                    }
-                    if limit_left == Some(0) {
-                        break;
-                    }
-                }
-                Ok(GetDataResponse::Flex(GetDataResponseFlex {
-                    dictionary,
-                    data,
-                }))
-            }
-        }
+        data_response::build(groups, query_format, query_limit, |bytes| {
+            restore_value(data_type, constraints.as_ref(), bytes)
+        })
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?

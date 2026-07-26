@@ -23,7 +23,7 @@ use axum::{
 #[utoipa::path(
     patch,
     path = "/databases/{db_name}/tables/{table_name}",
-    tags = ["tables"],
+    tags = ["Tables"],
     params(
         ("db_name" = String, Path, description = "データベース名"),
         ("table_name" = String, Path, description = "テーブル名"),

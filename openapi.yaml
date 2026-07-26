@@ -4,7 +4,7 @@ info:
   description: ''
   license:
     name: ''
-  version: 0.3.0
+  version: 0.3.1
 paths:
   /auth/login:
     post:
@@ -31,7 +31,7 @@ paths:
   /databases:
     get:
       tags:
-      - databases
+      - Databases
       summary: データベース一覧の取得
       description: |-
         ユーザー権限に応じて、アクセス可能なデータベースの一覧を取得します。
@@ -52,7 +52,7 @@ paths:
       - bearer_auth: []
     post:
       tags:
-      - databases
+      - Databases
       summary: データベースの作成
       description: 新しいデータベースを作成します。この操作はGlobal Admin権限が必要です。
       operationId: database_create
@@ -75,7 +75,7 @@ paths:
   /databases/{db_name}/tables:
     get:
       tags:
-      - tables
+      - Tables
       summary: テーブル一覧の取得
       description: 指定したデータベース内に存在するテーブルの一覧を取得します。この操作はデータベースのRead以上の権限が必要です。
       operationId: table_list
@@ -98,7 +98,7 @@ paths:
       - bearer_auth: []
     post:
       tags:
-      - tables
+      - Tables
       summary: テーブルの作成
       description: 指定したデータベース内に新しいテーブルを作成します。この操作はデータベースのWrite以上の権限が必要です。
       operationId: table_create
@@ -128,7 +128,7 @@ paths:
   /databases/{db_name}/tables/{table_name}:
     get:
       tags:
-      - tables
+      - Tables
       summary: テーブル情報の取得
       description: 指定したテーブルの詳細情報を取得します。この操作はデータベースのRead以上の権限が必要です。
       operationId: table_info
@@ -160,7 +160,7 @@ paths:
       - bearer_auth: []
     delete:
       tags:
-      - tables
+      - Tables
       summary: テーブルの削除
       description: 指定したテーブルを削除します。この操作はデータベースのWrite以上の権限が必要です。
       operationId: remove_table
@@ -188,7 +188,7 @@ paths:
       - bearer_auth: []
     patch:
       tags:
-      - tables
+      - Tables
       summary: テーブルの更新
       description: |-
         テーブルの名前変更や値の制約を更新します。この操作はデータベースの Manage 権限が必要です。
@@ -238,7 +238,7 @@ paths:
   /databases/{db_name}/tables/{table_name}/copy:
     post:
       tags:
-      - tables
+      - Tables
       summary: テーブルのコピー
       description: |-
         指定したテーブルを別のデータベース、または同じデータベース内に異なる名前でコピーします。
@@ -285,7 +285,7 @@ paths:
   /databases/{db_name}/tables/{table_name}/data:
     put:
       tags:
-      - data
+      - Data
       summary: データの上書き・追加
       description: |-
         指定した空間IDに対して、指定した値を書き込みます。
@@ -323,7 +323,7 @@ paths:
       - bearer_auth: []
     delete:
       tags:
-      - data
+      - Data
       summary: データの削除
       description: 指定した空間IDをテーブルからを削除します。この操作はデータベースのWrite以上の権限が必要です。
       operationId: data_remove
@@ -357,7 +357,7 @@ paths:
       - bearer_auth: []
     patch:
       tags:
-      - data
+      - Data
       summary: データの部分追加
       description: |-
         指定した空間IDに対して、指定した値を書き込みます。
@@ -398,7 +398,7 @@ paths:
   /databases/{db_name}/tables/{table_name}/data/search:
     post:
       tags:
-      - data
+      - Data
       summary: データの一括取得
       description: 空間IDと値をJSON配列として一括で取得します。この操作はデータベースのRead以上の権限が必要です。
       operationId: data_get
@@ -450,7 +450,7 @@ paths:
   /databases/{db_name}/tables/{table_name}/data/search/stream:
     post:
       tags:
-      - data
+      - Data
       summary: データのストリーミング取得
       description: 空間IDと値をNDJSON形式のストリームとして順次取得します。この操作はデータベースのRead以上の権限が必要です。
       operationId: data_get_stream
@@ -500,7 +500,7 @@ paths:
   /databases/{name}:
     get:
       tags:
-      - databases
+      - Databases
       summary: データベース情報の取得
       description: 指定したデータベースの詳細情報を取得します。対象データベースのRead以上の権限が必要です。
       operationId: database_info
@@ -523,7 +523,7 @@ paths:
       - bearer_auth: []
     delete:
       tags:
-      - databases
+      - Databases
       summary: データベースの削除
       description: 指定したデータベースを削除します。この操作はGlobal Admin権限が必要です。
       operationId: remove_database
@@ -543,7 +543,7 @@ paths:
         - global_admin
     patch:
       tags:
-      - databases
+      - Databases
       summary: データベース名の更新
       description: 指定したデータベースの名前を変更します。対象データベースのManage以上の権限が必要です。
       operationId: database_rename
@@ -577,7 +577,7 @@ paths:
   /databases/{name}/copy:
     post:
       tags:
-      - databases
+      - Databases
       summary: データベースのコピー
       description: 指定したデータベースをコピーします。コピー元データベースに対するRead権限が必要です。
       operationId: database_copy
@@ -612,10 +612,54 @@ paths:
           description: コピー先データベース、またはコピー元と同名のデータベースがすでに存在する
       security:
       - bearer_auth: []
+  /query:
+    post:
+      tags:
+      - Query
+      summary: クエリの実行
+      description: |-
+        複数のテーブルを対象にクエリ式を実行し、指定した空間IDの結果を取得します。
+        クエリ式が参照する**すべてのデータベース**に対して Read 以上の権限が必要です。
+      operationId: execute_query
+      parameters:
+      - name: format
+        in: query
+        description: 出力フォーマット(singleId, rangeId, flexId)
+        required: false
+        schema:
+          $ref: '#/components/schemas/OutputFormat'
+      - name: limit
+        in: query
+        description: 最大取得件数
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteQueryRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetDataResponse'
+        '400':
+          description: クエリ式が不正（型の混在・非対応の型など）
+        '403':
+          description: 参照先データベースへの権限が不足
+        '404':
+          description: 参照先のテーブルが存在しない
+      security:
+      - bearer_auth: []
   /system/info:
     get:
       tags:
-      - system
+      - System
       summary: サーバーのステータスとバージョン情報を取得する。
       description: ログイン済みのユーザーであれば誰でもアクセス可能です。
       operationId: get_system_info
@@ -1093,6 +1137,91 @@ components:
         name:
           type: string
           example: example_database
+    ExecuteQueryRequest:
+      type: object
+      description: Tableに対するQueryを表現する型
+      required:
+      - spatial_ids
+      - query
+      properties:
+        value_type:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/TableDataType'
+        spatial_ids:
+          type: array
+          items:
+            $ref: '#/components/schemas/SpatialId'
+        query:
+          $ref: '#/components/schemas/QueryNode'
+      example:
+        query:
+          input:
+            input:
+              input:
+                database: sensors
+                table: heat_sources
+                type: source
+              policy: max
+              radius: 3
+              type: falloffLinearX
+              z: 25
+            policy: max
+            radius: 3
+            type: falloffLinearY
+            z: 25
+          policy: average
+          type: zoomOut
+          z: 23
+        spatial_ids:
+        - f:
+          - 0
+          - 0
+          type: rangeId
+          x:
+          - 7300000
+          - 7300063
+          y:
+          - 3276800
+          - 3276863
+          z: 23
+        value_type: Int
+    FilterCondition:
+      oneOf:
+      - type: object
+        description: '`value` に一致する値だけを残す'
+        required:
+        - value
+        - mode
+        properties:
+          value: {}
+          mode:
+            type: string
+            enum:
+            - equals
+      - type: object
+        description: 値が `min..=max`に入る値だけを残す
+        required:
+        - mode
+        properties:
+          min: {}
+          max: {}
+          mode:
+            type: string
+            enum:
+            - inRange
+      - type: object
+        description: 値が `min..=max`に入る値を取り除く
+        required:
+        - mode
+        properties:
+          min: {}
+          max: {}
+          mode:
+            type: string
+            enum:
+            - notInRange
+      description: 値フィルタの条件。
     FlexId:
       type: object
       required:
@@ -1234,6 +1363,17 @@ components:
       properties:
         token:
           type: string
+    MergePolicyKind:
+      type: string
+      description: 同一空間に複数の値が集まったときの集約規則。
+      enum:
+      - overwrite
+      - keepExisting
+      - sum
+      - max
+      - min
+      - average
+      - difference
     OutputFormat:
       type: string
       enum:
@@ -1251,6 +1391,309 @@ components:
           example: example_database
         role:
           $ref: '#/components/schemas/UserRole'
+    QueryNode:
+      oneOf:
+      - type: object
+        description: 演算の起点。読み出し対象のテーブルを指定する。
+        required:
+        - database
+        - table
+        - type
+        properties:
+          database:
+            type: string
+            example: example_database
+          table:
+            type: string
+            example: example_table
+          type:
+            type: string
+            enum:
+            - source
+      - allOf:
+        - $ref: '#/components/schemas/FilterCondition'
+        - type: object
+          required:
+          - input
+          properties:
+            input:
+              $ref: '#/components/schemas/QueryNode'
+        - type: object
+          required:
+          - type
+          properties:
+            type:
+              type: string
+              enum:
+              - filterValues
+      - type: object
+        description: X方向へ平行移動する
+        required:
+        - input
+        - z
+        - index
+        - type
+        properties:
+          input:
+            $ref: '#/components/schemas/QueryNode'
+          z:
+            type: integer
+            format: int32
+            minimum: 0
+          index:
+            type: integer
+            format: int32
+          type:
+            type: string
+            enum:
+            - shiftX
+      - type: object
+        description: Y方向へ平行移動する
+        required:
+        - input
+        - z
+        - index
+        - type
+        properties:
+          input:
+            $ref: '#/components/schemas/QueryNode'
+          z:
+            type: integer
+            format: int32
+            minimum: 0
+          index:
+            type: integer
+            format: int32
+          type:
+            type: string
+            enum:
+            - shiftY
+      - type: object
+        description: F(高度)方向へ平行移動する
+        required:
+        - input
+        - z
+        - index
+        - type
+        properties:
+          input:
+            $ref: '#/components/schemas/QueryNode'
+          z:
+            type: integer
+            format: int32
+            minimum: 0
+          index:
+            type: integer
+            format: int32
+          type:
+            type: string
+            enum:
+            - shiftF
+      - type: object
+        description: 指定ズームレベルまで解像度を落とし、`policy` で集約する
+        required:
+        - input
+        - z
+        - policy
+        - type
+        properties:
+          input:
+            $ref: '#/components/schemas/QueryNode'
+          z:
+            type: integer
+            format: int32
+            minimum: 0
+          policy:
+            $ref: '#/components/schemas/MergePolicyKind'
+          type:
+            type: string
+            enum:
+            - zoomOut
+      - type: object
+        description: X方向の絶対座標範囲へ引き延ばす
+        required:
+        - input
+        - z
+        - start
+        - end
+        - policy
+        - type
+        properties:
+          input:
+            $ref: '#/components/schemas/QueryNode'
+          z:
+            type: integer
+            format: int32
+            minimum: 0
+          start:
+            type: integer
+            format: int32
+            minimum: 0
+          end:
+            type: integer
+            format: int32
+            minimum: 0
+          policy:
+            $ref: '#/components/schemas/MergePolicyKind'
+          type:
+            type: string
+            enum:
+            - extrudeX
+      - type: object
+        description: Y方向の絶対座標範囲へ引き延ばす
+        required:
+        - input
+        - z
+        - start
+        - end
+        - policy
+        - type
+        properties:
+          input:
+            $ref: '#/components/schemas/QueryNode'
+          z:
+            type: integer
+            format: int32
+            minimum: 0
+          start:
+            type: integer
+            format: int32
+            minimum: 0
+          end:
+            type: integer
+            format: int32
+            minimum: 0
+          policy:
+            $ref: '#/components/schemas/MergePolicyKind'
+          type:
+            type: string
+            enum:
+            - extrudeY
+      - type: object
+        description: F方向の絶対座標範囲へ引き延ばす
+        required:
+        - input
+        - z
+        - start
+        - end
+        - policy
+        - type
+        properties:
+          input:
+            $ref: '#/components/schemas/QueryNode'
+          z:
+            type: integer
+            format: int32
+            minimum: 0
+          start:
+            type: integer
+            format: int32
+          end:
+            type: integer
+            format: int32
+          policy:
+            $ref: '#/components/schemas/MergePolicyKind'
+          type:
+            type: string
+            enum:
+            - extrudeF
+      - type: object
+        description: X方向へ、指定距離で0になるよう値を線形減衰させる
+        required:
+        - input
+        - z
+        - radius
+        - policy
+        - type
+        properties:
+          input:
+            $ref: '#/components/schemas/QueryNode'
+          z:
+            type: integer
+            format: int32
+            minimum: 0
+          radius:
+            type: integer
+            format: int32
+            minimum: 0
+          policy:
+            $ref: '#/components/schemas/MergePolicyKind'
+          type:
+            type: string
+            enum:
+            - falloffLinearX
+      - type: object
+        description: Y方向へ、指定距離で0になるよう値を線形減衰させる
+        required:
+        - input
+        - z
+        - radius
+        - policy
+        - type
+        properties:
+          input:
+            $ref: '#/components/schemas/QueryNode'
+          z:
+            type: integer
+            format: int32
+            minimum: 0
+          radius:
+            type: integer
+            format: int32
+            minimum: 0
+          policy:
+            $ref: '#/components/schemas/MergePolicyKind'
+          type:
+            type: string
+            enum:
+            - falloffLinearY
+      - type: object
+        description: F方向へ、指定距離で0になるよう値を線形減衰させる
+        required:
+        - input
+        - z
+        - radius
+        - policy
+        - type
+        properties:
+          input:
+            $ref: '#/components/schemas/QueryNode'
+          z:
+            type: integer
+            format: int32
+            minimum: 0
+          radius:
+            type: integer
+            format: int32
+            minimum: 0
+          policy:
+            $ref: '#/components/schemas/MergePolicyKind'
+          type:
+            type: string
+            enum:
+            - falloffLinearF
+      - type: object
+        description: |-
+          2つの部分式を `policy` で重ね合わせる。
+          片側にしか値が無いセルは `default` を相手側の値とみなす。
+        required:
+        - left
+        - right
+        - default
+        - policy
+        - type
+        properties:
+          left:
+            $ref: '#/components/schemas/QueryNode'
+          right:
+            $ref: '#/components/schemas/QueryNode'
+          default: {}
+          policy:
+            $ref: '#/components/schemas/MergePolicyKind'
+          type:
+            type: string
+            enum:
+            - merge
     RangeId:
       type: object
       required:
@@ -1514,56 +1957,6 @@ components:
           min_length: 1
           type: Text
       - type: object
-        description: '`TinyInt` 型に対する制約。'
-        required:
-        - type
-        properties:
-          min:
-            type:
-            - integer
-            - 'null'
-            format: int32
-            description: 最小値（境界値を含む）
-          max:
-            type:
-            - integer
-            - 'null'
-            format: int32
-            description: 最大値（境界値を含む）
-          type:
-            type: string
-            enum:
-            - TinyInt
-        example:
-          max: 127
-          min: -128
-          type: TinyInt
-      - type: object
-        description: '`SmallInt` 型に対する制約。'
-        required:
-        - type
-        properties:
-          min:
-            type:
-            - integer
-            - 'null'
-            format: int32
-            description: 最小値（境界値を含む）
-          max:
-            type:
-            - integer
-            - 'null'
-            format: int32
-            description: 最大値（境界値を含む）
-          type:
-            type: string
-            enum:
-            - SmallInt
-        example:
-          max: 32767
-          min: -32768
-          type: SmallInt
-      - type: object
         description: '`Int` 型に対する制約。'
         required:
         - type
@@ -1572,13 +1965,13 @@ components:
             type:
             - integer
             - 'null'
-            format: int32
+            format: int64
             description: 最小値（境界値を含む）
           max:
             type:
             - integer
             - 'null'
-            format: int32
+            format: int64
             description: 最大値（境界値を含む）
           type:
             type: string
@@ -1589,31 +1982,6 @@ components:
           min: 0
           type: Int
       - type: object
-        description: '`BigInt` 型に対する制約。'
-        required:
-        - type
-        properties:
-          min:
-            type:
-            - integer
-            - 'null'
-            format: int64
-            description: 最小値（境界値を含む）
-          max:
-            type:
-            - integer
-            - 'null'
-            format: int64
-            description: 最大値（境界値を含む）
-          type:
-            type: string
-            enum:
-            - BigInt
-        example:
-          max: 100
-          min: 0
-          type: BigInt
-      - type: object
         description: '`Float` 型に対する制約。'
         required:
         - type
@@ -1622,13 +1990,13 @@ components:
             type:
             - number
             - 'null'
-            format: float
+            format: double
             description: 最小値（境界値を含む）
           max:
             type:
             - number
             - 'null'
-            format: float
+            format: double
             description: 最大値（境界値を含む）
           type:
             type: string
@@ -1638,31 +2006,6 @@ components:
           max: 100.0
           min: 0.0
           type: Float
-      - type: object
-        description: '`Double` 型に対する制約。'
-        required:
-        - type
-        properties:
-          min:
-            type:
-            - number
-            - 'null'
-            format: double
-            description: 最小値（境界値を含む）
-          max:
-            type:
-            - number
-            - 'null'
-            format: double
-            description: 最大値（境界値を含む）
-          type:
-            type: string
-            enum:
-            - Double
-        example:
-          max: 100.0
-          min: 0.0
-          type: Double
       - type: object
         description: '`Enum` 型に対する制約。'
         required:
@@ -1717,10 +2060,6 @@ components:
       - Boolean
       - Enum
       - Presence
-      - TinyInt
-      - SmallInt
-      - BigInt
-      - Double
     TableInfoResponse:
       type: object
       description: 単一テーブルの詳細情報。保持する空間ID(FlexId)の総数 `count` を必ず含む。
@@ -1838,56 +2177,12 @@ components:
             type:
             - integer
             - 'null'
-            format: int32
+            format: int64
           max:
             type:
             - integer
             - 'null'
-            format: int32
-          type:
-            type: string
-            enum:
-            - TinyInt
-        example:
-          max: 100
-          min: 0
-          type: TinyInt
-      - type: object
-        required:
-        - type
-        properties:
-          min:
-            type:
-            - integer
-            - 'null'
-            format: int32
-          max:
-            type:
-            - integer
-            - 'null'
-            format: int32
-          type:
-            type: string
-            enum:
-            - SmallInt
-        example:
-          max: 100
-          min: 0
-          type: SmallInt
-      - type: object
-        required:
-        - type
-        properties:
-          min:
-            type:
-            - integer
-            - 'null'
-            format: int32
-          max:
-            type:
-            - integer
-            - 'null'
-            format: int32
+            format: int64
           type:
             type: string
             enum:
@@ -1902,36 +2197,14 @@ components:
         properties:
           min:
             type:
-            - integer
-            - 'null'
-            format: int64
-          max:
-            type:
-            - integer
-            - 'null'
-            format: int64
-          type:
-            type: string
-            enum:
-            - BigInt
-        example:
-          max: 100
-          min: 0
-          type: BigInt
-      - type: object
-        required:
-        - type
-        properties:
-          min:
-            type:
             - number
             - 'null'
-            format: float
+            format: double
           max:
             type:
             - number
             - 'null'
-            format: float
+            format: double
           type:
             type: string
             enum:
@@ -1940,28 +2213,6 @@ components:
           max: 100.0
           min: 0.0
           type: Float
-      - type: object
-        required:
-        - type
-        properties:
-          min:
-            type:
-            - number
-            - 'null'
-            format: double
-          max:
-            type:
-            - number
-            - 'null'
-            format: double
-          type:
-            type: string
-            enum:
-            - Double
-        example:
-          max: 100.0
-          min: 0.0
-          type: Double
       - type: object
         required:
         - type
@@ -2052,11 +2303,13 @@ tags:
   description: Authentication endpoints
 - name: Users
   description: User management operations
-- name: databases
+- name: Databases
   description: Database operations
-- name: tables
+- name: Tables
   description: Table operations
-- name: data
+- name: Data
   description: Data manipulation operations
-- name: system
+- name: Query
+  description: Cross-table query execution
+- name: System
   description: System operations

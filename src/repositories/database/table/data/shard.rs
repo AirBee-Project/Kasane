@@ -1,5 +1,5 @@
 //! `tables_data`のKey `(TableId, FlexId)`は、
-//! 実データを持つ **リーフ**（[`SpatialIdMap`](kasane_logic::SpatialIdMap) のバイト列）か、
+//! 実データを持つ **リーフ**（[`kasane_logic::SpatialIdMap`] のバイト列）か、
 //! 分割後に子シャードのキー（領域 [`FlexId`]）を **ポインタ** として並べた **中間ノード**のいずれか。
 //!
 //! リーフが [`MAX_FLEX_ID_PER_SHARD`] を超えると分割され、親エントリは子へのポインタノードへ置き換わる。
@@ -160,6 +160,52 @@ pub fn route_leaves_batched<'a>(
         &mut out,
     )?;
     Ok(out)
+}
+
+/// `range` と重なる**既存のリーフ領域**を、ポインタ木を1回降りて集める。
+///
+/// [`route_leaves_batched`] が FlexId 群を担当リーフへ振り分ける（書き込み用に未作成キーも返す）のに対し、
+/// こちらは範囲クエリ用の読み取り経路であり、**データが存在するリーフだけ**を返す。
+pub fn route_leaves_for_range(
+    tables_data: &Database<TableIdAndFlexId, Bytes>,
+    txn: &RoTxn<WithoutTls>,
+    table_id: TableId,
+    range: &kasane_logic::RangeId,
+) -> Result<Vec<FlexId>, AppError> {
+    let mut out = Vec::new();
+    for root in [FlexId::LOWER_MAX, FlexId::UPPER_MAX] {
+        if root.intersects_range(range) {
+            descend_range(tables_data, txn, table_id, root, range, &mut out)?;
+        }
+    }
+    Ok(out)
+}
+
+/// `region` を根として、`range` と交差する子だけを辿り、到達したリーフ領域を `out` に積む。
+fn descend_range(
+    tables_data: &Database<TableIdAndFlexId, Bytes>,
+    txn: &RoTxn<WithoutTls>,
+    table_id: TableId,
+    region: FlexId,
+    range: &kasane_logic::RangeId,
+    out: &mut Vec<FlexId>,
+) -> Result<(), AppError> {
+    let Some(bytes) = tables_data.get(txn, &(table_id, region.clone()))? else {
+        // 未作成領域＝データ無し。読み取りでは辿る必要がない。
+        return Ok(());
+    };
+    match ShardEntry::child_pointers(bytes)? {
+        // リーフに到達。
+        None => out.push(region),
+        Some(children) => {
+            for child in children {
+                if child.intersects_range(range) {
+                    descend_range(tables_data, txn, table_id, child, range, out)?;
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// `region` を根として `ids` を子へ振り分けながら降り、リーフ（または未作成キー）へ到達した

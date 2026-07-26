@@ -34,7 +34,7 @@ use crate::{
         (status = 409, description = "コピー先テーブルがすでに存在する")
     ),
     security(("bearer_auth" = [])),
-    tag = "tables"
+    tag = "Tables"
 )]
 pub async fn table_copy(
     Path((db_name, table_name)): Path<(String, String)>,

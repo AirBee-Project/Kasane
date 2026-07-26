@@ -268,44 +268,6 @@ impl<'a> KasaneDbWrite<'a> {
                 }))
             }
             (
-                TableDataType::TinyInt,
-                crate::models::database::table::UpdateTableConstraints::TinyInt { min, max },
-            ) => {
-                let (mut current_min, mut current_max) = match current_constraints {
-                    Some(TableConstraints::TinyInt { min, max }) => (*min, *max),
-                    _ => (None, None),
-                };
-                if let Some(v) = min {
-                    current_min = v;
-                }
-                if let Some(v) = max {
-                    current_max = v;
-                }
-                Ok(Some(TableConstraints::TinyInt {
-                    min: current_min,
-                    max: current_max,
-                }))
-            }
-            (
-                TableDataType::SmallInt,
-                crate::models::database::table::UpdateTableConstraints::SmallInt { min, max },
-            ) => {
-                let (mut current_min, mut current_max) = match current_constraints {
-                    Some(TableConstraints::SmallInt { min, max }) => (*min, *max),
-                    _ => (None, None),
-                };
-                if let Some(v) = min {
-                    current_min = v;
-                }
-                if let Some(v) = max {
-                    current_max = v;
-                }
-                Ok(Some(TableConstraints::SmallInt {
-                    min: current_min,
-                    max: current_max,
-                }))
-            }
-            (
                 TableDataType::Int,
                 crate::models::database::table::UpdateTableConstraints::Int { min, max },
             ) => {
@@ -325,25 +287,6 @@ impl<'a> KasaneDbWrite<'a> {
                 }))
             }
             (
-                TableDataType::BigInt,
-                crate::models::database::table::UpdateTableConstraints::BigInt { min, max },
-            ) => {
-                let (mut current_min, mut current_max) = match current_constraints {
-                    Some(TableConstraints::BigInt { min, max }) => (*min, *max),
-                    _ => (None, None),
-                };
-                if let Some(v) = min {
-                    current_min = v;
-                }
-                if let Some(v) = max {
-                    current_max = v;
-                }
-                Ok(Some(TableConstraints::BigInt {
-                    min: current_min,
-                    max: current_max,
-                }))
-            }
-            (
                 TableDataType::Float,
                 crate::models::database::table::UpdateTableConstraints::Float { min, max },
             ) => {
@@ -358,25 +301,6 @@ impl<'a> KasaneDbWrite<'a> {
                     current_max = v;
                 }
                 Ok(Some(TableConstraints::Float {
-                    min: current_min,
-                    max: current_max,
-                }))
-            }
-            (
-                TableDataType::Double,
-                crate::models::database::table::UpdateTableConstraints::Double { min, max },
-            ) => {
-                let (mut current_min, mut current_max) = match current_constraints {
-                    Some(TableConstraints::Double { min, max }) => (*min, *max),
-                    _ => (None, None),
-                };
-                if let Some(v) = min {
-                    current_min = v;
-                }
-                if let Some(v) = max {
-                    current_max = v;
-                }
-                Ok(Some(TableConstraints::Double {
                     min: current_min,
                     max: current_max,
                 }))
