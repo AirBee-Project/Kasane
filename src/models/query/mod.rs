@@ -200,20 +200,15 @@ pub enum QueryNode {
 }
 
 impl QueryNode {
-    /// AST が参照する全ての `(database, table)` を、出現順・重複ありで集める。
-    pub fn sources(&self) -> Vec<(&str, &str)> {
-        let mut out = Vec::new();
-        self.collect_sources(&mut out);
-        out
-    }
-
-    fn collect_sources<'a>(&'a self, out: &mut Vec<(&'a str, &'a str)>) {
-        match self {
-            QueryNode::Source {
-                database, table, ..
-            } => out.push((database, table)),
-            QueryNode::FilterValues { input, .. } => input.collect_sources(out),
-            QueryNode::ShiftX { input, .. }
+    /// このノードが持つ子部分式を列挙する。
+    ///
+    /// AST を辿る処理（[`sources`](Self::sources) や値型推論）はすべてこれを経由する。
+    /// 演算子を追加したときに網羅性を直す必要があるのは、ここと実際の変換処理だけ。
+    pub fn children(&self) -> impl Iterator<Item = &QueryNode> {
+        let (a, b) = match self {
+            QueryNode::Source { .. } => (None, None),
+            QueryNode::FilterValues { input, .. }
+            | QueryNode::ShiftX { input, .. }
             | QueryNode::ShiftY { input, .. }
             | QueryNode::ShiftF { input, .. }
             | QueryNode::ZoomOut { input, .. }
@@ -222,12 +217,32 @@ impl QueryNode {
             | QueryNode::ExtrudeF { input, .. }
             | QueryNode::FalloffLinearX { input, .. }
             | QueryNode::FalloffLinearY { input, .. }
-            | QueryNode::FalloffLinearF { input, .. } => input.collect_sources(out),
-            QueryNode::Merge { left, right, .. } => {
-                left.collect_sources(out);
-                right.collect_sources(out);
-            }
-        }
+            | QueryNode::FalloffLinearF { input, .. } => (Some(&**input), None),
+            QueryNode::Merge { left, right, .. } => (Some(&**left), Some(&**right)),
+        };
+        a.into_iter().chain(b)
+    }
+
+    /// このノードを根とする部分木を、根から順に列挙する（行きがけ順）。
+    pub fn iter(&self) -> impl Iterator<Item = &QueryNode> {
+        let mut stack = vec![self];
+        core::iter::from_fn(move || {
+            let node = stack.pop()?;
+            stack.extend(node.children());
+            Some(node)
+        })
+    }
+
+    /// AST が参照する全ての `(database, table)` を、重複ありで集める。
+    pub fn sources(&self) -> Vec<(&str, &str)> {
+        self.iter()
+            .filter_map(|node| match node {
+                QueryNode::Source {
+                    database, table, ..
+                } => Some((database.as_str(), table.as_str())),
+                _ => None,
+            })
+            .collect()
     }
 }
 

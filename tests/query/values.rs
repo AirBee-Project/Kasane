@@ -492,3 +492,269 @@ async fn source_only_returns_all_cells() {
     assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(values(&result), vec![1, 5, 10, 20], "body: {result}");
 }
+
+// ---------------------------------------------------------------------------
+// 演算子パラメータの検証
+//
+// クエリは遅延評価（`run_on_subset`）でしか実行されないため、そこで
+// `validate()` を通していないと、範囲外パラメータを持つ演算子がセルを黙って
+// 捨てて「エラーではなく空の結果 (200)」を返してしまう。以下はその退行を防ぐ。
+// ---------------------------------------------------------------------------
+
+/// `extrudeX` の座標がそのズームレベルの範囲外なら 400。
+#[tokio::test]
+async fn rejects_extrude_x_coordinate_out_of_range() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(&app, "t_ex_x", "Int", &[(760000, serde_json::json!(1))]).await;
+
+    // z=5 の X 上限は 31。9999 は範囲外。
+    let (status, body) = post_query(
+        &app,
+        &serde_json::json!({
+            "spatial_ids": ids(760000, 1),
+            "query": {
+                "type": "extrudeX", "z": 5, "start": 0, "end": 9999, "policy": "max",
+                "input": source("t_ex_x")
+            }
+        }),
+        "",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "body: {body}");
+}
+
+/// `extrudeF` の高度がそのズームレベルの範囲外なら 400。
+#[tokio::test]
+async fn rejects_extrude_f_coordinate_out_of_range() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(&app, "t_ex_f", "Int", &[(761000, serde_json::json!(1))]).await;
+
+    let (status, body) = post_query(
+        &app,
+        &serde_json::json!({
+            "spatial_ids": ids(761000, 1),
+            "query": {
+                "type": "extrudeF", "z": 5, "start": 0, "end": 99999, "policy": "max",
+                "input": source("t_ex_f")
+            }
+        }),
+        "",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "body: {body}");
+}
+
+/// 値フィルタの下限が上限を上回っていたら 400。
+#[tokio::test]
+async fn rejects_inverted_filter_range() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(&app, "t_inv", "Int", &[(762000, serde_json::json!(5))]).await;
+
+    let (status, body) = post_query(
+        &app,
+        &serde_json::json!({
+            "spatial_ids": ids(762000, 1),
+            "query": {
+                "type": "filterValues", "mode": "inRange", "min": 100, "max": 1,
+                "input": source("t_inv")
+            }
+        }),
+        "",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "body: {body}");
+}
+
+/// 範囲内のパラメータなら従来どおり 200 で通ること（上の3件の裏取り）。
+#[tokio::test]
+async fn accepts_in_range_operator_parameters() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(&app, "t_ok", "Int", &[(763000, serde_json::json!(7))]).await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "spatial_ids": ids(763000, 1),
+            "query": {
+                "type": "filterValues", "mode": "inRange", "min": 1, "max": 100,
+                "input": source("t_ok")
+            }
+        }),
+        "",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    assert_eq!(values(&result), vec![7]);
+    assert_eq!(total_ids(&result), 1);
+}
+
+// ---------------------------------------------------------------------------
+// limit の挙動
+// ---------------------------------------------------------------------------
+
+/// `limit=0` で、値辞書に「どこからも参照されないエントリ」が残らないこと。
+///
+/// グループを組み立てる**前**に辞書へ push する実装だと、空間IDを1件も出力しないまま
+/// 最初のグループの値だけが辞書に残る（`dictionary` に1件、`data` は空）。
+/// 辞書長とグループ数が一致することで検出する。
+#[tokio::test]
+async fn zero_limit_leaves_no_orphan_dictionary_entries() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(
+        &app,
+        "t_lim",
+        "Int",
+        &[
+            (770000, serde_json::json!(1)),
+            (770001, serde_json::json!(2)),
+        ],
+    )
+    .await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "spatial_ids": ids(770000, 2),
+            "query": source("t_lim")
+        }),
+        "?limit=0",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    assert_eq!(
+        total_ids(&result),
+        0,
+        "limit=0 なのに空間IDが出ている: {result}"
+    );
+
+    let dict_len = result["dictionary"]
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let group_len = result["data"].as_array().map(|a| a.len()).unwrap_or(0);
+    assert_eq!(
+        dict_len, 0,
+        "参照されない辞書エントリが残っている: {result}"
+    );
+    assert_eq!(dict_len, group_len);
+}
+
+/// `limit` を掛けたときも、辞書エントリ数とグループ数が一致すること。
+#[tokio::test]
+async fn limit_keeps_dictionary_and_groups_consistent() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(
+        &app,
+        "t_lim1",
+        "Int",
+        &[
+            (773000, serde_json::json!(1)),
+            (773001, serde_json::json!(2)),
+            (773002, serde_json::json!(3)),
+            (773003, serde_json::json!(4)),
+        ],
+    )
+    .await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "spatial_ids": ids(773000, 4),
+            "query": source("t_lim1")
+        }),
+        "?limit=2",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    assert_eq!(total_ids(&result), 2, "limit が効いていない: {result}");
+
+    let dict_len = result["dictionary"]
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let group_len = result["data"].as_array().map(|a| a.len()).unwrap_or(0);
+    assert_eq!(
+        dict_len, group_len,
+        "参照されない辞書エントリが残っている: {result}"
+    );
+}
+
+/// `limit` での打ち切りは値の昇順で行われること。
+///
+/// 保持セル数を `limit` 件へ抑える最適化が、出力の中身を変えていないことの固定。
+#[tokio::test]
+async fn limit_keeps_the_smallest_values() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(
+        &app,
+        "t_lim2",
+        "Int",
+        &[
+            (771000, serde_json::json!(40)),
+            (771001, serde_json::json!(10)),
+            (771002, serde_json::json!(30)),
+            (771003, serde_json::json!(20)),
+        ],
+    )
+    .await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "spatial_ids": ids(771000, 4),
+            "query": source("t_lim2")
+        }),
+        "?limit=2",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    assert_eq!(total_ids(&result), 2);
+    assert_eq!(values(&result), vec![10, 20], "body: {result}");
+}
+
+/// `limit` 無指定なら全件返ること（上の2件の裏取り）。
+#[tokio::test]
+async fn no_limit_returns_every_cell() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(
+        &app,
+        "t_lim3",
+        "Int",
+        &[
+            (772000, serde_json::json!(40)),
+            (772001, serde_json::json!(10)),
+            (772002, serde_json::json!(30)),
+            (772003, serde_json::json!(20)),
+        ],
+    )
+    .await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "spatial_ids": ids(772000, 4),
+            "query": source("t_lim3")
+        }),
+        "",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    assert_eq!(total_ids(&result), 4);
+    assert_eq!(values(&result), vec![10, 20, 30, 40]);
+}

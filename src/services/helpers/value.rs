@@ -1,6 +1,6 @@
 //! 格納バイト列と JSON の相互変換。
 //!
-//! 型ごとの符号化・復号・検証は [`Value`](crate::services::query::value::Value) が一手に引き受け、
+//! 型ごとの符号化・復号・検証は [`crate::services::query::value::Value`] が一手に引き受け、
 //! ここは `data_type` から具体型へ単型化して trait を呼ぶだけの薄い入口。`search`（復元）も
 //! `insert`/`upsert`（格納）も同じ trait を通るので、型ごとの処理を二重に持たない。
 

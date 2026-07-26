@@ -25,7 +25,6 @@ pub async fn get(
     let query_limit = query.limit;
 
     tokio::task::spawn_blocking(move || {
-        let read_start = std::time::Instant::now();
         let (data_type, constraints, groups) = app_state.db.read(|db| {
             let table = match db.table_info(&db_name, &table_name) {
                 Ok(Some(v)) => v,
@@ -46,20 +45,10 @@ pub async fn get(
             let groups = db.data_get(table.id, ids)?;
             Ok((table.data_type, table.constraints, groups))
         })?;
-        // 計測: 読み取り(メタ取得 + data_get) と レスポンス構築(値復元) の分解。
-        // `LOG_MODE=kasane=debug` で有効。data_get 内部の内訳は別途 debug で出る。
-        let read_ms = read_start.elapsed().as_secs_f64() * 1e3;
 
-        let build_start = std::time::Instant::now();
-        let response = data_response::build(groups, query_format, query_limit, |bytes| {
+        data_response::build(groups, query_format, query_limit, |bytes| {
             restore_value(data_type, constraints.as_ref(), bytes)
-        });
-        tracing::debug!(
-            read_ms,
-            build_ms = build_start.elapsed().as_secs_f64() * 1e3,
-            "search timing"
-        );
-        response
+        })
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?

@@ -1,5 +1,5 @@
 //! `tables_data`のKey `(TableId, FlexId)`は、
-//! 実データを持つ **リーフ**（[`SpatialIdMap`](kasane_logic::SpatialIdMap) のバイト列）か、
+//! 実データを持つ **リーフ**（[`kasane_logic::SpatialIdMap`] のバイト列）か、
 //! 分割後に子シャードのキー（領域 [`FlexId`]）を **ポインタ** として並べた **中間ノード**のいずれか。
 //!
 //! リーフが [`MAX_FLEX_ID_PER_SHARD`] を超えると分割され、親エントリは子へのポインタノードへ置き換わる。

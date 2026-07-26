@@ -33,23 +33,17 @@ impl<'a> KasaneDbRead<'a> {
         table_id: crate::models::id::TableId,
         ids: SpatialIdSet,
     ) -> Result<ValueGroups, AppError> {
-        let start = std::time::Instant::now();
         let flex_ids: Vec<FlexId> = ids.flex_ids().collect();
-        let query_count = flex_ids.len();
 
         // ルーティングは 1 回だけ（並列チャンクごとの再ルーティングをやめる）。
-        let t_route = std::time::Instant::now();
         let by_leaf = shard::route_leaves_batched(
             &self.db.tables_data,
             &self.read_txn,
             table_id,
             flex_ids.iter(),
         )?;
-        let route_us = t_route.elapsed().as_micros();
-        let leaf_count = by_leaf.len();
-        let parallel = leaf_count >= DATA_GET_LEAF_PARALLEL_THRESHOLD;
+        let parallel = by_leaf.len() >= DATA_GET_LEAF_PARALLEL_THRESHOLD;
 
-        let t_resolve = std::time::Instant::now();
         let by_value: ValueMap = if !parallel {
             let mut by_value = ValueMap::default();
             for (region, queries) in by_leaf {
@@ -105,25 +99,6 @@ impl<'a> KasaneDbRead<'a> {
             }
             by_value
         };
-        let resolve_us = t_resolve.elapsed().as_micros();
-
-        // 計測: クエリ数・葉数・distinct値数・結果セル数・並列可否・ルーティング/解決時間。
-        // `LOG_MODE=kasane=debug` で有効。
-        if tracing::enabled!(tracing::Level::DEBUG) {
-            let group_count = by_value.len();
-            let cell_count: usize = by_value.values().map(|v| v.len()).sum();
-            tracing::debug!(
-                query_count,
-                leaf_count,
-                group_count,
-                cell_count,
-                parallel,
-                route_us,
-                resolve_us,
-                elapsed_ms = start.elapsed().as_secs_f64() * 1e3,
-                "data_get"
-            );
-        }
 
         Ok(by_value.into_iter().collect())
     }

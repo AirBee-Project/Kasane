@@ -103,9 +103,6 @@ where
     let mut limit_left = limit;
 
     for (value, flex_ids) in groups {
-        let value_ref = dictionary.len();
-        dictionary.push(to_json(&value)?);
-
         let mut spatial_ids = Vec::with_capacity(flex_ids.len());
         for flex_id in flex_ids {
             expand(flex_id, &mut limit_left, &mut spatial_ids);
@@ -114,7 +111,12 @@ where
             }
         }
 
+        // 辞書へ載せるのは、実際に出力される空間IDを持つ値だけ。
+        // 先に push すると、`limit` を使い切って `data` に載らなかったグループの値が
+        // どこからも参照されない辞書エントリとしてレスポンスに残ってしまう。
         if !spatial_ids.is_empty() {
+            let value_ref = dictionary.len();
+            dictionary.push(to_json(&value)?);
             data.push(DataGroup {
                 value_ref,
                 spatial_ids,

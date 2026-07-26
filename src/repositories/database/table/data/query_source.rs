@@ -55,9 +55,9 @@ where
     V: CellValue + 'static,
 {
     /// 演算はインメモリの作業木で行う。ディスク側が担うのは入力の読み出しだけ。
-    type Working = FlexTreeCore<V>;
+    type Value = V;
 
-    fn read_subset(&self, bounds: &[RangeId]) -> Result<Self::Working, LogicError> {
+    fn read_subset(&self, bounds: &[RangeId]) -> Result<FlexTreeCore<V>, LogicError> {
         let txn = self
             .env
             .read_txn()
@@ -88,7 +88,7 @@ where
         Ok(cells.into_iter().collect())
     }
 
-    fn read_all(self: Box<Self>) -> Result<Self::Working, LogicError> {
+    fn read_all(self: Box<Self>) -> Result<FlexTreeCore<V>, LogicError> {
         // テーブル全体の materialize は容量的に現実的でないため提供しない。
         // クエリは必ず領域を指定する遅延評価（`Query::lazy`）経由で実行する。
         Err(LogicError::Unsupported(

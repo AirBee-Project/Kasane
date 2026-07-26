@@ -1,7 +1,7 @@
 //! アプリ全体で使う値型の抽象（`Value` trait）。
 //!
 //! テーブルの `data_type` は実行時の値だが、Kasane-Logic の作業木や格納・復元は
-//! 具体的な Rust 型で行うため、`data_type` → 具体型の単型化を [`for_value_type!`] の
+//! 具体的な Rust 型で行うため、`data_type` → 具体型の単型化を [`for_value_type!`](crate::for_value_type) の
 //! 1 箇所に集約する。各具体型は [`Value`] を実装し、
 //!
 //! - 格納バイト列 ⇄ 値（[`Value::decoder`] / [`Value::encode`]）
@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use kasane_logic::{
-    CellValue, FlexTreeCore, Query,
+    CellValue, Query,
     merge_policy::{Average, Difference, KeepExisting, Max, Min, Overwrite, Sum},
 };
 
@@ -35,7 +35,7 @@ use crate::{
 };
 
 /// 値型 `V` に対するクエリ AST。
-pub type ValueQuery<V> = Query<FlexTreeCore<V>>;
+pub type ValueQuery<V> = Query<V>;
 
 /// 格納バイト列を値へ復元するデコーダ。`None` を返したセルは結果から除外される。
 pub type Decoder<V> = Arc<dyn Fn(&[u8]) -> Option<V> + Send + Sync>;
@@ -66,6 +66,13 @@ macro_rules! for_value_type {
 ///
 /// [`CellValue`] は `Ord` を要求するが浮動小数は `PartialOrd` しか持たないため、
 /// `total_cmp` による全順序を与える（NaN でも panic しない）。
+///
+/// # `ordered-float` クレートを使わない理由
+/// 全順序を与えるだけなら `ordered_float::OrderedFloat` で足りるが、この型には
+/// 加えて `From<u16>` / `From<u32>`（`zoomOut` の平均・`falloffLinear*` が要求）と
+/// `kasane_logic::merge_policy::saturating_add::Add` の実装が要る。
+/// いずれも「外部の型に外部のトレイト」となり orphan rule で実装できないため、
+/// ローカルの newtype が必須。`total_cmp` の再実装は 3 行なので依存を足す利点も無い。
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct OrderedFloat(pub f64);
 

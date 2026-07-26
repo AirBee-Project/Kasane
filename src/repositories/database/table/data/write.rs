@@ -76,7 +76,7 @@ impl<'a> KasaneDbWrite<'a> {
                 shard::load_leaf_map(&self.db.tables_data, &self.write_txn, table_id, &region)?;
             self.apply_leaf(table_id, data_type, region.clone(), map, &flex_ids, |m| {
                 for flex_id in &flex_ids {
-                    m.remove(flex_id).for_each(drop);
+                    m.remove(flex_id);
                 }
             })?;
             affected.push(region);

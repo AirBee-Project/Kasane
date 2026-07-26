@@ -107,32 +107,11 @@ fn build_decoder<V: Value>(
     }))
 }
 
-/// ASTの翻訳とコンテキスト解決機能を提供する拡張トレイト。
-pub trait QueryNodeExt {
+impl QueryNode {
     /// クエリ結果の値型を推論（または明示指定から決定）する。
-    fn resolve_value_type(
-        &self,
-        tables: &ResolvedTables,
-        explicit: Option<TableDataType>,
-    ) -> Result<TableDataType, AppError>;
-
-    /// 変換表を持たないソースの `data_type` が全て一致するかを調べる内部メソッド。
-    fn collect_source_types(
-        &self,
-        tables: &ResolvedTables,
-        inferred: &mut Option<TableDataType>,
-        converted_exists: &mut bool,
-    ) -> Result<(), AppError>;
-
-    /// Kasane の DSL を Kasane-Logic の AST へ翻訳する。
-    fn translate<V: Value>(
-        &self,
-        app_state: &AppState,
-        tables: &ResolvedTables,
-    ) -> Result<ValueQuery<V>, AppError>;
-}
-
-impl QueryNodeExt for QueryNode {
+    ///
+    /// 変換表を持たないソースの `data_type` が全て一致していればそれを採用する。
+    /// 1つでも変換表を使うソースがあれば推論できないので、明示指定を要求する。
     fn resolve_value_type(
         &self,
         tables: &ResolvedTables,
@@ -144,7 +123,35 @@ impl QueryNodeExt for QueryNode {
 
         let mut converted_exists = false;
         let mut inferred: Option<TableDataType> = None;
-        self.collect_source_types(tables, &mut inferred, &mut converted_exists)?;
+
+        for node in self.iter() {
+            let QueryNode::Source {
+                database,
+                table,
+                convert,
+            } = node
+            else {
+                continue;
+            };
+            if convert.is_some() {
+                converted_exists = true;
+                continue;
+            }
+            let meta = &tables[&(database.clone(), table.clone())];
+            match inferred {
+                None => inferred = Some(meta.data_type),
+                Some(existing) if existing != meta.data_type => {
+                    return Err(AppError::ConstraintViolation {
+                        reason: format!(
+                            "sources have different data types ({:?} and {:?}); \
+                             specify `value_type` and give each source a conversion table",
+                            existing, meta.data_type
+                        ),
+                    });
+                }
+                Some(_) => {}
+            }
+        }
 
         match inferred {
             Some(t) if !converted_exists => Ok(t),
@@ -156,58 +163,7 @@ impl QueryNodeExt for QueryNode {
         }
     }
 
-    fn collect_source_types(
-        &self,
-        tables: &ResolvedTables,
-        inferred: &mut Option<TableDataType>,
-        converted_exists: &mut bool,
-    ) -> Result<(), AppError> {
-        match self {
-            QueryNode::Source {
-                database,
-                table,
-                convert,
-            } => {
-                if convert.is_some() {
-                    *converted_exists = true;
-                    return Ok(());
-                }
-                let meta = &tables[&(database.clone(), table.clone())];
-                match inferred {
-                    None => *inferred = Some(meta.data_type),
-                    Some(existing) if *existing != meta.data_type => {
-                        return Err(AppError::ConstraintViolation {
-                            reason: format!(
-                                "sources have different data types ({:?} and {:?}); \
-                                 specify `value_type` and give each source a conversion table",
-                                existing, meta.data_type
-                            ),
-                        });
-                    }
-                    Some(_) => {}
-                }
-                Ok(())
-            }
-            QueryNode::Merge { left, right, .. } => {
-                left.collect_source_types(tables, inferred, converted_exists)?;
-                right.collect_source_types(tables, inferred, converted_exists)
-            }
-            QueryNode::ShiftX { input, .. }
-            | QueryNode::ShiftY { input, .. }
-            | QueryNode::ShiftF { input, .. }
-            | QueryNode::ZoomOut { input, .. }
-            | QueryNode::ExtrudeX { input, .. }
-            | QueryNode::ExtrudeY { input, .. }
-            | QueryNode::ExtrudeF { input, .. }
-            | QueryNode::FalloffLinearX { input, .. }
-            | QueryNode::FalloffLinearY { input, .. }
-            | QueryNode::FalloffLinearF { input, .. }
-            | QueryNode::FilterValues { input, .. } => {
-                input.collect_source_types(tables, inferred, converted_exists)
-            }
-        }
-    }
-
+    /// Kasane の DSL を Kasane-Logic の AST へ翻訳する。
     fn translate<V: Value>(
         &self,
         app_state: &AppState,
@@ -420,7 +376,7 @@ fn run<V: Value>(
     );
 
     // 対象領域をまとめて1回だけ評価し、結果を要求空間IDで絞る。
-    // 空間ID1件ずつ `lazy().get()` を回すとクエリが件数分再実行されてしまう。
+    // 空間ID1件ずつ `get()` を回すとクエリが件数分再実行されてしまう。
     let optimized = ast.optimize();
     let cells = optimized
         .run_on_subset(bounds)
@@ -428,11 +384,44 @@ fn run<V: Value>(
         .into_iter()
         .filter(|(flex_id, _)| targets.get(flex_id).next().is_some());
 
-    // 値ごとにグループ化する（レスポンスは値辞書 + 空間ID群の形）。
+    let by_value = group_by_value(cells, limit);
+    data_response::build(by_value, format, limit, |v| Ok(v.to_json()))
+}
+
+/// セル列を値ごとにグループ化する（レスポンスは値辞書 + 空間ID群の形）。
+///
+/// `limit` が指定されている場合、保持するセルを `limit` 件までに抑える。
+/// [`data_response::build`] は値の昇順（`BTreeMap` の順）にグループを出力して
+/// 上限へ達した時点で打ち切るため、**値が大きい側から捨てれば出力は変わらない**。
+/// `limit` を無視して全件積むと、`?limit=10` でも結果セル数分のメモリを確保してしまう。
+///
+/// `singleId` 形式では 1 つの `FlexId` が複数セルへ展開されるので、`limit` 件の
+/// `FlexId` を残せば出力は必ず `limit` 件以上に届く（不足しない）。
+fn group_by_value<V: Value>(
+    cells: impl Iterator<Item = (kasane_logic::FlexId, V)>,
+    limit: Option<usize>,
+) -> BTreeMap<V, Vec<kasane_logic::FlexId>> {
     let mut by_value: BTreeMap<V, Vec<kasane_logic::FlexId>> = BTreeMap::new();
+    let mut held = 0usize;
+
     for (flex_id, value) in cells {
         by_value.entry(value).or_default().push(flex_id);
+        held += 1;
+
+        let Some(limit) = limit else { continue };
+        while held > limit {
+            let mut largest = by_value
+                .last_entry()
+                .expect("held > limit >= 0 なのでグループは存在する");
+            let group = largest.get_mut();
+            let drop_n = (held - limit).min(group.len());
+            group.truncate(group.len() - drop_n);
+            held -= drop_n;
+            if group.is_empty() {
+                largest.remove();
+            }
+        }
     }
 
-    data_response::build(by_value, format, limit, |v| Ok(v.to_json()))
+    by_value
 }
