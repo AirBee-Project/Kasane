@@ -1,4 +1,4 @@
-name: main merge tests
+name: main merge test
 
 on:
   pull_request:
