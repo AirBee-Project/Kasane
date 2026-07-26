@@ -1,4 +1,4 @@
-//! 値に注目したクエリ（値フィルタ・型変換）と、全データ型への対応の検証。
+//! 値に注目したクエリ（値フィルタ）と、全データ型への対応の検証。
 
 use axum::http::StatusCode;
 
@@ -135,142 +135,6 @@ async fn filter_not_in_range_keeps_the_outside() {
 
     assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(values(&result), vec![1, 20]);
-}
-
-/// 変換表で Text テーブルを Int のクエリとして扱う（型が異なる値への置き換え）。
-#[tokio::test]
-async fn convert_maps_text_source_into_int() {
-    let app = TestApp::new();
-    app.create_database("test_db").await;
-    seed(
-        &app,
-        "t_text",
-        "Text",
-        &[
-            (730000, serde_json::json!("low")),
-            (730001, serde_json::json!("high")),
-        ],
-    )
-    .await;
-
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "value_type": "Int",
-            "spatial_ids": ids(730000, 2),
-            "query": {
-                "type": "source", "database": "test_db", "table": "t_text",
-                "convert": {
-                    "entries": [{ "from": "low", "to": 1 }, { "from": "high", "to": 9 }]
-                }
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::OK, "body: {result}");
-    assert_eq!(values(&result), vec![1, 9]);
-}
-
-/// 変換表に無い値は、`default` 未指定なら結果から除外される。
-#[tokio::test]
-async fn convert_drops_unmapped_values_without_default() {
-    let app = TestApp::new();
-    app.create_database("test_db").await;
-    seed(
-        &app,
-        "t_text2",
-        "Text",
-        &[
-            (740000, serde_json::json!("low")),
-            (740001, serde_json::json!("unknown")),
-        ],
-    )
-    .await;
-
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "value_type": "Int",
-            "spatial_ids": ids(740000, 2),
-            "query": {
-                "type": "source", "database": "test_db", "table": "t_text2",
-                "convert": { "entries": [{ "from": "low", "to": 1 }] }
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::OK, "body: {result}");
-    assert_eq!(values(&result), vec![1]);
-    assert_eq!(total_ids(&result), 1, "未掲載値のセルは落ちる");
-}
-
-/// `default` を指定すると、未掲載値もその値で埋まる。
-#[tokio::test]
-async fn convert_fills_unmapped_values_with_default() {
-    let app = TestApp::new();
-    app.create_database("test_db").await;
-    seed(
-        &app,
-        "t_text3",
-        "Text",
-        &[
-            (745000, serde_json::json!("low")),
-            (745001, serde_json::json!("unknown")),
-        ],
-    )
-    .await;
-
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "value_type": "Int",
-            "spatial_ids": ids(745000, 2),
-            "query": {
-                "type": "source", "database": "test_db", "table": "t_text3",
-                "convert": { "entries": [{ "from": "low", "to": 1 }], "default": 0 }
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::OK, "body: {result}");
-    assert_eq!(values(&result), vec![0, 1]);
-    assert_eq!(total_ids(&result), 2);
-}
-
-/// 型の異なる2テーブル（Text と Int）を変換表で揃えて合成できる。
-#[tokio::test]
-async fn convert_enables_merging_different_source_types() {
-    let app = TestApp::new();
-    app.create_database("test_db").await;
-    seed(&app, "t_a", "Text", &[(750000, serde_json::json!("high"))]).await;
-    seed(&app, "t_b", "Int", &[(750000, serde_json::json!(4))]).await;
-
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "value_type": "Int",
-            "spatial_ids": ids(750000, 1),
-            "query": {
-                "type": "merge", "default": 0, "policy": "sum",
-                "left": {
-                    "type": "source", "database": "test_db", "table": "t_a",
-                    "convert": { "entries": [{ "from": "high", "to": 6 }] }
-                },
-                "right": source("t_b")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::OK, "body: {result}");
-    assert_eq!(values(&result), vec![10], "6 + 4 = 10");
 }
 
 /// Text テーブルでも値フィルタは使える（比較に必要なのは順序だけ）。
@@ -757,4 +621,220 @@ async fn no_limit_returns_every_cell() {
     assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(total_ids(&result), 4);
     assert_eq!(values(&result), vec![10, 20, 30, 40]);
+}
+
+// ---------------------------------------------------------------------------
+// value_type の明示
+// ---------------------------------------------------------------------------
+
+/// `Enum` テーブルを作る（`create_table` は制約を渡せないので直接リクエストする）。
+async fn create_enum_table(app: &TestApp, table: &str, choices: &[&str]) {
+    use axum::body::Body;
+    use axum::http::Request;
+    use tower::ServiceExt;
+
+    let body = serde_json::json!({
+        "name": table,
+        "data_type": "Enum",
+        "max_zoom_level": 25,
+        "constraints": { "type": "Enum", "choices": choices }
+    });
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/test_db/tables")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&body).unwrap()))
+        .unwrap();
+    let res = app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+}
+
+/// `data_type` が異なるソースは、既定では推論できず 400 になる。
+///
+/// `Text` と `Enum` はどちらも文字列として復元されるが、推論は `data_type` の
+/// 同一性で判定するため弾かれる。
+#[tokio::test]
+async fn mixed_text_and_enum_sources_need_explicit_value_type() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(&app, "t_txt_m", "Text", &[(790000, serde_json::json!("a"))]).await;
+    create_enum_table(&app, "t_enum_m", &["a", "b"]).await;
+    put_data(
+        &app,
+        "t_enum_m",
+        &serde_json::json!({ "value": "b", "spatial_ids": [single_id(790000)] }),
+    )
+    .await;
+
+    let query = serde_json::json!({
+        "type": "merge", "default": "", "policy": "max",
+        "left": source("t_txt_m"),
+        "right": source("t_enum_m")
+    });
+
+    let (status, _) = post_query(
+        &app,
+        &serde_json::json!({ "spatial_ids": ids(790000, 1), "query": query }),
+        "?format=singleId",
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "推論できてはいけない");
+}
+
+/// `value_type` を明示すれば、`Text` と `Enum` のソースを1つのクエリで混ぜられる。
+///
+/// 変換表を廃止したあと `value_type` に残る唯一の実用。
+#[tokio::test]
+async fn explicit_value_type_unifies_text_and_enum_sources() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(&app, "t_txt_u", "Text", &[(791000, serde_json::json!("a"))]).await;
+    create_enum_table(&app, "t_enum_u", &["a", "b"]).await;
+    put_data(
+        &app,
+        "t_enum_u",
+        &serde_json::json!({ "value": "b", "spatial_ids": [single_id(791000)] }),
+    )
+    .await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "value_type": "Text",
+            "spatial_ids": ids(791000, 1),
+            "query": {
+                "type": "merge", "default": "", "policy": "max",
+                "left": source("t_txt_u"),
+                "right": source("t_enum_u")
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    // Enum 側は ID ではなく選択肢の文字列として読める。max("a", "b") = "b"
+    assert_eq!(result["dictionary"][0], serde_json::json!("b"));
+}
+
+/// 指定した `value_type` として読めない `data_type` のソースがあれば 400。
+#[tokio::test]
+async fn explicit_value_type_rejects_unreadable_source() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(&app, "t_int_x", "Int", &[(792000, serde_json::json!(1))]).await;
+
+    let (status, _) = post_query(
+        &app,
+        &serde_json::json!({
+            "value_type": "Text",
+            "spatial_ids": ids(792000, 1),
+            "query": source("t_int_x")
+        }),
+        "?format=singleId",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+// ---------------------------------------------------------------------------
+// 要求空間IDの解像度
+//
+// クエリ結果の解像度は演算子が決めるものであり、入力テーブルの `max_zoom_level`
+// （＝そのテーブルが保存する最小セル）とは別物。要求空間IDを `max_zoom_level` で
+// 丸めていた頃は、クエリ自身が生成したセルを指名できず 400 になっていた。
+// ---------------------------------------------------------------------------
+
+/// `max_zoom_level` より細かい空間IDで、クエリが生成したセルを指名できる。
+///
+/// `max_zoom_level = 20` のテーブルに z=25 のサブセル shift を掛けると、結果は
+/// z=21〜25 のセルを含む。それを z=25 の空間IDで取得できること。
+#[tokio::test]
+async fn accepts_targets_finer_than_source_max_zoom_level() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    app.create_table("test_db", "t_fine", "Int", 20).await;
+    put_data(
+        &app,
+        "t_fine",
+        &serde_json::json!({
+            "value": 7,
+            "spatial_ids": [{ "z": 20, "f": 0, "x": 800000, "y": 500000, "type": "singleId" }]
+        }),
+    )
+    .await;
+
+    // z=25 で 1 セル分ずらす（z=20 セルの 1/32）
+    let query =
+        serde_json::json!({ "type": "shiftX", "z": 25, "index": 1, "input": source("t_fine") });
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            // 元セル(z=20, x=800000) を z=25 へ落とすと x=25600000。shift 後は +1。
+            "spatial_ids": [{ "z": 25, "f": 0, "x": 25600001, "y": 16000000, "type": "singleId" }],
+            "query": query
+        }),
+        "?format=flexId",
+    )
+    .await;
+
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "max_zoom_level より細かい要求が弾かれている: {result}"
+    );
+    assert_eq!(values(&result), vec![7]);
+    assert!(total_ids(&result) > 0, "セルが返っていない: {result}");
+}
+
+/// 粗い側（`max_zoom_level` 未満）の要求は従来どおり通る。
+#[tokio::test]
+async fn accepts_targets_coarser_than_source_max_zoom_level() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    app.create_table("test_db", "t_coarse", "Int", 20).await;
+    put_data(
+        &app,
+        "t_coarse",
+        &serde_json::json!({
+            "value": 3,
+            "spatial_ids": [{ "z": 20, "f": 0, "x": 800000, "y": 500000, "type": "singleId" }]
+        }),
+    )
+    .await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "spatial_ids": [{ "z": 18, "f": 0, "x": 200000, "y": 125000, "type": "singleId" }],
+            "query": source("t_coarse")
+        }),
+        "?format=flexId",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    assert_eq!(values(&result), vec![3]);
+}
+
+/// ズームレベルの絶対上限（35）は従来どおり検証される。
+#[tokio::test]
+async fn rejects_zoom_level_beyond_absolute_maximum() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    app.create_table("test_db", "t_zmax", "Int", 20).await;
+
+    let (status, _) = post_query(
+        &app,
+        &serde_json::json!({
+            "spatial_ids": [{ "z": 40, "f": 0, "x": 1, "y": 1, "type": "singleId" }],
+            "query": source("t_zmax")
+        }),
+        "",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }

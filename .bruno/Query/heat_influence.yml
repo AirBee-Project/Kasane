@@ -1,0 +1,175 @@
+info:
+  name: heat_influence
+  type: http
+  seq: 6
+  tags:
+    - query
+
+http:
+  method: POST
+  url: "{{baseUrl}}/query"
+  params:
+    - name: format
+      value: rangeId
+      type: query
+    - name: limit
+      value: ""
+      type: query
+  body:
+    type: json
+    data: |-
+      {
+        "value_type": "Int",
+        "spatial_ids": [
+          { "type": "rangeId", "z": 23, "f": [0, 0], "x": [7300000, 7300063], "y": [3276800, 3276863] }
+        ],
+        "query": {
+          "type": "zoomOut",
+          "z": 23,
+          "policy": "average",
+          "input": {
+            "type": "falloffLinearY",
+            "z": 25,
+            "radius": 3,
+            "policy": "max",
+            "input": {
+              "type": "falloffLinearX",
+              "z": 25,
+              "radius": 3,
+              "policy": "max",
+              "input": {
+                "type": "extrudeF",
+                "z": 25,
+                "start": 0,
+                "end": 50,
+                "policy": "max",
+                "input": {
+                  "type": "source",
+                  "database": "sensors",
+                  "table": "heat_sources"
+                }
+              }
+            }
+          }
+        }
+      }
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 200 Response
+    description: >-
+      実用パイプラインの例。点で持つ熱源テーブル（Int）を高度方向へ引き延ばし、
+      XY 方向に線形減衰させて影響圏を作り、ズームアウトで粗く平均集約する。
+      内側の演算が先に適用され、query は外側＝最後の演算がルートになる木で表す。
+      falloffLinear* は値の乗除算を要するため Int と Float でのみ使える
+    request:
+      url: "{{baseUrl}}/query"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "value_type": "Int",
+            "spatial_ids": [
+              { "type": "rangeId", "z": 23, "f": [0, 0], "x": [7300000, 7300063], "y": [3276800, 3276863] }
+            ],
+            "query": {
+              "type": "zoomOut",
+              "z": 23,
+              "policy": "average",
+              "input": {
+                "type": "falloffLinearY",
+                "z": 25,
+                "radius": 3,
+                "policy": "max",
+                "input": {
+                  "type": "falloffLinearX",
+                  "z": 25,
+                  "radius": 3,
+                  "policy": "max",
+                  "input": {
+                    "type": "extrudeF",
+                    "z": 25,
+                    "start": 0,
+                    "end": 50,
+                    "policy": "max",
+                    "input": {
+                      "type": "source",
+                      "database": "sensors",
+                      "table": "heat_sources"
+                    }
+                  }
+                }
+              }
+            }
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "dictionary": [100, 66, 33],
+            "data": [
+              {
+                "valueRef": 0,
+                "spatialIds": [
+                  { "z": 23, "f": [0, 0], "x": [7300000, 7300000], "y": [3276800, 3276800] }
+                ]
+              },
+              {
+                "valueRef": 1,
+                "spatialIds": [
+                  { "z": 23, "f": [0, 0], "x": [7300001, 7300001], "y": [3276800, 3276800] }
+                ]
+              },
+              {
+                "valueRef": 2,
+                "spatialIds": [
+                  { "z": 23, "f": [0, 0], "x": [7300002, 7300002], "y": [3276800, 3276800] }
+                ]
+              }
+            ]
+          }
+  - name: 400 Response
+    description: falloffLinear* を非数値型のテーブルに使った
+    request:
+      url: "{{baseUrl}}/query"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "spatial_ids": [
+              { "type": "singleId", "z": 23, "f": 0, "x": 7300000, "y": 3276800 }
+            ],
+            "query": {
+              "type": "falloffLinearX",
+              "z": 25,
+              "radius": 3,
+              "policy": "max",
+              "input": {
+                "type": "source",
+                "database": "example_database",
+                "table": "text_table"
+              }
+            }
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      body:
+        type: text
+        data: ""

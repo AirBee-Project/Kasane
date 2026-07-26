@@ -139,14 +139,14 @@ fn unsupported_policy(policy: MergePolicyKind, value_type: &str) -> AppError {
     }
 }
 
-/// 変換表なしのソースの `data_type` がクエリ値型に合わないときのエラー。
+/// ソースの `data_type` がクエリ値型として読めないときのエラー。
 pub fn incompatible_source(
     table: &crate::models::database::table::Table,
     value_type: &str,
 ) -> AppError {
     AppError::ConstraintViolation {
         reason: format!(
-            "table '{}' is {:?} but the query value type is {value_type}; add a `convert` table to this source",
+            "table '{}' is {:?}, which cannot be read as the query value type {value_type}",
             table.name, table.data_type
         ),
     }
@@ -203,7 +203,7 @@ pub trait Value: CellValue + Ord + 'static {
     /// エラーメッセージ用の型名。
     fn type_name() -> &'static str;
 
-    /// この `data_type` の格納値を、変換表なしで `Self` として解釈できるか。
+    /// この `data_type` の格納値を `Self` として解釈できるか。
     ///
     /// `for_value_type!` の分岐と一致させる（`Text` と `Enum` はともに `String`）。
     fn accepts(data_type: TableDataType) -> bool;
@@ -220,7 +220,7 @@ pub trait Value: CellValue + Ord + 'static {
     /// レスポンス用の JSON へ。
     fn to_json(&self) -> serde_json::Value;
 
-    /// リクエスト中のリテラル（挿入値・フィルタ境界・merge の既定値・変換表の値）から作る。
+    /// リクエスト中のリテラル（挿入値・フィルタ境界・merge の既定値）から作る。
     fn from_json(value: &serde_json::Value) -> Result<Self, AppError>;
 
     fn zoom_out(

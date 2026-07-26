@@ -145,8 +145,6 @@ impl utoipa::Modify for SecurityAddon {
         crate::models::query::QueryNode,
         crate::models::query::MergePolicyKind,
         crate::models::query::FilterCondition,
-        crate::models::query::ValueConvert,
-        crate::models::query::ValueConvertEntry,
     )),
     tags(
         (name = "Auth", description = "Authentication endpoints"),

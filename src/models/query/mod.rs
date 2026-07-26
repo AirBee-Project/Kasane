@@ -1,23 +1,8 @@
-//! `/query` エンドポイントの入口となるクエリ DSL。
-//!
-//! OpenAPI に露出する形はこちら（Kasane）が定義し、AST の最適化・実行は Kasane-Logic に委ねる。
-//! Kasane-Logic 側にしか存在しない演算子は、ここにマッピングを追加しない限り API には現れない。
-
-use crate::models::{database::table::data::ZoomLevelPolicy, spatial_id::SpatialId};
+use crate::models::spatial_id::SpatialId;
 use serde::Deserialize;
 use utoipa::ToSchema;
 
 /// 同一空間に複数の値が集まったときの集約規則。
-///
-/// Kasane-Logic の `merge_policy` の各型に対応する。
-///
-/// - `overwrite`: 後の値で上書きする
-/// - `keepExisting`: 既存の値を優先する
-/// - `sum`: 合計する
-/// - `max`: 大きい方を採る
-/// - `min`: 小さい方を採る
-/// - `average`: 平均を採る
-/// - `difference`: 差を採る
 #[derive(Debug, Deserialize, ToSchema, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum MergePolicyKind {
@@ -41,16 +26,16 @@ pub enum MergePolicyKind {
 #[derive(Debug, Deserialize, ToSchema, Clone)]
 #[serde(tag = "mode", rename_all = "camelCase")]
 pub enum FilterCondition {
-    /// `value` に一致するセルだけを残す
+    /// `value` に一致する値だけを残す
     Equals { value: serde_json::Value },
-    /// 値が `min..=max`（閉区間）に入るセルだけを残す
+    /// 値が `min..=max`に入る値だけを残す
     InRange {
         #[serde(default)]
         min: Option<serde_json::Value>,
         #[serde(default)]
         max: Option<serde_json::Value>,
     },
-    /// 値が `min..=max`（閉区間）に入るセルを取り除く
+    /// 値が `min..=max`に入る値を取り除く
     NotInRange {
         #[serde(default)]
         min: Option<serde_json::Value>,
@@ -59,27 +44,6 @@ pub enum FilterCondition {
     },
 }
 
-/// 格納値からクエリの値型への変換表。
-///
-/// `from` はそのテーブルの `data_type` の値、`to` はクエリの値型の値。
-#[derive(Debug, Deserialize, ToSchema, Clone)]
-pub struct ValueConvert {
-    pub entries: Vec<ValueConvertEntry>,
-    /// 変換表に載っていない値の扱い。省略するとそのセルを結果から除外する。
-    #[serde(default)]
-    pub default: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Deserialize, ToSchema, Clone)]
-pub struct ValueConvertEntry {
-    pub from: serde_json::Value,
-    pub to: serde_json::Value,
-}
-
-/// クエリ式のノード（AST）。
-///
-/// `source` を葉とする木構造。`merge` は2つの部分式を持つため、複数テーブルを
-/// 1つのクエリで扱える。参照する全データベースに Read 権限が必要。
 #[derive(Debug, Deserialize, ToSchema, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum QueryNode {
@@ -89,14 +53,8 @@ pub enum QueryNode {
         database: String,
         #[schema(example = "example_table")]
         table: String,
-        /// テーブルの格納値をクエリの値型へ写す変換表（任意）。
-        ///
-        /// 省略した場合、このテーブルの `data_type` はクエリの値型と一致していなければならない。
-        /// 指定すると、型の異なるテーブル同士を1つのクエリで扱える。
-        convert: Option<ValueConvert>,
     },
 
-    /// 値の条件でセルを絞り込む。空間的な形は変えない。
     FilterValues {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
@@ -126,7 +84,7 @@ pub enum QueryNode {
         index: i32,
     },
 
-    /// 指定ズームレベルまで解像度を落とし、集まった子を `policy` で集約する
+    /// 指定ズームレベルまで解像度を落とし、`policy` で集約する
     ZoomOut {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
@@ -201,9 +159,6 @@ pub enum QueryNode {
 
 impl QueryNode {
     /// このノードが持つ子部分式を列挙する。
-    ///
-    /// AST を辿る処理（[`sources`](Self::sources) や値型推論）はすべてこれを経由する。
-    /// 演算子を追加したときに網羅性を直す必要があるのは、ここと実際の変換処理だけ。
     pub fn children(&self) -> impl Iterator<Item = &QueryNode> {
         let (a, b) = match self {
             QueryNode::Source { .. } => (None, None),
@@ -246,19 +201,10 @@ impl QueryNode {
     }
 }
 
-/// `POST /query` のリクエストボディ。
-///
-/// `search` と同じ空間ID指定に、実行するクエリ式（`query`）を足した形。
-///
-/// 下の例は「点で持つ熱源テーブル `sensors.heat_sources`（`Int`）を、高度方向へ引き延ばし、
-/// XY 方向に線形減衰させて影響圏を作り、ズームアウトで粗く平均集約する」パイプライン。
-/// Kasane-Logic のビルダーで書くと
-/// `source.extrude_f(25, 0, 50, Max).falloff_linear_x(25, 3, Max).falloff_linear_y(25, 3, Max).zoom_out(23, Average)`
-/// に相当する（内側の演算が先に適用され、`query` は外側=最後の演算がルートになる木で表す）。
+/// Tableに対するQueryを表現する型
 #[derive(Debug, Deserialize, ToSchema)]
 #[schema(example = json!({
     "value_type": "Int",
-    "zoom_level_policy": "Normalize",
     "spatial_ids": [
         { "type": "rangeId", "z": 23, "f": [0, 0], "x": [7300000, 7300063], "y": [3276800, 3276863] }
     ],
@@ -276,33 +222,18 @@ impl QueryNode {
                 "z": 25,
                 "radius": 3,
                 "policy": "max",
-                "input": {
-                    "type": "extrudeF",
-                    "z": 25,
-                    "start": 0,
-                    "end": 50,
-                    "policy": "max",
-                    "input": {
+                 "input": {
                         "type": "source",
                         "database": "sensors",
                         "table": "heat_sources"
-                    }
                 }
             }
         }
     }
 }))]
 pub struct ExecuteQueryRequest {
-    /// クエリ結果の値型。
-    ///
-    /// 省略時は、変換表を持たない全ソースの `data_type` が一致していればそれを採用する。
-    /// 変換表を使う場合は明示が必要。
     #[serde(default)]
     pub value_type: Option<crate::models::database::table::TableDataType>,
-    /// 結果を取得したい空間IDの配列
     pub spatial_ids: Vec<SpatialId>,
-    #[serde(default)]
-    pub zoom_level_policy: ZoomLevelPolicy,
-    /// 実行するクエリ式
     pub query: QueryNode,
 }

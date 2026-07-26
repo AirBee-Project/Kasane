@@ -7,7 +7,6 @@
 pub mod value;
 
 use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
 
 use kasane_logic::{RangeId, Source};
 
@@ -20,10 +19,10 @@ use crate::{
             Table, TableDataType,
             data::{GetDataQuery, GetDataResponse, OutputFormat},
         },
-        query::{ExecuteQueryRequest, FilterCondition, QueryNode, ValueConvert},
+        query::{ExecuteQueryRequest, FilterCondition, QueryNode},
     },
     repositories::database::table::data::query_source::TableSource,
-    services::helpers::{data_response, spatial_ids::process_spatial_ids, value::interpret_value},
+    services::helpers::{data_response, spatial_ids::to_spatial_id_set},
 };
 
 use value::{Decoder, Value, ValueQuery};
@@ -59,59 +58,23 @@ fn resolve_tables(app_state: &AppState, node: &QueryNode) -> Result<ResolvedTabl
     Ok(tables)
 }
 
-/// 参照テーブルの `max_zoom_level` の最大値（最も細かいテーブルの解像度）。
+/// テーブルの格納値をクエリの値型 `V` へ復元するデコーダを組み立てる。
 ///
-/// 対象空間IDの解像度上限に使う。最小値（最も粗いテーブル）に合わせると、細かいテーブルに
-/// 本来入る空間IDまで `Error` で弾かれたり `Normalize` で粗く丸められたりして解像度が潰れる。
-/// 最も細かい解像度を上限にすれば、粗いテーブルもその領域を内包するリーフの値として正しく
-/// 寄与する（`descend_range` / `get_range`）ため、情報を落とさずに済む。
-/// 単一テーブル参照時は search 系 API と同じくそのテーブルの `max_zoom_level` に一致する。
-fn max_zoom(tables: &ResolvedTables) -> u8 {
-    tables
-        .values()
-        .map(|t| t.max_zoom_level)
-        .max()
-        .expect("resolve_tables rejects empty source sets")
-}
-
-/// テーブルの格納値をクエリの値型 `V` へ写すデコーダを組み立てる。
-///
-/// 変換表が無い場合、そのテーブルの `data_type` は `V` と一致していなければならない。
-/// 変換表がある場合は、`from` を**そのテーブルの格納形式へエンコードした結果**を鍵にする
-/// （保存時とまったく同じ符号化を使うので、型ごとの比較を書き分けずに済む）。
-fn build_decoder<V: Value>(
-    table: &Table,
-    convert: Option<&ValueConvert>,
-) -> Result<Decoder<V>, AppError> {
-    let Some(convert) = convert else {
-        // 変換表が無い場合は、そのテーブルの格納形式が V と一致していなければならない。
-        if !V::accepts(table.data_type) {
-            return Err(value::incompatible_source(table, V::type_name()));
-        }
-        return V::decoder(table.constraints.as_ref());
-    };
-
-    let mut map: HashMap<Vec<u8>, V> = HashMap::with_capacity(convert.entries.len());
-    for entry in &convert.entries {
-        let key = interpret_value(
-            table.data_type,
-            table.constraints.as_ref(),
-            entry.from.clone(),
-        )?;
-        map.insert(key, V::from_json(&entry.to)?);
+/// そのテーブルの `data_type` は `V` として読めなければならない
+/// （`Text` と `Enum` はどちらも文字列として読める）。
+fn build_decoder<V: Value>(table: &Table) -> Result<Decoder<V>, AppError> {
+    if !V::accepts(table.data_type) {
+        return Err(value::incompatible_source(table, V::type_name()));
     }
-    let default = convert.default.as_ref().map(V::from_json).transpose()?;
-
-    Ok(Arc::new(move |bytes: &[u8]| {
-        map.get(bytes).cloned().or_else(|| default.clone())
-    }))
+    V::decoder(table.constraints.as_ref())
 }
 
 impl QueryNode {
     /// クエリ結果の値型を推論（または明示指定から決定）する。
     ///
-    /// 変換表を持たないソースの `data_type` が全て一致していればそれを採用する。
-    /// 1つでも変換表を使うソースがあれば推論できないので、明示指定を要求する。
+    /// 全ソースの `data_type` が一致していればそれを採用する。一致しない場合は、
+    /// 同じ値型として読める組合せ（`Text` と `Enum`）であっても推論はしないので、
+    /// `value_type` の明示を要求する。
     fn resolve_value_type(
         &self,
         tables: &ResolvedTables,
@@ -121,30 +84,19 @@ impl QueryNode {
             return Ok(explicit);
         }
 
-        let mut converted_exists = false;
         let mut inferred: Option<TableDataType> = None;
 
         for node in self.iter() {
-            let QueryNode::Source {
-                database,
-                table,
-                convert,
-            } = node
-            else {
+            let QueryNode::Source { database, table } = node else {
                 continue;
             };
-            if convert.is_some() {
-                converted_exists = true;
-                continue;
-            }
             let meta = &tables[&(database.clone(), table.clone())];
             match inferred {
                 None => inferred = Some(meta.data_type),
                 Some(existing) if existing != meta.data_type => {
                     return Err(AppError::ConstraintViolation {
                         reason: format!(
-                            "sources have different data types ({:?} and {:?}); \
-                             specify `value_type` and give each source a conversion table",
+                            "sources have different data types ({:?} and {:?});                              specify `value_type` explicitly if they can be read as the same type",
                             existing, meta.data_type
                         ),
                     });
@@ -153,14 +105,10 @@ impl QueryNode {
             }
         }
 
-        match inferred {
-            Some(t) if !converted_exists => Ok(t),
-            _ => Err(AppError::ConstraintViolation {
-                reason: "cannot infer the query value type; specify `value_type` explicitly \
-                         (required when a source uses a conversion table)"
-                    .to_string(),
-            }),
-        }
+        inferred.ok_or_else(|| AppError::ConstraintViolation {
+            reason: "cannot infer the query value type; specify `value_type` explicitly"
+                .to_string(),
+        })
     }
 
     /// Kasane の DSL を Kasane-Logic の AST へ翻訳する。
@@ -170,13 +118,9 @@ impl QueryNode {
         tables: &ResolvedTables,
     ) -> Result<ValueQuery<V>, AppError> {
         match self {
-            QueryNode::Source {
-                database,
-                table,
-                convert,
-            } => {
+            QueryNode::Source { database, table } => {
                 let meta = &tables[&(database.clone(), table.clone())];
-                let decode = build_decoder::<V>(meta, convert.as_ref())?;
+                let decode = build_decoder::<V>(meta)?;
                 Ok(TableSource::<V>::new(
                     app_state.db.env.clone(),
                     app_state.db.tables_data,
@@ -351,11 +295,7 @@ fn run<V: Value>(
     format: OutputFormat,
     limit: Option<usize>,
 ) -> Result<GetDataResponse, AppError> {
-    let targets = process_spatial_ids(
-        &request.spatial_ids,
-        max_zoom(tables),
-        &request.zoom_level_policy,
-    )?;
+    let targets = to_spatial_id_set(&request.spatial_ids)?;
 
     // 要求された空間IDそのものを評価境界にする。
     //

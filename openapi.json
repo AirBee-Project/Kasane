@@ -942,7 +942,7 @@
           "Query"
         ],
         "summary": "クエリの実行",
-        "description": "複数のテーブルを対象にクエリ式を評価し、指定した空間IDの結果を取得します。\nクエリ式が参照する**すべてのデータベース**に対して Read 以上の権限が必要です。",
+        "description": "複数のテーブルを対象にクエリ式を実行し、指定した空間IDの結果を取得します。\nクエリ式が参照する**すべてのデータベース**に対して Read 以上の権限が必要です。",
         "operationId": "execute_query",
         "parameters": [
           {
@@ -1725,7 +1725,7 @@
       },
       "ExecuteQueryRequest": {
         "type": "object",
-        "description": "`POST /query` のリクエストボディ。\n\n`search` と同じ空間ID指定に、実行するクエリ式（`query`）を足した形。\n\n下の例は「点で持つ熱源テーブル `sensors.heat_sources`（`Int`）を、高度方向へ引き延ばし、\nXY 方向に線形減衰させて影響圏を作り、ズームアウトで粗く平均集約する」パイプライン。\nKasane-Logic のビルダーで書くと\n`source.extrude_f(25, 0, 50, Max).falloff_linear_x(25, 3, Max).falloff_linear_y(25, 3, Max).zoom_out(23, Average)`\nに相当する（内側の演算が先に適用され、`query` は外側=最後の演算がルートになる木で表す）。",
+        "description": "Tableに対するQueryを表現する型",
         "required": [
           "spatial_ids",
           "query"
@@ -1737,8 +1737,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/TableDataType",
-                "description": "クエリ結果の値型。\n\n省略時は、変換表を持たない全ソースの `data_type` が一致していればそれを採用する。\n変換表を使う場合は明示が必要。"
+                "$ref": "#/components/schemas/TableDataType"
               }
             ]
           },
@@ -1746,15 +1745,10 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SpatialId"
-            },
-            "description": "結果を取得したい空間IDの配列"
-          },
-          "zoom_level_policy": {
-            "$ref": "#/components/schemas/ZoomLevelPolicy"
+            }
           },
           "query": {
-            "$ref": "#/components/schemas/QueryNode",
-            "description": "実行するクエリ式"
+            "$ref": "#/components/schemas/QueryNode"
           }
         },
         "example": {
@@ -1762,16 +1756,9 @@
             "input": {
               "input": {
                 "input": {
-                  "end": 50,
-                  "input": {
-                    "database": "sensors",
-                    "table": "heat_sources",
-                    "type": "source"
-                  },
-                  "policy": "max",
-                  "start": 0,
-                  "type": "extrudeF",
-                  "z": 25
+                  "database": "sensors",
+                  "table": "heat_sources",
+                  "type": "source"
                 },
                 "policy": "max",
                 "radius": 3,
@@ -1805,15 +1792,14 @@
               "z": 23
             }
           ],
-          "value_type": "Int",
-          "zoom_level_policy": "Normalize"
+          "value_type": "Int"
         }
       },
       "FilterCondition": {
         "oneOf": [
           {
             "type": "object",
-            "description": "`value` に一致するセルだけを残す",
+            "description": "`value` に一致する値だけを残す",
             "required": [
               "value",
               "mode"
@@ -1830,7 +1816,7 @@
           },
           {
             "type": "object",
-            "description": "値が `min..=max`（閉区間）に入るセルだけを残す",
+            "description": "値が `min..=max`に入る値だけを残す",
             "required": [
               "mode"
             ],
@@ -1847,7 +1833,7 @@
           },
           {
             "type": "object",
-            "description": "値が `min..=max`（閉区間）に入るセルを取り除く",
+            "description": "値が `min..=max`に入る値を取り除く",
             "required": [
               "mode"
             ],
@@ -2069,7 +2055,7 @@
       },
       "MergePolicyKind": {
         "type": "string",
-        "description": "同一空間に複数の値が集まったときの集約規則。\n\nKasane-Logic の `merge_policy` の各型に対応する。\n\n- `overwrite`: 後の値で上書きする\n- `keepExisting`: 既存の値を優先する\n- `sum`: 合計する\n- `max`: 大きい方を採る\n- `min`: 小さい方を採る\n- `average`: 平均を採る\n- `difference`: 差を採る",
+        "description": "同一空間に複数の値が集まったときの集約規則。",
         "enum": [
           "overwrite",
           "keepExisting",
@@ -2123,17 +2109,6 @@
                 "type": "string",
                 "example": "example_table"
               },
-              "convert": {
-                "oneOf": [
-                  {
-                    "type": "null"
-                  },
-                  {
-                    "$ref": "#/components/schemas/ValueConvert",
-                    "description": "テーブルの格納値をクエリの値型へ写す変換表（任意）。\n\n省略した場合、このテーブルの `data_type` はクエリの値型と一致していなければならない。\n指定すると、型の異なるテーブル同士を1つのクエリで扱える。"
-                  }
-                ]
-              },
               "type": {
                 "type": "string",
                 "enum": [
@@ -2160,7 +2135,6 @@
               },
               {
                 "type": "object",
-                "description": "値の条件でセルを絞り込む。空間的な形は変えない。",
                 "required": [
                   "type"
                 ],
@@ -2173,8 +2147,7 @@
                   }
                 }
               }
-            ],
-            "description": "値の条件でセルを絞り込む。空間的な形は変えない。"
+            ]
           },
           {
             "type": "object",
@@ -2268,7 +2241,7 @@
           },
           {
             "type": "object",
-            "description": "指定ズームレベルまで解像度を落とし、集まった子を `policy` で集約する",
+            "description": "指定ズームレベルまで解像度を落とし、`policy` で集約する",
             "required": [
               "input",
               "z",
@@ -2550,8 +2523,7 @@
               }
             }
           }
-        ],
-        "description": "クエリ式のノード（AST）。\n\n`source` を葉とする木構造。`merge` は2つの部分式を持つため、複数テーブルを\n1つのクエリで扱える。参照する全データベースに Read 権限が必要。"
+        ]
       },
       "RangeId": {
         "type": "object",
@@ -3457,35 +3429,6 @@
           "Write",
           "Manage"
         ]
-      },
-      "ValueConvert": {
-        "type": "object",
-        "description": "格納値からクエリの値型への変換表。\n\n`from` はそのテーブルの `data_type` の値、`to` はクエリの値型の値。",
-        "required": [
-          "entries"
-        ],
-        "properties": {
-          "entries": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ValueConvertEntry"
-            }
-          },
-          "default": {
-            "description": "変換表に載っていない値の扱い。省略するとそのセルを結果から除外する。"
-          }
-        }
-      },
-      "ValueConvertEntry": {
-        "type": "object",
-        "required": [
-          "from",
-          "to"
-        ],
-        "properties": {
-          "from": {},
-          "to": {}
-        }
       },
       "ZoomLevelPolicy": {
         "type": "string",
