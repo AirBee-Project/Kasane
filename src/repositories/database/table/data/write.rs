@@ -11,6 +11,7 @@ use crate::{error::AppError, repositories::KasaneDbWrite};
 impl<'a> KasaneDbWrite<'a> {
     /// 指定された空間IDセット（`ids`）すべてに対して `data` を書き込む。
     /// 既に値が存在するIDについては、新しい値で上書きする。
+    #[tracing::instrument(skip_all)]
     pub fn data_insert(
         &mut self,
         table_id: TableId,
@@ -33,6 +34,7 @@ impl<'a> KasaneDbWrite<'a> {
 
     /// 指定された空間IDセット（`ids`）のうち、まだ値が存在しないIDに対してのみ `data` を書き込む。
     /// 既存の値は上書きされずにそのまま保持される。
+    #[tracing::instrument(skip_all)]
     pub fn data_upsert(
         &mut self,
         table_id: TableId,
@@ -63,6 +65,7 @@ impl<'a> KasaneDbWrite<'a> {
 
     /// 指定された空間IDセット（`ids`）に紐づく値をすべて削除する。
     /// 削除後にデータ量が少なくなった場合、リーフ（シャード）の結合（マージ）を試みる。
+    #[tracing::instrument(skip_all)]
     pub fn data_remove(
         &mut self,
         table_id: TableId,

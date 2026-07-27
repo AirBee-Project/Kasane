@@ -12,6 +12,7 @@ pub mod openapi;
 pub mod repositories;
 pub mod routes;
 pub mod services;
+pub mod telemetry;
 
 #[derive(Clone)]
 pub struct AppState {

@@ -8,6 +8,7 @@ use crate::{
 
 impl<'a> KasaneDbWrite<'a> {
     /// Databaseの情報を取得する
+    #[tracing::instrument(skip_all)]
     pub fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
         if self.database_caches.contains_key(name) {
             return Ok(Some(DatabaseInfoResponse {
@@ -26,6 +27,7 @@ impl<'a> KasaneDbWrite<'a> {
     }
 
     /// Databaseを作成する
+    #[tracing::instrument(skip_all)]
     pub fn database_create(&mut self, name: &str) -> Result<DatabaseInfoResponse, AppError> {
         if self.database_info(name)?.is_some() {
             return Err(AppError::DatabaseAlreadyExists {
@@ -49,6 +51,7 @@ impl<'a> KasaneDbWrite<'a> {
     }
 
     /// Databaseを削除する
+    #[tracing::instrument(skip_all)]
     pub fn database_remove(&mut self, name: &str) -> Result<(), AppError> {
         if name.is_empty() {
             return Err(AppError::DatabaseNotFound {
@@ -91,6 +94,7 @@ impl<'a> KasaneDbWrite<'a> {
     }
 
     /// Databaseの名前を変更する
+    #[tracing::instrument(skip_all)]
     pub fn database_rename(&mut self, name: &str, new_name: &str) -> Result<(), AppError> {
         if name == new_name {
             return Ok(());
@@ -131,6 +135,7 @@ impl<'a> KasaneDbWrite<'a> {
     }
 
     /// Databaseをコピーする。
+    #[tracing::instrument(skip_all)]
     pub fn database_copy(
         &mut self,
         src_db_name: &str,

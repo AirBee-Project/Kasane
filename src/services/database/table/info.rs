@@ -1,5 +1,6 @@
 use crate::{AppState, error::AppError, models::database::table::TableInfoResponse};
 
+#[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn info(
     app_state: &AppState,
     db_name: &str,

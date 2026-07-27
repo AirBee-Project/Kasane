@@ -8,8 +8,6 @@ use crate::AppState;
 mod database;
 mod openapi;
 
-use tower_http::trace::TraceLayer;
-
 pub fn create_router(app_state: AppState) -> Router {
     let protected_router = Router::new()
         .route(
@@ -51,10 +49,16 @@ pub fn create_router(app_state: AppState) -> Router {
 
     let auth_router = Router::new().route("/auth/login", post(crate::handlers::auth::login));
 
-    Router::new()
+    let mut router = Router::new()
         .merge(auth_router)
         .merge(protected_router)
-        .merge(openapi::routes())
-        .layer(TraceLayer::new_for_http())
-        .with_state(app_state)
+        .merge(openapi::routes());
+
+    // OpenTelemetryが有効な場合のみミドルウェアを追加する
+    if std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").is_ok() {
+        router =
+            router.route_layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default());
+    }
+
+    router.with_state(app_state)
 }

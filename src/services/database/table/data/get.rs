@@ -8,6 +8,7 @@ use crate::{
     services::helpers::{data_response, spatial_ids::process_spatial_ids, value::restore_value},
 };
 
+#[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn get(
     app_state: &AppState,
     db_name: &str,
@@ -24,30 +25,35 @@ pub async fn get(
     let query_format = query.format;
     let query_limit = query.limit;
 
+    let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
-        let (data_type, constraints, groups) = app_state.db.read(|db| {
-            let table = match db.table_info(&db_name, &table_name) {
-                Ok(Some(v)) => v,
-                Ok(None) => {
-                    tracing::debug!("Table not found: {}", table_name);
-                    return Err(AppError::TableNotFound {
-                        name: table_name.clone(),
-                    });
-                }
-                Err(e) => {
-                    tracing::error!("Failed to get table info for '{}': {}", table_name, e);
-                    return Err(e);
-                }
-            };
-            let ids = process_spatial_ids(&spatial_ids, table.max_zoom_level, &zoom_level_policy)?;
-            tracing::debug!("Searching {} spatial IDs", ids.count());
+        span.in_scope(|| {
+            let (data_type, constraints, groups) = app_state.db.read(|db| {
+                let table = match db.table_info(&db_name, &table_name) {
+                    Ok(Some(v)) => Ok(v),
+                    Ok(None) => {
+                        tracing::debug!("Table not found: {}", table_name);
+                        Err(AppError::TableNotFound {
+                            name: table_name.clone(),
+                        })
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to get table info for '{}': {}", table_name, e);
+                        Err(e)
+                    }
+                }?;
 
-            let groups = db.data_get(table.id, ids)?;
-            Ok((table.data_type, table.constraints, groups))
-        })?;
+                let ids =
+                    process_spatial_ids(&spatial_ids, table.max_zoom_level, &zoom_level_policy)?;
 
-        data_response::build(groups, query_format, query_limit, |bytes| {
-            restore_value(data_type, constraints.as_ref(), bytes)
+                let groups = db.data_get(table.id, ids)?;
+
+                Ok((table.data_type, table.constraints, groups))
+            })?;
+
+            data_response::build(groups, query_format, query_limit, |bytes| {
+                restore_value(data_type, constraints.as_ref(), bytes)
+            })
         })
     })
     .await

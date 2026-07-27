@@ -1,5 +1,6 @@
 use crate::{AppState, error::AppError, models::database::table::TableSummary};
 
+#[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn table_update(
     state: AppState,
     db_name: &str,

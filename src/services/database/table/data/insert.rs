@@ -5,6 +5,7 @@ use crate::{
     services::helpers::{spatial_ids::process_spatial_ids, value::interpret_value},
 };
 
+#[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn insert(
     app_state: &AppState,
     db_name: &str,
@@ -24,6 +25,7 @@ pub async fn insert(
         })?;
 
     let value = interpret_value(table.data_type, table.constraints.as_ref(), value)?;
+
     let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
 
     app_state

@@ -6,6 +6,7 @@ use crate::{
 };
 
 /// 値が存在しないIDにのみ書き込む（Upsert）
+#[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn upsert(
     app_state: &AppState,
     db_name: &str,
@@ -23,6 +24,7 @@ pub async fn upsert(
         })?;
 
     let value = interpret_value(table.data_type, table.constraints.as_ref(), value)?;
+
     let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
 
     app_state

@@ -15,6 +15,7 @@ use axum::Json;
     ),
     tag = "System"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn get_system_info() -> Json<SystemInfoResponse> {
     Json(SystemInfoResponse {
         status: "ok".to_string(),

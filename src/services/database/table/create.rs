@@ -19,15 +19,18 @@ pub async fn create(
     let db_name = db_name.to_string();
     let table_name = table_name.to_string();
 
+    let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
-        app_state.db.write(|db| {
-            db.table_create(
-                &db_name,
-                &table_name,
-                req.data_type,
-                req.max_zoom_level,
-                req.constraints,
-            )
+        span.in_scope(|| {
+            app_state.db.write(|db| {
+                db.table_create(
+                    &db_name,
+                    &table_name,
+                    req.data_type,
+                    req.max_zoom_level,
+                    req.constraints,
+                )
+            })
         })
     })
     .await

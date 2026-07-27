@@ -2,6 +2,7 @@ use crate::{error::AppError, models::database::DatabaseInfoResponse, repositorie
 
 impl<'a> KasaneDbRead<'a> {
     /// Databaseの情報を取得する
+    #[tracing::instrument(skip_all)]
     pub fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
         if name.is_empty() {
             return Ok(None);
@@ -17,6 +18,7 @@ impl<'a> KasaneDbRead<'a> {
     }
 
     /// Databaseの一覧を取得する
+    #[tracing::instrument(skip_all)]
     pub fn database_list(&self) -> Result<Vec<DatabaseInfoResponse>, AppError> {
         let db = self.db.databases;
         let mut list = Vec::new();

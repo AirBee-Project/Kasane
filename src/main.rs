@@ -1,8 +1,5 @@
 use std::{net::SocketAddr, sync::Arc};
 
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
 use clap::Parser;
 use kasane::{AppState, auth_cache::AuthCache, db_init, kasane};
 
@@ -27,8 +24,25 @@ fn default_port() -> u16 {
         .unwrap_or(5173)
 }
 
-fn log_filter() -> String {
-    std::env::var("LOG_MODE").unwrap_or_else(|_| "kasane=info,tower_http=info".to_string())
+struct TracerShutdownGuard(Option<opentelemetry_sdk::trace::SdkTracerProvider>);
+
+impl Drop for TracerShutdownGuard {
+    fn drop(&mut self) {
+        let Some(provider) = self.0.take() else {
+            return;
+        };
+
+        let result = match tokio::runtime::Handle::try_current() {
+            Ok(handle) if handle.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread => {
+                tokio::task::block_in_place(|| provider.shutdown())
+            }
+            _ => provider.shutdown(),
+        };
+
+        if let Err(e) = result {
+            eprintln!("Failed to shutdown TracerProvider: {:?}", e);
+        }
+    }
 }
 
 #[tokio::main]
@@ -36,10 +50,8 @@ async fn main() {
     // 環境変数の読み込み
     dotenvy::dotenv().ok();
 
-    // ログの初期化
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::new(log_filter()))
-        .init();
+    // ログおよびテレメトリの初期化
+    let _tracer_provider = TracerShutdownGuard(kasane::telemetry::init_telemetry());
 
     let args = Args::parse();
     let db = db_init::initialize_database(&args.database_path);
@@ -56,5 +68,33 @@ async fn main() {
         listener.local_addr().unwrap(),
         args.database_path,
     );
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .unwrap();
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+    tracing::info!("Shutting down gracefuly, flushing traces...");
 }

@@ -32,6 +32,7 @@ use axum::{
     security(("bearer_auth" = [])),
     tag = "Data"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn data_upsert(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,

@@ -272,17 +272,20 @@ pub async fn execute(
     let limit = query_params.limit;
 
     // LMDB 読み取りと演算はいずれも同期ブロッキング処理のため、async ワーカーを塞がない。
+    let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || -> Result<GetDataResponse, AppError> {
-        let tables = resolve_tables(&app_state, &request.query)?;
-        let value_type = request
-            .query
-            .resolve_value_type(&tables, request.value_type)?;
+        span.in_scope(|| {
+            let tables = resolve_tables(&app_state, &request.query)?;
+            let value_type = request
+                .query
+                .resolve_value_type(&tables, request.value_type)?;
 
-        // 作業木は単一の値型で組まれるため、ここで値型ごとに単型化する。
-        // Enum は格納こそ ID だが、クエリ上は選択肢の文字列（String）として扱う。
-        for_value_type!(
-            value_type, run, &app_state, &request, &tables, format, limit
-        )
+            // 作業木は単一の値型で組まれるため、ここで値型ごとに単型化する。
+            // Enum は格納こそ ID だが、クエリ上は選択肢の文字列（String）として扱う。
+            for_value_type!(
+                value_type, run, &app_state, &request, &tables, format, limit
+            )
+        })
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?

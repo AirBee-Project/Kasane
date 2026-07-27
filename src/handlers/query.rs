@@ -34,6 +34,7 @@ use crate::services::query as query_service;
     security(("bearer_auth" = [])),
     tag = "Query"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn execute_query(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,

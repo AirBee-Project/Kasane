@@ -44,16 +44,21 @@ pub async fn create(app_state: &AppState, name: &str) -> Result<DatabaseInfoResp
     let app_state = app_state.clone();
     let name = name.to_string();
 
-    tokio::task::spawn_blocking(move || app_state.db.write(|db| db.database_create(&name)))
-        .await
-        .map_err(|e| AppError::InternalError(e.to_string()))?
+    let span = tracing::Span::current();
+    tokio::task::spawn_blocking(move || {
+        span.in_scope(|| app_state.db.write(|db| db.database_create(&name)))
+    })
+    .await
+    .map_err(|e| AppError::InternalError(e.to_string()))?
 }
 
 pub async fn remove(app_state: &AppState, name: &str) -> Result<(), AppError> {
     let app_state = app_state.clone();
     let name = name.to_string();
 
+    let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
+        let _guard = span.enter();
         let tables = app_state.db.read(|r| r.table_list(&name))?;
 
         app_state.db.write(|db| {
@@ -74,10 +79,13 @@ pub async fn rename(app_state: &AppState, name: &str, new_name: &str) -> Result<
     let name = name.to_string();
     let new_name = new_name.to_string();
 
+    let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
-        app_state
-            .db
-            .write(|db| db.database_rename(&name, &new_name))
+        span.in_scope(|| {
+            app_state
+                .db
+                .write(|db| db.database_rename(&name, &new_name))
+        })
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?
@@ -93,10 +101,13 @@ pub async fn copy(
     let name = name.to_string();
     let copy_name = copy_name.to_string();
 
+    let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
-        app_state
-            .db
-            .write(|db| db.database_copy(&name, &copy_name, user_id))
+        span.in_scope(|| {
+            app_state
+                .db
+                .write(|db| db.database_copy(&name, &copy_name, user_id))
+        })
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?

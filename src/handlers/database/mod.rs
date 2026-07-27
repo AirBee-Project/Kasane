@@ -27,6 +27,7 @@ use axum::{
     security(("bearer_auth" = ["global_admin"])),
     tag = "Databases"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn database_create(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -59,6 +60,7 @@ pub async fn database_create(
     security(("bearer_auth" = [])),
     tag = "Databases"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn database_info(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -90,6 +92,7 @@ pub async fn database_info(
     security(("bearer_auth" = [])),
     tag = "Databases"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn database_list(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -118,6 +121,7 @@ pub async fn database_list(
     security(("bearer_auth" = ["global_admin"])),
     tag = "Databases"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn remove_database(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -150,6 +154,7 @@ pub async fn remove_database(
     security(("bearer_auth" = [])),
     tag = "Databases"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn database_rename(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -187,6 +192,7 @@ pub async fn database_rename(
     security(("bearer_auth" = [])),
     tag = "Databases"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn database_copy(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
