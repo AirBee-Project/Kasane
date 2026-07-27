@@ -31,9 +31,20 @@ struct TracerShutdownGuard(Option<opentelemetry_sdk::trace::SdkTracerProvider>);
 
 impl Drop for TracerShutdownGuard {
     fn drop(&mut self) {
-        if let Some(provider) = self.0.take()
-            && let Err(e) = provider.shutdown()
-        {
+        let Some(provider) = self.0.take() else {
+            return;
+        };
+
+        // shutdown() は内部でブロッキング待機する。バッチ処理は Tokio 上のタスクとして動くため、
+        // ワーカースレッドをそのまま止めずに block_in_place で退避させてから待つ。
+        let result = match tokio::runtime::Handle::try_current() {
+            Ok(handle) if handle.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread => {
+                tokio::task::block_in_place(|| provider.shutdown())
+            }
+            _ => provider.shutdown(),
+        };
+
+        if let Err(e) = result {
             eprintln!("Failed to shutdown TracerProvider: {:?}", e);
         }
     }

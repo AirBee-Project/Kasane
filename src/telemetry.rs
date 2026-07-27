@@ -117,8 +117,16 @@ pub fn init_telemetry() -> Option<opentelemetry_sdk::trace::SdkTracerProvider> {
             Sampler::AlwaysOn
         };
 
+        // 既定の `with_batch_exporter` は OTel 専用の OS スレッドでエクスポートを実行するため、
+        // tonic / reqwest(async) クライアントが Tokio のリアクタを見つけられず
+        // "there is no reactor running" で panic する。
+        // Tokio ランタイム上でバッチ処理を回すプロセッサを明示的に使う。
+        let batch_processor = opentelemetry_sdk::trace::span_processor_with_async_runtime::
+            BatchSpanProcessor::builder(exporter, opentelemetry_sdk::runtime::Tokio)
+                .build();
+
         let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
-            .with_batch_exporter(exporter)
+            .with_span_processor(batch_processor)
             .with_sampler(sampler)
             .with_resource(resource)
             .build();
