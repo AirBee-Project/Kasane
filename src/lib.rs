@@ -12,6 +12,7 @@ pub mod openapi;
 pub mod repositories;
 pub mod routes;
 pub mod services;
+pub mod telemetry;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -22,4 +23,3 @@ pub struct AppState {
 pub fn kasane(app_state: AppState) -> axum::Router {
     create_router(app_state)
 }
-pub mod telemetry;
