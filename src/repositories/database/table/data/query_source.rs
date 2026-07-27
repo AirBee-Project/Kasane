@@ -2,11 +2,11 @@
 //!
 //! Kasane-Logic の [`Source`] は「範囲を指定して読む」ことしか要求しないため、テーブル全体を
 //! メモリへ展開せずにクエリの入力になれる。演算そのものはインメモリの作業木
-//! （[`FlexTreeCore`]）上で行われ、本アダプタは**入力の読み出し方**だけを担う。
+//! （[`WorkingTree`]）上で行われ、本アダプタは**入力の読み出し方**だけを担う。
 
 use heed::types::Bytes;
 use heed::{Database, Env, WithoutTls};
-use kasane_logic::{CellValue, Error as LogicError, FlexId, FlexTreeCore, RangeId, Source};
+use kasane_logic::{CellValue, Error as LogicError, FlexId, RangeId, Source, WorkingTree};
 
 use super::shard;
 use crate::db_init::TableIdAndFlexId;
@@ -57,7 +57,7 @@ where
     /// 演算はインメモリの作業木で行う。ディスク側が担うのは入力の読み出しだけ。
     type Value = V;
 
-    fn read_subset(&self, bounds: &[RangeId]) -> Result<FlexTreeCore<V>, LogicError> {
+    fn read_subset(&self, bounds: &[RangeId]) -> Result<WorkingTree<V>, LogicError> {
         let txn = self
             .env
             .read_txn()
@@ -88,7 +88,7 @@ where
         Ok(cells.into_iter().collect())
     }
 
-    fn read_all(self: Box<Self>) -> Result<FlexTreeCore<V>, LogicError> {
+    fn read_all(self: Box<Self>) -> Result<WorkingTree<V>, LogicError> {
         // テーブル全体の materialize は容量的に現実的でないため提供しない。
         // クエリは必ず領域を指定する遅延評価（`Query::lazy`）経由で実行する。
         Err(LogicError::Unsupported(

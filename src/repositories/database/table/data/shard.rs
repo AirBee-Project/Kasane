@@ -14,7 +14,17 @@ use crate::error::AppError;
 use crate::models::id::TableId;
 
 /// 1つのシャードが保持できる [`FlexId`] 数の上限。これを超えたシャードは動的に分割される。
-pub const MAX_FLEX_ID_PER_SHARD: usize = 4096;
+///
+/// # この値の決め方
+/// 書き込みは read-modify-write（リーフ全体を `SpatialIdMap::from_bytes` で
+/// `Arc` 木へ復元 → 変更 → `to_bytes`）なので、**1回の書き込みコストはリーフサイズに
+/// ほぼ線形**に効く。一方リーフを小さくするとリーフ数が増え、ルーティングの降下段数と
+/// LMDB エントリ数が増える。
+///
+/// 実データ（建物ボクセル）でこの上限を掃引して決めた値。大きすぎると書き込みが重くなり、
+/// 小さすぎるとリーフ数の増加が効き始める。変更する場合は書き込み・広域検索・点検索の
+/// 3つを併せて計測すること（片方だけ見ると逆方向へ最適化しやすい）。
+pub const MAX_FLEX_ID_PER_SHARD: usize = 512;
 
 /// 兄弟シャードの合算件数がこの値以下になったら再びmergeして1つのシャードにする。
 pub const MERGE_FLEX_ID_THRESHOLD: usize = MAX_FLEX_ID_PER_SHARD / 2;
@@ -318,7 +328,12 @@ pub fn load_leaf_archived<'txn>(
     match tables_data.get(txn, &(table_id, region.clone()))? {
         Some(entry) => match leaf_payload(entry)? {
             // 自分自身の to_bytes が書いた正当なバイト列。
-            Some(map_bytes) => Ok(Some(unsafe { ArchivedMap::access(map_bytes) })),
+            // 形式バージョンだけは検証されるので、古い形式のデータは黙って誤読されず
+            // ここでエラーになる。
+            Some(map_bytes) => Ok(Some(
+                unsafe { ArchivedMap::access(map_bytes) }
+                    .map_err(|e| AppError::InternalError(format!("leaf format: {e}")))?,
+            )),
             None => Err(AppError::InternalError(
                 "routed to a pointer node".to_string(),
             )),
