@@ -27,6 +27,7 @@ use crate::{
     security(("bearer_auth" = ["global_admin"])),
     tag = "Users"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn list_users(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -52,6 +53,7 @@ pub async fn list_users(
     security(("bearer_auth" = ["global_admin"])),
     tag = "Users"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn create_user(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -80,6 +82,7 @@ pub async fn create_user(
     security(("bearer_auth" = ["global_admin"])),
     tag = "Users"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn delete_user(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -109,6 +112,7 @@ pub async fn delete_user(
     security(("bearer_auth" = [])),
     tag = "Users"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn get_user(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -138,6 +142,7 @@ pub async fn get_user(
     security(("bearer_auth" = [])),
     tag = "Users"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn update_password(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -173,6 +178,7 @@ pub async fn update_password(
     security(("bearer_auth" = ["global_admin"])),
     tag = "Users"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn set_admin(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -202,6 +208,7 @@ pub async fn set_admin(
     security(("bearer_auth" = ["global_admin"])),
     tag = "Users"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn get_privileges(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -232,6 +239,7 @@ pub async fn get_privileges(
     security(("bearer_auth" = ["global_admin"])),
     tag = "Users"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn set_privilege(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -262,6 +270,7 @@ pub async fn set_privilege(
     security(("bearer_auth" = ["global_admin"])),
     tag = "Users"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn delete_privilege(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,

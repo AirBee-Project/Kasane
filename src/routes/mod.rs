@@ -8,8 +8,6 @@ use crate::AppState;
 mod database;
 mod openapi;
 
-use tower_http::trace::TraceLayer;
-
 pub fn create_router(app_state: AppState) -> Router {
     let protected_router = Router::new()
         .route(
@@ -55,6 +53,6 @@ pub fn create_router(app_state: AppState) -> Router {
         .merge(auth_router)
         .merge(protected_router)
         .merge(openapi::routes())
-        .layer(TraceLayer::new_for_http())
+        .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default())
         .with_state(app_state)
 }

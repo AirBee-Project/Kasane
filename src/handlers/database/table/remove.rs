@@ -25,6 +25,7 @@ use axum::Extension;
     security(("bearer_auth" = [])),
     tag = "Tables"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn remove_table(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,

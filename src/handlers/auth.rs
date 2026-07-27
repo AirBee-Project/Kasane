@@ -20,11 +20,14 @@ use crate::{
     ),
     tag = "Auth"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn login(
     State(app_state): State<AppState>,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, AppError> {
+    let span = tracing::Span::current();
     let token = tokio::task::spawn_blocking(move || -> Result<String, AppError> {
+        let _guard = span.enter();
         let meta = app_state
             .db
             .read_users(|repo| repo.get_user_meta(&payload.username))?;

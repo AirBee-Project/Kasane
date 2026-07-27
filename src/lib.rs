@@ -22,3 +22,4 @@ pub struct AppState {
 pub fn kasane(app_state: AppState) -> axum::Router {
     create_router(app_state)
 }
+pub mod telemetry;

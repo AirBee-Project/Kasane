@@ -28,6 +28,7 @@ impl<'a> KasaneDbRead<'a> {
     /// ルーティング（ポインタ木の降下）は 1 回だけ行い、担当リーフへ振り分けたあと、
     /// **リーフ単位**で解決を並列化する。各リーフは互いに独立（同一セルは 1 つの葉にしか
     /// 属さない）なので、部分マップを作って最後に値でマージするだけで正しく合流できる。
+    #[tracing::instrument(skip_all)]
     pub fn data_get(
         &self,
         table_id: crate::models::id::TableId,
@@ -146,6 +147,7 @@ impl<'a> KasaneDbRead<'a> {
 pub type DataStreamSender = tokio::sync::mpsc::Sender<Result<(Vec<u8>, Vec<FlexId>), AppError>>;
 
 impl<'a> KasaneDbRead<'a> {
+    #[tracing::instrument(skip_all)]
     pub fn data_get_stream(
         &self,
         table_id: TableId,
@@ -239,6 +241,7 @@ impl<'a> KasaneDbRead<'a> {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn data_filter_eq(
         &'a self,
         table_id: TableId,
@@ -265,6 +268,7 @@ impl<'a> KasaneDbRead<'a> {
         }))
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn data_filter_range(
         &'a self,
         table_id: TableId,

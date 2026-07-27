@@ -14,6 +14,7 @@ use crate::models::auth::Claims;
 /// プロセス全体で共有する JWT 署名鍵。
 static JWT_SECRET: OnceLock<Vec<u8>> = OnceLock::new();
 
+#[tracing::instrument(skip_all)]
 pub fn jwt_secret() -> &'static [u8] {
     JWT_SECRET.get_or_init(
         || match std::env::var("JWT_SECRET").ok().filter(|s| !s.is_empty()) {
@@ -32,6 +33,7 @@ pub fn jwt_secret() -> &'static [u8] {
     )
 }
 
+#[tracing::instrument(skip_all)]
 pub fn hash_password(password: &str) -> Result<String, AppError> {
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
@@ -42,6 +44,7 @@ pub fn hash_password(password: &str) -> Result<String, AppError> {
     Ok(password_hash)
 }
 
+#[tracing::instrument(skip_all)]
 pub fn verify_password(password: &str, password_hash: &str) -> Result<bool, AppError> {
     let parsed_hash = PasswordHash::new(password_hash)
         .map_err(|_| AppError::InternalError("Invalid password hash format".to_string()))?;
@@ -54,6 +57,7 @@ pub fn verify_password(password: &str, password_hash: &str) -> Result<bool, AppE
 }
 
 /// 存在しないユーザーへのログイン試行でも、実在ユーザーと同等の計算コストをかけるためのダミー検証。
+#[tracing::instrument(skip_all)]
 pub fn dummy_verify_password(password: &str) {
     static DUMMY_HASH: OnceLock<String> = OnceLock::new();
     let dummy = DUMMY_HASH.get_or_init(|| {
@@ -66,6 +70,7 @@ pub fn dummy_verify_password(password: &str) {
 }
 
 /// 指定ユーザーの最新メタデータ（UUID・トークン世代）を読み込み、JWT を発行する。
+#[tracing::instrument(skip_all)]
 pub fn generate_jwt(app_state: &AppState, username: &str) -> Result<String, AppError> {
     let meta = app_state
         .db
@@ -93,6 +98,7 @@ pub fn generate_jwt(app_state: &AppState, username: &str) -> Result<String, AppE
     .map_err(|_| AppError::InternalError("Failed to generate token".to_string()))
 }
 
+#[tracing::instrument(skip_all)]
 pub fn verify_jwt(token: &str) -> Result<Claims, AppError> {
     let validation = Validation::default();
     let token_data = decode::<Claims>(token, &DecodingKey::from_secret(jwt_secret()), &validation)

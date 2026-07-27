@@ -4,6 +4,7 @@ use heed::BytesDecode;
 
 impl<'a> KasaneDbRead<'a> {
     /// Tableの情報を取得する
+    #[tracing::instrument(skip_all)]
     pub fn table_info(&self, db_name: &str, table_name: &str) -> Result<Option<Table>, AppError> {
         if db_name.is_empty() {
             return Ok(None);
@@ -34,6 +35,7 @@ impl<'a> KasaneDbRead<'a> {
     }
 
     /// Tableの一覧を取得する
+    #[tracing::instrument(skip_all)]
     pub fn table_list(&self, db_name: &str) -> Result<Vec<Table>, AppError> {
         if db_name.is_empty() {
             return Err(AppError::DatabaseNotFound {
@@ -74,6 +76,7 @@ impl<'a> KasaneDbRead<'a> {
     }
 
     /// テーブルが保持する [`FlexId`](kasane_logic::FlexId) の総数を返す。
+    #[tracing::instrument(skip_all)]
     pub fn table_count(&self, table_id: crate::models::id::TableId) -> Result<u64, AppError> {
         use crate::repositories::database::table::data::shard::ShardEntry;
 

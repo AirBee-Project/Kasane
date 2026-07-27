@@ -17,6 +17,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
+#[tracing::instrument(skip_all)]
 pub async fn get_stream(
     app_state: &AppState,
     db_name: &str,

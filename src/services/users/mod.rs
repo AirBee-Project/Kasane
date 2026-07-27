@@ -27,7 +27,9 @@ pub async fn create_user(app_state: &AppState, req: CreateUserRequest) -> Result
 
     let app_state = app_state.clone();
 
+    let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
+        let _guard = span.enter();
         let hash = hash_password(&req.password)?;
         let meta = UserMetadata {
             id: Uuid::now_v7(),
@@ -51,7 +53,9 @@ pub async fn delete_user(app_state: &AppState, username: &str) -> Result<(), App
     let state = app_state.clone();
     let username_owned = username.to_string();
 
+    let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
+        let _guard = span.enter();
         state
             .db
             .write_users(|repo| repo.delete_user(&username_owned))
@@ -71,7 +75,9 @@ pub async fn update_password(
     let state = app_state.clone();
     let username_owned = username.to_string();
 
+    let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
+        let _guard = span.enter();
         let hash = hash_password(&req.password)?;
 
         let meta = state
@@ -107,7 +113,9 @@ pub async fn set_admin(
     let state = app_state.clone();
     let username_owned = username.to_string();
 
+    let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
+        let _guard = span.enter();
         let meta = state
             .db
             .read_users(|repo| repo.get_user_meta(&username_owned))?
@@ -138,7 +146,9 @@ pub async fn set_privilege(
     let username = username.to_string();
     let db_name = db_name.to_string();
 
+    let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
+        let _guard = span.enter();
         let user_id = app_state
             .db
             .read_users(|repo| repo.get_user(&username))?
@@ -162,7 +172,9 @@ pub async fn delete_privilege(
     let username = username.to_string();
     let db_name = db_name.to_string();
 
+    let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
+        let _guard = span.enter();
         let user_id = app_state
             .db
             .read_users(|repo| repo.get_user(&username))?

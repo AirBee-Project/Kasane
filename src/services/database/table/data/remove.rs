@@ -5,6 +5,7 @@ use crate::{
     services::helpers::spatial_ids::process_spatial_ids,
 };
 
+#[tracing::instrument(skip_all)]
 pub async fn remove(
     app_state: &AppState,
     db_name: &str,

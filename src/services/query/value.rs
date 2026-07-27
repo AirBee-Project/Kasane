@@ -140,6 +140,7 @@ fn unsupported_policy(policy: MergePolicyKind, value_type: &str) -> AppError {
 }
 
 /// ソースの `data_type` がクエリ値型として読めないときのエラー。
+#[tracing::instrument(skip_all)]
 pub fn incompatible_source(
     table: &crate::models::database::table::Table,
     value_type: &str,

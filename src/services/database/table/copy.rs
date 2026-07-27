@@ -13,7 +13,9 @@ pub async fn copy(
     let copy_db_name = copy_db_name.to_string();
     let copy_table_name = copy_table_name.to_string();
 
+    let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
+        let _guard = span.enter();
         app_state.db.write(|db| {
             db.table_copy(
                 &src_db_name,

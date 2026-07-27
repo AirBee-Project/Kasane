@@ -41,6 +41,7 @@ use axum::{
         ("bearer_auth" = [])
     )
 )]
+#[tracing::instrument(skip_all)]
 pub async fn table_update_handler(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,

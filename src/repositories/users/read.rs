@@ -10,10 +10,12 @@ pub struct KasaneUsersRead<'a> {
 }
 
 impl<'a> KasaneUsersRead<'a> {
+    #[tracing::instrument(skip_all)]
     pub fn new(read_txn: heed::RoTxn<'a, heed::WithoutTls>, db: &'a crate::db_init::AppDb) -> Self {
         Self { read_txn, db }
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn get_user_meta(&self, username: &str) -> Result<Option<UserMetadata>, AppError> {
         let users_table = self.db.users;
         if let Some(val) = users_table.get(&self.read_txn, username)? {
@@ -25,6 +27,7 @@ impl<'a> KasaneUsersRead<'a> {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn get_user(&self, username: &str) -> Result<Option<User>, AppError> {
         if let Some(meta) = self.get_user_meta(username)? {
             Ok(Some(User::from_meta(username, &meta)))
@@ -33,6 +36,7 @@ impl<'a> KasaneUsersRead<'a> {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn get_privilege(
         &self,
         user_id: crate::models::id::UserId,
@@ -62,6 +66,7 @@ impl<'a> KasaneUsersRead<'a> {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn get_all_users(&self) -> Result<Vec<User>, AppError> {
         let users_table = self.db.users;
         let mut users = Vec::new();
@@ -74,6 +79,7 @@ impl<'a> KasaneUsersRead<'a> {
         Ok(users)
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn get_user_privileges(
         &self,
         user_id: crate::models::id::UserId,

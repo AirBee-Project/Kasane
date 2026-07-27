@@ -27,6 +27,7 @@ use crate::{
     security(("bearer_auth" = [])),
     tag = "Tables"
 )]
+#[tracing::instrument(skip_all)]
 pub async fn table_info(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
