@@ -32,8 +32,6 @@ impl Drop for TracerShutdownGuard {
             return;
         };
 
-        // shutdown() は内部でブロッキング待機する。バッチ処理は Tokio 上のタスクとして動くため、
-        // ワーカースレッドをそのまま止めずに block_in_place で退避させてから待つ。
         let result = match tokio::runtime::Handle::try_current() {
             Ok(handle) if handle.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread => {
                 tokio::task::block_in_place(|| provider.shutdown())
@@ -74,8 +72,6 @@ async fn main() {
         .with_graceful_shutdown(shutdown_signal())
         .await
         .unwrap();
-
-    // _tracer_provider がドロップされる際（panic時含む）にトレースが確実に送信される
 }
 
 async fn shutdown_signal() {

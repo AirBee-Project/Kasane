@@ -3,17 +3,15 @@ use opentelemetry_sdk::{propagation::TraceContextPropagator, trace::Sampler};
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt, util::SubscriberInitExt};
 
 pub fn init_telemetry() -> Option<opentelemetry_sdk::trace::SdkTracerProvider> {
-    // W3C Trace Context の伝播を有効化（フロントエンドからの traceparent ヘッダーを引き継ぐ）
+    // W3C Trace Context の伝播を有効化
     global::set_text_map_propagator(TraceContextPropagator::new());
 
-    // ログレベルのフィルタリング。デフォルトでアプリケーションとtower_http, OTelミドルウェアを出力対象にする
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         EnvFilter::new(
             "info,kasane=info,tower_http=info,axum_tracing_opentelemetry=error,otel::tracing=info",
         )
     });
 
-    // OTLPエンドポイント（例: http://localhost:4317）が設定されていればトレーサーを有効化
     let otlp_endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok();
 
     let (tracer, sdk_provider) = if let Some(endpoint) = otlp_endpoint {
@@ -85,10 +83,6 @@ pub fn init_telemetry() -> Option<opentelemetry_sdk::trace::SdkTracerProvider> {
             Sampler::AlwaysOn
         };
 
-        // 既定の `with_batch_exporter` は OTel 専用の OS スレッドでエクスポートを実行するため、
-        // tonic / reqwest(async) クライアントが Tokio のリアクタを見つけられず
-        // "there is no reactor running" で panic する。
-        // Tokio ランタイム上でバッチ処理を回すプロセッサを明示的に使う。
         let batch_processor = opentelemetry_sdk::trace::span_processor_with_async_runtime::
             BatchSpanProcessor::builder(exporter, opentelemetry_sdk::runtime::Tokio)
                 .build();
