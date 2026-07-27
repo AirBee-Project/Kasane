@@ -5,7 +5,7 @@ use crate::{
     services::helpers::{spatial_ids::process_spatial_ids, value::interpret_value},
 };
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn insert(
     app_state: &AppState,
     db_name: &str,
@@ -24,19 +24,12 @@ pub async fn insert(
             name: table_name.to_string(),
         })?;
 
-    let value = tracing::info_span!("interpret_value")
-        .in_scope(|| interpret_value(table.data_type, table.constraints.as_ref(), value))?;
+    let value = interpret_value(table.data_type, table.constraints.as_ref(), value)?;
 
-    let ids = tracing::info_span!("process_spatial_ids")
-        .in_scope(|| process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy))?;
+    let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
 
-    use tracing::Instrument;
-    async {
-        app_state
-            .db
-            .batch_data_insert(table.id, table.data_type, ids, value)
-            .await
-    }
-    .instrument(tracing::info_span!("batch_data_insert_wait"))
-    .await
+    app_state
+        .db
+        .batch_data_insert(table.id, table.data_type, ids, value)
+        .await
 }

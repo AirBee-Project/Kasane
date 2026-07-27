@@ -36,7 +36,7 @@ use crate::{
     security(("bearer_auth" = [])),
     tag = "Tables"
 )]
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn table_copy(
     Path((db_name, table_name)): Path<(String, String)>,
     State(app_state): State<AppState>,

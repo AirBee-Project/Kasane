@@ -15,7 +15,7 @@ impl<'a> KasaneUsersWrite<'a> {
         Self { write_txn, db }
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(username = %username))]
     pub fn create_user(&mut self, username: &str, meta: &UserMetadata) -> Result<(), AppError> {
         let users_table = self.db.users;
         if users_table.get(&self.write_txn, username)?.is_some() {
@@ -27,7 +27,7 @@ impl<'a> KasaneUsersWrite<'a> {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(username = %username))]
     pub fn update_user_meta(
         &mut self,
         username: &str,
@@ -43,7 +43,7 @@ impl<'a> KasaneUsersWrite<'a> {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(username = %username))]
     pub fn delete_user(&mut self, username: &str) -> Result<(), AppError> {
         let users_table = self.db.users;
         if let Some(val) = users_table.get(&self.write_txn, username)? {
@@ -71,7 +71,7 @@ impl<'a> KasaneUsersWrite<'a> {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(db_name = %db_name))]
     pub fn set_privilege(
         &mut self,
         user_id: crate::models::id::UserId,
@@ -102,7 +102,7 @@ impl<'a> KasaneUsersWrite<'a> {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(db_name = %db_name))]
     pub fn remove_privilege(
         &mut self,
         user_id: crate::models::id::UserId,

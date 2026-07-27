@@ -15,7 +15,7 @@ impl<'a> KasaneUsersRead<'a> {
         Self { read_txn, db }
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(username = %username))]
     pub fn get_user_meta(&self, username: &str) -> Result<Option<UserMetadata>, AppError> {
         let users_table = self.db.users;
         if let Some(val) = users_table.get(&self.read_txn, username)? {
@@ -27,7 +27,7 @@ impl<'a> KasaneUsersRead<'a> {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(username = %username))]
     pub fn get_user(&self, username: &str) -> Result<Option<User>, AppError> {
         if let Some(meta) = self.get_user_meta(username)? {
             Ok(Some(User::from_meta(username, &meta)))
@@ -36,7 +36,7 @@ impl<'a> KasaneUsersRead<'a> {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(db_name = %db_name))]
     pub fn get_privilege(
         &self,
         user_id: crate::models::id::UserId,

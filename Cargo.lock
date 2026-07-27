@@ -1448,6 +1448,7 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
+ "percent-encoding",
  "rand 0.10.2",
  "rand_core 0.6.4",
  "rayon",
@@ -1459,6 +1460,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-stream",
+ "tonic",
  "tower",
  "tower-http 0.7.0",
  "tracing",
@@ -1472,6 +1474,7 @@ dependencies = [
 [[package]]
 name = "kasane-logic"
 version = "0.1.4"
+source = "git+https://github.com/AirBee-Project/Kasane-Logic.git#70c817c1d64c4051837cc4ab30d0646e9b3b4b48"
 dependencies = [
  "hashbrown 0.15.5",
  "libm",
@@ -3143,8 +3146,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac2a5518c70fa84342385732db33fb3f44bc4cc748936eb5833d2df34d6445ef"
 dependencies = [
  "async-trait",
+ "axum",
  "base64",
  "bytes",
+ "h2",
  "http",
  "http-body",
  "http-body-util",
@@ -3153,6 +3158,7 @@ dependencies = [
  "hyper-util",
  "percent-encoding",
  "pin-project",
+ "socket2",
  "sync_wrapper",
  "tokio",
  "tokio-stream",

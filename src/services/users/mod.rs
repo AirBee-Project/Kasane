@@ -55,10 +55,11 @@ pub async fn delete_user(app_state: &AppState, username: &str) -> Result<(), App
 
     let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
-        let _guard = span.enter();
-        state
-            .db
-            .write_users(|repo| repo.delete_user(&username_owned))
+        span.in_scope(|| {
+            state
+                .db
+                .write_users(|repo| repo.delete_user(&username_owned))
+        })
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))??;

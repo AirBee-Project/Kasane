@@ -16,8 +16,9 @@ use rustc_hash::FxHashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
+use tracing::Instrument;
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn get_stream(
     app_state: &AppState,
     db_name: &str,
@@ -54,152 +55,156 @@ pub async fn get_stream(
 
     let (out_sender, out_receiver) = mpsc::channel::<Result<String, AppError>>(100);
 
-    tokio::spawn(async move {
-        while let Some(res) = receiver.recv().await {
-            if let Some(left) = limit_left
-                && left == 0
-            {
-                break;
-            }
+    let span = tracing::Span::current();
+    tokio::spawn(
+        async move {
+            while let Some(res) = receiver.recv().await {
+                if let Some(left) = limit_left
+                    && left == 0
+                {
+                    break;
+                }
 
-            match res {
-                Ok((bytes, flex_ids)) => {
-                    let mut hasher = DefaultHasher::new();
-                    bytes.hash(&mut hasher);
-                    let hash_val = hasher.finish();
-                    let value_ref = format!("{:x}", hash_val);
+                match res {
+                    Ok((bytes, flex_ids)) => {
+                        let mut hasher = DefaultHasher::new();
+                        bytes.hash(&mut hasher);
+                        let hash_val = hasher.finish();
+                        let value_ref = format!("{:x}", hash_val);
 
-                    if !sent_hashes.contains(&hash_val) {
-                        sent_hashes.insert(hash_val);
-                        let json_value =
-                            match restore_value(data_type, constraints.as_ref(), &bytes) {
-                                Ok(v) => v,
-                                Err(e) => {
-                                    let _ = out_sender.send(Err(e)).await;
-                                    break;
+                        if !sent_hashes.contains(&hash_val) {
+                            sent_hashes.insert(hash_val);
+                            let json_value =
+                                match restore_value(data_type, constraints.as_ref(), &bytes) {
+                                    Ok(v) => v,
+                                    Err(e) => {
+                                        let _ = out_sender.send(Err(e)).await;
+                                        break;
+                                    }
+                                };
+                            let dict_event = StreamDictionaryEvent {
+                                value_ref: value_ref.clone(),
+                                value: json_value,
+                            };
+
+                            let ndjson = match format {
+                                OutputFormat::SingleId => serde_json::to_string(
+                                    &StreamEventSingle::Dictionary(dict_event),
+                                ),
+                                OutputFormat::RangeId => {
+                                    serde_json::to_string(&StreamEventRange::Dictionary(dict_event))
+                                }
+                                OutputFormat::FlexId => {
+                                    serde_json::to_string(&StreamEventFlex::Dictionary(dict_event))
                                 }
                             };
-                        let dict_event = StreamDictionaryEvent {
-                            value_ref: value_ref.clone(),
-                            value: json_value,
-                        };
 
-                        let ndjson = match format {
+                            if let Ok(ndjson_str) = ndjson
+                                && out_sender.send(Ok(ndjson_str + "\n")).await.is_err()
+                            {
+                                break;
+                            }
+                        }
+
+                        // Then handle spatial_ids
+                        match format {
                             OutputFormat::SingleId => {
-                                serde_json::to_string(&StreamEventSingle::Dictionary(dict_event))
+                                let mut spatial_ids = Vec::new();
+                                for flex_id in flex_ids {
+                                    for single_id in flex_id.single_ids() {
+                                        if let Some(left) = limit_left.as_mut() {
+                                            if *left == 0 {
+                                                break;
+                                            }
+                                            *left -= 1;
+                                        }
+                                        spatial_ids.push(RawSingleId {
+                                            z: single_id.z(),
+                                            f: single_id.f(),
+                                            x: single_id.x(),
+                                            y: single_id.y(),
+                                        });
+                                    }
+                                }
+                                if !spatial_ids.is_empty() {
+                                    let ev = StreamEventSingle::Data(StreamDataEventSingle {
+                                        value_ref,
+                                        spatial_ids,
+                                    });
+                                    let str = serde_json::to_string(&ev).unwrap() + "\n";
+                                    if out_sender.send(Ok(str)).await.is_err() {
+                                        break;
+                                    }
+                                }
                             }
                             OutputFormat::RangeId => {
-                                serde_json::to_string(&StreamEventRange::Dictionary(dict_event))
-                            }
-                            OutputFormat::FlexId => {
-                                serde_json::to_string(&StreamEventFlex::Dictionary(dict_event))
-                            }
-                        };
-
-                        if let Ok(ndjson_str) = ndjson
-                            && out_sender.send(Ok(ndjson_str + "\n")).await.is_err()
-                        {
-                            break;
-                        }
-                    }
-
-                    // Then handle spatial_ids
-                    match format {
-                        OutputFormat::SingleId => {
-                            let mut spatial_ids = Vec::new();
-                            for flex_id in flex_ids {
-                                for single_id in flex_id.single_ids() {
+                                let mut spatial_ids = Vec::new();
+                                for flex_id in flex_ids {
                                     if let Some(left) = limit_left.as_mut() {
                                         if *left == 0 {
                                             break;
                                         }
                                         *left -= 1;
                                     }
-                                    spatial_ids.push(RawSingleId {
-                                        z: single_id.z(),
-                                        f: single_id.f(),
-                                        x: single_id.x(),
-                                        y: single_id.y(),
+                                    let range_id = RangeId::from(&flex_id);
+                                    spatial_ids.push(RawRangeId {
+                                        z: range_id.z(),
+                                        f: range_id.f(),
+                                        x: range_id.x(),
+                                        y: range_id.y(),
                                     });
                                 }
-                            }
-                            if !spatial_ids.is_empty() {
-                                let ev = StreamEventSingle::Data(StreamDataEventSingle {
-                                    value_ref,
-                                    spatial_ids,
-                                });
-                                let str = serde_json::to_string(&ev).unwrap() + "\n";
-                                if out_sender.send(Ok(str)).await.is_err() {
-                                    break;
-                                }
-                            }
-                        }
-                        OutputFormat::RangeId => {
-                            let mut spatial_ids = Vec::new();
-                            for flex_id in flex_ids {
-                                if let Some(left) = limit_left.as_mut() {
-                                    if *left == 0 {
+                                if !spatial_ids.is_empty() {
+                                    let ev = StreamEventRange::Data(StreamDataEventRange {
+                                        value_ref,
+                                        spatial_ids,
+                                    });
+                                    let str = serde_json::to_string(&ev).unwrap() + "\n";
+                                    if out_sender.send(Ok(str)).await.is_err() {
                                         break;
                                     }
-                                    *left -= 1;
-                                }
-                                let range_id = RangeId::from(&flex_id);
-                                spatial_ids.push(RawRangeId {
-                                    z: range_id.z(),
-                                    f: range_id.f(),
-                                    x: range_id.x(),
-                                    y: range_id.y(),
-                                });
-                            }
-                            if !spatial_ids.is_empty() {
-                                let ev = StreamEventRange::Data(StreamDataEventRange {
-                                    value_ref,
-                                    spatial_ids,
-                                });
-                                let str = serde_json::to_string(&ev).unwrap() + "\n";
-                                if out_sender.send(Ok(str)).await.is_err() {
-                                    break;
                                 }
                             }
-                        }
-                        OutputFormat::FlexId => {
-                            let mut spatial_ids = Vec::new();
-                            for flex_id in flex_ids {
-                                if let Some(left) = limit_left.as_mut() {
-                                    if *left == 0 {
+                            OutputFormat::FlexId => {
+                                let mut spatial_ids = Vec::new();
+                                for flex_id in flex_ids {
+                                    if let Some(left) = limit_left.as_mut() {
+                                        if *left == 0 {
+                                            break;
+                                        }
+                                        *left -= 1;
+                                    }
+                                    spatial_ids.push(RawFlexId {
+                                        f_zoomlevel: flex_id.f_zoomlevel(),
+                                        f_index: flex_id.f_index(),
+                                        x_zoomlevel: flex_id.x_zoomlevel(),
+                                        x_index: flex_id.x_index(),
+                                        y_zoomlevel: flex_id.y_zoomlevel(),
+                                        y_index: flex_id.y_index(),
+                                    });
+                                }
+                                if !spatial_ids.is_empty() {
+                                    let ev = StreamEventFlex::Data(StreamDataEventFlex {
+                                        value_ref,
+                                        spatial_ids,
+                                    });
+                                    let str = serde_json::to_string(&ev).unwrap() + "\n";
+                                    if out_sender.send(Ok(str)).await.is_err() {
                                         break;
                                     }
-                                    *left -= 1;
-                                }
-                                spatial_ids.push(RawFlexId {
-                                    f_zoomlevel: flex_id.f_zoomlevel(),
-                                    f_index: flex_id.f_index(),
-                                    x_zoomlevel: flex_id.x_zoomlevel(),
-                                    x_index: flex_id.x_index(),
-                                    y_zoomlevel: flex_id.y_zoomlevel(),
-                                    y_index: flex_id.y_index(),
-                                });
-                            }
-                            if !spatial_ids.is_empty() {
-                                let ev = StreamEventFlex::Data(StreamDataEventFlex {
-                                    value_ref,
-                                    spatial_ids,
-                                });
-                                let str = serde_json::to_string(&ev).unwrap() + "\n";
-                                if out_sender.send(Ok(str)).await.is_err() {
-                                    break;
                                 }
                             }
                         }
                     }
-                }
-                Err(e) => {
-                    let _ = out_sender.send(Err(e)).await;
-                    break;
+                    Err(e) => {
+                        let _ = out_sender.send(Err(e)).await;
+                        break;
+                    }
                 }
             }
         }
-    });
+        .instrument(span),
+    );
 
     Ok(ReceiverStream::new(out_receiver))
 }

@@ -7,10 +7,11 @@ pub async fn remove(app_state: &AppState, db_name: &str, table_name: &str) -> Re
 
     let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
-        let _guard = span.enter();
-        app_state
-            .db
-            .write(|db| db.table_remove(&db_name, &table_name))
+        span.in_scope(|| {
+            app_state
+                .db
+                .write(|db| db.table_remove(&db_name, &table_name))
+        })
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?

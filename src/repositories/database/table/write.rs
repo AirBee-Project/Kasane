@@ -6,7 +6,7 @@ use crate::{
 
 impl<'a> KasaneDbWrite<'a> {
     /// Tableの情報を取得する
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
     pub fn table_info(&self, db_name: &str, table_name: &str) -> Result<Option<Table>, AppError> {
         if db_name.is_empty() {
             return Ok(None);
@@ -47,7 +47,7 @@ impl<'a> KasaneDbWrite<'a> {
     }
 
     /// Tableを作成する
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
     pub fn table_create(
         &mut self,
         db_name: &str,
@@ -155,7 +155,7 @@ impl<'a> KasaneDbWrite<'a> {
     }
 
     /// Tableの名前や制約を変更する。
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
     pub fn table_update(
         &mut self,
         db_name: &str,
@@ -409,7 +409,7 @@ impl<'a> KasaneDbWrite<'a> {
     }
 
     /// Tableを削除する。
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
     pub fn table_remove(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError> {
         let table = match self.table_info(db_name, table_name)? {
             Some(t) => t,

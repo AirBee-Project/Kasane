@@ -274,18 +274,18 @@ pub async fn execute(
     // LMDB 読み取りと演算はいずれも同期ブロッキング処理のため、async ワーカーを塞がない。
     let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || -> Result<GetDataResponse, AppError> {
-        let _guard = span.enter();
-        let tables = tracing::info_span!("resolve_tables")
-            .in_scope(|| resolve_tables(&app_state, &request.query))?;
-        let value_type = request
-            .query
-            .resolve_value_type(&tables, request.value_type)?;
+        span.in_scope(|| {
+            let tables = resolve_tables(&app_state, &request.query)?;
+            let value_type = request
+                .query
+                .resolve_value_type(&tables, request.value_type)?;
 
-        // 作業木は単一の値型で組まれるため、ここで値型ごとに単型化する。
-        // Enum は格納こそ ID だが、クエリ上は選択肢の文字列（String）として扱う。
-        for_value_type!(
-            value_type, run, &app_state, &request, &tables, format, limit
-        )
+            // 作業木は単一の値型で組まれるため、ここで値型ごとに単型化する。
+            // Enum は格納こそ ID だが、クエリ上は選択肢の文字列（String）として扱う。
+            for_value_type!(
+                value_type, run, &app_state, &request, &tables, format, limit
+            )
+        })
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?
@@ -311,8 +311,7 @@ fn run<V: Value>(
         return data_response::build(empty, format, limit, |v| Ok(v.to_json()));
     }
 
-    let ast = tracing::info_span!("query_translate")
-        .in_scope(|| request.query.translate::<V>(app_state, tables))?;
+    let ast = request.query.translate::<V>(app_state, tables)?;
     tracing::debug!(
         "Executing query over {} source table(s), {} target region(s)",
         tables.len(),
@@ -321,16 +320,15 @@ fn run<V: Value>(
 
     // 対象領域をまとめて1回だけ評価し、結果を要求空間IDで絞る。
     // 空間ID1件ずつ `get()` を回すとクエリが件数分再実行されてしまう。
-    let optimized = tracing::info_span!("query_optimize").in_scope(|| ast.optimize());
-    let cells = tracing::info_span!("query_execute")
-        .in_scope(|| optimized.run_on_subset(bounds))
+    let optimized = ast.optimize();
+    let cells = optimized
+        .run_on_subset(bounds)
         .map_err(AppError::LogicError)?
         .into_iter()
         .filter(|(flex_id, _)| targets.get(flex_id).next().is_some());
 
-    let by_value = tracing::info_span!("group_by_value").in_scope(|| group_by_value(cells, limit));
-    tracing::info_span!("data_response::build")
-        .in_scope(|| data_response::build(by_value, format, limit, |v| Ok(v.to_json())))
+    let by_value = group_by_value(cells, limit);
+    data_response::build(by_value, format, limit, |v| Ok(v.to_json()))
 }
 
 /// セル列を値ごとにグループ化する（レスポンスは値辞書 + 空間ID群の形）。

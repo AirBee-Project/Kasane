@@ -6,7 +6,7 @@ use crate::{
 };
 
 /// 値が存在しないIDにのみ書き込む（Upsert）
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn upsert(
     app_state: &AppState,
     db_name: &str,
@@ -16,25 +16,19 @@ pub async fn upsert(
     zoom_level_policy: &ZoomLevelPolicy,
 ) -> Result<(), AppError> {
     // 失敗し得るユーザ入力検証はバッチ投入前に済ませる（insert と同様）。
-    let table = tracing::info_span!("table_info")
-        .in_scope(|| app_state.db.read(|r| r.table_info(db_name, table_name)))?
+    let table = app_state
+        .db
+        .read(|r| r.table_info(db_name, table_name))?
         .ok_or_else(|| AppError::TableNotFound {
             name: table_name.to_string(),
         })?;
 
-    let value = tracing::info_span!("interpret_value")
-        .in_scope(|| interpret_value(table.data_type, table.constraints.as_ref(), value))?;
+    let value = interpret_value(table.data_type, table.constraints.as_ref(), value)?;
 
-    let ids = tracing::info_span!("process_spatial_ids")
-        .in_scope(|| process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy))?;
+    let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
 
-    use tracing::Instrument;
-    async {
-        app_state
-            .db
-            .batch_data_upsert(table.id, table.data_type, ids, value)
-            .await
-    }
-    .instrument(tracing::info_span!("batch_data_upsert_wait"))
-    .await
+    app_state
+        .db
+        .batch_data_upsert(table.id, table.data_type, ids, value)
+        .await
 }

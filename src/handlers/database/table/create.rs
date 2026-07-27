@@ -31,7 +31,7 @@ use crate::{
     security(("bearer_auth" = [])),
     tag = "Tables"
 )]
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(skip_all, fields(db_name = %db_name))]
 pub async fn table_create(
     Path(db_name): Path<String>,
     State(app_state): State<AppState>,

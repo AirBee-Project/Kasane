@@ -4,7 +4,7 @@ use heed::BytesDecode;
 
 impl<'a> KasaneDbRead<'a> {
     /// Tableの情報を取得する
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
     pub fn table_info(&self, db_name: &str, table_name: &str) -> Result<Option<Table>, AppError> {
         if db_name.is_empty() {
             return Ok(None);
@@ -35,7 +35,7 @@ impl<'a> KasaneDbRead<'a> {
     }
 
     /// Tableの一覧を取得する
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, fields(db_name = %db_name))]
     pub fn table_list(&self, db_name: &str) -> Result<Vec<Table>, AppError> {
         if db_name.is_empty() {
             return Err(AppError::DatabaseNotFound {

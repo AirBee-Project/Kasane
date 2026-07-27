@@ -70,7 +70,7 @@ pub fn dummy_verify_password(password: &str) {
 }
 
 /// 指定ユーザーの最新メタデータ（UUID・トークン世代）を読み込み、JWT を発行する。
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(skip_all, fields(username = %username))]
 pub fn generate_jwt(app_state: &AppState, username: &str) -> Result<String, AppError> {
     let meta = app_state
         .db

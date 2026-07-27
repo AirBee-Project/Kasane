@@ -46,8 +46,7 @@ pub async fn create(app_state: &AppState, name: &str) -> Result<DatabaseInfoResp
 
     let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
-        let _guard = span.enter();
-        app_state.db.write(|db| db.database_create(&name))
+        span.in_scope(|| app_state.db.write(|db| db.database_create(&name)))
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?
@@ -82,10 +81,11 @@ pub async fn rename(app_state: &AppState, name: &str, new_name: &str) -> Result<
 
     let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
-        let _guard = span.enter();
-        app_state
-            .db
-            .write(|db| db.database_rename(&name, &new_name))
+        span.in_scope(|| {
+            app_state
+                .db
+                .write(|db| db.database_rename(&name, &new_name))
+        })
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?
@@ -103,10 +103,11 @@ pub async fn copy(
 
     let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
-        let _guard = span.enter();
-        app_state
-            .db
-            .write(|db| db.database_copy(&name, &copy_name, user_id))
+        span.in_scope(|| {
+            app_state
+                .db
+                .write(|db| db.database_copy(&name, &copy_name, user_id))
+        })
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?
