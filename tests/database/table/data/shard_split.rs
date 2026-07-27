@@ -1,6 +1,6 @@
 //! 動的シャード分割のエンドツーエンド検証。
 //!
-//! 閾値 `MAX_FLEX_ID_PER_SHARD`(=4096) を超える数の互いに素なセルを挿入し、
+//! 閾値 `MAX_FLEX_ID_PER_SHARD` を超える数の互いに素なセルを挿入し、
 //! 1) 実際に分割が起きてポインタノードが生成されること、
 //! 2) 分割後も全件が読み戻せること、
 //! 3) `table_count` が全件と一致すること、を直接確認する。
@@ -20,7 +20,7 @@ fn dynamic_shard_splits_and_reads_back() {
     let db = initialize_database(tmp.path().to_str().unwrap());
     let table_id = TableId(uuid::Uuid::now_v7());
 
-    // 4096 を超える 5000 個の互いに素なセルを上半球(f=0)へ挿入する。
+    // 閾値を超える数の互いに素なセルを上半球(f=0)へ挿入する。
     // x を 4 間隔にして兄弟マージを防ぎ、各セルが独立リーフになるようにする。
     let n: u32 = 5000;
     {

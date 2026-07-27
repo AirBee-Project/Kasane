@@ -32,7 +32,7 @@ fn value_filter_eq_and_range_after_split() {
     let table_id = TableId(uuid::Uuid::now_v7());
     let dt = TableDataType::Int;
 
-    // 分割閾値(4096)を超える 5000 セルを、各々別の値で挿入する（高カーディナリティ数値）。
+    // 分割閾値を超える数のセルを、各々別の値で挿入する（高カーディナリティ数値）。
     let n: i32 = 5000;
     {
         let wtxn = db.env.write_txn().unwrap();

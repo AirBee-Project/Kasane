@@ -41,7 +41,7 @@ impl XorShift {
 
 const Z: u8 = 20;
 const F: i32 = 0;
-/// 66*66 = 4356 セル > MAX(4096)。全セル挿入で必ず分割が起きる。
+/// 66*66 = 4356 セル。`MAX_FLEX_ID_PER_SHARD` を超えるので全セル挿入で必ず分割が起きる。
 const W: u32 = 66;
 const H: u32 = 66;
 
