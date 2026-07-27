@@ -1,8 +1,5 @@
 use std::{net::SocketAddr, sync::Arc};
 
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
 use clap::Parser;
 use kasane::{AppState, auth_cache::AuthCache, db_init, kasane};
 

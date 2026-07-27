@@ -9,7 +9,7 @@ pub fn init_telemetry() -> Option<opentelemetry_sdk::trace::SdkTracerProvider> {
     // ログレベルのフィルタリング。デフォルトでアプリケーションとtower_http, OTelミドルウェアを出力対象にする
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         EnvFilter::new(
-            "info,kasane=info,tower_http=info,axum_tracing_opentelemetry=info,otel::tracing=info",
+            "info,kasane=info,tower_http=info,axum_tracing_opentelemetry=error,otel::tracing=info",
         )
     });
 
@@ -17,10 +17,7 @@ pub fn init_telemetry() -> Option<opentelemetry_sdk::trace::SdkTracerProvider> {
     let otlp_endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok();
 
     let (tracer, sdk_provider) = if let Some(endpoint) = otlp_endpoint {
-        use opentelemetry_otlp::{SpanExporter, WithExportConfig, WithHttpConfig, WithTonicConfig};
-
-        let protocol = std::env::var("OTEL_EXPORTER_OTLP_PROTOCOL")
-            .unwrap_or_else(|_| "http/protobuf".to_string());
+        use opentelemetry_otlp::{SpanExporter, WithExportConfig, WithHttpConfig};
 
         let mut http_headers = std::collections::HashMap::new();
         if let Ok(header_str) = std::env::var("OTEL_EXPORTER_OTLP_HEADERS") {
@@ -38,41 +35,12 @@ pub fn init_telemetry() -> Option<opentelemetry_sdk::trace::SdkTracerProvider> {
             }
         }
 
-        let exporter = if protocol == "grpc" {
-            let mut metadata = tonic::metadata::MetadataMap::new();
-            for (k, v) in &http_headers {
-                let key_result = k
-                    .to_lowercase()
-                    .parse::<tonic::metadata::MetadataKey<tonic::metadata::Ascii>>();
-                let val_result =
-                    v.parse::<tonic::metadata::MetadataValue<tonic::metadata::Ascii>>();
-
-                match (key_result, val_result) {
-                    (Ok(key), Ok(val)) => {
-                        metadata.insert(key, val);
-                    }
-                    (Err(e), _) => {
-                        tracing::warn!("Failed to parse gRPC header key '{}': {}", k, e);
-                    }
-                    (_, Err(e)) => {
-                        tracing::warn!("Failed to parse gRPC header value for key '{}': {}", k, e);
-                    }
-                }
-            }
-            SpanExporter::builder()
-                .with_tonic()
-                .with_endpoint(&endpoint)
-                .with_metadata(metadata)
-                .build()
-                .expect("OTLP(gRPC) Exporterの構築に失敗しました")
-        } else {
-            SpanExporter::builder()
-                .with_http()
-                .with_endpoint(&endpoint)
-                .with_headers(http_headers)
-                .build()
-                .expect("OTLP(HTTP) Exporterの構築に失敗しました")
-        };
+        let exporter = SpanExporter::builder()
+            .with_http()
+            .with_endpoint(&endpoint)
+            .with_headers(http_headers)
+            .build()
+            .expect("OTLP(HTTP) Exporterの構築に失敗しました");
 
         let mut attributes = vec![opentelemetry::KeyValue::new(
             "service.namespace",
