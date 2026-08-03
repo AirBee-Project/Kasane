@@ -154,7 +154,7 @@
           "Tables"
         ],
         "summary": "テーブルの作成",
-        "description": "指定したデータベース内に新しいテーブルを作成します。この操作はデータベースのWrite以上の権限が必要です。",
+        "description": "指定したデータベース内に新しいテーブルを作成します。この操作はデータベースのManage以上の権限が必要です。",
         "operationId": "table_create",
         "parameters": [
           {
@@ -252,7 +252,7 @@
           "Tables"
         ],
         "summary": "テーブルの削除",
-        "description": "指定したテーブルを削除します。この操作はデータベースのWrite以上の権限が必要です。",
+        "description": "指定したテーブルを削除します。この操作はデータベースのManage以上の権限が必要です。",
         "operationId": "remove_table",
         "parameters": [
           {
@@ -920,7 +920,7 @@
             "description": "リクエストが不正（パラメータエラー、または不正なデータベース名）"
           },
           "403": {
-            "description": "権限不足（コピー元DBのRead権限がない場合）"
+            "description": "権限不足（Global Admin権限がない場合）"
           },
           "404": {
             "description": "コピー元データベースが存在しない"
@@ -1587,6 +1587,24 @@
                   "format": "int32",
                   "example": 412905,
                   "minimum": 0
+                },
+                "i": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "example": 3600,
+                  "minimum": 1
+                },
+                "t": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "example": 1,
+                  "minimum": 0
                 }
               }
             }
@@ -1656,6 +1674,30 @@
                     412900,
                     412907
                   ]
+                },
+                "i": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "example": 3600,
+                  "minimum": 1
+                },
+                "t": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0
+                  },
+                  "example": [
+                    0,
+                    5
+                  ]
                 }
               }
             }
@@ -1706,6 +1748,24 @@
                   "type": "integer",
                   "format": "int32",
                   "example": 412905,
+                  "minimum": 0
+                },
+                "i": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "example": 3600,
+                  "minimum": 1
+                },
+                "t": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "example": 1,
                   "minimum": 0
                 }
               }
@@ -1900,6 +1960,24 @@
             "type": "integer",
             "format": "int32",
             "example": 412905,
+            "minimum": 0
+          },
+          "i": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "example": 3600,
+            "minimum": 1
+          },
+          "t": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "example": 1,
             "minimum": 0
           }
         }
@@ -2577,6 +2655,30 @@
               412900,
               412907
             ]
+          },
+          "i": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "example": 3600,
+            "minimum": 1
+          },
+          "t": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            },
+            "example": [
+              0,
+              5
+            ]
           }
         }
       },
@@ -2629,6 +2731,24 @@
             "type": "integer",
             "format": "int32",
             "example": 412905,
+            "minimum": 0
+          },
+          "i": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "example": 3600,
+            "minimum": 1
+          },
+          "t": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "example": 1,
             "minimum": 0
           }
         }

@@ -13,6 +13,12 @@ pub struct RawSingleId {
     pub x: u32,
     #[schema(example = 412905)]
     pub y: u32,
+    #[schema(example = 3600, minimum = 1)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub i: Option<u64>,
+    #[schema(example = 1)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub t: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Clone)]
@@ -26,6 +32,12 @@ pub struct RawRangeId {
     pub x: [u32; 2],
     #[schema(example = json!([412900,412907]))]
     pub y: [u32; 2],
+    #[schema(example = 3600, minimum = 1)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub i: Option<u64>,
+    #[schema(example = json!([0, 5]))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub t: Option<[u64; 2]>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Clone)]
@@ -44,6 +56,12 @@ pub struct RawFlexId {
     pub y_zoomlevel: u8,
     #[schema(example = 412905)]
     pub y_index: u32,
+    #[schema(example = 3600, minimum = 1)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub i: Option<u64>,
+    #[schema(example = 1)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub t: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Clone)]

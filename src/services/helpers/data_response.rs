@@ -3,7 +3,7 @@
 //! `search`（格納値をそのまま返す）と `query`（クエリの計算結果を返す）は、値の作り方こそ
 //! 違うものの出力形は同一（値辞書 + 空間ID群）なので、整形はここに一本化する。
 
-use kasane_logic::{FlexId, RangeId};
+use kasane_logic::{FlexId, RangeId, SpatialId as _};
 
 use crate::{
     error::AppError,
@@ -40,11 +40,21 @@ where
                     if !take_one(left) {
                         break;
                     }
+                    let (i, t) = if single_id.is_whole_time() {
+                        (None, None)
+                    } else {
+                        (
+                            Some(single_id.time_interval().seconds()),
+                            Some(single_id.t()),
+                        )
+                    };
                     out.push(RawSingleId {
                         z: single_id.z(),
                         f: single_id.f(),
                         x: single_id.x(),
                         y: single_id.y(),
+                        i,
+                        t,
                     });
                 }
             })?;
@@ -56,11 +66,21 @@ where
                     return;
                 }
                 let range_id = RangeId::from(&flex_id);
+                let (i, t) = if range_id.is_whole_time() {
+                    (None, None)
+                } else {
+                    (
+                        Some(range_id.time_interval().seconds()),
+                        Some(range_id.t()), // RangeId returns [u64; 2] for t()
+                    )
+                };
                 out.push(RawRangeId {
                     z: range_id.z(),
                     f: range_id.f(),
                     x: range_id.x(),
                     y: range_id.y(),
+                    i,
+                    t,
                 });
             })?;
             GetDataResponse::Range(GetDataResponseRange { dictionary, data })
@@ -70,6 +90,11 @@ where
                 if !take_one(left) {
                     return;
                 }
+                let (i, t) = if flex_id.is_whole_time() {
+                    (None, None)
+                } else {
+                    (Some(flex_id.time_interval().seconds()), Some(flex_id.t()))
+                };
                 out.push(RawFlexId {
                     f_zoomlevel: flex_id.f_zoomlevel(),
                     f_index: flex_id.f_index(),
@@ -77,6 +102,8 @@ where
                     x_index: flex_id.x_index(),
                     y_zoomlevel: flex_id.y_zoomlevel(),
                     y_index: flex_id.y_index(),
+                    i,
+                    t,
                 });
             })?;
             GetDataResponse::Flex(GetDataResponseFlex { dictionary, data })

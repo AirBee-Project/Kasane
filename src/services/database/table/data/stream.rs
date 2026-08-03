@@ -11,7 +11,7 @@ use crate::{
     },
     services::helpers::{spatial_ids::process_spatial_ids, value::restore_value},
 };
-use kasane_logic::{FlexId, RangeId};
+use kasane_logic::{FlexId, RangeId, SpatialId as _};
 use rustc_hash::FxHashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use tokio::sync::mpsc;
@@ -118,11 +118,21 @@ pub async fn get_stream(
                                             }
                                             *left -= 1;
                                         }
+                                        let (i, t) = if single_id.is_whole_time() {
+                                            (None, None)
+                                        } else {
+                                            (
+                                                Some(single_id.time_interval().seconds()),
+                                                Some(single_id.t()),
+                                            )
+                                        };
                                         spatial_ids.push(RawSingleId {
                                             z: single_id.z(),
                                             f: single_id.f(),
                                             x: single_id.x(),
                                             y: single_id.y(),
+                                            i,
+                                            t,
                                         });
                                     }
                                 }
@@ -147,11 +157,21 @@ pub async fn get_stream(
                                         *left -= 1;
                                     }
                                     let range_id = RangeId::from(&flex_id);
+                                    let (i, t) = if range_id.is_whole_time() {
+                                        (None, None)
+                                    } else {
+                                        (
+                                            Some(range_id.time_interval().seconds()),
+                                            Some(range_id.t()),
+                                        )
+                                    };
                                     spatial_ids.push(RawRangeId {
                                         z: range_id.z(),
                                         f: range_id.f(),
                                         x: range_id.x(),
                                         y: range_id.y(),
+                                        i,
+                                        t,
                                     });
                                 }
                                 if !spatial_ids.is_empty() {
@@ -174,6 +194,11 @@ pub async fn get_stream(
                                         }
                                         *left -= 1;
                                     }
+                                    let (i, t) = if flex_id.is_whole_time() {
+                                        (None, None)
+                                    } else {
+                                        (Some(flex_id.time_interval().seconds()), Some(flex_id.t()))
+                                    };
                                     spatial_ids.push(RawFlexId {
                                         f_zoomlevel: flex_id.f_zoomlevel(),
                                         f_index: flex_id.f_index(),
@@ -181,6 +206,8 @@ pub async fn get_stream(
                                         x_index: flex_id.x_index(),
                                         y_zoomlevel: flex_id.y_zoomlevel(),
                                         y_index: flex_id.y_index(),
+                                        i,
+                                        t,
                                     });
                                 }
                                 if !spatial_ids.is_empty() {

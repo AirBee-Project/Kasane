@@ -41,6 +41,8 @@ async fn test_table_data_remove_single_id() {
             f: 0,
             x: 931386,
             y: 412905,
+            i: None,
+            t: None,
         },
     );
 
@@ -162,6 +164,8 @@ async fn test_table_data_remove_partial_overlap() {
             f: 0,
             x: 11,
             y: 10,
+            i: None,
+            t: None,
         },
     );
 }

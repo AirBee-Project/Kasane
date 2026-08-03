@@ -94,6 +94,9 @@ pub enum AppError {
     Auth(AuthError),
     InternalError(String),
     Conflict(String),
+    InvalidSpatialId {
+        reason: String,
+    },
 
     DatabaseNotFound {
         name: String,
@@ -143,6 +146,7 @@ impl AppError {
             AppError::Auth(e) => e.status(),
             AppError::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             AppError::Conflict(_) => StatusCode::CONFLICT,
+            AppError::InvalidSpatialId { .. } => StatusCode::BAD_REQUEST,
             AppError::DatabaseNotFound { .. } => StatusCode::NOT_FOUND,
             AppError::DatabaseAlreadyExists { .. } => StatusCode::CONFLICT,
             AppError::TableNotFound { .. } => StatusCode::NOT_FOUND,
@@ -165,6 +169,7 @@ impl AppError {
             AppError::Auth(e) => e.code(),
             AppError::InternalError(_) => "internal_error",
             AppError::Conflict(_) => "conflict",
+            AppError::InvalidSpatialId { .. } => "invalid_spatial_id",
             AppError::DatabaseNotFound { .. } => "database_not_found",
             AppError::DatabaseAlreadyExists { .. } => "database_already_exists",
             AppError::TableNotFound { .. } => "table_not_found",
@@ -188,6 +193,9 @@ impl fmt::Display for AppError {
             AppError::Auth(e) => write!(f, "Authentication error: {}", e),
             AppError::InternalError(msg) => write!(f, "Internal error: {}", msg),
             AppError::Conflict(msg) => write!(f, "Conflict error: {}", msg),
+            AppError::InvalidSpatialId { reason } => {
+                write!(f, "Invalid Spatial ID: {}", reason)
+            }
             AppError::DatabaseNotFound { name } => {
                 write!(f, "Database '{}' not found", name)
             }
