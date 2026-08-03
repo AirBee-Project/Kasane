@@ -185,7 +185,7 @@ pub async fn database_rename(
     responses(
         (status = 201, body = DatabaseInfoResponse),
         (status = 400, description = "リクエストが不正（パラメータエラー、または不正なデータベース名）"),
-        (status = 403, description = "権限不足（コピー元DBのRead権限がない場合）"),
+        (status = 403, description = "権限不足（Global Admin権限がない場合）"),
         (status = 404, description = "コピー元データベースが存在しない"),
         (status = 409, description = "コピー先データベース、またはコピー元と同名のデータベースがすでに存在する")
     ),
