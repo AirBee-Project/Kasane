@@ -1594,7 +1594,7 @@
                     "null"
                   ],
                   "format": "int64",
-                  "example": 3600,
+                  "example": 1,
                   "minimum": 1
                 },
                 "t": {
@@ -1968,7 +1968,7 @@
               "null"
             ],
             "format": "int64",
-            "example": 3600,
+            "example": 1,
             "minimum": 1
           },
           "t": {

@@ -200,7 +200,7 @@ fn descend_range(
     range: &kasane_logic::RangeId,
     out: &mut Vec<FlexId>,
 ) -> Result<(), AppError> {
-    let Some(bytes) = tables_data.get(txn, &(table_id, region.clone()))? else {
+    let Some(bytes) = tables_data.get(txn, &(table_id, region))? else {
         // 未作成領域＝データ無し。読み取りでは辿る必要がない。
         return Ok(());
     };
@@ -231,7 +231,7 @@ fn descend_batched<'a>(
     if ids.is_empty() {
         return Ok(());
     }
-    match tables_data.get(txn, &(table_id, region.clone()))? {
+    match tables_data.get(txn, &(table_id, region))? {
         // 未作成リーフ or 実データリーフ → ここへ到達した全 flex_id が担当。
         None => {
             out.entry(region)
@@ -279,7 +279,7 @@ pub fn find_parent_pointer(
 
     let mut cur = root;
     loop {
-        match tables_data.get(txn, &(table_id, cur.clone()))? {
+        match tables_data.get(txn, &(table_id, cur))? {
             Some(bytes) => match ShardEntry::child_pointers(bytes)? {
                 Some(children) => {
                     // region が直接の子なら、cur が親。
@@ -289,7 +289,7 @@ pub fn find_parent_pointer(
                     // region を含む子へ降りる（region ⊆ child）。
                     match children
                         .into_iter()
-                        .find(|c| c.intersection(region) == Some(region.clone()))
+                        .find(|c| c.intersection(region) == Some(*region))
                     {
                         Some(child) => cur = child,
                         None => return Ok(None),
@@ -325,7 +325,7 @@ pub fn load_leaf_archived<'txn>(
     table_id: TableId,
     region: &FlexId,
 ) -> Result<Option<ArchivedSpatialIdMap<'txn>>, AppError> {
-    match tables_data.get(txn, &(table_id, region.clone()))? {
+    match tables_data.get(txn, &(table_id, *region))? {
         Some(entry) => match leaf_payload(entry)? {
             // 自分自身の to_bytes が書いた正当なバイト列。
             // 形式バージョンだけは検証されるので、古い形式のデータは黙って誤読されず
@@ -349,7 +349,7 @@ pub fn load_leaf_map(
     table_id: TableId,
     region: &FlexId,
 ) -> Result<SpatialIdMap<Vec<u8>>, AppError> {
-    match tables_data.get(txn, &(table_id, region.clone()))? {
+    match tables_data.get(txn, &(table_id, *region))? {
         Some(bytes) => match ShardEntry::decode(bytes)? {
             ShardEntry::Leaf(map_bytes) => {
                 unsafe { SpatialIdMap::<Vec<u8>>::from_bytes(&map_bytes) }
@@ -359,6 +359,6 @@ pub fn load_leaf_map(
                 "routed to a pointer node".to_string(),
             )),
         },
-        None => Ok(SpatialIdMap::new_in_shard(region.clone())),
+        None => Ok(SpatialIdMap::new_in_shard(*region)),
     }
 }

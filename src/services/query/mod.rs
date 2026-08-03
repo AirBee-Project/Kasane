@@ -8,7 +8,7 @@ pub mod value;
 
 use std::collections::{BTreeMap, HashMap};
 
-use kasane_logic::{RangeId, Source};
+use kasane_logic::RangeId;
 
 use crate::{
     AppState,
@@ -19,9 +19,8 @@ use crate::{
             Table, TableDataType,
             data::{GetDataQuery, GetDataResponse, OutputFormat},
         },
-        query::{ExecuteQueryRequest, FilterCondition, QueryNode},
+        query::{ExecuteQueryRequest, QueryNode},
     },
-    repositories::database::table::data::query_source::TableSource,
     services::helpers::{data_response, spatial_ids::to_spatial_id_set},
 };
 
