@@ -579,7 +579,7 @@ paths:
       tags:
       - Databases
       summary: データベースのコピー
-      description: 指定したデータベースをコピーします。コピー元データベースに対するRead権限が必要です。
+      description: 指定したデータベースをコピーします。この操作はGlobal Admin権限が必要です。
       operationId: database_copy
       parameters:
       - name: name
@@ -611,7 +611,8 @@ paths:
         '409':
           description: コピー先データベース、またはコピー元と同名のデータベースがすでに存在する
       security:
-      - bearer_auth: []
+      - bearer_auth:
+        - global_admin
   /query:
     post:
       tags:

@@ -7,7 +7,7 @@
 
 use heed::types::Bytes;
 use heed::{Database, RoTxn, WithoutTls};
-use kasane_logic::{ArchivedMap, FlexId, SpatialIdMap};
+use kasane_logic::{ArchivedSpatialIdMap, FlexId, SpatialIdMap};
 
 use crate::db_init::TableIdAndFlexId;
 use crate::error::AppError;
@@ -324,14 +324,14 @@ pub fn load_leaf_archived<'txn>(
     txn: &'txn RoTxn<WithoutTls>,
     table_id: TableId,
     region: &FlexId,
-) -> Result<Option<ArchivedMap<'txn>>, AppError> {
+) -> Result<Option<ArchivedSpatialIdMap<'txn>>, AppError> {
     match tables_data.get(txn, &(table_id, region.clone()))? {
         Some(entry) => match leaf_payload(entry)? {
             // 自分自身の to_bytes が書いた正当なバイト列。
             // 形式バージョンだけは検証されるので、古い形式のデータは黙って誤読されず
             // ここでエラーになる。
             Some(map_bytes) => Ok(Some(
-                unsafe { ArchivedMap::access(map_bytes) }
+                unsafe { ArchivedSpatialIdMap::access(map_bytes) }
                     .map_err(|e| AppError::InternalError(format!("leaf format: {e}")))?,
             )),
             None => Err(AppError::InternalError(

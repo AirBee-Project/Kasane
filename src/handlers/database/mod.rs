@@ -174,7 +174,7 @@ pub async fn database_rename(
 
 /// データベースのコピー
 ///
-/// 指定したデータベースをコピーします。コピー元データベースに対するRead権限が必要です。
+/// 指定したデータベースをコピーします。この操作はGlobal Admin権限が必要です。
 #[utoipa::path(
     post,
     path = "/databases/{name}/copy",
@@ -189,7 +189,7 @@ pub async fn database_rename(
         (status = 404, description = "コピー元データベースが存在しない"),
         (status = 409, description = "コピー先データベース、またはコピー元と同名のデータベースがすでに存在する")
     ),
-    security(("bearer_auth" = [])),
+    security(("bearer_auth" = ["global_admin"])),
     tag = "Databases"
 )]
 #[tracing::instrument(skip_all)]
@@ -199,13 +199,9 @@ pub async fn database_copy(
     Path(db_name): Path<String>,
     Json(request): Json<CopyDatabaseRequest>,
 ) -> Result<Response, AppError> {
-    crate::middleware::auth::check_privilege(
-        &app_state,
-        &auth_user,
-        &db_name,
-        crate::models::users::UserRole::Read,
-    )
-    .await?;
+    if !auth_user.user.is_global_admin {
+        return Err(AuthError::RequiresGlobalAdmin.into());
+    }
 
     if db_name == request.copy_name {
         return Err(AppError::Conflict(
