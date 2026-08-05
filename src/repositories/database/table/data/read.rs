@@ -19,9 +19,6 @@ type ValueMap = FxHashMap<Vec<u8>, Vec<FlexId>>;
 /// クエリ数で判定すると単一スレッドに落ちてしまう（実測: 540万セルで 363ms）。
 const DATA_GET_LEAF_PARALLEL_THRESHOLD: usize = 32;
 
-/// `data_get_stream` を Rayon で並列化する基準。
-const DATA_GET_STREAM_PARALLEL_THRESHOLD: usize = 1000;
-
 impl<'a> KasaneDbRead<'a> {
     /// 指定された範囲の空間IDを値ごとにグループ化して返す。
     ///
@@ -144,103 +141,7 @@ impl<'a> KasaneDbRead<'a> {
     }
 }
 
-pub type DataStreamSender = tokio::sync::mpsc::Sender<Result<(Vec<u8>, Vec<FlexId>), AppError>>;
-
 impl<'a> KasaneDbRead<'a> {
-    #[tracing::instrument(skip_all)]
-    pub fn data_get_stream(
-        &self,
-        table_id: TableId,
-        flex_ids: SpatialIdSet,
-        sender: DataStreamSender,
-    ) {
-        let tables_data = self.db.tables_data;
-        let env = self.db.env.clone();
-
-        tokio::task::spawn_blocking(move || {
-            let flex_ids_vec: Vec<FlexId> = flex_ids.flex_ids().collect();
-            if flex_ids_vec.is_empty() {
-                return;
-            }
-
-            // 小規模: 単一スレッドで解決し逐次送信。
-            if flex_ids_vec.len() < DATA_GET_STREAM_PARALLEL_THRESHOLD {
-                let txn = match env.read_txn() {
-                    Ok(txn) => txn,
-                    Err(e) => {
-                        let _ = sender.blocking_send(Err(AppError::InternalError(e.to_string())));
-                        return;
-                    }
-                };
-                let mut local = FxHashMap::default();
-                if let Err(e) = Self::resolve_query_batch(
-                    &tables_data,
-                    &txn,
-                    table_id,
-                    &flex_ids_vec,
-                    &mut local,
-                ) {
-                    let _ = sender.blocking_send(Err(e));
-                    return;
-                }
-                for (val, ids) in local {
-                    if sender.blocking_send(Ok((val, ids))).is_err() {
-                        return; // receiver dropped (limit reached or stream closed)
-                    }
-                }
-                return;
-            }
-
-            use rayon::prelude::*;
-            let chunk_size = flex_ids_vec
-                .len()
-                .div_ceil(rayon::current_num_threads().max(1));
-
-            let partials: Result<Vec<ValueMap>, AppError> = flex_ids_vec
-                .par_chunks(chunk_size.max(1))
-                .map(|chunk| {
-                    let txn = env
-                        .read_txn()
-                        .map_err(|e| AppError::InternalError(e.to_string()))?;
-                    let mut local = ValueMap::default();
-                    Self::resolve_query_batch(&tables_data, &txn, table_id, chunk, &mut local)?;
-                    Ok(local)
-                })
-                .collect();
-
-            match partials {
-                Ok(partials) => {
-                    for partial in partials {
-                        for (val, ids) in partial {
-                            if sender.blocking_send(Ok((val, ids))).is_err() {
-                                return; // receiver dropped
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    let _ = sender.blocking_send(Err(e));
-                }
-            }
-        });
-    }
-
-    /// `queries` 内の各クエリ FlexId をルーティングして解決し、`by_value` へ蓄積する。
-    /// （`data_get_stream` 用。`data_get` はルーティングを 1 回だけ行い葉単位で並列化する。）
-    fn resolve_query_batch(
-        tables_data: &heed::Database<crate::db_init::TableIdAndFlexId, heed::types::Bytes>,
-        txn: &heed::RoTxn<heed::WithoutTls>,
-        table_id: TableId,
-        queries: &[FlexId],
-        by_value: &mut FxHashMap<Vec<u8>, Vec<FlexId>>,
-    ) -> Result<(), AppError> {
-        let by_leaf = shard::route_leaves_batched(tables_data, txn, table_id, queries.iter())?;
-        for (region, queries) in by_leaf {
-            Self::resolve_leaf(tables_data, txn, table_id, &region, &queries, by_value)?;
-        }
-        Ok(())
-    }
-
     #[tracing::instrument(skip_all)]
     pub fn data_filter_eq(
         &'a self,
