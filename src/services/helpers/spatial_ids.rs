@@ -33,6 +33,11 @@ pub fn to_spatial_id_set(ids: &[SpatialId]) -> Result<SpatialIdSet, AppError> {
                 let mut id = SingleId::new(s.z, s.f, s.x, s.y)?;
                 if let Some(i) = s.i {
                     let interval = kasane_logic::Interval::new(i)?;
+                    if !kasane_logic::AllowedIntervals::calendar().contains(interval) {
+                        return Err(AppError::InvalidSpatialId {
+                            reason: format!("Interval {} is not allowed", i),
+                        });
+                    }
                     let t = s.t.ok_or_else(|| AppError::InvalidSpatialId {
                         reason: "t must be provided when i is provided".to_string(),
                     })?;
@@ -48,6 +53,11 @@ pub fn to_spatial_id_set(ids: &[SpatialId]) -> Result<SpatialIdSet, AppError> {
                 let mut id = RangeId::new(r.z, r.f, r.x, r.y)?;
                 if let Some(i) = r.i {
                     let interval = kasane_logic::Interval::new(i)?;
+                    if !kasane_logic::AllowedIntervals::calendar().contains(interval) {
+                        return Err(AppError::InvalidSpatialId {
+                            reason: format!("Interval {} is not allowed", i),
+                        });
+                    }
                     let t = r.t.ok_or_else(|| AppError::InvalidSpatialId {
                         reason: "t must be provided when i is provided".to_string(),
                     })?;
@@ -105,6 +115,11 @@ pub fn process_spatial_ids(
                 let mut id = SingleId::new(single_id.z, single_id.f, single_id.x, single_id.y)?;
                 if let Some(i) = single_id.i {
                     let interval = kasane_logic::Interval::new(i)?;
+                    if !kasane_logic::AllowedIntervals::calendar().contains(interval) {
+                        return Err(AppError::InvalidSpatialId {
+                            reason: format!("Interval {} is not allowed", i),
+                        });
+                    }
                     let t = single_id.t.ok_or_else(|| AppError::InvalidSpatialId {
                         reason: "t must be provided when i is provided".to_string(),
                     })?;
@@ -129,6 +144,11 @@ pub fn process_spatial_ids(
                 let mut id = RangeId::new(range_id.z, range_id.f, range_id.x, range_id.y)?;
                 if let Some(i) = range_id.i {
                     let interval = kasane_logic::Interval::new(i)?;
+                    if !kasane_logic::AllowedIntervals::calendar().contains(interval) {
+                        return Err(AppError::InvalidSpatialId {
+                            reason: format!("Interval {} is not allowed", i),
+                        });
+                    }
                     let t = range_id.t.ok_or_else(|| AppError::InvalidSpatialId {
                         reason: "t must be provided when i is provided".to_string(),
                     })?;

@@ -1541,6 +1541,7 @@
             "type": "array",
             "items": {
               "type": "object",
+              "description": "高さ・経度・緯度・時間の4軸すべてを「ズームレベル + インデックス」で表す時空間ID。\n時間を指定する場合は `t_zoomlevel` と `t_index` を必ず両方指定すること。\n両方省略した場合は「全時間」を表す。",
               "required": [
                 "fZoomlevel",
                 "fIndex",
@@ -1553,6 +1554,7 @@
                 "fZoomlevel": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "高さ方向のズームレベル。",
                   "example": 20,
                   "maximum": 30,
                   "minimum": 0
@@ -1560,11 +1562,13 @@
                 "fIndex": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "高さ方向のインデックス。",
                   "example": 0
                 },
                 "xZoomlevel": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "経度方向のズームレベル。",
                   "example": 20,
                   "maximum": 30,
                   "minimum": 0
@@ -1572,12 +1576,14 @@
                 "xIndex": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "経度方向のインデックス。",
                   "example": 931386,
                   "minimum": 0
                 },
                 "yZoomlevel": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "緯度方向のズームレベル。",
                   "example": 20,
                   "maximum": 30,
                   "minimum": 0
@@ -1585,6 +1591,7 @@
                 "yIndex": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "緯度方向のインデックス。",
                   "example": 412905,
                   "minimum": 0
                 },
@@ -1594,6 +1601,7 @@
                     "null"
                   ],
                   "format": "int32",
+                  "description": "時間軸のズームレベル",
                   "example": 25,
                   "maximum": 35,
                   "minimum": 0
@@ -1604,6 +1612,7 @@
                     "null"
                   ],
                   "format": "int64",
+                  "description": "時間軸のインデックス。",
                   "example": 7,
                   "minimum": 0
                 }
@@ -1627,6 +1636,7 @@
             "type": "array",
             "items": {
               "type": "object",
+              "description": "直方体（範囲）の空間ボクセルを指す時空間ID。\n\n時間を指定する場合は `i` と `t` を必ず両方指定すること。\n両方省略した場合は「全時間」を表す。",
               "required": [
                 "z",
                 "f",
@@ -1637,6 +1647,7 @@
                 "z": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "ズームレベル。",
                   "example": 20,
                   "maximum": 30,
                   "minimum": 0
@@ -1647,6 +1658,7 @@
                     "type": "integer",
                     "format": "int32"
                   },
+                  "description": "高さ方向の範囲 `[min, max]`（両端を含む）。",
                   "example": [
                     0,
                     0
@@ -1659,6 +1671,7 @@
                     "format": "int32",
                     "minimum": 0
                   },
+                  "description": "経度方向の範囲 `[min, max]`（両端を含む）。",
                   "example": [
                     931388,
                     931390
@@ -1671,6 +1684,7 @@
                     "format": "int32",
                     "minimum": 0
                   },
+                  "description": "緯度方向の範囲 `[min, max]`（両端を含む）。",
                   "example": [
                     412900,
                     412907
@@ -1682,6 +1696,7 @@
                     "null"
                   ],
                   "format": "int64",
+                  "description": "時間間隔（単位: 秒）。1970-01-01T00:00:00Z を起点とする。任意の値は指定できず、 次の暦の単位のいずれかのみ指定できる: `1`（秒）、`60`（分）、`3600`（時）、`86400`（日）、`34359738368`（2^35秒、全時間）。",
                   "example": 3600,
                   "minimum": 1
                 },
@@ -1695,6 +1710,7 @@
                     "format": "int64",
                     "minimum": 0
                   },
+                  "description": "時間インデックスの範囲 `[min, max]`（両端を含む、単位は `i` 秒）。",
                   "example": [
                     0,
                     5
@@ -1720,6 +1736,7 @@
             "type": "array",
             "items": {
               "type": "object",
+              "description": "単一の空間ボクセルを指す時空間ID。\n\n時間を指定する場合は `i` と `t` を必ず両方指定すること。\n両方省略した場合は「全時間」を表す。",
               "required": [
                 "z",
                 "f",
@@ -1730,6 +1747,7 @@
                 "z": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "ズームレベル。",
                   "example": 20,
                   "maximum": 30,
                   "minimum": 0
@@ -1737,17 +1755,20 @@
                 "f": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "高さ方向のインデックス。",
                   "example": 0
                 },
                 "x": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "経度方向のインデックス。",
                   "example": 931386,
                   "minimum": 0
                 },
                 "y": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "緯度方向のインデックス。",
                   "example": 412905,
                   "minimum": 0
                 },
@@ -1757,6 +1778,7 @@
                     "null"
                   ],
                   "format": "int64",
+                  "description": "時間間隔（単位: 秒）。1970-01-01T00:00:00Z を起点とする。任意の値は指定できず、 次の暦の単位のいずれかのみ指定できる: `1`（秒）、`60`（分）、`3600`（時）、`86400`（日）、`34359738368`（2^35秒、全時間）。",
                   "example": 3600,
                   "minimum": 1
                 },
@@ -1766,6 +1788,7 @@
                     "null"
                   ],
                   "format": "int64",
+                  "description": "時間インデックス。`t = floor(Unixタイムスタンプ(秒) / i)` で求まる値。",
                   "example": 1,
                   "minimum": 0
                 }
@@ -1916,6 +1939,7 @@
       },
       "FlexId": {
         "type": "object",
+        "description": "高さ・経度・緯度・時間の4軸すべてを「ズームレベル + インデックス」で表す時空間ID。\n時間を指定する場合は `t_zoomlevel` と `t_index` を必ず両方指定すること。\n両方省略した場合は「全時間」を表す。",
         "required": [
           "fZoomlevel",
           "fIndex",
@@ -1928,6 +1952,7 @@
           "fZoomlevel": {
             "type": "integer",
             "format": "int32",
+            "description": "高さ方向のズームレベル。",
             "example": 20,
             "maximum": 30,
             "minimum": 0
@@ -1935,11 +1960,13 @@
           "fIndex": {
             "type": "integer",
             "format": "int32",
+            "description": "高さ方向のインデックス。",
             "example": 0
           },
           "xZoomlevel": {
             "type": "integer",
             "format": "int32",
+            "description": "経度方向のズームレベル。",
             "example": 20,
             "maximum": 30,
             "minimum": 0
@@ -1947,12 +1974,14 @@
           "xIndex": {
             "type": "integer",
             "format": "int32",
+            "description": "経度方向のインデックス。",
             "example": 931386,
             "minimum": 0
           },
           "yZoomlevel": {
             "type": "integer",
             "format": "int32",
+            "description": "緯度方向のズームレベル。",
             "example": 20,
             "maximum": 30,
             "minimum": 0
@@ -1960,6 +1989,7 @@
           "yIndex": {
             "type": "integer",
             "format": "int32",
+            "description": "緯度方向のインデックス。",
             "example": 412905,
             "minimum": 0
           },
@@ -1969,6 +1999,7 @@
               "null"
             ],
             "format": "int32",
+            "description": "時間軸のズームレベル",
             "example": 25,
             "maximum": 35,
             "minimum": 0
@@ -1979,6 +2010,7 @@
               "null"
             ],
             "format": "int64",
+            "description": "時間軸のインデックス。",
             "example": 7,
             "minimum": 0
           }
@@ -2609,6 +2641,7 @@
       },
       "RangeId": {
         "type": "object",
+        "description": "直方体（範囲）の空間ボクセルを指す時空間ID。\n\n時間を指定する場合は `i` と `t` を必ず両方指定すること。\n両方省略した場合は「全時間」を表す。",
         "required": [
           "z",
           "f",
@@ -2619,6 +2652,7 @@
           "z": {
             "type": "integer",
             "format": "int32",
+            "description": "ズームレベル。",
             "example": 20,
             "maximum": 30,
             "minimum": 0
@@ -2629,6 +2663,7 @@
               "type": "integer",
               "format": "int32"
             },
+            "description": "高さ方向の範囲 `[min, max]`（両端を含む）。",
             "example": [
               0,
               0
@@ -2641,6 +2676,7 @@
               "format": "int32",
               "minimum": 0
             },
+            "description": "経度方向の範囲 `[min, max]`（両端を含む）。",
             "example": [
               931388,
               931390
@@ -2653,6 +2689,7 @@
               "format": "int32",
               "minimum": 0
             },
+            "description": "緯度方向の範囲 `[min, max]`（両端を含む）。",
             "example": [
               412900,
               412907
@@ -2664,6 +2701,7 @@
               "null"
             ],
             "format": "int64",
+            "description": "時間間隔（単位: 秒）。1970-01-01T00:00:00Z を起点とする。任意の値は指定できず、 次の暦の単位のいずれかのみ指定できる: `1`（秒）、`60`（分）、`3600`（時）、`86400`（日）、`34359738368`（2^35秒、全時間）。",
             "example": 3600,
             "minimum": 1
           },
@@ -2677,6 +2715,7 @@
               "format": "int64",
               "minimum": 0
             },
+            "description": "時間インデックスの範囲 `[min, max]`（両端を含む、単位は `i` 秒）。",
             "example": [
               0,
               5
@@ -2704,6 +2743,7 @@
       },
       "SingleId": {
         "type": "object",
+        "description": "単一の空間ボクセルを指す時空間ID。\n\n時間を指定する場合は `i` と `t` を必ず両方指定すること。\n両方省略した場合は「全時間」を表す。",
         "required": [
           "z",
           "f",
@@ -2714,6 +2754,7 @@
           "z": {
             "type": "integer",
             "format": "int32",
+            "description": "ズームレベル。",
             "example": 20,
             "maximum": 30,
             "minimum": 0
@@ -2721,17 +2762,20 @@
           "f": {
             "type": "integer",
             "format": "int32",
+            "description": "高さ方向のインデックス。",
             "example": 0
           },
           "x": {
             "type": "integer",
             "format": "int32",
+            "description": "経度方向のインデックス。",
             "example": 931386,
             "minimum": 0
           },
           "y": {
             "type": "integer",
             "format": "int32",
+            "description": "緯度方向のインデックス。",
             "example": 412905,
             "minimum": 0
           },
@@ -2741,6 +2785,7 @@
               "null"
             ],
             "format": "int64",
+            "description": "時間間隔（単位: 秒）。1970-01-01T00:00:00Z を起点とする。任意の値は指定できず、 次の暦の単位のいずれかのみ指定できる: `1`（秒）、`60`（分）、`3600`（時）、`86400`（日）、`34359738368`（2^35秒、全時間）。",
             "example": 3600,
             "minimum": 1
           },
@@ -2750,6 +2795,7 @@
               "null"
             ],
             "format": "int64",
+            "description": "時間インデックス。`t = floor(Unixタイムスタンプ(秒) / i)` で求まる値。",
             "example": 1,
             "minimum": 0
           }
