@@ -1,7 +1,10 @@
+#[cfg(feature = "production")]
 use opentelemetry::global;
+#[cfg(feature = "production")]
 use opentelemetry_sdk::{propagation::TraceContextPropagator, trace::Sampler};
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt, util::SubscriberInitExt};
 
+#[cfg(feature = "production")]
 pub fn init_telemetry() -> Option<opentelemetry_sdk::trace::SdkTracerProvider> {
     // W3C Trace Context の伝播を有効化
     global::set_text_map_propagator(TraceContextPropagator::new());
@@ -117,4 +120,26 @@ pub fn init_telemetry() -> Option<opentelemetry_sdk::trace::SdkTracerProvider> {
     }
 
     sdk_provider
+}
+
+#[cfg(not(feature = "production"))]
+pub fn init_telemetry() {
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        EnvFilter::new(
+            "info,kasane=info,tower_http=info,axum_tracing_opentelemetry=error,otel::tracing=info",
+        )
+    });
+
+    let log_format = std::env::var("KASANE_LOG_FORMAT").unwrap_or_else(|_| "plain".to_string());
+
+    let registry = Registry::default().with(env_filter);
+
+    // KASANE_LOG_FORMAT に応じてJSON出力とプレーンテキスト出力を切り替える
+    if log_format == "json" {
+        registry
+            .with(tracing_subscriber::fmt::layer().json())
+            .init();
+    } else {
+        registry.with(tracing_subscriber::fmt::layer()).init();
+    }
 }
