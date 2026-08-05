@@ -85,23 +85,31 @@ impl QueryNode {
         }
 
         let mut inferred: Option<TableDataType> = None;
+        let mut stack = vec![self];
 
-        for node in self.iter() {
-            let QueryNode::Source { database, table } = node else {
-                continue;
-            };
-            let meta = &tables[&(database.clone(), table.clone())];
-            match inferred {
-                None => inferred = Some(meta.data_type),
-                Some(existing) if existing != meta.data_type => {
-                    return Err(AppError::ConstraintViolation {
-                        reason: format!(
-                            "sources have different data types ({:?} and {:?});                              specify `value_type` explicitly if they can be read as the same type",
-                            existing, meta.data_type
-                        ),
-                    });
+        while let Some(node) = stack.pop() {
+            match node {
+                QueryNode::Source { database, table } => {
+                    let meta = &tables[&(database.clone(), table.clone())];
+                    match inferred {
+                        None => inferred = Some(meta.data_type),
+                        Some(existing) if existing != meta.data_type => {
+                            return Err(AppError::ConstraintViolation {
+                                reason: format!(
+                                    "sources have different data types ({:?} and {:?}); specify `value_type` explicitly if they can be read as the same type",
+                                    existing, meta.data_type
+                                ),
+                            });
+                        }
+                        Some(_) => {}
+                    }
                 }
-                Some(_) => {}
+                QueryNode::MapValues { .. } => {
+                    // MapValues の出力型は子ノードに依存しないため、これより下は推論の対象外とする
+                }
+                _ => {
+                    stack.extend(node.children());
+                }
             }
         }
 
@@ -257,8 +265,76 @@ impl QueryNode {
                     }
                 })
             }
+
+            QueryNode::MapValues {
+                input,
+                input_type,
+                mapping,
+                default,
+            } => {
+                let u_type = input.resolve_value_type(tables, *input_type)?;
+                match u_type {
+                    TableDataType::Int => build_map_values::<i64, V>(
+                        input.as_ref(),
+                        app_state,
+                        tables,
+                        mapping,
+                        default,
+                    ),
+                    TableDataType::Float => build_map_values::<crate::services::query::value::OrderedFloat, V>(
+                        input.as_ref(),
+                        app_state,
+                        tables,
+                        mapping,
+                        default,
+                    ),
+                    TableDataType::Text | TableDataType::Enum => build_map_values::<String, V>(
+                        input.as_ref(),
+                        app_state,
+                        tables,
+                        mapping,
+                        default,
+                    ),
+                    TableDataType::Boolean => build_map_values::<bool, V>(
+                        input.as_ref(),
+                        app_state,
+                        tables,
+                        mapping,
+                        default,
+                    ),
+                    TableDataType::Presence => build_map_values::<(), V>(
+                        input.as_ref(),
+                        app_state,
+                        tables,
+                        mapping,
+                        default,
+                    ),
+                }
+            }
         }
     }
+}
+
+fn build_map_values<U: Value, V: Value>(
+    input: &QueryNode,
+    app_state: &AppState,
+    tables: &ResolvedTables,
+    mapping: &[crate::models::query::MappingEntry],
+    default_val: &serde_json::Value,
+) -> Result<ValueQuery<V>, AppError> {
+    let inner_query = input.translate::<U>(app_state, tables)?;
+
+    let mut typed_mapping: std::collections::BTreeMap<U, V> = std::collections::BTreeMap::new();
+    for entry in mapping {
+        let key_u = U::from_json(&entry.from)?;
+        let val_v = V::from_json(&entry.to)?;
+        typed_mapping.insert(key_u, val_v);
+    }
+    let typed_default = V::from_json(default_val)?;
+
+    Ok(inner_query.map_values(move |u| {
+        typed_mapping.get(&u).cloned().unwrap_or_else(|| typed_default.clone())
+    }))
 }
 
 /// クエリを実行し、対象空間IDの値を返す。

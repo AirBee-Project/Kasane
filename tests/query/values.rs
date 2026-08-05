@@ -838,3 +838,47 @@ async fn rejects_zoom_level_beyond_absolute_maximum() {
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+/// 値の変換に関するテスト
+#[tokio::test]
+async fn map_values_converts_types_and_applies_fallback() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(
+        &app,
+        "t_map",
+        "Text",
+        &[
+            (800000, serde_json::json!("Sunny")),
+            (800001, serde_json::json!("Cloudy")),
+            (800002, serde_json::json!("Rainy")),
+            (800003, serde_json::json!("Unknown")),
+        ],
+    )
+    .await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "value_type": "Int",
+            "spatial_ids": ids(800000, 4),
+            "query": {
+                "type": "mapValues",
+                "mapping": [
+                    { "from": "Sunny", "to": 100 },
+                    { "from": "Cloudy", "to": 50 },
+                    { "from": "Rainy", "to": 0 }
+                ],
+                "default": -1,
+                "input": source("t_map")
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    // 辞書の中身を検証: 値が変換され、デフォルトが適用されていること
+    assert_eq!(values(&result), vec![-1, 0, 50, 100]);
+    assert_eq!(total_ids(&result), 4);
+}

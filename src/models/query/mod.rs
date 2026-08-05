@@ -44,6 +44,13 @@ pub enum FilterCondition {
     },
 }
 
+/// 対応表エントリ
+#[derive(Debug, Deserialize, ToSchema, Clone)]
+pub struct MappingEntry {
+    pub from: serde_json::Value,
+    pub to: serde_json::Value,
+}
+
 #[derive(Debug, Deserialize, ToSchema, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum QueryNode {
@@ -155,6 +162,19 @@ pub enum QueryNode {
         default: serde_json::Value,
         policy: MergePolicyKind,
     },
+
+    /// 値を対応表に基づいて変換する。対応表にない値は `default` になる。
+    MapValues {
+        #[schema(no_recursion)]
+        input: Box<QueryNode>,
+        /// 入力側の型。省略時はソースから推論を試みる。
+        #[serde(default)]
+        input_type: Option<crate::models::database::table::TableDataType>,
+        /// 変換マップ (from: 変換前の値, to: 変換後の値)
+        mapping: Vec<MappingEntry>,
+        /// マップに存在しない場合のデフォルト値
+        default: serde_json::Value,
+    },
 }
 
 impl QueryNode {
@@ -172,7 +192,8 @@ impl QueryNode {
             | QueryNode::ExtrudeF { input, .. }
             | QueryNode::FalloffLinearX { input, .. }
             | QueryNode::FalloffLinearY { input, .. }
-            | QueryNode::FalloffLinearF { input, .. } => (Some(&**input), None),
+            | QueryNode::FalloffLinearF { input, .. }
+            | QueryNode::MapValues { input, .. } => (Some(&**input), None),
             QueryNode::Merge { left, right, .. } => (Some(&**left), Some(&**right)),
         };
         a.into_iter().chain(b)
