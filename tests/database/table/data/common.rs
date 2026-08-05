@@ -127,7 +127,7 @@ pub async fn search_data(
 /// assert_first_entry(
 ///     &result_json,
 ///     3i64,
-///     RawSingleId { z: 20, f: 0, x: 931386, y: 412905 },
+///     RawSingleId { z: 20, f: 0, x: 931386, y: 412905, i: None, t: None },
 /// );
 /// ```
 pub fn assert_first_entry(
@@ -195,7 +195,17 @@ pub fn to_result_map<T: DeserializeOwned>(
 
                     // value は clone() が必要（複数のIDが同じ値を参照するため）
                     let data_clone: T = serde_json::from_value(val.clone()).unwrap();
-                    result_map.insert(RawSingleId { z, f, x, y }, data_clone);
+                    result_map.insert(
+                        RawSingleId {
+                            z,
+                            f,
+                            x,
+                            y,
+                            i: None,
+                            t: None,
+                        },
+                        data_clone,
+                    );
                 }
             }
         }

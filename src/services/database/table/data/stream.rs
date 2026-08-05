@@ -11,7 +11,7 @@ use crate::{
     },
     services::helpers::{spatial_ids::process_spatial_ids, value::restore_value},
 };
-use kasane_logic::{FlexId, RangeId};
+use kasane_logic::{AllowedIntervals, FlexId, SpatialId as _, SpatialIdSet};
 use rustc_hash::FxHashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use tokio::sync::mpsc;
@@ -110,19 +110,36 @@ pub async fn get_stream(
                         match format {
                             OutputFormat::SingleId => {
                                 let mut spatial_ids = Vec::new();
-                                for flex_id in flex_ids {
-                                    for single_id in flex_id.single_ids() {
+                                // このチャンク分の flex_ids をまとめ、range_ids_in で（空間は
+                                // 自然な粒度を保ったまま）時間だけ暦の単位に結合し直してから、
+                                // 各領域を single_ids で展開する。flat_single_ids_in は使わない
+                                // （Set全体の最大ズームへ空間側も強制的に均してしまうため）。
+                                let set: SpatialIdSet = flex_ids.into_iter().collect();
+                                'ranges: for range_id in
+                                    set.range_ids_in(AllowedIntervals::calendar())
+                                {
+                                    for single_id in range_id.single_ids() {
                                         if let Some(left) = limit_left.as_mut() {
                                             if *left == 0 {
-                                                break;
+                                                break 'ranges;
                                             }
                                             *left -= 1;
                                         }
+                                        let (i, t) = if single_id.is_whole_time() {
+                                            (None, None)
+                                        } else {
+                                            (
+                                                Some(single_id.time_interval().seconds()),
+                                                Some(single_id.t()),
+                                            )
+                                        };
                                         spatial_ids.push(RawSingleId {
                                             z: single_id.z(),
                                             f: single_id.f(),
                                             x: single_id.x(),
                                             y: single_id.y(),
+                                            i,
+                                            t,
                                         });
                                     }
                                 }
@@ -139,19 +156,29 @@ pub async fn get_stream(
                             }
                             OutputFormat::RangeId => {
                                 let mut spatial_ids = Vec::new();
-                                for flex_id in flex_ids {
+                                let set: SpatialIdSet = flex_ids.into_iter().collect();
+                                for range_id in set.range_ids_in(AllowedIntervals::calendar()) {
                                     if let Some(left) = limit_left.as_mut() {
                                         if *left == 0 {
                                             break;
                                         }
                                         *left -= 1;
                                     }
-                                    let range_id = RangeId::from(&flex_id);
+                                    let (i, t) = if range_id.is_whole_time() {
+                                        (None, None)
+                                    } else {
+                                        (
+                                            Some(range_id.time_interval().seconds()),
+                                            Some(range_id.t()),
+                                        )
+                                    };
                                     spatial_ids.push(RawRangeId {
                                         z: range_id.z(),
                                         f: range_id.f(),
                                         x: range_id.x(),
                                         y: range_id.y(),
+                                        i,
+                                        t,
                                     });
                                 }
                                 if !spatial_ids.is_empty() {
@@ -174,6 +201,11 @@ pub async fn get_stream(
                                         }
                                         *left -= 1;
                                     }
+                                    let (t_zoomlevel, t_index) = if flex_id.is_whole_time() {
+                                        (None, None)
+                                    } else {
+                                        (Some(flex_id.t_zoomlevel()), Some(flex_id.t()))
+                                    };
                                     spatial_ids.push(RawFlexId {
                                         f_zoomlevel: flex_id.f_zoomlevel(),
                                         f_index: flex_id.f_index(),
@@ -181,6 +213,8 @@ pub async fn get_stream(
                                         x_index: flex_id.x_index(),
                                         y_zoomlevel: flex_id.y_zoomlevel(),
                                         y_index: flex_id.y_index(),
+                                        t_zoomlevel,
+                                        t_index,
                                     });
                                 }
                                 if !spatial_ids.is_empty() {

@@ -18,12 +18,16 @@ async fn test_table_data_get_multiple() {
         f: 0,
         x: 10,
         y: 10,
+        i: None,
+        t: None,
     };
     let id2 = RawSingleId {
         z: 20,
         f: 0,
         x: 20,
         y: 20,
+        i: None,
+        t: None,
     };
 
     put_data(

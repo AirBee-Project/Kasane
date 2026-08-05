@@ -1,9 +1,117 @@
-use kasane_logic::{RangeId, SingleId, SpatialIdSet};
+use kasane_logic::{AllowedIntervals, FlexId, Interval, RangeId, SingleId, SpatialIdSet};
 
 use crate::{
     error::AppError,
     models::{database::table::data::ZoomLevelPolicy, spatial_id::SpatialId},
 };
+
+/// 時間成分の不正はすべて [`AppError::InvalidSpatialId`] に畳む。
+///
+/// `Interval::new` や `with_time` は [`kasane_logic::Error`] を返し、そのまま `?` で
+/// 上げると `logic_error` になる。一方このモジュール自身が出す「暦の単位ではない」
+/// 「`i` と `t` が片方だけ」は `invalid_spatial_id` である。同じ「時間指定が不正」
+/// という1つのユーザーミスに2つのコードが割り当たると、クライアント側で一様に
+/// 扱えないため、ここで `invalid_spatial_id` へ統一する。
+fn invalid_time(error: kasane_logic::Error) -> AppError {
+    AppError::InvalidSpatialId {
+        reason: error.to_string(),
+    }
+}
+
+fn invalid_time_reason(reason: impl Into<String>) -> AppError {
+    AppError::InvalidSpatialId {
+        reason: reason.into(),
+    }
+}
+
+/// `{i}`（時間間隔）と `{t}`（時間インデックス）で時間を指定できる ID。
+///
+/// `SingleId` と `RangeId` は `{t}` の形だけが違う（単一値 / 区間）ので、
+/// [`apply_interval_time`] をこの1つのトレイト越しに共有する。
+trait WithIntervalTime: Sized {
+    /// `{t}` の表現。`SingleId` は `u64`、`RangeId` は `[u64; 2]`。
+    type Index;
+
+    fn with_interval_time(
+        self,
+        interval: Interval,
+        t: Self::Index,
+    ) -> Result<Self, kasane_logic::Error>;
+}
+
+impl WithIntervalTime for SingleId {
+    type Index = u64;
+
+    fn with_interval_time(self, interval: Interval, t: u64) -> Result<Self, kasane_logic::Error> {
+        self.with_time(interval, t)
+    }
+}
+
+impl WithIntervalTime for RangeId {
+    type Index = [u64; 2];
+
+    fn with_interval_time(
+        self,
+        interval: Interval,
+        t: [u64; 2],
+    ) -> Result<Self, kasane_logic::Error> {
+        self.with_time(interval, t)
+    }
+}
+
+/// `{i}` / `{t}` を検証して ID へ適用する。
+///
+/// `i` と `t` は「両方指定」か「両方省略」のいずれかで、省略時は全時間を表す。
+/// `i` は暦の単位（[`AllowedIntervals::calendar`]）のみ受け付ける。
+fn apply_interval_time<Id: WithIntervalTime>(
+    id: Id,
+    i: Option<u64>,
+    t: Option<Id::Index>,
+) -> Result<Id, AppError> {
+    match (i, t) {
+        (None, None) => Ok(id),
+        (Some(i), Some(t)) => {
+            let interval = Interval::new(i).map_err(invalid_time)?;
+            if !AllowedIntervals::calendar().contains(interval) {
+                // 許可値はここで数え上げず候補集合から作る（定義がずれても文言が追従する）。
+                let allowed = AllowedIntervals::calendar()
+                    .iter()
+                    .map(|unit| unit.seconds().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Err(invalid_time_reason(format!(
+                    "interval {i} is not allowed; i must be one of: {allowed}"
+                )));
+            }
+            id.with_interval_time(interval, t).map_err(invalid_time)
+        }
+        (Some(_), None) => Err(invalid_time_reason("t must be provided when i is provided")),
+        (None, Some(_)) => Err(invalid_time_reason("i must be provided when t is provided")),
+    }
+}
+
+/// `FlexId` の時間（ズームレベル + インデックスの2分岐Segment）を適用する。
+///
+/// `FlexId` は木のノードアドレスなので `{i}` ではなくズームレベルで時間を指定する。
+/// そのため暦の単位の検証は行わない（[`apply_interval_time`] と非対称なのはこのため）。
+fn apply_segment_time(
+    id: FlexId,
+    t_zoomlevel: Option<u8>,
+    t_index: Option<u64>,
+) -> Result<FlexId, AppError> {
+    match (t_zoomlevel, t_index) {
+        (None, None) => Ok(id),
+        (Some(t_zoomlevel), Some(t_index)) => {
+            id.with_time(t_zoomlevel, t_index).map_err(invalid_time)
+        }
+        (Some(_), None) => Err(invalid_time_reason(
+            "tIndex must be provided when tZoomlevel is provided",
+        )),
+        (None, Some(_)) => Err(invalid_time_reason(
+            "tZoomlevel must be provided when tIndex is provided",
+        )),
+    }
+}
 
 pub fn resolve_zoom(
     zoom: u8,
@@ -19,43 +127,34 @@ pub fn resolve_zoom(
             max_zoom_level,
             input_zoom_level: zoom,
         }),
-
         ZoomLevelPolicy::Ignore => Ok(None),
-
         ZoomLevelPolicy::Normalize => Ok(Some(max_zoom_level)),
     }
 }
 
-/// リクエストの空間IDを、解像度を丸めずにそのまま集合へ変換する。
-///
-/// `/query` 用。テーブルの `max_zoom_level` は「そのテーブルが**保存**する最小セル」の
-/// 制約であって、クエリ**結果**の解像度とは別物なので、ここでは上限を掛けない。
-/// `shiftX` / `falloffLinear*` / `extrude*` は引数 `z` の粒度までセルを細分しうるため、
-/// 入力テーブルの保存粒度で要求領域を丸めると、クエリ自身が生成したセルを
-/// 指名できなくなる。
-///
-/// ズームレベルの絶対上限（[`ZoomLevel::MAX`](kasane_logic::ZoomLevel)）は
-/// `SingleId::new` などのコンストラクタが従来どおり検証する。
 pub fn to_spatial_id_set(ids: &[SpatialId]) -> Result<SpatialIdSet, AppError> {
     let mut result = SpatialIdSet::new();
 
     for spatial_id in ids {
         match spatial_id {
             SpatialId::SingleId(s) => {
-                result.insert(SingleId::new(s.z, s.f, s.x, s.y)?);
+                let id = SingleId::new(s.z, s.f, s.x, s.y)?;
+                result.insert(apply_interval_time(id, s.i, s.t)?);
             }
             SpatialId::RangeId(r) => {
-                result.insert(RangeId::new(r.z, r.f, r.x, r.y)?);
+                let id = RangeId::new(r.z, r.f, r.x, r.y)?;
+                result.insert(apply_interval_time(id, r.i, r.t)?);
             }
             SpatialId::FlexId(f) => {
-                result.insert(kasane_logic::FlexId::new(
+                let id = FlexId::new(
                     f.f_zoomlevel,
                     f.f_index,
                     f.x_zoomlevel,
                     f.x_index,
                     f.y_zoomlevel,
                     f.y_index,
-                )?);
+                )?;
+                result.insert(apply_segment_time(id, f.t_zoomlevel, f.t_index)?);
             }
         }
     }
@@ -63,10 +162,6 @@ pub fn to_spatial_id_set(ids: &[SpatialId]) -> Result<SpatialIdSet, AppError> {
     Ok(result)
 }
 
-/// リクエストの空間IDを、テーブルの `max_zoom_level` で丸めながら集合へ変換する。
-///
-/// `max_zoom_level` より細かい空間IDの扱いは `policy` に従う。保存粒度がそのまま
-/// 意味を持つ API（`/data` の取得・挿入・削除）向け。
 pub fn process_spatial_ids(
     ids: &[SpatialId],
     max_zoom_level: u8,
@@ -82,6 +177,10 @@ pub fn process_spatial_ids(
                 };
 
                 let id = SingleId::new(single_id.z, single_id.f, single_id.x, single_id.y)?;
+                // 時間を先に載せてから `spatial_parent_at_zoom` を通す。`SingleId` /
+                // `RangeId` の同メソッドは `{i}` / `{t}` をそのまま引き継ぐ（`FlexId` 版は
+                // `FlexId::new` 経由で時間を落とすので、下の FlexId 分岐だけ順序が逆）。
+                let id = apply_interval_time(id, single_id.i, single_id.t)?;
 
                 if zoom == single_id.z {
                     result.insert(id);
@@ -95,6 +194,7 @@ pub fn process_spatial_ids(
                 };
 
                 let id = RangeId::new(range_id.z, range_id.f, range_id.x, range_id.y)?;
+                let id = apply_interval_time(id, range_id.i, range_id.t)?;
 
                 if zoom == range_id.z {
                     result.insert(id);
@@ -127,7 +227,9 @@ pub fn process_spatial_ids(
                 let (new_xz, new_xi) = scale_down(flex_id.x_zoomlevel, xz, flex_id.x_index as i64);
                 let (new_yz, new_yi) = scale_down(flex_id.y_zoomlevel, yz, flex_id.y_index as i64);
 
-                let id = kasane_logic::FlexId::new(
+                // 空間側を縮めてから時間を載せる（`FlexId::new` は時間を全時間へ戻すため、
+                // 逆順にすると指定された時間が黙って落ちる）。
+                let id = FlexId::new(
                     new_fz,
                     new_fi as i32,
                     new_xz,
@@ -135,7 +237,11 @@ pub fn process_spatial_ids(
                     new_yz,
                     new_yi as u32,
                 )?;
-                result.insert(id);
+                result.insert(apply_segment_time(
+                    id,
+                    flex_id.t_zoomlevel,
+                    flex_id.t_index,
+                )?);
             }
         }
     }

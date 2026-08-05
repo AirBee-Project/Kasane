@@ -64,7 +64,6 @@ pub async fn delete_user(app_state: &AppState, username: &str) -> Result<(), App
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))??;
 
-    app_state.auth_cache.remove(username);
     Ok(())
 }
 
@@ -97,7 +96,6 @@ pub async fn update_password(
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))??;
 
-    app_state.auth_cache.remove(username);
     Ok(())
 }
 
@@ -133,7 +131,6 @@ pub async fn set_admin(
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))??;
 
-    app_state.auth_cache.remove(username);
     Ok(())
 }
 

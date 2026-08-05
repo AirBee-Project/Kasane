@@ -19,7 +19,7 @@ http:
     type: json
     data: |-
       {
-        "spatial_ids": [{"type":"singleId","z":23,"f":0,"x":7451089,"y":3303245}],
+        "spatial_ids": [{"type":"singleId","z":23,"f":0,"x":7451089,"y":3303245,"i":3600,"t":1}],
         "zoom_level_policy": "Error"
       }
   auth:
@@ -49,7 +49,7 @@ examples:
         type: json
         data: |-
           {
-            "spatial_ids": [{"type":"singleId","z":23,"f":0,"x":7451089,"y":3303245}],
+            "spatial_ids": [{"type":"singleId","z":23,"f":0,"x":7451089,"y":3303245,"i":3600,"t":1}],
             "zoom_level_policy": "Error"
           }
     response:
@@ -74,7 +74,7 @@ examples:
         type: json
         data: |-
           {
-            "spatial_ids": [{"type":"singleId","z":23,"f":0,"x":7451089,"y":3303245}],
+            "spatial_ids": [{"type":"singleId","z":23,"f":0,"x":7451089,"y":3303245,"i":3600,"t":1}],
             "zoom_level_policy": "Error"
           }
     response:

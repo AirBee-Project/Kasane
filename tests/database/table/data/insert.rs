@@ -38,6 +38,8 @@ async fn test_table_data_insert_single_id() {
             f: 0,
             x: 931386,
             y: 412905,
+            i: None,
+            t: None,
         },
     );
 }
@@ -88,6 +90,8 @@ async fn test_table_data_insert_int_range_constraint() {
             f: 0,
             x: 931386,
             y: 412905,
+            i: None,
+            t: None,
         },
     );
 
@@ -136,6 +140,8 @@ async fn test_table_data_insert_float() {
             f: 0,
             x: 931386,
             y: 412905,
+            i: None,
+            t: None,
         },
     );
 }
@@ -238,6 +244,8 @@ async fn test_table_data_insert_two_single_id() {
             f: 0,
             x: 931386,
             y: 412905,
+            i: None,
+            t: None,
         },
     );
 
@@ -249,6 +257,8 @@ async fn test_table_data_insert_two_single_id() {
             f: -1,
             x: 931386,
             y: 412905,
+            i: None,
+            t: None,
         },
     );
 }
@@ -282,6 +292,8 @@ async fn test_table_data_insert_single_id_overwrite() {
             f: 0,
             x: 931386,
             y: 412905,
+            i: None,
+            t: None,
         },
     );
 
@@ -302,6 +314,8 @@ async fn test_table_data_insert_single_id_overwrite() {
             f: 0,
             x: 931386,
             y: 412905,
+            i: None,
+            t: None,
         },
     );
 }
@@ -406,6 +420,8 @@ async fn test_table_data_insert_range_id() {
             f: 0,
             x: 931386,
             y: 412905,
+            i: None,
+            t: None,
         },
     );
 
@@ -475,6 +491,8 @@ async fn test_table_data_overload_insert() {
         f: 0,
         x: 1862772,
         y: 825810,
+        i: None,
+        t: None,
     };
 
     for (raw_single_id, value) in result_map {
@@ -567,6 +585,8 @@ async fn test_table_data_isolation() {
             f: 0,
             x: 100,
             y: 100,
+            i: None,
+            t: None,
         },
     );
 
@@ -579,6 +599,8 @@ async fn test_table_data_isolation() {
             f: 0,
             x: 100,
             y: 100,
+            i: None,
+            t: None,
         },
     );
 }
@@ -649,6 +671,8 @@ async fn test_table_data_deep_split() {
             f: 0,
             x: 0,
             y: 0,
+            i: None,
+            t: None,
         },
     );
 
@@ -663,6 +687,8 @@ async fn test_table_data_deep_split() {
             f: 0,
             x: 1,
             y: 0,
+            i: None,
+            t: None,
         },
     );
 }
@@ -711,6 +737,8 @@ async fn test_table_data_insert_enum_success() {
             f: 0,
             x: 0,
             y: 0,
+            i: None,
+            t: None,
         },
     );
 }
@@ -800,6 +828,8 @@ async fn test_table_data_insert_presence_success() {
             f: 0,
             x: 0,
             y: 0,
+            i: None,
+            t: None,
         },
     );
 }
