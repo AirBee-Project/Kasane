@@ -258,8 +258,8 @@ impl<'a> KasaneDbRead<'a> {
 
         Ok(iter.filter_map(move |item| match item {
             Ok((key, _)) => {
-                // 可変長値で前方一致しただけの別キーを除外（残りがちょうど flexid 14B）。
-                if key.len() != prefix.len() + 14 {
+                // 可変長値で前方一致しただけの別キーを除外（残りがちょうど flexid 分の長さ）。
+                if key.len() != prefix.len() + FlexId::ENCODED_LEN {
                     return None;
                 }
                 Some(value_index::flexid_from_key(key))
@@ -281,7 +281,7 @@ impl<'a> KasaneDbRead<'a> {
         // hi 側は flexid 部を最大化して `(hi, *)` まで含める。
         let mut end =
             value_index::make_prefix(table_id, &value_index::order_preserving(data_type, hi));
-        end.extend_from_slice(&[0xFF; 14]);
+        end.extend_from_slice(&[0xFF; FlexId::ENCODED_LEN]);
 
         let bounds = (
             std::ops::Bound::Included(start.as_slice()),

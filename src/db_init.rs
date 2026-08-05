@@ -82,9 +82,9 @@ impl<'a> heed::BytesEncode<'a> for TableIdAndFlexId {
     fn bytes_encode(
         item: &'a Self::EItem,
     ) -> Result<Cow<'a, [u8]>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut bytes = Vec::with_capacity(30);
+        let mut bytes = Vec::with_capacity(16 + FlexId::ENCODED_LEN);
         bytes.extend_from_slice(&item.0.into_bytes());
-        bytes.extend_from_slice(&item.1.spatial_encode());
+        bytes.extend_from_slice(&item.1.encode());
         Ok(Cow::Owned(bytes))
     }
 }
@@ -95,16 +95,16 @@ impl<'a> heed::BytesDecode<'a> for TableIdAndFlexId {
     fn bytes_decode(
         bytes: &'a [u8],
     ) -> Result<Self::DItem, Box<dyn std::error::Error + Send + Sync>> {
-        if bytes.len() != 30 {
+        if bytes.len() != 16 + FlexId::ENCODED_LEN {
             return Err("invalid length for TableIdAndFlexId".into());
         }
         let mut table_id = [0u8; 16];
         table_id.copy_from_slice(&bytes[0..16]);
         let table_id = crate::models::id::TableId(uuid::Uuid::from_bytes(table_id));
 
-        let mut flex_id_bytes = [0u8; 14];
-        flex_id_bytes.copy_from_slice(&bytes[16..30]);
-        let flex_id = FlexId::spatial_decode(&flex_id_bytes)?;
+        let mut flex_id_bytes = [0u8; FlexId::ENCODED_LEN];
+        flex_id_bytes.copy_from_slice(&bytes[16..16 + FlexId::ENCODED_LEN]);
+        let flex_id = FlexId::decode(&flex_id_bytes)?;
 
         Ok((table_id, flex_id))
     }
@@ -140,7 +140,7 @@ pub struct AppDb {
     pub tables_data: Database<TableIdAndFlexId, Bytes>,
 
     /// 値→空間の二次インデックス（値フィルタ用）。
-    /// Key 生バイト列: `table_id(16) ‖ 順序保存エンコード値(可変) ‖ flexid.spatial_encode(14)` -> 値なし
+    /// Key 生バイト列: `table_id(16) ‖ 順序保存エンコード値(可変) ‖ flexid.encode(FlexId::ENCODED_LEN)` -> 値なし
     pub value_index: Database<Bytes, Unit>,
 
     /// 書き込みバッチャーへの送信チャネル
