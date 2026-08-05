@@ -110,6 +110,7 @@ fn apply_segment_time(
     }
 }
 
+/// [SpatialId]EnumをSpatialIdSetに詰め込んで、競合の解消などを行う
 pub fn to_spatial_id_set(ids: &[SpatialId]) -> Result<SpatialIdSet, AppError> {
     let mut result = SpatialIdSet::new();
 
