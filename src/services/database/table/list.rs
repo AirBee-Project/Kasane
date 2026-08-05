@@ -14,6 +14,7 @@ pub async fn list(app_state: &AppState, db_name: &str) -> Result<TableListRespon
             data_type: table.data_type,
             max_zoom_level: table.max_zoom_level,
             constraints: table.constraints,
+            description: table.description,
         })
         .collect();
     Ok(TableListResponse(response_tables))

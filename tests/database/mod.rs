@@ -263,3 +263,76 @@ async fn test_database_copy_success() {
 }
 
 pub mod table;
+
+#[tokio::test]
+/// データベースのdescription付与と更新が正常に行えるかを検証する。
+async fn test_database_description() {
+    let test_app = DbTestApp::new();
+
+    // 1. description付きでデータベースを作成
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases")
+        .header("Content-Type", "application/json")
+        .body(Body::from(
+            r#"{"name": "desc_db", "description": "This is a test database."}"#,
+        ))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // 2. 情報を取得してdescriptionを確認
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases/desc_db")
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["description"], "This is a test database.");
+
+    // 3. descriptionを更新
+    let req = Request::builder()
+        .method("PATCH")
+        .uri("/databases/desc_db")
+        .header("Content-Type", "application/json")
+        .body(Body::from(r#"{"description": "Updated description."}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 4. 更新後の情報を取得して確認
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases/desc_db")
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["description"], "Updated description.");
+}
+
+#[tokio::test]
+/// データベースのdescriptionが4096文字を超える場合にエラーになるかを検証する。
+async fn test_database_description_too_long() {
+    let test_app = DbTestApp::new();
+
+    // 制限文字数+1文字のdescriptionを作成
+    let long_desc = "a".repeat(kasane::models::database::MAX_DESCRIPTION_LENGTH + 1);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&serde_json::json!({
+            "name": "desc_db_too_long",
+            "description": long_desc
+        })).unwrap()))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}

@@ -57,6 +57,7 @@ pub async fn table_update_handler(
         &table_name,
         payload.name.as_deref(),
         Some(payload.constraints),
+        Some(payload.description),
         payload.validate_existing_data,
     )
     .await?;

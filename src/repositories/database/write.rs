@@ -13,13 +13,18 @@ impl<'a> KasaneDbWrite<'a> {
         if self.database_caches.contains_key(name) {
             return Ok(Some(DatabaseInfoResponse {
                 name: name.to_string(),
+                description: self
+                    .database_caches
+                    .get(name)
+                    .and_then(|m| m.description.clone()),
             }));
         }
 
         let db = self.db.databases;
-        if db.get(&self.write_txn, name)?.is_some() {
+        if let Some(meta) = db.get(&self.write_txn, name)? {
             Ok(Some(DatabaseInfoResponse {
                 name: name.to_string(),
+                description: meta.description,
             }))
         } else {
             Ok(None)
@@ -28,7 +33,11 @@ impl<'a> KasaneDbWrite<'a> {
 
     /// Databaseを作成する
     #[tracing::instrument(skip_all)]
-    pub fn database_create(&mut self, name: &str) -> Result<DatabaseInfoResponse, AppError> {
+    pub fn database_create(
+        &mut self,
+        name: &str,
+        description: Option<String>,
+    ) -> Result<DatabaseInfoResponse, AppError> {
         if self.database_info(name)?.is_some() {
             return Err(AppError::DatabaseAlreadyExists {
                 name: name.to_string(),
@@ -38,6 +47,7 @@ impl<'a> KasaneDbWrite<'a> {
         let id = Uuid::now_v7();
         let meta = DatabaseMetadata {
             id: crate::models::id::DatabaseId(id),
+            description: description.clone(),
         };
 
         let db = self.db.databases;
@@ -47,6 +57,7 @@ impl<'a> KasaneDbWrite<'a> {
 
         Ok(DatabaseInfoResponse {
             name: name.to_string(),
+            description,
         })
     }
 
@@ -93,18 +104,23 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(())
     }
 
-    /// Databaseの名前を変更する
+    /// Databaseの名前や説明を変更する
     #[tracing::instrument(skip_all)]
-    pub fn database_rename(&mut self, name: &str, new_name: &str) -> Result<(), AppError> {
-        if name == new_name {
-            return Ok(());
+    pub fn database_update(
+        &mut self,
+        name: &str,
+        new_name: Option<String>,
+        description: Option<String>,
+    ) -> Result<(), AppError> {
+        let final_new_name = new_name.as_deref().unwrap_or(name);
+
+        if name != final_new_name {
+            // new_nameの妥当性を検証
+            crate::services::helpers::name_valid::name_valid(final_new_name)?;
         }
 
-        // new_nameの妥当性を検証
-        crate::services::helpers::name_valid::name_valid(new_name)?;
-
-        // コピー元の存在確認
-        let meta = {
+        // 変更元の存在確認
+        let mut meta = {
             let db = self.db.databases;
             if let Some(meta) = db.get(&self.write_txn, name)? {
                 meta
@@ -115,21 +131,32 @@ impl<'a> KasaneDbWrite<'a> {
             }
         };
 
-        // コピー先が既に存在するか確認
-        let db = self.db.databases;
-        if db.get(&self.write_txn, new_name)?.is_some() {
-            return Err(AppError::DatabaseAlreadyExists {
-                name: new_name.to_string(),
-            });
+        if name != final_new_name {
+            // コピー先が既に存在するか確認
+            let db = self.db.databases;
+            if db.get(&self.write_txn, final_new_name)?.is_some() {
+                return Err(AppError::DatabaseAlreadyExists {
+                    name: final_new_name.to_string(),
+                });
+            }
         }
 
-        // lmdbから古いエントリを削除し、新しいエントリを追加
-        db.delete(&mut self.write_txn, name)?;
-        db.put(&mut self.write_txn, new_name, &meta)?;
+        // 説明の更新
+        if let Some(desc) = description {
+            meta.description = Some(desc);
+        }
+
+        let db = self.db.databases;
+        if name != final_new_name {
+            // lmdbから古いエントリを削除し、新しいエントリを追加
+            db.delete(&mut self.write_txn, name)?;
+            self.database_caches.remove(name);
+        }
+        db.put(&mut self.write_txn, final_new_name, &meta)?;
 
         // キャッシュの更新
-        self.database_caches.remove(name);
-        self.database_caches.insert(new_name.to_string(), meta);
+        self.database_caches
+            .insert(final_new_name.to_string(), meta);
 
         Ok(())
     }
@@ -163,7 +190,10 @@ impl<'a> KasaneDbWrite<'a> {
 
         // 3. コピー先データベースを作成
         let copy_db_id = crate::models::id::DatabaseId(Uuid::now_v7());
-        let copy_meta = DatabaseMetadata { id: copy_db_id };
+        let copy_meta = DatabaseMetadata {
+            id: copy_db_id,
+            description: src_db_meta.description.clone(),
+        };
 
         let db = self.db.databases;
         db.put(&mut self.write_txn, copy_name, &copy_meta)?;
@@ -204,6 +234,7 @@ impl<'a> KasaneDbWrite<'a> {
 
         Ok(DatabaseInfoResponse {
             name: copy_name.to_string(),
+            description: src_db_meta.description,
         })
     }
 }

@@ -38,15 +38,33 @@ pub async fn list(
         .collect())
 }
 
-pub async fn create(app_state: &AppState, name: &str) -> Result<DatabaseInfoResponse, AppError> {
+pub async fn create(
+    app_state: &AppState,
+    name: &str,
+    description: Option<String>,
+) -> Result<DatabaseInfoResponse, AppError> {
     crate::services::helpers::name_valid::name_valid(name)?;
+    if let Some(desc) = &description
+        && desc.chars().count() > crate::models::database::MAX_DESCRIPTION_LENGTH
+    {
+        return Err(AppError::InvalidName {
+            reason: format!(
+                "Description cannot exceed {} characters",
+                crate::models::database::MAX_DESCRIPTION_LENGTH
+            ),
+        });
+    }
 
     let app_state = app_state.clone();
     let name = name.to_string();
 
     let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
-        span.in_scope(|| app_state.db.write(|db| db.database_create(&name)))
+        span.in_scope(|| {
+            app_state
+                .db
+                .write(|db| db.database_create(&name, description))
+        })
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?
@@ -74,17 +92,35 @@ pub async fn remove(app_state: &AppState, name: &str) -> Result<(), AppError> {
     .map_err(|e| AppError::InternalError(e.to_string()))?
 }
 
-pub async fn rename(app_state: &AppState, name: &str, new_name: &str) -> Result<(), AppError> {
+pub async fn update(
+    app_state: &AppState,
+    name: &str,
+    new_name: Option<String>,
+    description: Option<String>,
+) -> Result<(), AppError> {
+    if let Some(new_n) = &new_name {
+        crate::services::helpers::name_valid::name_valid(new_n)?;
+    }
+    if let Some(desc) = &description
+        && desc.chars().count() > crate::models::database::MAX_DESCRIPTION_LENGTH
+    {
+        return Err(AppError::InvalidName {
+            reason: format!(
+                "Description cannot exceed {} characters",
+                crate::models::database::MAX_DESCRIPTION_LENGTH
+            ),
+        });
+    }
+
     let app_state = app_state.clone();
     let name = name.to_string();
-    let new_name = new_name.to_string();
 
     let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
         span.in_scope(|| {
             app_state
                 .db
-                .write(|db| db.database_rename(&name, &new_name))
+                .write(|db| db.database_update(&name, new_name, description))
         })
     })
     .await

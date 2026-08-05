@@ -71,7 +71,7 @@ impl utoipa::Modify for SecurityAddon {
         // DELETE /databases/{name}
         crate::handlers::database::remove_database,
         // PATCH /databases/{name}
-        crate::handlers::database::database_rename,
+        crate::handlers::database::database_update,
         // POST /databases/{name}/copy
         crate::handlers::database::database_copy,
         crate::handlers::database::table::create::table_create,

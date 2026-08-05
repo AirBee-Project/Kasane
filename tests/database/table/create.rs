@@ -221,3 +221,67 @@ async fn test_create_table_enum_choice_length_limits() {
     let response = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
 }
+
+#[tokio::test]
+/// テーブルのdescription付与が正常に行えるかを検証する。
+async fn test_create_table_description() {
+    let test_app = TestApp::new();
+    test_app.create_database("test_db").await;
+
+    let create_body = serde_json::json!({
+        "name": "desc_table",
+        "data_type": "Int",
+        "max_zoom_level": 25,
+        "description": "This is a test table."
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/test_db/tables")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases/test_db/tables/desc_table")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(json["description"], "This is a test table.");
+}
+
+#[tokio::test]
+/// テーブルのdescriptionが4096文字を超える場合にエラーになるかを検証する。
+async fn test_create_table_description_too_long() {
+    let test_app = TestApp::new();
+    test_app.create_database("test_db").await;
+
+    let long_desc = "a".repeat(kasane::models::database::MAX_DESCRIPTION_LENGTH + 1);
+
+    let create_body = serde_json::json!({
+        "name": "desc_table_too_long",
+        "data_type": "Int",
+        "max_zoom_level": 25,
+        "description": long_desc
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/test_db/tables")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}

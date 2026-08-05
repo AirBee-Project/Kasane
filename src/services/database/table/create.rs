@@ -11,6 +11,16 @@ pub async fn create(
     req: CreateTableRequest,
 ) -> Result<Table, AppError> {
     crate::services::helpers::name_valid::name_valid(table_name)?;
+    if let Some(desc) = &req.description
+        && desc.chars().count() > crate::models::database::MAX_DESCRIPTION_LENGTH
+    {
+        return Err(AppError::InvalidName {
+            reason: format!(
+                "Description cannot exceed {} characters",
+                crate::models::database::MAX_DESCRIPTION_LENGTH
+            ),
+        });
+    }
 
     // max_zoom_levelの検証
     kasane_logic::ZoomLevel::new(req.max_zoom_level)?;
@@ -29,6 +39,7 @@ pub async fn create(
                     req.data_type,
                     req.max_zoom_level,
                     req.constraints,
+                    req.description,
                 )
             })
         })

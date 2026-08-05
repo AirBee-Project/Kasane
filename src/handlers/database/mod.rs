@@ -36,7 +36,9 @@ pub async fn database_create(
     if !auth_user.user.is_global_admin {
         return Err(AuthError::RequiresGlobalAdmin.into());
     }
-    let res = crate::services::database::create(&app_state, request.name.as_str()).await?;
+    let res =
+        crate::services::database::create(&app_state, request.name.as_str(), request.description)
+            .await?;
     Ok((
         StatusCode::CREATED,
         [(LOCATION, format!("/databases/{}", request.name))],
@@ -134,9 +136,9 @@ pub async fn remove_database(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// データベース名の更新
+/// データベースの更新
 ///
-/// 指定したデータベースの名前を変更します。対象データベースのManage以上の権限が必要です。
+/// 指定したデータベースの名前や説明を変更します。対象データベースのManage以上の権限が必要です。
 #[utoipa::path(
     patch,
     path = "/databases/{name}",
@@ -155,7 +157,7 @@ pub async fn remove_database(
     tag = "Databases"
 )]
 #[tracing::instrument(skip_all)]
-pub async fn database_rename(
+pub async fn database_update(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
     Path(db_name): Path<String>,
@@ -168,7 +170,8 @@ pub async fn database_rename(
         crate::models::users::UserRole::Manage,
     )
     .await?;
-    crate::services::database::rename(&app_state, &db_name, &request.new_name).await?;
+    crate::services::database::update(&app_state, &db_name, request.new_name, request.description)
+        .await?;
     Ok(StatusCode::OK)
 }
 

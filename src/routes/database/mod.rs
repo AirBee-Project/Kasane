@@ -8,7 +8,7 @@ pub fn routes() -> Router<AppState> {
             "/{db_name}",
             get(crate::handlers::database::database_info)
                 .delete(crate::handlers::database::remove_database)
-                .patch(crate::handlers::database::database_rename),
+                .patch(crate::handlers::database::database_update),
         )
         .route(
             "/{db_name}/copy",
