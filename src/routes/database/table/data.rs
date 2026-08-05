@@ -9,10 +9,6 @@ pub fn routes() -> Router<AppState> {
             post(crate::handlers::database::table::data::get::data_get),
         )
         .route(
-            "/{name}/data/search/stream",
-            post(crate::handlers::database::table::data::stream::data_get_stream),
-        )
-        .route(
             "/{name}/data",
             put(crate::handlers::database::table::data::insert::data_insert)
                 .patch(crate::handlers::database::table::data::upsert::data_upsert)

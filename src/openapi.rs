@@ -92,8 +92,6 @@ impl utoipa::Modify for SecurityAddon {
         crate::handlers::database::table::data::remove::data_remove,
         // POST   /databases/{db_name}/tables/{table_name}/data/search
         crate::handlers::database::table::data::get::data_get,
-        // POST   /databases/{db_name}/tables/{table_name}/data/search/stream
-        crate::handlers::database::table::data::stream::data_get_stream,
         // POST   /query
         crate::handlers::query::execute_query,
     ),
@@ -133,13 +131,6 @@ impl utoipa::Modify for SecurityAddon {
         RemoveDataRequest,
         ZoomLevelPolicy,
         SpatialId,
-        crate::models::database::table::data::StreamEventSingle,
-        crate::models::database::table::data::StreamEventRange,
-        crate::models::database::table::data::StreamEventFlex,
-        crate::models::database::table::data::StreamDataEventSingle,
-        crate::models::database::table::data::StreamDataEventRange,
-        crate::models::database::table::data::StreamDataEventFlex,
-        crate::models::database::table::data::StreamDictionaryEvent,
         // Query
         crate::models::query::ExecuteQueryRequest,
         crate::models::query::QueryNode,
