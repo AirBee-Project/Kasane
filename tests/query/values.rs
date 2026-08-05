@@ -744,7 +744,7 @@ async fn explicit_value_type_rejects_unreadable_source() {
 // とは別物。要求空間IDを丸めていた頃は、クエリ自身が生成したセルを指名できず 400 になっていた。
 // ---------------------------------------------------------------------------
 
-/// ズームレベルの絶対上限（35）は従来どおり検証される。
+/// ズームレベルの絶対上限（30）は従来どおり検証される。
 #[tokio::test]
 async fn rejects_zoom_level_beyond_absolute_maximum() {
     let app = TestApp::new();
@@ -754,7 +754,7 @@ async fn rejects_zoom_level_beyond_absolute_maximum() {
     let (status, _) = post_query(
         &app,
         &serde_json::json!({
-            "spatial_ids": [{ "z": 40, "f": 0, "x": 1, "y": 1, "type": "singleId" }],
+            "spatial_ids": [{ "z": 31, "f": 0, "x": 1, "y": 1, "type": "singleId" }],
             "query": source("t_zmax")
         }),
         "",

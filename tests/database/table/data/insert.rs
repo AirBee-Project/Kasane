@@ -823,3 +823,30 @@ async fn test_table_data_insert_presence_failure() {
     let response = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+/// ズームレベルの絶対上限（30）を超える空間ID（例: z=31）を入力した際にエラーが返ることを検証する。
+async fn test_table_data_insert_rejects_zoom_level_beyond_absolute_maximum() {
+    let test_app = TestApp::new();
+    test_app.create_database("test_db").await;
+    test_app.create_table("test_db", "test_table", "Int").await;
+
+    let single_id_query =
+        serde_json::json!([{ "z": 31, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
+
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/databases/test_db/tables/test_table/data")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            serde_json::to_string(
+                &serde_json::json!({ "value": 3, "spatial_ids": single_id_query }),
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
