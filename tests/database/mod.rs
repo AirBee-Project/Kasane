@@ -328,10 +328,13 @@ async fn test_database_description_too_long() {
         .method("POST")
         .uri("/databases")
         .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&serde_json::json!({
-            "name": "desc_db_too_long",
-            "description": long_desc
-        })).unwrap()))
+        .body(Body::from(
+            serde_json::to_string(&serde_json::json!({
+                "name": "desc_db_too_long",
+                "description": long_desc
+            }))
+            .unwrap(),
+        ))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
