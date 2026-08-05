@@ -22,18 +22,16 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use kasane_logic::{
-    Query, SafeValue, Source,
+    Query, SafeValue,
     merge_policy::{Average, Difference, KeepExisting, Max, Min, Overwrite, Sum},
 };
 
 use crate::{
-    AppState,
     error::AppError,
     models::{
         database::table::{JsonValueType, TableConstraints, TableDataType},
-        query::{FilterCondition, MergePolicyKind, QueryNode},
+        query::MergePolicyKind,
     },
-    services::query::ResolvedTables,
 };
 
 /// 値型 `V` に対するクエリ AST。
@@ -66,7 +64,7 @@ macro_rules! for_value_type {
 
 /// 浮動小数（f64）を `Ord` にするラッパー。
 ///
-/// [`CellValue`] は `Ord` を要求するが浮動小数は `PartialOrd` しか持たないため、
+/// [`SafeValue`] は `Ord` を要求するが浮動小数は `PartialOrd` しか持たないため、
 /// `total_cmp` による全順序を与える（NaN でも panic しない）。
 ///
 /// # `ordered-float` クレートを使わない理由
@@ -226,11 +224,68 @@ pub trait Value: SafeValue + Ord + 'static {
     /// リクエスト中のリテラル（挿入値・フィルタ境界・merge の既定値）から作る。
     fn from_json(value: &serde_json::Value) -> Result<Self, AppError>;
 
-    fn translate_query(
-        node: &QueryNode,
-        app_state: &AppState,
-        tables: &ResolvedTables,
+    fn zoom_out(
+        q: ValueQuery<Self>,
+        z: u8,
+        p: MergePolicyKind,
     ) -> Result<ValueQuery<Self>, AppError>;
+
+    fn extrude_x(
+        q: ValueQuery<Self>,
+        z: u8,
+        start: u32,
+        end: u32,
+        p: MergePolicyKind,
+    ) -> Result<ValueQuery<Self>, AppError>;
+
+    fn extrude_y(
+        q: ValueQuery<Self>,
+        z: u8,
+        start: u32,
+        end: u32,
+        p: MergePolicyKind,
+    ) -> Result<ValueQuery<Self>, AppError>;
+
+    fn extrude_f(
+        q: ValueQuery<Self>,
+        z: u8,
+        start: i32,
+        end: i32,
+        p: MergePolicyKind,
+    ) -> Result<ValueQuery<Self>, AppError>;
+
+    fn merge(
+        lhs: ValueQuery<Self>,
+        rhs: ValueQuery<Self>,
+        default: Self,
+        p: MergePolicyKind,
+    ) -> Result<ValueQuery<Self>, AppError>;
+
+    /// 線形減衰。値の乗除算を要するため、既定では非対応。
+    fn falloff_x(
+        _q: ValueQuery<Self>,
+        _z: u8,
+        _r: u32,
+        _p: MergePolicyKind,
+    ) -> Result<ValueQuery<Self>, AppError> {
+        Err(unsupported_op("falloffLinearX", Self::type_name()))
+    }
+    fn falloff_y(
+        _q: ValueQuery<Self>,
+        _z: u8,
+        _r: u32,
+        _p: MergePolicyKind,
+    ) -> Result<ValueQuery<Self>, AppError> {
+        Err(unsupported_op("falloffLinearY", Self::type_name()))
+    }
+    fn falloff_f(
+        _q: ValueQuery<Self>,
+        _z: u8,
+        _r: u32,
+        _p: MergePolicyKind,
+    ) -> Result<ValueQuery<Self>, AppError> {
+        Err(unsupported_op("falloffLinearF", Self::type_name()))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -266,160 +321,83 @@ macro_rules! dispatch_full {
 }
 
 // ---------------------------------------------------------------------------
-// translate 生成マクロ
+// op 生成マクロ
 // ---------------------------------------------------------------------------
 
-macro_rules! dispatch_falloff_impl {
-    ($ty:ty, $q:expr, $method:ident ( $($args:expr),* ), $policy:expr) => {
-        dispatch_full!($ty, $q, $method ( $($args),* ), $policy)
-    }
-}
-
-macro_rules! dispatch_falloff_unsupported {
-    ($ty:ty, $q:expr, $method:ident ( $($args:expr),* ), $policy:expr) => {
-        {
-            let _ = &$q;
-            $(let _ = &$args;)*
-            let _ = &$policy;
-            Err(unsupported_op(stringify!($method), <$ty as Value>::type_name()))
-        }
-    }
-}
-
-macro_rules! impl_translate {
-    ($ty:ty, $dispatch:ident, $dispatch_falloff:ident) => {
-        fn translate_query(
-            node: &QueryNode,
-            app_state: &AppState,
-            tables: &ResolvedTables,
+/// 演算子メソッド群を、指定のポリシーディスパッチで生成する。
+macro_rules! impl_ops {
+    ($ty:ty, $dispatch:ident) => {
+        fn zoom_out(
+            q: ValueQuery<Self>,
+            z: u8,
+            p: MergePolicyKind,
         ) -> Result<ValueQuery<Self>, AppError> {
-            match node {
-                QueryNode::Source { database, table } => {
-                    let meta = &tables[&(database.clone(), table.clone())];
-                    let decode = super::build_decoder::<Self>(meta)?;
-                    Ok(crate::repositories::database::table::data::query_source::TableSource::<Self>::new(
-                        app_state.db.env.clone(),
-                        app_state.db.tables_data,
-                        meta.id,
-                        decode,
-                    )
-                    .query())
-                }
+            $dispatch!($ty, q, zoom_out(z), p)
+        }
+        fn extrude_x(
+            q: ValueQuery<Self>,
+            z: u8,
+            start: u32,
+            end: u32,
+            p: MergePolicyKind,
+        ) -> Result<ValueQuery<Self>, AppError> {
+            $dispatch!($ty, q, extrude_x(z, start, end), p)
+        }
+        fn extrude_y(
+            q: ValueQuery<Self>,
+            z: u8,
+            start: u32,
+            end: u32,
+            p: MergePolicyKind,
+        ) -> Result<ValueQuery<Self>, AppError> {
+            $dispatch!($ty, q, extrude_y(z, start, end), p)
+        }
+        fn extrude_f(
+            q: ValueQuery<Self>,
+            z: u8,
+            start: i32,
+            end: i32,
+            p: MergePolicyKind,
+        ) -> Result<ValueQuery<Self>, AppError> {
+            $dispatch!($ty, q, extrude_f(z, start, end), p)
+        }
+        fn merge(
+            lhs: ValueQuery<Self>,
+            rhs: ValueQuery<Self>,
+            default: Self,
+            p: MergePolicyKind,
+        ) -> Result<ValueQuery<Self>, AppError> {
+            $dispatch!($ty, lhs, merge(rhs, default), p)
+        }
+    };
+}
 
-                QueryNode::ShiftX { input, z, index } => {
-                    Ok(input.translate::<Self>(app_state, tables)?.shift_x(*z, *index))
-                }
-                QueryNode::ShiftY { input, z, index } => {
-                    Ok(input.translate::<Self>(app_state, tables)?.shift_y(*z, *index))
-                }
-                QueryNode::ShiftF { input, z, index } => {
-                    Ok(input.translate::<Self>(app_state, tables)?.shift_f(*z, *index))
-                }
-
-                QueryNode::ZoomOut { input, z, policy } => {
-                    let q = input.translate::<Self>(app_state, tables)?;
-                    $dispatch!($ty, q, zoom_out(*z), *policy)
-                }
-
-                QueryNode::ExtrudeX {
-                    input,
-                    z,
-                    start,
-                    end,
-                    policy,
-                } => {
-                    let q = input.translate::<Self>(app_state, tables)?;
-                    $dispatch!($ty, q, extrude_x(*z, *start, *end), *policy)
-                }
-                QueryNode::ExtrudeY {
-                    input,
-                    z,
-                    start,
-                    end,
-                    policy,
-                } => {
-                    let q = input.translate::<Self>(app_state, tables)?;
-                    $dispatch!($ty, q, extrude_y(*z, *start, *end), *policy)
-                }
-                QueryNode::ExtrudeF {
-                    input,
-                    z,
-                    start,
-                    end,
-                    policy,
-                } => {
-                    let q = input.translate::<Self>(app_state, tables)?;
-                    $dispatch!($ty, q, extrude_f(*z, *start, *end), *policy)
-                }
-
-                QueryNode::FalloffLinearX {
-                    input,
-                    z,
-                    radius,
-                    policy,
-                } => {
-                    let q = input.translate::<Self>(app_state, tables)?;
-                    $dispatch_falloff!($ty, q, falloff_linear_x(*z, *radius), *policy)
-                }
-                QueryNode::FalloffLinearY {
-                    input,
-                    z,
-                    radius,
-                    policy,
-                } => {
-                    let q = input.translate::<Self>(app_state, tables)?;
-                    $dispatch_falloff!($ty, q, falloff_linear_y(*z, *radius), *policy)
-                }
-                QueryNode::FalloffLinearF {
-                    input,
-                    z,
-                    radius,
-                    policy,
-                } => {
-                    let q = input.translate::<Self>(app_state, tables)?;
-                    $dispatch_falloff!($ty, q, falloff_linear_f(*z, *radius), *policy)
-                }
-
-                QueryNode::Merge {
-                    left,
-                    right,
-                    default,
-                    policy,
-                } => {
-                    let lhs = left.translate::<Self>(app_state, tables)?;
-                    let rhs = right.translate::<Self>(app_state, tables)?;
-                    let default_val = Self::from_json(default)?;
-                    $dispatch!($ty, lhs, merge(rhs, default_val), *policy)
-                }
-
-                QueryNode::FilterValues { input, condition } => {
-                    let q = input.translate::<Self>(app_state, tables)?;
-                    let parse = |v: &Option<serde_json::Value>| -> Result<Option<Self>, AppError> {
-                        v.as_ref().map(Self::from_json).transpose()
-                    };
-                    Ok(match condition {
-                        FilterCondition::Equals { value } => q.filter_eq(Self::from_json(value)?),
-                        FilterCondition::InRange { min, max } => {
-                            let start = parse(min)?
-                                .map(core::ops::Bound::Included)
-                                .unwrap_or(core::ops::Bound::Unbounded);
-                            let end = parse(max)?
-                                .map(core::ops::Bound::Included)
-                                .unwrap_or(core::ops::Bound::Unbounded);
-                            q.filter_in((start, end))
-                        }
-                        FilterCondition::NotInRange { min, max } => {
-                            let start = parse(min)?
-                                .map(core::ops::Bound::Included)
-                                .unwrap_or(core::ops::Bound::Unbounded);
-                            let end = parse(max)?
-                                .map(core::ops::Bound::Included)
-                                .unwrap_or(core::ops::Bound::Unbounded);
-                            q.filter_not_in((start, end))
-                        }
-                    })
-                }
-            }
+/// 算術が使える型に `falloffLinear*` を生やす。
+macro_rules! impl_falloff {
+    ($ty:ty, $dispatch:ident) => {
+        fn falloff_x(
+            q: ValueQuery<Self>,
+            z: u8,
+            r: u32,
+            p: MergePolicyKind,
+        ) -> Result<ValueQuery<Self>, AppError> {
+            $dispatch!($ty, q, falloff_linear_x(z, r), p)
+        }
+        fn falloff_y(
+            q: ValueQuery<Self>,
+            z: u8,
+            r: u32,
+            p: MergePolicyKind,
+        ) -> Result<ValueQuery<Self>, AppError> {
+            $dispatch!($ty, q, falloff_linear_y(z, r), p)
+        }
+        fn falloff_f(
+            q: ValueQuery<Self>,
+            z: u8,
+            r: u32,
+            p: MergePolicyKind,
+        ) -> Result<ValueQuery<Self>, AppError> {
+            $dispatch!($ty, q, falloff_linear_f(z, r), p)
         }
     };
 }
@@ -463,7 +441,8 @@ impl Value for i64 {
             })
     }
 
-    impl_translate!(i64, dispatch_full, dispatch_falloff_impl);
+    impl_ops!(i64, dispatch_full);
+    impl_falloff!(i64, dispatch_full);
 }
 
 impl Value for OrderedFloat {
@@ -513,7 +492,8 @@ impl Value for OrderedFloat {
         }
     }
 
-    impl_translate!(OrderedFloat, dispatch_full, dispatch_falloff_impl);
+    impl_ops!(OrderedFloat, dispatch_full);
+    impl_falloff!(OrderedFloat, dispatch_full);
 }
 
 // ---------------------------------------------------------------------------
@@ -600,7 +580,7 @@ impl Value for String {
             .ok_or_else(|| type_mismatch(value, JsonValueType::String))
     }
 
-    impl_translate!(String, dispatch_ord, dispatch_falloff_unsupported);
+    impl_ops!(String, dispatch_ord);
 }
 
 impl Value for bool {
@@ -634,7 +614,7 @@ impl Value for bool {
             .ok_or_else(|| type_mismatch(value, JsonValueType::Bool))
     }
 
-    impl_translate!(bool, dispatch_ord, dispatch_falloff_unsupported);
+    impl_ops!(bool, dispatch_ord);
 }
 
 /// `Presence`（値を持たず、空間IDの存在だけを表す型）。
@@ -670,5 +650,5 @@ impl Value for () {
         }
     }
 
-    impl_translate!((), dispatch_ord, dispatch_falloff_unsupported);
+    impl_ops!((), dispatch_ord);
 }

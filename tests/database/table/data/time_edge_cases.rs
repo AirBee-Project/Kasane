@@ -162,12 +162,13 @@ async fn non_calendar_intervals_are_rejected() {
             "value": 1,
             "spatial_ids": [{"type":"singleId","z":20,"f":0,"x":1,"y":1,"i":i,"t":0}]
         });
-        let (status, _) = put_status(&test_app, &body).await;
+        let (status, resp) = put_status(&test_app, &body).await;
         assert_eq!(
             status,
             StatusCode::BAD_REQUEST,
             "i={i} should have been rejected"
         );
+        assert_eq!(resp["code"], "invalid_spatial_id", "i={i}: {resp:?}");
     }
 }
 
@@ -179,8 +180,80 @@ async fn zero_interval_is_rejected() {
         "value": 1,
         "spatial_ids": [{"type":"singleId","z":20,"f":0,"x":1,"y":1,"i":0,"t":0}]
     });
-    let (status, _) = put_status(&test_app, &body).await;
+    let (status, resp) = put_status(&test_app, &body).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(resp["code"], "invalid_spatial_id", "{resp:?}");
+}
+
+/// 「時間指定が不正」というひとつのユーザーミスに、複数のエラーコードを割り当てない。
+///
+/// `i=0` は kasane-logic の `Interval::new` が、`i=7` はこちらの暦チェックが、
+/// `t` の範囲外は `with_time` が弾く——と検出箇所はバラバラだが、クライアントから見れば
+/// どれも同じ「`i`/`t` の指定ミス」なので、`code` は1つに揃っていなければならない。
+#[tokio::test]
+async fn every_invalid_time_specification_shares_one_error_code() {
+    let test_app = TestApp::new();
+    setup(&test_app).await;
+
+    let single = |extra: serde_json::Value| {
+        let mut id = serde_json::json!({"type":"singleId","z":20,"f":0,"x":1,"y":1});
+        let obj = id.as_object_mut().unwrap();
+        for (k, v) in extra.as_object().unwrap() {
+            obj.insert(k.clone(), v.clone());
+        }
+        serde_json::json!({ "value": 1, "spatial_ids": [id] })
+    };
+
+    let cases = [
+        // `Interval::new` が弾く（0 / 上限超え）
+        ("i=0", single(serde_json::json!({"i":0,"t":0}))),
+        (
+            "i over max",
+            single(serde_json::json!({"i":34359738369u64,"t":0})),
+        ),
+        // 暦の単位チェックが弾く
+        ("i=7", single(serde_json::json!({"i":7,"t":0}))),
+        // `with_time` が弾く（区間の終端が 2^35 秒を超える）
+        (
+            "t out of range",
+            single(serde_json::json!({"i":86400,"t":u64::MAX})),
+        ),
+        // 片方だけの指定
+        ("i without t", single(serde_json::json!({"i":3600}))),
+        ("t without i", single(serde_json::json!({"t":0}))),
+        // FlexId 側も同じコードに揃える
+        (
+            "flexId tZoomlevel without tIndex",
+            serde_json::json!({
+                "value": 1,
+                "spatial_ids": [{
+                    "type":"flexId",
+                    "fZoomlevel":20,"fIndex":0,"xZoomlevel":20,"xIndex":1,
+                    "yZoomlevel":20,"yIndex":1,"tZoomlevel":25
+                }]
+            }),
+        ),
+        (
+            "flexId tZoomlevel out of range",
+            serde_json::json!({
+                "value": 1,
+                "spatial_ids": [{
+                    "type":"flexId",
+                    "fZoomlevel":20,"fIndex":0,"xZoomlevel":20,"xIndex":1,
+                    "yZoomlevel":20,"yIndex":1,"tZoomlevel":36,"tIndex":0
+                }]
+            }),
+        ),
+    ];
+
+    for (label, body) in cases {
+        let (status, resp) = put_status(&test_app, &body).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{label}: {resp:?}");
+        assert_eq!(
+            resp["code"], "invalid_spatial_id",
+            "{label} should use the same error code as every other bad time spec: {resp:?}"
+        );
+    }
 }
 
 /// 暦の単位はすべて受理される（境界値を1つずつ確認）。
