@@ -281,12 +281,11 @@ impl QueryNode {
                         mapping,
                         default,
                     ),
-                    TableDataType::Float => build_map_values::<crate::services::query::value::OrderedFloat, V>(
-                        input.as_ref(),
-                        app_state,
-                        tables,
-                        mapping,
-                        default,
+                    TableDataType::Float => build_map_values::<
+                        crate::services::query::value::OrderedFloat,
+                        V,
+                    >(
+                        input.as_ref(), app_state, tables, mapping, default
                     ),
                     TableDataType::Text | TableDataType::Enum => build_map_values::<String, V>(
                         input.as_ref(),
@@ -333,7 +332,10 @@ fn build_map_values<U: Value, V: Value>(
     let typed_default = V::from_json(default_val)?;
 
     Ok(inner_query.map_values(move |u| {
-        typed_mapping.get(&u).cloned().unwrap_or_else(|| typed_default.clone())
+        typed_mapping
+            .get(&u)
+            .cloned()
+            .unwrap_or_else(|| typed_default.clone())
     }))
 }
 
