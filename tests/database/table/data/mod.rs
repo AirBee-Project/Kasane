@@ -8,7 +8,6 @@ pub mod remove;
 pub mod shard_coverage;
 pub mod shard_merge;
 pub mod shard_split;
-pub mod stream;
 pub mod time_coalescing;
 pub mod time_edge_cases;
 pub mod upsert;
