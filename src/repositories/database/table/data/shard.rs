@@ -45,7 +45,7 @@ impl ShardEntry {
                     ));
                 }
                 let mut regions = Vec::with_capacity(body.len() / FlexId::ENCODED_LEN);
-                for chunk in body.chunks_exact(FlexId::ENCODED_LEN) {
+                for chunk in body.as_chunks::<{ FlexId::ENCODED_LEN }>().0 {
                     let mut b = [0u8; FlexId::ENCODED_LEN];
                     b.copy_from_slice(chunk);
                     regions
