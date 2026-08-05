@@ -1001,7 +1001,7 @@ components:
           items:
             type: object
             description: |-
-              高さ・経度・緯度・時間の4軸すべてを「ズームレベル + インデックス」で表す時空間ID。
+              高さ・経度・緯度・時間の4軸すべてを「ズームレベル + インデックス」で表す拡張時空間IDを表す型。
               時間を指定する場合は `t_zoomlevel` と `t_index` を必ず両方指定すること。
               両方省略した場合は「全時間」を表す。
             required:
@@ -1081,7 +1081,7 @@ components:
           items:
             type: object
             description: |-
-              直方体（範囲）の空間ボクセルを指す時空間ID。
+              区間表現の時空間IDを表す型。
 
               時間を指定する場合は `i` と `t` を必ず両方指定すること。
               両方省略した場合は「全時間」を表す。
@@ -1143,7 +1143,7 @@ components:
                   type: integer
                   format: int64
                   minimum: 0
-                description: 時間インデックスの範囲 `[min, max]`（両端を含む、単位は `i` 秒）。
+                description: 時間インデックスの区間表現。
                 example:
                 - 0
                 - 5
@@ -1161,7 +1161,7 @@ components:
           items:
             type: object
             description: |-
-              単一の空間ボクセルを指す時空間ID。
+              通常の時空間IDを表す型。
 
               時間を指定する場合は `i` と `t` を必ず両方指定すること。
               両方省略した場合は「全時間」を表す。
@@ -1208,7 +1208,7 @@ components:
                 - integer
                 - 'null'
                 format: int64
-                description: 時間インデックス。`t = floor(Unixタイムスタンプ(秒) / i)` で求まる値。
+                description: 時間インデックス。
                 example: 1
                 minimum: 0
     DatabaseInfoResponse:
@@ -1307,7 +1307,7 @@ components:
     FlexId:
       type: object
       description: |-
-        高さ・経度・緯度・時間の4軸すべてを「ズームレベル + インデックス」で表す時空間ID。
+        高さ・経度・緯度・時間の4軸すべてを「ズームレベル + インデックス」で表す拡張時空間IDを表す型。
         時間を指定する場合は `t_zoomlevel` と `t_index` を必ず両方指定すること。
         両方省略した場合は「全時間」を表す。
       required:
@@ -1806,7 +1806,7 @@ components:
     RangeId:
       type: object
       description: |-
-        直方体（範囲）の空間ボクセルを指す時空間ID。
+        区間表現の時空間IDを表す型。
 
         時間を指定する場合は `i` と `t` を必ず両方指定すること。
         両方省略した場合は「全時間」を表す。
@@ -1868,7 +1868,7 @@ components:
             type: integer
             format: int64
             minimum: 0
-          description: 時間インデックスの範囲 `[min, max]`（両端を含む、単位は `i` 秒）。
+          description: 時間インデックスの区間表現。
           example:
           - 0
           - 5
@@ -1887,7 +1887,7 @@ components:
     SingleId:
       type: object
       description: |-
-        単一の空間ボクセルを指す時空間ID。
+        通常の時空間IDを表す型。
 
         時間を指定する場合は `i` と `t` を必ず両方指定すること。
         両方省略した場合は「全時間」を表す。
@@ -1934,7 +1934,7 @@ components:
           - integer
           - 'null'
           format: int64
-          description: 時間インデックス。`t = floor(Unixタイムスタンプ(秒) / i)` で求まる値。
+          description: 時間インデックス。
           example: 1
           minimum: 0
     SpatialId:

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use utoipa::ToSchema;
 
-/// 単一の空間ボクセルを指す時空間ID。
+/// 通常の時空間IDを表す型。
 ///
 /// 時間を指定する場合は `i` と `t` を必ず両方指定すること。
 /// 両方省略した場合は「全時間」を表す。
@@ -25,13 +25,13 @@ pub struct RawSingleId {
     #[schema(example = 3600, minimum = 1)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub i: Option<u64>,
-    /// 時間インデックス。`t = floor(Unixタイムスタンプ(秒) / i)` で求まる値。
+    /// 時間インデックス。
     #[schema(example = 1)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub t: Option<u64>,
 }
 
-/// 直方体（範囲）の空間ボクセルを指す時空間ID。
+/// 区間表現の時空間IDを表す型。
 ///
 /// 時間を指定する場合は `i` と `t` を必ず両方指定すること。
 /// 両方省略した場合は「全時間」を表す。
@@ -54,13 +54,13 @@ pub struct RawRangeId {
     #[schema(example = 3600, minimum = 1)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub i: Option<u64>,
-    /// 時間インデックスの範囲 `[min, max]`（両端を含む、単位は `i` 秒）。
+    /// 時間インデックスの区間表現。
     #[schema(example = json!([0, 5]))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub t: Option<[u64; 2]>,
 }
 
-/// 高さ・経度・緯度・時間の4軸すべてを「ズームレベル + インデックス」で表す時空間ID。
+/// 高さ・経度・緯度・時間の4軸すべてを「ズームレベル + インデックス」で表す拡張時空間IDを表す型。
 /// 時間を指定する場合は `t_zoomlevel` と `t_index` を必ず両方指定すること。
 /// 両方省略した場合は「全時間」を表す。
 #[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Clone)]
