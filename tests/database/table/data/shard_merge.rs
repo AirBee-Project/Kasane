@@ -84,7 +84,7 @@ fn siblings_merge_after_mass_remove() {
 
     let mut query = SpatialIdSet::new();
     query.insert(RangeId::new(20, [0, 0], [keep_from * 4, (n - 1) * 4], [0, 0]).unwrap());
-    let got = r.data_get(table_id, query).unwrap();
+    let got = r.data_get(table_id, query, None).unwrap();
     let mut xs: HashSet<u32> = HashSet::new();
     for (value, flex_ids) in got {
         assert_eq!(value, b"v".to_vec());
