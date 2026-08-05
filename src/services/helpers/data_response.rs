@@ -90,10 +90,10 @@ where
                 if !take_one(left) {
                     return;
                 }
-                let (i, t) = if flex_id.is_whole_time() {
+                let (t_zoomlevel, t_index) = if flex_id.is_whole_time() {
                     (None, None)
                 } else {
-                    (Some(flex_id.time_interval().seconds()), Some(flex_id.t()))
+                    (Some(flex_id.t_zoomlevel()), Some(flex_id.t()))
                 };
                 out.push(RawFlexId {
                     f_zoomlevel: flex_id.f_zoomlevel(),
@@ -102,8 +102,8 @@ where
                     x_index: flex_id.x_index(),
                     y_zoomlevel: flex_id.y_zoomlevel(),
                     y_index: flex_id.y_index(),
-                    i,
-                    t,
+                    t_zoomlevel,
+                    t_index,
                 });
             })?;
             GetDataResponse::Flex(GetDataResponseFlex { dictionary, data })

@@ -1040,19 +1040,20 @@ components:
                 format: int32
                 example: 412905
                 minimum: 0
-              i:
+              tZoomlevel:
+                type:
+                - integer
+                - 'null'
+                format: int32
+                example: 25
+                maximum: 35
+                minimum: 0
+              tIndex:
                 type:
                 - integer
                 - 'null'
                 format: int64
-                example: 1
-                minimum: 1
-              t:
-                type:
-                - integer
-                - 'null'
-                format: int64
-                example: 1
+                example: 7
                 minimum: 0
     DataGroup_RangeId:
       type: object
@@ -1311,19 +1312,20 @@ components:
           format: int32
           example: 412905
           minimum: 0
-        i:
+        tZoomlevel:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          example: 25
+          maximum: 35
+          minimum: 0
+        tIndex:
           type:
           - integer
           - 'null'
           format: int64
-          example: 1
-          minimum: 1
-        t:
-          type:
-          - integer
-          - 'null'
-          format: int64
-          example: 1
+          example: 7
           minimum: 0
     GetDataQuery:
       type: object

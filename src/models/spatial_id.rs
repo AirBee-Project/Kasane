@@ -56,12 +56,12 @@ pub struct RawFlexId {
     pub y_zoomlevel: u8,
     #[schema(example = 412905)]
     pub y_index: u32,
-    #[schema(example = 1, minimum = 1)]
+    #[schema(example = 25, maximum = 35)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub i: Option<u64>,
-    #[schema(example = 1)]
+    pub t_zoomlevel: Option<u8>,
+    #[schema(example = 7)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub t: Option<u64>,
+    pub t_index: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Clone)]

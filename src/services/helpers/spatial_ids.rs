@@ -32,67 +32,55 @@ pub fn to_spatial_id_set(ids: &[SpatialId]) -> Result<SpatialIdSet, AppError> {
             SpatialId::SingleId(s) => {
                 let mut id = SingleId::new(s.z, s.f, s.x, s.y)?;
                 if let Some(i) = s.i {
-                    let interval =
-                        kasane_logic::Interval::new(i).map_err(|_| AppError::InvalidSpatialId {
-                            reason: format!("Invalid interval: {}", i),
-                        })?;
-                    if !kasane_logic::AllowedIntervals::calendar().contains(interval) {
-                        return Err(AppError::InvalidSpatialId {
-                            reason: format!("Interval {} is not allowed", i),
-                        });
-                    }
+                    let interval = kasane_logic::Interval::new(i)?;
                     let t = s.t.ok_or_else(|| AppError::InvalidSpatialId {
                         reason: "t must be provided when i is provided".to_string(),
                     })?;
                     id = id.with_time(interval, t)?;
+                } else if s.t.is_some() {
+                    return Err(AppError::InvalidSpatialId {
+                        reason: "i must be provided when t is provided".to_string(),
+                    });
                 }
                 result.insert(id);
             }
             SpatialId::RangeId(r) => {
                 let mut id = RangeId::new(r.z, r.f, r.x, r.y)?;
                 if let Some(i) = r.i {
-                    let interval =
-                        kasane_logic::Interval::new(i).map_err(|_| AppError::InvalidSpatialId {
-                            reason: format!("Invalid interval: {}", i),
-                        })?;
-                    if !kasane_logic::AllowedIntervals::calendar().contains(interval) {
-                        return Err(AppError::InvalidSpatialId {
-                            reason: format!("Interval {} is not allowed", i),
-                        });
-                    }
+                    let interval = kasane_logic::Interval::new(i)?;
                     let t = r.t.ok_or_else(|| AppError::InvalidSpatialId {
                         reason: "t must be provided when i is provided".to_string(),
                     })?;
                     id = id.with_time(interval, t)?;
+                } else if r.t.is_some() {
+                    return Err(AppError::InvalidSpatialId {
+                        reason: "i must be provided when t is provided".to_string(),
+                    });
                 }
                 result.insert(id);
             }
             SpatialId::FlexId(f) => {
-                let mut f_zoomlevel = f.f_zoomlevel;
-                let mut f_index = f.f_index;
-
-                if let Some(i) = f.i {
-                    if i == 1 {
-                        f_zoomlevel = 35;
-                        let t = f.t.ok_or_else(|| AppError::InvalidSpatialId {
-                            reason: "t must be provided when i is provided".to_string(),
-                        })?;
-                        f_index = t as i32;
-                    } else if i != 0 {
-                        return Err(AppError::InvalidSpatialId {
-                            reason: format!("FlexId cannot represent interval {}", i),
-                        });
-                    }
-                }
-
-                result.insert(kasane_logic::FlexId::new(
-                    f_zoomlevel,
-                    f_index,
+                let mut id = kasane_logic::FlexId::new(
+                    f.f_zoomlevel,
+                    f.f_index,
                     f.x_zoomlevel,
                     f.x_index,
                     f.y_zoomlevel,
                     f.y_index,
-                )?);
+                )?;
+
+                if let Some(t_zoomlevel) = f.t_zoomlevel {
+                    let t_index = f.t_index.ok_or_else(|| AppError::InvalidSpatialId {
+                        reason: "tIndex must be provided when tZoomlevel is provided".to_string(),
+                    })?;
+                    id = id.with_time(t_zoomlevel, t_index)?;
+                } else if f.t_index.is_some() {
+                    return Err(AppError::InvalidSpatialId {
+                        reason: "tZoomlevel must be provided when tIndex is provided".to_string(),
+                    });
+                }
+
+                result.insert(id);
             }
         }
     }
@@ -116,19 +104,15 @@ pub fn process_spatial_ids(
 
                 let mut id = SingleId::new(single_id.z, single_id.f, single_id.x, single_id.y)?;
                 if let Some(i) = single_id.i {
-                    let interval =
-                        kasane_logic::Interval::new(i).map_err(|_| AppError::InvalidSpatialId {
-                            reason: format!("Invalid interval: {}", i),
-                        })?;
-                    if !kasane_logic::AllowedIntervals::calendar().contains(interval) {
-                        return Err(AppError::InvalidSpatialId {
-                            reason: format!("Interval {} is not allowed", i),
-                        });
-                    }
+                    let interval = kasane_logic::Interval::new(i)?;
                     let t = single_id.t.ok_or_else(|| AppError::InvalidSpatialId {
                         reason: "t must be provided when i is provided".to_string(),
                     })?;
                     id = id.with_time(interval, t)?;
+                } else if single_id.t.is_some() {
+                    return Err(AppError::InvalidSpatialId {
+                        reason: "i must be provided when t is provided".to_string(),
+                    });
                 }
 
                 if zoom == single_id.z {
@@ -144,19 +128,15 @@ pub fn process_spatial_ids(
 
                 let mut id = RangeId::new(range_id.z, range_id.f, range_id.x, range_id.y)?;
                 if let Some(i) = range_id.i {
-                    let interval =
-                        kasane_logic::Interval::new(i).map_err(|_| AppError::InvalidSpatialId {
-                            reason: format!("Invalid interval: {}", i),
-                        })?;
-                    if !kasane_logic::AllowedIntervals::calendar().contains(interval) {
-                        return Err(AppError::InvalidSpatialId {
-                            reason: format!("Interval {} is not allowed", i),
-                        });
-                    }
+                    let interval = kasane_logic::Interval::new(i)?;
                     let t = range_id.t.ok_or_else(|| AppError::InvalidSpatialId {
                         reason: "t must be provided when i is provided".to_string(),
                     })?;
                     id = id.with_time(interval, t)?;
+                } else if range_id.t.is_some() {
+                    return Err(AppError::InvalidSpatialId {
+                        reason: "i must be provided when t is provided".to_string(),
+                    });
                 }
 
                 if zoom == range_id.z {
@@ -199,26 +179,15 @@ pub fn process_spatial_ids(
                     new_yi as u32,
                 )?;
 
-                if let Some(i) = flex_id.i {
-                    let interval =
-                        kasane_logic::Interval::new(i).map_err(|_| AppError::InvalidSpatialId {
-                            reason: format!("Invalid interval: {}", i),
-                        })?;
-                    if !interval.is_power_of_two() {
-                        return Err(AppError::InvalidSpatialId {
-                            reason: format!("FlexId interval must be a power of two, got {}", i),
-                        });
-                    }
-                    if !kasane_logic::AllowedIntervals::calendar().contains(interval) {
-                        return Err(AppError::InvalidSpatialId {
-                            reason: format!("Interval {} is not allowed", i),
-                        });
-                    }
-                    let t = flex_id.t.ok_or_else(|| AppError::InvalidSpatialId {
-                        reason: "t must be provided when i is provided".to_string(),
+                if let Some(t_zoomlevel) = flex_id.t_zoomlevel {
+                    let t_index = flex_id.t_index.ok_or_else(|| AppError::InvalidSpatialId {
+                        reason: "tIndex must be provided when tZoomlevel is provided".to_string(),
                     })?;
-                    let t_zoomlevel = 35 - i.trailing_zeros() as u8;
-                    id = id.with_time(t_zoomlevel, t)?;
+                    id = id.with_time(t_zoomlevel, t_index)?;
+                } else if flex_id.t_index.is_some() {
+                    return Err(AppError::InvalidSpatialId {
+                        reason: "tZoomlevel must be provided when tIndex is provided".to_string(),
+                    });
                 }
                 result.insert(id);
             }
