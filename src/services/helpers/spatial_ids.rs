@@ -1,9 +1,6 @@
 use kasane_logic::{AllowedIntervals, FlexId, Interval, RangeId, SingleId, SpatialIdSet};
 
-use crate::{
-    error::AppError,
-    models::spatial_id::SpatialId,
-};
+use crate::{error::AppError, models::spatial_id::SpatialId};
 
 /// 時間成分の不正はすべて [`AppError::InvalidSpatialId`] に畳む。
 ///
@@ -113,7 +110,6 @@ fn apply_segment_time(
     }
 }
 
-
 pub fn to_spatial_id_set(ids: &[SpatialId]) -> Result<SpatialIdSet, AppError> {
     let mut result = SpatialIdSet::new();
 
@@ -143,4 +139,3 @@ pub fn to_spatial_id_set(ids: &[SpatialId]) -> Result<SpatialIdSet, AppError> {
 
     Ok(result)
 }
-

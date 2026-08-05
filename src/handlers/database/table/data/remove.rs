@@ -37,12 +37,6 @@ pub async fn data_remove(
     crate::middleware::auth::check_privilege(&app_state, &auth_user, &db_name, UserRole::Write)
         .await?;
 
-    data_remove_service::remove(
-        &app_state,
-        &db_name,
-        &table_name,
-        &payload.spatial_ids,
-    )
-    .await?;
+    data_remove_service::remove(&app_state, &db_name, &table_name, &payload.spatial_ids).await?;
     Ok(StatusCode::NO_CONTENT)
 }

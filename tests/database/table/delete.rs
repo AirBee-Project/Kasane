@@ -64,9 +64,7 @@ async fn test_delete_table_cache_bug() {
     let table_name = "bug1_table";
 
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", table_name, "Int")
-        .await;
+    test_app.create_table("test_db", table_name, "Int").await;
 
     let single_id_query = serde_json::json!([
         { "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }

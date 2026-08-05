@@ -12,9 +12,7 @@ use crate::database::table::data::common::search_data;
 async fn test_table_data_concurrent_group_commit() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", "test_table", "Int")
-        .await;
+    test_app.create_table("test_db", "test_table", "Int").await;
 
     let app = test_app.app.clone();
     let num_tasks = 100;
@@ -100,9 +98,7 @@ async fn test_table_data_concurrent_group_commit() {
 async fn test_invalid_request_does_not_abort_valid_batch() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", "test_table", "Int")
-        .await;
+    test_app.create_table("test_db", "test_table", "Int").await;
 
     let app = test_app.app.clone();
     let num_valid = 50;

@@ -75,9 +75,7 @@ async fn test_table_data_remove_logical_bug() {
 
     let table_name = "bug3_table";
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", table_name, "Int")
-        .await;
+    test_app.create_table("test_db", table_name, "Int").await;
 
     let parent_id_query =
         serde_json::json!([{ "z": 10, "f": 0, "x": 909, "y": 403, "type": "singleId" }]);
@@ -123,9 +121,7 @@ async fn test_table_data_remove_partial_overlap() {
 
     let table_name = "partial_remove_table";
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", table_name, "Int")
-        .await;
+    test_app.create_table("test_db", table_name, "Int").await;
 
     let id1 = serde_json::json!({ "z": 20, "f": 0, "x": 10, "y": 10, "type": "singleId" });
     let id2 = serde_json::json!({ "z": 20, "f": 0, "x": 11, "y": 10, "type": "singleId" });

@@ -744,7 +744,6 @@ async fn explicit_value_type_rejects_unreadable_source() {
 // とは別物。要求空間IDを丸めていた頃は、クエリ自身が生成したセルを指名できず 400 になっていた。
 // ---------------------------------------------------------------------------
 
-
 /// ズームレベルの絶対上限（35）は従来どおり検証される。
 #[tokio::test]
 async fn rejects_zoom_level_beyond_absolute_maximum() {

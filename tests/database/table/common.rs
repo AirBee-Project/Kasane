@@ -57,12 +57,7 @@ impl TestApp {
         assert_eq!(response.status(), axum::http::StatusCode::CREATED);
     }
 
-    pub async fn create_table(
-        &self,
-        db_name: &str,
-        name: &str,
-        data_type: &str,
-    ) {
+    pub async fn create_table(&self, db_name: &str, name: &str, data_type: &str) {
         let create_body = serde_json::json!({
             "name": name,
             "data_type": data_type

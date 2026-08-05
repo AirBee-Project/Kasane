@@ -15,9 +15,7 @@ use crate::database::table::data::common::{put_data, search_data};
 
 async fn setup(test_app: &TestApp) {
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", "test_table", "Int")
-        .await;
+    test_app.create_table("test_db", "test_table", "Int").await;
 }
 
 /// `PUT /data` を投げてステータスコードだけ返す（成功・失敗どちらも許容する）。

@@ -14,9 +14,7 @@ use crate::database::table::data::common::put_data;
 async fn read_back_coalesces_a_non_power_of_two_calendar_interval() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", "test_table", "Int")
-        .await;
+    test_app.create_table("test_db", "test_table", "Int").await;
 
     let single_id_query = serde_json::json!([{
         "z": 20, "f": 0, "x": 931386, "y": 412905,
@@ -67,9 +65,7 @@ async fn read_back_coalesces_a_non_power_of_two_calendar_interval() {
 async fn read_back_coalesces_adjacent_segments_into_a_range() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", "test_table", "Int")
-        .await;
+    test_app.create_table("test_db", "test_table", "Int").await;
 
     for t in [0, 1] {
         let query = serde_json::json!([{

@@ -14,9 +14,7 @@ use crate::database::table::data::common::{
 async fn test_table_data_insert_single_id() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", "test_table", "Int")
-        .await;
+    test_app.create_table("test_db", "test_table", "Int").await;
 
     let single_id_query =
         serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
@@ -150,9 +148,7 @@ async fn test_table_data_insert_float() {
 async fn test_table_data_insert_single_id_error() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", "test_table", "Int")
-        .await;
+    test_app.create_table("test_db", "test_table", "Int").await;
 
     let single_id_query =
         serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
@@ -179,9 +175,7 @@ async fn test_table_data_insert_single_id_error() {
 async fn test_table_data_insert_single_id_logic_error() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", "test_table", "Text")
-        .await;
+    test_app.create_table("test_db", "test_table", "Text").await;
 
     let single_id_query =
         serde_json::json!([{ "z": 3, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
@@ -208,9 +202,7 @@ async fn test_table_data_insert_single_id_logic_error() {
 async fn test_table_data_insert_two_single_id() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", "test_table", "Int")
-        .await;
+    test_app.create_table("test_db", "test_table", "Int").await;
 
     let single_id_query_1 =
         serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
@@ -267,9 +259,7 @@ async fn test_table_data_insert_two_single_id() {
 async fn test_table_data_insert_single_id_overwrite() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", "test_table", "Int")
-        .await;
+    test_app.create_table("test_db", "test_table", "Int").await;
 
     let single_id_query =
         serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
@@ -394,9 +384,7 @@ async fn test_table_data_insert_range_id_overwrite() {
 async fn test_table_data_insert_range_id() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", "test_table", "Int")
-        .await;
+    test_app.create_table("test_db", "test_table", "Int").await;
 
     let range_id_query = serde_json::json!([{ "z": 20, "f": [0, 100], "x": [931380, 931386], "y": [412900, 412905], "type": "rangeId" }]);
 
@@ -456,9 +444,7 @@ async fn test_table_data_insert_range_id() {
 async fn test_table_data_overload_insert() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", "test_table", "Text")
-        .await;
+    test_app.create_table("test_db", "test_table", "Text").await;
 
     let query1 =
         serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
@@ -510,9 +496,7 @@ async fn test_table_data_recursive_merge() {
 
     let table_name = "merge_table";
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", table_name, "Int")
-        .await;
+    test_app.create_table("test_db", table_name, "Int").await;
 
     for f in 0..4 {
         for y in 0..4 {
@@ -604,7 +588,6 @@ async fn test_table_data_isolation() {
     );
 }
 
-
 #[tokio::test]
 /// 広範な親ノード内にピンポイントな子ノードを挿入した際、親が適切に分割され値の整合性が保たれるかを検証する。
 async fn test_table_data_deep_split() {
@@ -612,9 +595,7 @@ async fn test_table_data_deep_split() {
 
     let table_name = "split_table";
     test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", table_name, "Int")
-        .await;
+    test_app.create_table("test_db", table_name, "Int").await;
 
     let parent_query = serde_json::json!([{ "z": 18, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
     put_data(

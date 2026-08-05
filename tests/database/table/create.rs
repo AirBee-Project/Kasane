@@ -92,7 +92,6 @@ async fn test_create_table_conflict() {
     assert_eq!(json["data_type"], "Int");
 }
 
-
 #[tokio::test]
 /// ENUM型のテーブル作成時に、選択肢の文字列長さが制限(最大255文字、空文字禁止)に従っているか検証する。
 async fn test_create_table_enum_choice_length_limits() {

@@ -1,7 +1,5 @@
 use crate::{
-    AppState,
-    error::AppError,
-    models::spatial_id::SpatialId,
+    AppState, error::AppError, models::spatial_id::SpatialId,
     services::helpers::spatial_ids::to_spatial_id_set,
 };
 

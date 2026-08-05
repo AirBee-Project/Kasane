@@ -259,9 +259,7 @@ async fn test_manage_privileges() {
         .uri("/databases/test_db/tables")
         .header("Authorization", format!("Bearer {}", user_token))
         .header("Content-Type", "application/json")
-        .body(Body::from(
-            r#"{"name": "t1", "data_type": "Int"}"#,
-        ))
+        .body(Body::from(r#"{"name": "t1", "data_type": "Int"}"#))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
@@ -288,9 +286,7 @@ async fn test_write_privileges() {
         .uri("/databases/test_db/tables")
         .header("Authorization", format!("Bearer {}", root_token))
         .header("Content-Type", "application/json")
-        .body(Body::from(
-            r#"{"name": "t1", "data_type": "Int"}"#,
-        ))
+        .body(Body::from(r#"{"name": "t1", "data_type": "Int"}"#))
         .unwrap();
     test_app.app.clone().oneshot(req).await.unwrap();
 
@@ -303,9 +299,7 @@ async fn test_write_privileges() {
         .uri("/databases/test_db/tables")
         .header("Authorization", format!("Bearer {}", user_token))
         .header("Content-Type", "application/json")
-        .body(Body::from(
-            r#"{"name": "t2", "data_type": "Int"}"#,
-        ))
+        .body(Body::from(r#"{"name": "t2", "data_type": "Int"}"#))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
@@ -343,9 +337,7 @@ async fn test_read_privileges() {
         .uri("/databases/test_db/tables")
         .header("Authorization", format!("Bearer {}", root_token))
         .header("Content-Type", "application/json")
-        .body(Body::from(
-            r#"{"name": "t1", "data_type": "Int"}"#,
-        ))
+        .body(Body::from(r#"{"name": "t1", "data_type": "Int"}"#))
         .unwrap();
     test_app.app.clone().oneshot(req).await.unwrap();
 
@@ -541,9 +533,7 @@ async fn test_no_privileges() {
         .uri("/databases/test_db/tables")
         .header("Authorization", format!("Bearer {}", root_token))
         .header("Content-Type", "application/json")
-        .body(Body::from(
-            r#"{"name": "t1", "data_type": "Int"}"#,
-        ))
+        .body(Body::from(r#"{"name": "t1", "data_type": "Int"}"#))
         .unwrap();
     test_app.app.clone().oneshot(req).await.unwrap();
 
@@ -989,9 +979,7 @@ async fn test_copy_and_rename_permissions() {
         .uri("/databases/copied_db/tables")
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", user_a_token))
-        .body(Body::from(
-            r#"{"name": "new_table", "data_type": "Int"}"#,
-        ))
+        .body(Body::from(r#"{"name": "new_table", "data_type": "Int"}"#))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
