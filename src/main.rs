@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use clap::Parser;
 use kasane::{AppState, db_init, kasane};
 
-#[cfg(not(debug_assertions))]
+#[cfg(feature = "production")]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
@@ -28,8 +28,10 @@ fn default_port() -> u16 {
         .unwrap_or(5172)
 }
 
+#[cfg(feature = "production")]
 struct TracerShutdownGuard(Option<opentelemetry_sdk::trace::SdkTracerProvider>);
 
+#[cfg(feature = "production")]
 impl Drop for TracerShutdownGuard {
     fn drop(&mut self) {
         let Some(provider) = self.0.take() else {
@@ -55,7 +57,10 @@ async fn main() {
     dotenvy::dotenv().ok();
 
     // ログおよびテレメトリの初期化
+    #[cfg(feature = "production")]
     let _tracer_provider = TracerShutdownGuard(kasane::telemetry::init_telemetry());
+    #[cfg(not(feature = "production"))]
+    kasane::telemetry::init_telemetry();
 
     let args = Args::parse();
     let db = db_init::initialize_database(&args.database_path);

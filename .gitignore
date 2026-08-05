@@ -21,3 +21,7 @@ Thumbs.db
 .claude
 
 /default_kasane_db
+
+
+# craneliftの設定が書いてあるため
+.cargo/config.toml
