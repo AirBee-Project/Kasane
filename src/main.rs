@@ -3,6 +3,10 @@ use std::{net::SocketAddr, sync::Arc};
 use clap::Parser;
 use kasane::{AppState, auth_cache::AuthCache, db_init, kasane};
 
+#[cfg(not(debug_assertions))]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
 struct Args {
