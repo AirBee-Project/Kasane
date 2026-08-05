@@ -74,7 +74,6 @@ examples:
           {
             "name": "example_table_renamed",
             "data_type": "Int",
-            "max_zoom_level": 25,
             "constraints": {
               "type": "Int",
               "min": 0,

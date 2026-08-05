@@ -42,7 +42,6 @@ pub async fn data_remove(
         &db_name,
         &table_name,
         &payload.spatial_ids,
-        &payload.zoom_level_policy,
     )
     .await?;
     Ok(StatusCode::NO_CONTENT)

@@ -13,7 +13,7 @@ async fn test_delete_table_success() {
     test_app.create_database("test_db").await;
 
     test_app
-        .create_table("test_db", "table_to_delete", "Int", 25)
+        .create_table("test_db", "table_to_delete", "Int")
         .await;
 
     let req = Request::builder()
@@ -42,7 +42,7 @@ async fn test_delete_table_not_found() {
 
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "example_table", "Int", 25)
+        .create_table("test_db", "example_table", "Int")
         .await;
 
     let req = Request::builder()
@@ -65,7 +65,7 @@ async fn test_delete_table_cache_bug() {
 
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", table_name, "Int", 25)
+        .create_table("test_db", table_name, "Int")
         .await;
 
     let single_id_query = serde_json::json!([
@@ -94,7 +94,6 @@ async fn test_delete_table_cache_bug() {
             serde_json::to_string(&serde_json::json!({
                 "name": table_name,
                 "data_type": "Int",
-                "max_zoom_level": 25
             }))
             .unwrap(),
         ))

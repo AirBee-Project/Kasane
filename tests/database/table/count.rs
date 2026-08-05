@@ -30,7 +30,7 @@ async fn test_table_count_dynamic() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "count_test_table", "Int", 25)
+        .create_table("test_db", "count_test_table", "Int")
         .await;
 
     // 初期状態の count は 0 であること

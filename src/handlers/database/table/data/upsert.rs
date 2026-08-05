@@ -48,7 +48,6 @@ pub async fn data_upsert(
         &table_name,
         &payload.spatial_ids,
         payload.value,
-        &payload.zoom_level_policy,
     )
     .await?;
     Ok(StatusCode::NO_CONTENT)

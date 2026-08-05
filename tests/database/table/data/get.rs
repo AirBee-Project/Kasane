@@ -10,7 +10,7 @@ async fn test_table_data_get_multiple() {
     let table_name = "get_table";
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", table_name, "Int", 25)
+        .create_table("test_db", table_name, "Int")
         .await;
 
     let id1 = RawSingleId {
@@ -78,7 +78,7 @@ async fn test_table_data_get_format_options() {
     let table_name = "get_table_formats";
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", table_name, "Int", 25)
+        .create_table("test_db", table_name, "Int")
         .await;
 
     put_data(

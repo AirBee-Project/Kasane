@@ -46,7 +46,6 @@ pub async fn data_insert(
         &table_name,
         &payload.spatial_ids,
         payload.value,
-        &payload.zoom_level_policy,
     )
     .await?;
     Ok(StatusCode::OK)

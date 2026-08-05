@@ -62,12 +62,10 @@ impl TestApp {
         db_name: &str,
         name: &str,
         data_type: &str,
-        max_zoom_level: u8,
     ) {
         let create_body = serde_json::json!({
             "name": name,
-            "data_type": data_type,
-            "max_zoom_level": max_zoom_level
+            "data_type": data_type
         });
 
         let req = Request::builder()

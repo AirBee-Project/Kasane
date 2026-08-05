@@ -10,7 +10,7 @@ async fn test_table_data_upsert_basic() {
     let table_name = "upsert_table";
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", table_name, "Int", 25)
+        .create_table("test_db", table_name, "Int")
         .await;
 
     let query_a = serde_json::json!([{ "z": 20, "f": 0, "x": 100, "y": 100, "type": "singleId" }]);

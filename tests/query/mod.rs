@@ -74,7 +74,7 @@ async fn query_source_only_returns_stored_values() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "test_table", "Int", 25)
+        .create_table("test_db", "test_table", "Int")
         .await;
 
     put_data(
@@ -105,7 +105,7 @@ async fn query_shift_x_moves_values() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "test_table", "Int", 25)
+        .create_table("test_db", "test_table", "Int")
         .await;
 
     put_data(
@@ -149,11 +149,11 @@ async fn query_merge_across_two_databases() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "test_table", "Int", 25)
+        .create_table("test_db", "test_table", "Int")
         .await;
     test_app.create_database("other_db").await;
     test_app
-        .create_table("other_db", "other_table", "Int", 25)
+        .create_table("other_db", "other_table", "Int")
         .await;
 
     // 同じ空間IDへ、別々のデータベースのテーブルから 10 と 5 を置く。
@@ -207,11 +207,11 @@ async fn query_uses_finest_table_resolution() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "fine_table", "Int", 25)
+        .create_table("test_db", "fine_table", "Int")
         .await;
     test_app.create_database("coarse_db").await;
     test_app
-        .create_table("coarse_db", "coarse_table", "Int", 20)
+        .create_table("coarse_db", "coarse_table", "Int")
         .await;
 
     // 細かいテーブルへ zoom25 のセルへ 10 を置く。
@@ -269,10 +269,10 @@ async fn query_rejects_mixed_data_types() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "int_table", "Int", 25)
+        .create_table("test_db", "int_table", "Int")
         .await;
     test_app
-        .create_table("test_db", "text_table", "Text", 25)
+        .create_table("test_db", "text_table", "Text")
         .await;
 
     let (status, _) = post_query(

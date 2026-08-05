@@ -22,7 +22,6 @@ pub async fn table_update(
     Ok(TableSummary {
         name: table.name,
         data_type: table.data_type,
-        max_zoom_level: table.max_zoom_level,
         constraints: table.constraints,
     })
 }

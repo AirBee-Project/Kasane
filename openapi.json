@@ -1395,8 +1395,7 @@
         "description": "時空間IDと値が対応するTableを作成する",
         "required": [
           "name",
-          "data_type",
-          "max_zoom_level"
+          "data_type"
         ],
         "properties": {
           "name": {
@@ -1405,13 +1404,6 @@
           },
           "data_type": {
             "$ref": "#/components/schemas/TableDataType"
-          },
-          "max_zoom_level": {
-            "type": "integer",
-            "format": "int32",
-            "example": 25,
-            "maximum": 30,
-            "minimum": 0
           },
           "constraints": {
             "oneOf": [
@@ -1967,9 +1959,6 @@
             "items": {
               "$ref": "#/components/schemas/SpatialId"
             }
-          },
-          "zoom_level_policy": {
-            "$ref": "#/components/schemas/ZoomLevelPolicy"
           }
         }
       },
@@ -2057,9 +2046,6 @@
             "items": {
               "$ref": "#/components/schemas/SpatialId"
             }
-          },
-          "zoom_level_policy": {
-            "$ref": "#/components/schemas/ZoomLevelPolicy"
           }
         }
       },
@@ -2660,9 +2646,6 @@
             "items": {
               "$ref": "#/components/schemas/SpatialId"
             }
-          },
-          "zoom_level_policy": {
-            "$ref": "#/components/schemas/ZoomLevelPolicy"
           }
         }
       },
@@ -2991,7 +2974,6 @@
         "required": [
           "name",
           "data_type",
-          "max_zoom_level",
           "count"
         ],
         "properties": {
@@ -3001,12 +2983,6 @@
           },
           "data_type": {
             "$ref": "#/components/schemas/TableDataType"
-          },
-          "max_zoom_level": {
-            "type": "integer",
-            "format": "int32",
-            "example": 25,
-            "minimum": 0
           },
           "count": {
             "type": "integer",
@@ -3037,8 +3013,7 @@
         "description": "テーブルの基本情報。一覧で返す軽量ビューで、件数は含まない。",
         "required": [
           "name",
-          "data_type",
-          "max_zoom_level"
+          "data_type"
         ],
         "properties": {
           "name": {
@@ -3047,12 +3022,6 @@
           },
           "data_type": {
             "$ref": "#/components/schemas/TableDataType"
-          },
-          "max_zoom_level": {
-            "type": "integer",
-            "format": "int32",
-            "example": 25,
-            "minimum": 0
           },
           "constraints": {
             "oneOf": [
@@ -3319,15 +3288,6 @@
           "Read",
           "Write",
           "Manage"
-        ]
-      },
-      "ZoomLevelPolicy": {
-        "type": "string",
-        "description": "テーブルの max_zoom_level よりも大きなズームレベル値の空間IDが入力された場合の処理方針",
-        "enum": [
-          "Error",
-          "Ignore",
-          "Normalize"
         ]
       }
     },

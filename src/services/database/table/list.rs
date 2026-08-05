@@ -12,7 +12,6 @@ pub async fn list(app_state: &AppState, db_name: &str) -> Result<TableListRespon
         .map(|table| TableSummary {
             name: table.name,
             data_type: table.data_type,
-            max_zoom_level: table.max_zoom_level,
             constraints: table.constraints,
         })
         .collect();

@@ -10,8 +10,6 @@ pub struct TableSummary {
     pub name: String,
     #[schema(example = TableDataType::Int)]
     pub data_type: TableDataType,
-    #[schema(example = 25)]
-    pub max_zoom_level: u8,
     #[schema(example = json!({"type": "Int", "min": 0, "max": 100}))]
     pub constraints: Option<TableConstraints>,
 }
@@ -23,8 +21,6 @@ pub struct TableInfoResponse {
     pub name: String,
     #[schema(example = TableDataType::Int)]
     pub data_type: TableDataType,
-    #[schema(example = 25)]
-    pub max_zoom_level: u8,
     #[schema(example = 100)]
     pub count: u64,
     #[schema(example = json!({"type": "Int", "min": 0, "max": 100}))]

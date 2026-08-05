@@ -16,7 +16,6 @@ async fn test_table_copy_success_same_db() {
     let create_body = serde_json::json!({
         "name": "src_table",
         "data_type": "Int",
-        "max_zoom_level": 25
     });
     let req = Request::builder()
         .method("POST")

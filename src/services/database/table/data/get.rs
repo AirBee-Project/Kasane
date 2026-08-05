@@ -2,10 +2,10 @@ use crate::{
     AppState,
     error::AppError,
     models::{
-        database::table::data::{GetDataQuery, GetDataResponse, ZoomLevelPolicy},
+        database::table::data::{GetDataQuery, GetDataResponse},
         spatial_id::SpatialId,
     },
-    services::helpers::{data_response, spatial_ids::process_spatial_ids, value::restore_value},
+    services::helpers::{data_response, spatial_ids::to_spatial_id_set, value::restore_value},
 };
 
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
@@ -14,14 +14,12 @@ pub async fn get(
     db_name: &str,
     table_name: &str,
     spatial_ids: &[SpatialId],
-    zoom_level_policy: &ZoomLevelPolicy,
     query: &GetDataQuery,
 ) -> Result<GetDataResponse, AppError> {
     let app_state = app_state.clone();
     let db_name = db_name.to_string();
     let table_name = table_name.to_string();
     let spatial_ids = spatial_ids.to_vec();
-    let zoom_level_policy = *zoom_level_policy;
     let query_format = query.format;
     let query_limit = query.limit;
 
@@ -43,8 +41,7 @@ pub async fn get(
                     }
                 }?;
 
-                let ids =
-                    process_spatial_ids(&spatial_ids, table.max_zoom_level, &zoom_level_policy)?;
+                let ids = to_spatial_id_set(&spatial_ids)?;
 
                 let groups = db.data_get(table.id, ids)?;
 

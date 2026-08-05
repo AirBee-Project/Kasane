@@ -133,10 +133,6 @@ pub enum AppError {
         reason: String,
     },
     LogicError(kasane_logic::Error),
-    ZoomLevelPolicy {
-        max_zoom_level: u8,
-        input_zoom_level: u8,
-    },
 }
 
 impl AppError {
@@ -158,7 +154,6 @@ impl AppError {
             AppError::StorageError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             AppError::InvalidName { .. } => StatusCode::BAD_REQUEST,
             AppError::LogicError(_) => StatusCode::BAD_REQUEST,
-            AppError::ZoomLevelPolicy { .. } => StatusCode::BAD_REQUEST,
         }
     }
 
@@ -181,7 +176,6 @@ impl AppError {
             AppError::StorageError(_) => "storage_error",
             AppError::InvalidName { .. } => "invalid_name",
             AppError::LogicError(_) => "logic_error",
-            AppError::ZoomLevelPolicy { .. } => "zoom_level_policy",
         }
     }
 }
@@ -225,14 +219,6 @@ impl fmt::Display for AppError {
             AppError::InvalidStoredValue { reason } => {
                 write!(f, "Invalid stored value: {}", reason)
             }
-            AppError::ZoomLevelPolicy {
-                max_zoom_level,
-                input_zoom_level,
-            } => write!(
-                f,
-                "Zoom level policy violation: expected max {}, got {}",
-                max_zoom_level, input_zoom_level
-            ),
         }
     }
 }

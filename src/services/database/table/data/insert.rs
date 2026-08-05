@@ -1,8 +1,8 @@
 use crate::{
     AppState,
     error::AppError,
-    models::{database::table::data::ZoomLevelPolicy, spatial_id::SpatialId},
-    services::helpers::{spatial_ids::process_spatial_ids, value::interpret_value},
+    models::spatial_id::SpatialId,
+    services::helpers::{spatial_ids::to_spatial_id_set, value::interpret_value},
 };
 
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
@@ -12,7 +12,6 @@ pub async fn insert(
     table_name: &str,
     spatial_ids: &[SpatialId],
     value: serde_json::Value,
-    zoom_level_policy: &ZoomLevelPolicy,
 ) -> Result<(), AppError> {
     // 失敗し得るユーザ入力検証（テーブル存在・値の解釈・ズーム解決）は、
     // 書き込みバッチへ投入する前に済ませておく。こうすることで、ある不正リクエストが
@@ -26,7 +25,7 @@ pub async fn insert(
 
     let value = interpret_value(table.data_type, table.constraints.as_ref(), value)?;
 
-    let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
+    let ids = to_spatial_id_set(spatial_ids)?;
 
     app_state
         .db

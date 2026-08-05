@@ -14,7 +14,6 @@ pub async fn info(
                 Ok(TableInfoResponse {
                     name: table.name,
                     data_type: table.data_type,
-                    max_zoom_level: table.max_zoom_level,
                     count,
                     constraints: table.constraints,
                 })

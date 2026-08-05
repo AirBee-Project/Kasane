@@ -28,7 +28,6 @@ impl<'a> KasaneDbWrite<'a> {
                 id: m.id,
                 name: table_name.to_string(),
                 data_type: m.data_type,
-                max_zoom_level: m.max_zoom_level,
                 constraints: m.constraints,
             }))
         } else {
@@ -43,7 +42,6 @@ impl<'a> KasaneDbWrite<'a> {
         db_name: &str,
         table_name: &str,
         data_type: TableDataType,
-        max_zoom_level: u8,
         constraints: Option<TableConstraints>,
     ) -> Result<Table, AppError> {
         if db_name.is_empty() {
@@ -124,7 +122,6 @@ impl<'a> KasaneDbWrite<'a> {
         let meta = TableMetadata {
             id,
             data_type,
-            max_zoom_level,
             constraints: actual_constraints.clone(),
         };
 
@@ -136,7 +133,6 @@ impl<'a> KasaneDbWrite<'a> {
             id,
             name: table_name.to_string(),
             data_type,
-            max_zoom_level,
             constraints: actual_constraints,
         })
     }
@@ -208,7 +204,6 @@ impl<'a> KasaneDbWrite<'a> {
         let meta = TableMetadata {
             id: table.id,
             data_type: table.data_type,
-            max_zoom_level: table.max_zoom_level,
             constraints: table.constraints.clone(),
         };
 
@@ -519,7 +514,6 @@ impl<'a> KasaneDbWrite<'a> {
         let copy_table_meta = TableMetadata {
             id: copy_table_id,
             data_type: src_table_meta.data_type,
-            max_zoom_level: src_table_meta.max_zoom_level,
             constraints: src_table_meta.constraints.clone(),
         };
 
@@ -570,7 +564,6 @@ impl<'a> KasaneDbWrite<'a> {
             id: copy_table_id,
             name: copy_table_name.to_string(),
             data_type: src_table_meta.data_type,
-            max_zoom_level: src_table_meta.max_zoom_level,
             constraints: src_table_meta.constraints,
         })
     }

@@ -903,19 +903,12 @@ components:
       required:
       - name
       - data_type
-      - max_zoom_level
       properties:
         name:
           type: string
           example: example_table
         data_type:
           $ref: '#/components/schemas/TableDataType'
-        max_zoom_level:
-          type: integer
-          format: int32
-          example: 25
-          maximum: 30
-          minimum: 0
         constraints:
           oneOf:
           - type: 'null'
@@ -1345,8 +1338,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SpatialId'
-        zoom_level_policy:
-          $ref: '#/components/schemas/ZoomLevelPolicy'
     GetDataResponse:
       oneOf:
       - $ref: '#/components/schemas/GetDataResponseSingle'
@@ -1403,8 +1394,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SpatialId'
-        zoom_level_policy:
-          $ref: '#/components/schemas/ZoomLevelPolicy'
     LoginRequest:
       type: object
       required:
@@ -1835,8 +1824,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SpatialId'
-        zoom_level_policy:
-          $ref: '#/components/schemas/ZoomLevelPolicy'
     SingleId:
       type: object
       description: |-
@@ -2072,7 +2059,6 @@ components:
       required:
       - name
       - data_type
-      - max_zoom_level
       - count
       properties:
         name:
@@ -2080,11 +2066,6 @@ components:
           example: example_table
         data_type:
           $ref: '#/components/schemas/TableDataType'
-        max_zoom_level:
-          type: integer
-          format: int32
-          example: 25
-          minimum: 0
         count:
           type: integer
           format: int64
@@ -2104,18 +2085,12 @@ components:
       required:
       - name
       - data_type
-      - max_zoom_level
       properties:
         name:
           type: string
           example: example_table
         data_type:
           $ref: '#/components/schemas/TableDataType'
-        max_zoom_level:
-          type: integer
-          format: int32
-          example: 25
-          minimum: 0
         constraints:
           oneOf:
           - type: 'null'
@@ -2292,13 +2267,6 @@ components:
       - Read
       - Write
       - Manage
-    ZoomLevelPolicy:
-      type: string
-      description: テーブルの max_zoom_level よりも大きなズームレベル値の空間IDが入力された場合の処理方針
-      enum:
-      - Error
-      - Ignore
-      - Normalize
   securitySchemes:
     bearer_auth:
       type: http

@@ -10,8 +10,6 @@ pub struct CreateTableRequest {
     pub name: String,
     #[schema(example = TableDataType::Int)]
     pub data_type: TableDataType,
-    #[schema(example = 25, maximum = 30)]
-    pub max_zoom_level: u8,
     /// 値に対する制約。指定しない場合は制約なしとなる。
     #[schema(example = json!({"type": "Int", "min": 0, "max": 100}))]
     pub constraints: Option<TableConstraints>,

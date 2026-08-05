@@ -1,8 +1,8 @@
 use crate::{
     AppState,
     error::AppError,
-    models::{database::table::data::ZoomLevelPolicy, spatial_id::SpatialId},
-    services::helpers::{spatial_ids::process_spatial_ids, value::interpret_value},
+    models::spatial_id::SpatialId,
+    services::helpers::{spatial_ids::to_spatial_id_set, value::interpret_value},
 };
 
 /// 値が存在しないIDにのみ書き込む（Upsert）
@@ -13,7 +13,6 @@ pub async fn upsert(
     table_name: &str,
     spatial_ids: &[SpatialId],
     value: serde_json::Value,
-    zoom_level_policy: &ZoomLevelPolicy,
 ) -> Result<(), AppError> {
     // 失敗し得るユーザ入力検証はバッチ投入前に済ませる（insert と同様）。
     let table = app_state
@@ -25,7 +24,7 @@ pub async fn upsert(
 
     let value = interpret_value(table.data_type, table.constraints.as_ref(), value)?;
 
-    let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
+    let ids = to_spatial_id_set(spatial_ids)?;
 
     app_state
         .db

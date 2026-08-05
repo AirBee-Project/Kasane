@@ -56,7 +56,7 @@ examples:
       shiftX / shiftY / shiftF は指定ズームレベル z の 1 セル分を単位に index だけ平行移動する。
       extrudeX / extrudeY / extrudeF は各セルをその軸の絶対座標範囲 start..=end へ引き延ばす。
       いずれも z より粗いセルは z の粒度まで細分されるため、結果はテーブルの
-      max_zoom_level より細かくなりうる。要求する spatial_ids はその解像度で指定してよい
+      クエリの出力空間はテーブルの空間より細かくなりうる。要求する spatial_ids はその解像度で指定してよい
     request:
       url: "{{baseUrl}}/query"
       method: POST

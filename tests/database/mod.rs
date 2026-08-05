@@ -90,7 +90,7 @@ async fn test_remove_database() {
         .uri("/databases/test_db/tables")
         .header("Content-Type", "application/json")
         .body(Body::from(
-            r#"{"name": "test_table", "data_type": "Int", "max_zoom_level": 25}"#,
+            r#"{"name": "test_table", "data_type": "Int"}"#,
         ))
         .unwrap();
     test_app.app.clone().oneshot(req).await.unwrap();

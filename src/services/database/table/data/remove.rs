@@ -1,8 +1,8 @@
 use crate::{
     AppState,
     error::AppError,
-    models::{database::table::data::ZoomLevelPolicy, spatial_id::SpatialId},
-    services::helpers::spatial_ids::process_spatial_ids,
+    models::spatial_id::SpatialId,
+    services::helpers::spatial_ids::to_spatial_id_set,
 };
 
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
@@ -11,7 +11,6 @@ pub async fn remove(
     db_name: &str,
     table_name: &str,
     spatial_ids: &[SpatialId],
-    zoom_level_policy: &ZoomLevelPolicy,
 ) -> Result<(), AppError> {
     // 失敗し得るユーザ入力検証はバッチ投入前に済ませる（insert と同様）。
     let table = app_state
@@ -21,7 +20,7 @@ pub async fn remove(
             name: table_name.to_string(),
         })?;
 
-    let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
+    let ids = to_spatial_id_set(spatial_ids)?;
 
     app_state
         .db

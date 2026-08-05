@@ -26,7 +26,6 @@ impl<'a> KasaneDbRead<'a> {
                 id: m.id,
                 name: table_name.to_string(),
                 data_type: m.data_type,
-                max_zoom_level: m.max_zoom_level,
                 constraints: m.constraints,
             }))
         } else {
@@ -68,7 +67,6 @@ impl<'a> KasaneDbRead<'a> {
                 id: m.id,
                 name: name.to_string(),
                 data_type: m.data_type,
-                max_zoom_level: m.max_zoom_level,
                 constraints: m.constraints,
             });
         }

@@ -12,9 +12,6 @@ pub async fn create(
 ) -> Result<Table, AppError> {
     crate::services::helpers::name_valid::name_valid(table_name)?;
 
-    // max_zoom_levelの検証
-    kasane_logic::ZoomLevel::new(req.max_zoom_level)?;
-
     let app_state = app_state.clone();
     let db_name = db_name.to_string();
     let table_name = table_name.to_string();
@@ -27,7 +24,6 @@ pub async fn create(
                     &db_name,
                     &table_name,
                     req.data_type,
-                    req.max_zoom_level,
                     req.constraints,
                 )
             })

@@ -15,7 +15,7 @@ async fn test_table_data_insert_single_id() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "test_table", "Int", 25)
+        .create_table("test_db", "test_table", "Int")
         .await;
 
     let single_id_query =
@@ -59,7 +59,6 @@ async fn test_table_data_insert_int_range_constraint() {
             serde_json::json!({
                 "name": "test_table",
                 "data_type": "Int",
-                "max_zoom_level": 25,
                 "constraints": { "type": "Int", "min": -128, "max": 127 }
             })
             .to_string(),
@@ -118,7 +117,7 @@ async fn test_table_data_insert_float() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "test_table", "Float", 25)
+        .create_table("test_db", "test_table", "Float")
         .await;
 
     let single_id_query =
@@ -152,7 +151,7 @@ async fn test_table_data_insert_single_id_error() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "test_table", "Int", 25)
+        .create_table("test_db", "test_table", "Int")
         .await;
 
     let single_id_query =
@@ -181,7 +180,7 @@ async fn test_table_data_insert_single_id_logic_error() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "test_table", "Text", 25)
+        .create_table("test_db", "test_table", "Text")
         .await;
 
     let single_id_query =
@@ -210,7 +209,7 @@ async fn test_table_data_insert_two_single_id() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "test_table", "Int", 25)
+        .create_table("test_db", "test_table", "Int")
         .await;
 
     let single_id_query_1 =
@@ -269,7 +268,7 @@ async fn test_table_data_insert_single_id_overwrite() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "test_table", "Int", 25)
+        .create_table("test_db", "test_table", "Int")
         .await;
 
     let single_id_query =
@@ -326,7 +325,7 @@ async fn test_table_data_insert_range_id_overwrite() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "test_table_text", "Text", 25)
+        .create_table("test_db", "test_table_text", "Text")
         .await;
 
     let range_id_query = serde_json::json!([{ "z": 18, "f": [0,0], "x": [232846,232850], "y": [103226,103240], "type": "rangeId" }]);
@@ -396,7 +395,7 @@ async fn test_table_data_insert_range_id() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "test_table", "Int", 25)
+        .create_table("test_db", "test_table", "Int")
         .await;
 
     let range_id_query = serde_json::json!([{ "z": 20, "f": [0, 100], "x": [931380, 931386], "y": [412900, 412905], "type": "rangeId" }]);
@@ -458,7 +457,7 @@ async fn test_table_data_overload_insert() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "test_table", "Text", 30)
+        .create_table("test_db", "test_table", "Text")
         .await;
 
     let query1 =
@@ -512,7 +511,7 @@ async fn test_table_data_recursive_merge() {
     let table_name = "merge_table";
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", table_name, "Int", 25)
+        .create_table("test_db", table_name, "Int")
         .await;
 
     for f in 0..4 {
@@ -558,8 +557,8 @@ async fn test_table_data_isolation() {
     let table2 = "table2";
 
     test_app.create_database("test_db").await;
-    test_app.create_table("test_db", table1, "Int", 25).await;
-    test_app.create_table("test_db", table2, "Int", 25).await;
+    test_app.create_table("test_db", table1, "Int").await;
+    test_app.create_table("test_db", table2, "Int").await;
 
     let query = serde_json::json!([{ "z": 20, "f": 0, "x": 100, "y": 100, "type": "singleId" }]);
 
@@ -605,35 +604,6 @@ async fn test_table_data_isolation() {
     );
 }
 
-#[tokio::test]
-/// max_zoom_levelを超えるズームレベルでの挿入がエラーになるかを検証する。
-async fn test_table_data_max_zoom_enforcement() {
-    let test_app = TestApp::new();
-
-    let table_name = "low_zoom_table";
-    test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", table_name, "Int", 10)
-        .await;
-
-    let high_zoom_query =
-        serde_json::json!([{ "z": 11, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
-
-    let req = Request::builder()
-        .method("PUT")
-        .uri(format!("/databases/test_db/tables/{}/data", table_name))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(
-            serde_json::to_string(
-                &serde_json::json!({ "value": 100, "spatial_ids": high_zoom_query }),
-            )
-            .unwrap(),
-        ))
-        .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-}
 
 #[tokio::test]
 /// 広範な親ノード内にピンポイントな子ノードを挿入した際、親が適切に分割され値の整合性が保たれるかを検証する。
@@ -643,7 +613,7 @@ async fn test_table_data_deep_split() {
     let table_name = "split_table";
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", table_name, "Int", 25)
+        .create_table("test_db", table_name, "Int")
         .await;
 
     let parent_query = serde_json::json!([{ "z": 18, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
@@ -702,7 +672,6 @@ async fn test_table_data_insert_enum_success() {
     let create_body = serde_json::json!({
         "name": "enum_table",
         "data_type": "Enum",
-        "max_zoom_level": 25,
         "constraints": {
             "type": "Enum",
             "choices": ["Apple", "Banana", "Orange"]
@@ -752,7 +721,6 @@ async fn test_table_data_insert_enum_failure() {
     let create_body = serde_json::json!({
         "name": "enum_table",
         "data_type": "Enum",
-        "max_zoom_level": 25,
         "constraints": {
             "type": "Enum",
             "choices": ["Apple", "Banana", "Orange"]
@@ -796,7 +764,6 @@ async fn test_table_data_insert_presence_success() {
     let create_body = serde_json::json!({
         "name": "presence_table",
         "data_type": "Presence",
-        "max_zoom_level": 25
     });
 
     let req = Request::builder()
@@ -843,7 +810,6 @@ async fn test_table_data_insert_presence_failure() {
     let create_body = serde_json::json!({
         "name": "presence_table",
         "data_type": "Presence",
-        "max_zoom_level": 25
     });
 
     let req = Request::builder()

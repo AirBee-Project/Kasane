@@ -6,6 +6,5 @@ use serde::Deserialize;
 pub struct TableMetadata {
     pub id: crate::models::id::TableId,
     pub data_type: TableDataType,
-    pub max_zoom_level: u8,
     pub constraints: Option<TableConstraints>,
 }

@@ -16,7 +16,6 @@ async fn test_update_table_name_success() {
     let create_body = serde_json::json!({
         "name": "old_name",
         "data_type": "Int",
-        "max_zoom_level": 25
     });
 
     let req = Request::builder()
@@ -72,7 +71,6 @@ async fn test_update_table_constraints_success() {
     let create_body = serde_json::json!({
         "name": "constrained_table",
         "data_type": "Int",
-        "max_zoom_level": 25
     });
 
     let req = Request::builder()
@@ -118,7 +116,6 @@ async fn test_update_table_constraints_with_existing_data_violation() {
     let create_body = serde_json::json!({
         "name": "my_table",
         "data_type": "Int",
-        "max_zoom_level": 25
     });
     let req = Request::builder()
         .method("POST")
@@ -192,7 +189,6 @@ async fn test_update_table_constraints_type_mismatch() {
     let create_body = serde_json::json!({
         "name": "my_table",
         "data_type": "Int",
-        "max_zoom_level": 25
     });
     let req = Request::builder()
         .method("POST")

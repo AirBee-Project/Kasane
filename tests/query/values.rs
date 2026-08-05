@@ -13,7 +13,7 @@ async fn seed(
     data_type: &str,
     cells: &[(i64, serde_json::Value)],
 ) {
-    test_app.create_table("test_db", table, data_type, 25).await;
+    test_app.create_table("test_db", table, data_type).await;
     for (x, v) in cells {
         put_data(
             test_app,
@@ -636,7 +636,6 @@ async fn create_enum_table(app: &TestApp, table: &str, choices: &[&str]) {
     let body = serde_json::json!({
         "name": table,
         "data_type": "Enum",
-        "max_zoom_level": 25,
         "constraints": { "type": "Enum", "choices": choices }
     });
     let req = Request::builder()
@@ -741,90 +740,17 @@ async fn explicit_value_type_rejects_unreadable_source() {
 // ---------------------------------------------------------------------------
 // 要求空間IDの解像度
 //
-// クエリ結果の解像度は演算子が決めるものであり、入力テーブルの `max_zoom_level`
-// （＝そのテーブルが保存する最小セル）とは別物。要求空間IDを `max_zoom_level` で
-// 丸めていた頃は、クエリ自身が生成したセルを指名できず 400 になっていた。
+// クエリ結果の解像度は演算子が決めるものであり、入力テーブルの最小セル
+// とは別物。要求空間IDを丸めていた頃は、クエリ自身が生成したセルを指名できず 400 になっていた。
 // ---------------------------------------------------------------------------
 
-/// `max_zoom_level` より細かい空間IDで、クエリが生成したセルを指名できる。
-///
-/// `max_zoom_level = 20` のテーブルに z=25 のサブセル shift を掛けると、結果は
-/// z=21〜25 のセルを含む。それを z=25 の空間IDで取得できること。
-#[tokio::test]
-async fn accepts_targets_finer_than_source_max_zoom_level() {
-    let app = TestApp::new();
-    app.create_database("test_db").await;
-    app.create_table("test_db", "t_fine", "Int", 20).await;
-    put_data(
-        &app,
-        "t_fine",
-        &serde_json::json!({
-            "value": 7,
-            "spatial_ids": [{ "z": 20, "f": 0, "x": 800000, "y": 500000, "type": "singleId" }]
-        }),
-    )
-    .await;
-
-    // z=25 で 1 セル分ずらす（z=20 セルの 1/32）
-    let query =
-        serde_json::json!({ "type": "shiftX", "z": 25, "index": 1, "input": source("t_fine") });
-
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            // 元セル(z=20, x=800000) を z=25 へ落とすと x=25600000。shift 後は +1。
-            "spatial_ids": [{ "z": 25, "f": 0, "x": 25600001, "y": 16000000, "type": "singleId" }],
-            "query": query
-        }),
-        "?format=flexId",
-    )
-    .await;
-
-    assert_eq!(
-        status,
-        StatusCode::OK,
-        "max_zoom_level より細かい要求が弾かれている: {result}"
-    );
-    assert_eq!(values(&result), vec![7]);
-    assert!(total_ids(&result) > 0, "セルが返っていない: {result}");
-}
-
-/// 粗い側（`max_zoom_level` 未満）の要求は従来どおり通る。
-#[tokio::test]
-async fn accepts_targets_coarser_than_source_max_zoom_level() {
-    let app = TestApp::new();
-    app.create_database("test_db").await;
-    app.create_table("test_db", "t_coarse", "Int", 20).await;
-    put_data(
-        &app,
-        "t_coarse",
-        &serde_json::json!({
-            "value": 3,
-            "spatial_ids": [{ "z": 20, "f": 0, "x": 800000, "y": 500000, "type": "singleId" }]
-        }),
-    )
-    .await;
-
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": [{ "z": 18, "f": 0, "x": 200000, "y": 125000, "type": "singleId" }],
-            "query": source("t_coarse")
-        }),
-        "?format=flexId",
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::OK, "body: {result}");
-    assert_eq!(values(&result), vec![3]);
-}
 
 /// ズームレベルの絶対上限（35）は従来どおり検証される。
 #[tokio::test]
 async fn rejects_zoom_level_beyond_absolute_maximum() {
     let app = TestApp::new();
     app.create_database("test_db").await;
-    app.create_table("test_db", "t_zmax", "Int", 20).await;
+    app.create_table("test_db", "t_zmax", "Int").await;
 
     let (status, _) = post_query(
         &app,

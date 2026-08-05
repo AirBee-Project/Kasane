@@ -70,7 +70,6 @@ pub async fn table_copy(
     let summary = TableSummary {
         name: res.name,
         data_type: res.data_type,
-        max_zoom_level: res.max_zoom_level,
         constraints: res.constraints,
     };
 

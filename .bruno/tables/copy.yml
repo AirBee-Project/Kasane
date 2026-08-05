@@ -64,7 +64,6 @@ examples:
           {
             "name": "dest_table",
             "data_type": "Int",
-            "max_zoom_level": 25,
             "constraints": {
               "type": "Int",
               "min": 0,

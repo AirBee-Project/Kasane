@@ -260,7 +260,7 @@ async fn test_manage_privileges() {
         .header("Authorization", format!("Bearer {}", user_token))
         .header("Content-Type", "application/json")
         .body(Body::from(
-            r#"{"name": "t1", "data_type": "Int", "max_zoom_level": 5}"#,
+            r#"{"name": "t1", "data_type": "Int"}"#,
         ))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();
@@ -289,7 +289,7 @@ async fn test_write_privileges() {
         .header("Authorization", format!("Bearer {}", root_token))
         .header("Content-Type", "application/json")
         .body(Body::from(
-            r#"{"name": "t1", "data_type": "Int", "max_zoom_level": 5}"#,
+            r#"{"name": "t1", "data_type": "Int"}"#,
         ))
         .unwrap();
     test_app.app.clone().oneshot(req).await.unwrap();
@@ -304,7 +304,7 @@ async fn test_write_privileges() {
         .header("Authorization", format!("Bearer {}", user_token))
         .header("Content-Type", "application/json")
         .body(Body::from(
-            r#"{"name": "t2", "data_type": "Int", "max_zoom_level": 5}"#,
+            r#"{"name": "t2", "data_type": "Int"}"#,
         ))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();
@@ -344,7 +344,7 @@ async fn test_read_privileges() {
         .header("Authorization", format!("Bearer {}", root_token))
         .header("Content-Type", "application/json")
         .body(Body::from(
-            r#"{"name": "t1", "data_type": "Int", "max_zoom_level": 5}"#,
+            r#"{"name": "t1", "data_type": "Int"}"#,
         ))
         .unwrap();
     test_app.app.clone().oneshot(req).await.unwrap();
@@ -542,7 +542,7 @@ async fn test_no_privileges() {
         .header("Authorization", format!("Bearer {}", root_token))
         .header("Content-Type", "application/json")
         .body(Body::from(
-            r#"{"name": "t1", "data_type": "Int", "max_zoom_level": 5}"#,
+            r#"{"name": "t1", "data_type": "Int"}"#,
         ))
         .unwrap();
     test_app.app.clone().oneshot(req).await.unwrap();
@@ -590,7 +590,7 @@ async fn test_query_authorization() {
             .header("Authorization", format!("Bearer {}", root_token))
             .header("Content-Type", "application/json")
             .body(Body::from(format!(
-                r#"{{"name": "{}", "data_type": "Int", "max_zoom_level": 5}}"#,
+                r#"{{"name": "{}", "data_type": "Int"}}"#,
                 table
             )))
             .unwrap();
@@ -990,7 +990,7 @@ async fn test_copy_and_rename_permissions() {
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", user_a_token))
         .body(Body::from(
-            r#"{"name": "new_table", "data_type": "Int", "max_zoom_level": 25}"#,
+            r#"{"name": "new_table", "data_type": "Int"}"#,
         ))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();

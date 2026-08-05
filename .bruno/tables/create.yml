@@ -18,7 +18,6 @@ http:
       {
         "name": "example_table",
         "data_type": "Text",
-        "max_zoom_level": 25
       }
   auth:
     type: bearer
@@ -46,7 +45,6 @@ examples:
           {
             "name": "example_table",
             "data_type": "Text",
-            "max_zoom_level": 25
           }
     response:
       status: 201
@@ -69,7 +67,6 @@ examples:
           {
             "name": "example_table",
             "data_type": "Text",
-            "max_zoom_level": 25
           }
     response:
       status: 400
@@ -92,7 +89,6 @@ examples:
           {
             "name": "example_table",
             "data_type": "Text",
-            "max_zoom_level": 25
           }
     response:
       status: 409

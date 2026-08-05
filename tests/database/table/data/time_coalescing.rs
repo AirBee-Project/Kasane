@@ -15,7 +15,7 @@ async fn read_back_coalesces_a_non_power_of_two_calendar_interval() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "test_table", "Int", 25)
+        .create_table("test_db", "test_table", "Int")
         .await;
 
     let single_id_query = serde_json::json!([{
@@ -68,7 +68,7 @@ async fn read_back_coalesces_adjacent_segments_into_a_range() {
     let test_app = TestApp::new();
     test_app.create_database("test_db").await;
     test_app
-        .create_table("test_db", "test_table", "Int", 25)
+        .create_table("test_db", "test_table", "Int")
         .await;
 
     for t in [0, 1] {
