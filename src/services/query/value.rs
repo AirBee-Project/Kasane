@@ -44,16 +44,21 @@ pub type Decoder<V> = Arc<dyn Fn(&[u8]) -> Option<V> + Send + Sync>;
 ///
 /// 「実行時の型 → コンパイル時の型」の分岐はここ 1 箇所だけ。型を増減するときも
 /// この match だけを直せばよい。
+///
+/// 呼ぶ関数が型引数を 2 つ以上取る場合は、残りを `[..]` で後ろへ続ける
+/// （例: `for_value_type!(dt, f[V], args..)` は `f::<単型化した型, V>(args..)`）。
 #[macro_export]
 macro_rules! for_value_type {
-    ($dt:expr, $func:ident $(, $arg:expr)* $(,)?) => {{
+    ($dt:expr, $func:ident $([$($rest:ty),* $(,)?])? $(, $arg:expr)* $(,)?) => {{
         use $crate::models::database::table::TableDataType;
         match $dt {
-            TableDataType::Int => $func::<i64>($($arg),*),
-            TableDataType::Float => $func::<$crate::services::query::value::OrderedFloat>($($arg),*),
-            TableDataType::Text | TableDataType::Enum => $func::<String>($($arg),*),
-            TableDataType::Boolean => $func::<bool>($($arg),*),
-            TableDataType::Presence => $func::<()>($($arg),*),
+            TableDataType::Int => $func::<i64 $($(, $rest)*)?>($($arg),*),
+            TableDataType::Float => {
+                $func::<$crate::services::query::value::OrderedFloat $($(, $rest)*)?>($($arg),*)
+            }
+            TableDataType::Text | TableDataType::Enum => $func::<String $($(, $rest)*)?>($($arg),*),
+            TableDataType::Boolean => $func::<bool $($(, $rest)*)?>($($arg),*),
+            TableDataType::Presence => $func::<() $($(, $rest)*)?>($($arg),*),
         }
     }};
 }
@@ -483,7 +488,10 @@ impl Value for OrderedFloat {
                 expected: "Float".to_string(),
             })?;
         if v.is_finite() {
-            Ok(OrderedFloat(v))
+            // `Ord` は `total_cmp` なので `-0.0 < 0.0` となり、両者は別の値として振る舞う。
+            // 格納・フィルタ境界・`mapValues` の対応表がいずれもこの経路を通るので、
+            // ここで `0.0` へ寄せておけば「`-0.0` を書いたのに一致しない」が起きない。
+            Ok(OrderedFloat(if v == 0.0 { 0.0 } else { v }))
         } else {
             Err(AppError::NumericValueOutOfRange {
                 actual: value.to_string(),

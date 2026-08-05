@@ -839,7 +839,7 @@ async fn rejects_zoom_level_beyond_absolute_maximum() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
-/// 値の変換に関するテスト
+/// Text を Int へ変換し、対応表に無い値は `default` になる。
 #[tokio::test]
 async fn map_values_converts_types_and_applies_fallback() {
     let app = TestApp::new();
@@ -878,7 +878,539 @@ async fn map_values_converts_types_and_applies_fallback() {
     .await;
 
     assert_eq!(status, StatusCode::OK, "body: {result}");
-    // 辞書の中身を検証: 値が変換され、デフォルトが適用されていること
+    // "Unknown" だけが対応表に無いので -1 になる。
     assert_eq!(values(&result), vec![-1, 0, 50, 100]);
     assert_eq!(total_ids(&result), 4);
+}
+
+/// Int を Text へ変換する。
+#[tokio::test]
+async fn map_values_converts_int_to_text() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(
+        &app,
+        "t_map_int",
+        "Int",
+        &[
+            (801000, serde_json::json!(1)),
+            (801001, serde_json::json!(2)),
+            (801002, serde_json::json!(3)),
+        ],
+    )
+    .await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "value_type": "Text",
+            "spatial_ids": ids(801000, 3),
+            "query": {
+                "type": "mapValues",
+                "mapping": [
+                    { "from": 1, "to": "One" },
+                    { "from": 2, "to": "Two" }
+                ],
+                "default": "Other",
+                "input": source("t_map_int")
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    // 辞書は値の昇順。3 は対応表に無いので "Other" になる。
+    assert_eq!(
+        result["dictionary"],
+        serde_json::json!(["One", "Other", "Two"])
+    );
+    assert_eq!(total_ids(&result), 3);
+}
+
+/// Boolean を Int へ変換する。
+#[tokio::test]
+async fn map_values_converts_boolean_to_int() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(
+        &app,
+        "t_map_bool",
+        "Boolean",
+        &[
+            (802000, serde_json::json!(true)),
+            (802001, serde_json::json!(false)),
+        ],
+    )
+    .await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "value_type": "Int",
+            "spatial_ids": ids(802000, 2),
+            "query": {
+                "type": "mapValues",
+                "mapping": [
+                    { "from": true, "to": 1 },
+                    { "from": false, "to": 0 }
+                ],
+                "default": -1,
+                "input": source("t_map_bool")
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    assert_eq!(values(&result), vec![0, 1]);
+    assert_eq!(total_ids(&result), 2);
+}
+
+/// Float を Boolean へ変換する。
+#[tokio::test]
+async fn map_values_converts_float_to_boolean() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(
+        &app,
+        "t_map_float",
+        "Float",
+        &[
+            (803000, serde_json::json!(1.5)),
+            (803001, serde_json::json!(2.5)),
+            (803002, serde_json::json!(3.5)),
+        ],
+    )
+    .await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "value_type": "Boolean",
+            "spatial_ids": ids(803000, 3),
+            "query": {
+                "type": "mapValues",
+                "mapping": [
+                    { "from": 1.5, "to": true },
+                    { "from": 2.5, "to": false }
+                ],
+                "default": true,
+                "input": source("t_map_float")
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    // values() は Int/Float 専用なので辞書を直接見る。3.5 は対応表に無く default の true。
+    assert_eq!(result["dictionary"], serde_json::json!([false, true]));
+    assert_eq!(total_ids(&result), 3);
+}
+
+/// mapValues が結果の値型を決める位置にあるとき、`value_type` の省略は 400。
+#[tokio::test]
+async fn map_values_rejects_missing_value_type() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(
+        &app,
+        "t_map_missing_vt",
+        "Int",
+        &[(804000, serde_json::json!(1))],
+    )
+    .await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "spatial_ids": ids(804000, 1),
+            "query": {
+                "type": "mapValues",
+                "mapping": [
+                    { "from": 1, "to": "One" }
+                ],
+                "default": "Other",
+                "input": source("t_map_missing_vt")
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        result["error"]
+            .as_str()
+            .unwrap()
+            .contains("cannot infer the query value type because it contains a mapValues operator"),
+        "error: {result}"
+    );
+}
+
+/// merge の両辺が mapValues でも、リクエストの `value_type` が両方の出力型になる。
+#[tokio::test]
+async fn map_values_as_both_merge_operands() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(
+        &app,
+        "t_map_merge",
+        "Int",
+        &[(805000, serde_json::json!(1))],
+    )
+    .await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "value_type": "Text",
+            "spatial_ids": ids(805000, 1),
+            "query": {
+                "type": "merge",
+                "policy": "min",
+                "default": "Z",
+                "left": {
+                    "type": "mapValues",
+                    "mapping": [{ "from": 1, "to": "A" }],
+                    "default": "Z",
+                    "input": source("t_map_merge")
+                },
+                "right": {
+                    "type": "mapValues",
+                    "mapping": [{ "from": 1, "to": "B" }],
+                    "default": "Z",
+                    "input": source("t_map_merge")
+                }
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    assert_eq!(result["dictionary"], serde_json::json!(["A"]));
+    assert_eq!(total_ids(&result), 1);
+}
+
+/// mapValues を直接入れ子にする場合、内側の出力型は推論できないので
+/// 外側の `input_type` で明示する必要がある。
+#[tokio::test]
+async fn map_values_nested_requires_input_type() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(&app, "t_map_nest", "Int", &[(805100, serde_json::json!(1))]).await;
+
+    let inner = serde_json::json!({
+        "type": "mapValues",
+        "mapping": [{ "from": 1, "to": "One" }],
+        "default": "X",
+        "input": source("t_map_nest")
+    });
+
+    // 外側が内側の出力型を推論できず 400。
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "value_type": "Int",
+            "spatial_ids": ids(805100, 1),
+            "query": {
+                "type": "mapValues",
+                "mapping": [{ "from": "One", "to": 11 }],
+                "default": -1,
+                "input": inner
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        result["error"]
+            .as_str()
+            .unwrap()
+            .contains("mapValues operator"),
+        "error: {result}"
+    );
+
+    // `input_type` を明示すれば通る。
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "value_type": "Int",
+            "spatial_ids": ids(805100, 1),
+            "query": {
+                "type": "mapValues",
+                "input_type": "Text",
+                "mapping": [{ "from": "One", "to": 11 }],
+                "default": -1,
+                "input": inner
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    assert_eq!(values(&result), vec![11]);
+}
+
+/// `from` が重複した対応表は 400 で拒否される。
+#[tokio::test]
+async fn map_values_rejects_duplicate_mapping_keys() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(&app, "t_map_dup", "Int", &[(806000, serde_json::json!(1))]).await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "value_type": "Text",
+            "spatial_ids": ids(806000, 1),
+            "query": {
+                "type": "mapValues",
+                "mapping": [
+                    { "from": 1, "to": "One" },
+                    { "from": 1, "to": "Uno" }
+                ],
+                "default": "Other",
+                "input": source("t_map_dup")
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        result["error"]
+            .as_str()
+            .unwrap()
+            .contains("duplicate mapping key"),
+        "error: {result}"
+    );
+}
+
+/// 空の対応表は、全ての値を `default` に潰す。
+#[tokio::test]
+async fn map_values_allows_empty_mapping() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(
+        &app,
+        "t_map_empty",
+        "Int",
+        &[(807000, serde_json::json!(1))],
+    )
+    .await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "value_type": "Text",
+            "spatial_ids": ids(807000, 1),
+            "query": {
+                "type": "mapValues",
+                "mapping": [],
+                "default": "Other",
+                "input": source("t_map_empty")
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    assert_eq!(result["dictionary"], serde_json::json!(["Other"]));
+    assert_eq!(total_ids(&result), 1);
+}
+
+/// ソースの型として読めない `input_type` は拒否される。
+#[tokio::test]
+async fn map_values_rejects_wrong_input_type() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(
+        &app,
+        "t_map_wrong_input",
+        "Text",
+        &[(808000, serde_json::json!("A"))],
+    )
+    .await;
+
+    // ソースは Text なのに、input_type で Int だと主張している。
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "value_type": "Text",
+            "spatial_ids": ids(808000, 1),
+            "query": {
+                "type": "mapValues",
+                "input_type": "Int",
+                "mapping": [
+                    { "from": 1, "to": "One" }
+                ],
+                "default": "Other",
+                "input": source("t_map_wrong_input")
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        result["error"]
+            .as_str()
+            .unwrap()
+            .contains("cannot be read as the query value type Int"),
+        "error: {result}"
+    );
+}
+
+/// Float の対応表で `-0.0` と `0.0` が同一視される。
+///
+/// `OrderedFloat` の順序は `total_cmp` なので、正規化しないと `-0.0` を書いた
+/// エントリが `0.0` に一致せず、重複としても検出されない。
+#[tokio::test]
+async fn map_values_treats_negative_zero_as_zero() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(
+        &app,
+        "t_map_negzero",
+        "Float",
+        &[(811000, serde_json::json!(0.0))],
+    )
+    .await;
+
+    // `-0.0` のエントリが、格納された `0.0` に一致する。
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "value_type": "Int",
+            "spatial_ids": ids(811000, 1),
+            "query": {
+                "type": "mapValues",
+                "mapping": [{ "from": -0.0, "to": 7 }],
+                "default": -1,
+                "input": source("t_map_negzero")
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    assert_eq!(values(&result), vec![7]);
+
+    // 同じ理由で `0.0` と `-0.0` の併記は重複として弾かれる。
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "value_type": "Int",
+            "spatial_ids": ids(811000, 1),
+            "query": {
+                "type": "mapValues",
+                "mapping": [{ "from": 0.0, "to": 7 }, { "from": -0.0, "to": 8 }],
+                "default": -1,
+                "input": source("t_map_negzero")
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        result["error"]
+            .as_str()
+            .unwrap()
+            .contains("duplicate mapping key"),
+        "error: {result}"
+    );
+}
+
+/// Enum ソースは選択肢の文字列として対応表に照合される。
+#[tokio::test]
+async fn map_values_supports_enum_source() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    create_enum_table(&app, "t_map_enum", &["A", "B"]).await;
+    put_data(
+        &app,
+        "t_map_enum",
+        &serde_json::json!({ "value": "A", "spatial_ids": [single_id(809000)] }),
+    )
+    .await;
+    put_data(
+        &app,
+        "t_map_enum",
+        &serde_json::json!({ "value": "B", "spatial_ids": [single_id(809001)] }),
+    )
+    .await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "value_type": "Int",
+            "spatial_ids": ids(809000, 2),
+            "query": {
+                "type": "mapValues",
+                "mapping": [
+                    { "from": "A", "to": 10 },
+                    { "from": "B", "to": 20 }
+                ],
+                "default": 0,
+                "input": source("t_map_enum")
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    assert_eq!(values(&result), vec![10, 20]);
+    assert_eq!(total_ids(&result), 2);
+}
+
+/// 値の無いセルは `default` にならず、欠損のまま残る。
+#[tokio::test]
+async fn map_values_keeps_missing_cells() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(
+        &app,
+        "t_map_missing_cell",
+        "Int",
+        &[
+            (810000, serde_json::json!(1)),
+            // 810001 には値を置かない
+            (810002, serde_json::json!(3)),
+        ],
+    )
+    .await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            "value_type": "Text",
+            // 3 件問い合わせるが、ソースにあるのは 2 件だけ。
+            "spatial_ids": ids(810000, 3),
+            "query": {
+                "type": "mapValues",
+                "mapping": [
+                    { "from": 1, "to": "One" }
+                ],
+                "default": "Other",
+                "input": source("t_map_missing_cell")
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    // 1 -> "One"、3 -> default の "Other"。空の 810001 は "Other" にならない。
+    assert_eq!(result["dictionary"], serde_json::json!(["One", "Other"]));
+    assert_eq!(total_ids(&result), 2);
 }

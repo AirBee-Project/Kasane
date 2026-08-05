@@ -47,7 +47,9 @@ pub enum FilterCondition {
 /// 対応表エントリ
 #[derive(Debug, Deserialize, ToSchema, Clone)]
 pub struct MappingEntry {
+    /// 変換前の値
     pub from: serde_json::Value,
+    /// 変換後の値
     pub to: serde_json::Value,
 }
 
@@ -164,15 +166,23 @@ pub enum QueryNode {
     },
 
     /// 値を対応表に基づいて変換する。対応表にない値は `default` になる。
+    ///
+    /// 変換するのは「値を持つセル」だけで、値の無いセルは `default` にはならず
+    /// 欠損のまま残る（`merge` の `default` とは意味が異なる）。
+    ///
+    /// 出力型は対応表のリテラルだけで決まり推論できないため、このノードが結果の値型を
+    /// 決める位置にあるならリクエストの `value_type` を明示する必要がある。
+    /// `Float` の照合は完全一致で、`-0.0` は `0.0` として扱われる。
     MapValues {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
-        /// 入力側の型。省略時はソースから推論を試みる。
+        /// 入力側の型。省略時はソースから推論する。
+        /// `input` 自体が `mapValues` の場合は推論できないため、指定が必須。
         #[serde(default)]
         input_type: Option<crate::models::database::table::TableDataType>,
-        /// 変換マップ (from: 変換前の値, to: 変換後の値)
+        /// 変換前後の対応表。`from` の重複は 400 で拒否される。
         mapping: Vec<MappingEntry>,
-        /// マップに存在しない場合のデフォルト値
+        /// 対応表に存在しない値に使う既定値
         default: serde_json::Value,
     },
 }

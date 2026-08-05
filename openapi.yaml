@@ -1363,6 +1363,17 @@ components:
       properties:
         token:
           type: string
+    MappingEntry:
+      type: object
+      description: 対応表エントリ
+      required:
+      - from
+      - to
+      properties:
+        from:
+          description: 変換前の値
+        to:
+          description: 変換後の値
     MergePolicyKind:
       type: string
       description: 同一空間に複数の値が集まったときの集約規則。
@@ -1694,6 +1705,42 @@ components:
             type: string
             enum:
             - merge
+      - type: object
+        description: |-
+          値を対応表に基づいて変換する。対応表にない値は `default` になる。
+
+          変換するのは「値を持つセル」だけで、値の無いセルは `default` にはならず
+          欠損のまま残る（`merge` の `default` とは意味が異なる）。
+
+          出力型は対応表のリテラルだけで決まり推論できないため、このノードが結果の値型を
+          決める位置にあるならリクエストの `value_type` を明示する必要がある。
+          `Float` の照合は完全一致で、`-0.0` は `0.0` として扱われる。
+        required:
+        - input
+        - mapping
+        - default
+        - type
+        properties:
+          input:
+            $ref: '#/components/schemas/QueryNode'
+          input_type:
+            oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/TableDataType'
+              description: |-
+                入力側の型。省略時はソースから推論する。
+                `input` 自体が `mapValues` の場合は推論できないため、指定が必須。
+          mapping:
+            type: array
+            items:
+              $ref: '#/components/schemas/MappingEntry'
+            description: 変換前後の対応表。`from` の重複は 400 で拒否される。
+          default:
+            description: 対応表に存在しない値に使う既定値
+          type:
+            type: string
+            enum:
+            - mapValues
     RangeId:
       type: object
       required:

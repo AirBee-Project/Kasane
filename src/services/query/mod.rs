@@ -19,7 +19,7 @@ use crate::{
             Table, TableDataType,
             data::{GetDataQuery, GetDataResponse, OutputFormat},
         },
-        query::{ExecuteQueryRequest, FilterCondition, QueryNode},
+        query::{ExecuteQueryRequest, FilterCondition, MappingEntry, QueryNode},
     },
     repositories::database::table::data::query_source::TableSource,
     services::helpers::{data_response, spatial_ids::to_spatial_id_set},
@@ -75,6 +75,11 @@ impl QueryNode {
     /// 全ソースの `data_type` が一致していればそれを採用する。一致しない場合は、
     /// 同じ値型として読める組合せ（`Text` と `Enum`）であっても推論はしないので、
     /// `value_type` の明示を要求する。
+    ///
+    /// `MapValues` の出力型は対応表のリテラルだけで決まりソースに依存しないため、
+    /// その部分木は走査せず、推論にも寄与しない（`sources()` は逆に、テーブル解決の
+    /// ため `MapValues` の下も辿る）。結果として `MapValues` しか持たないクエリの
+    /// 出力型は推論できず、`value_type` の明示が要る。
     fn resolve_value_type(
         &self,
         tables: &ResolvedTables,
@@ -85,37 +90,40 @@ impl QueryNode {
         }
 
         let mut inferred: Option<TableDataType> = None;
+        let mut has_map_values = false;
         let mut stack = vec![self];
 
         while let Some(node) = stack.pop() {
-            match node {
-                QueryNode::Source { database, table } => {
-                    let meta = &tables[&(database.clone(), table.clone())];
-                    match inferred {
-                        None => inferred = Some(meta.data_type),
-                        Some(existing) if existing != meta.data_type => {
-                            return Err(AppError::ConstraintViolation {
-                                reason: format!(
-                                    "sources have different data types ({:?} and {:?}); specify `value_type` explicitly if they can be read as the same type",
-                                    existing, meta.data_type
-                                ),
-                            });
-                        }
-                        Some(_) => {}
-                    }
+            if matches!(node, QueryNode::MapValues { .. }) {
+                has_map_values = true;
+                continue;
+            }
+            stack.extend(node.children());
+
+            let QueryNode::Source { database, table } = node else {
+                continue;
+            };
+            let data_type = tables[&(database.clone(), table.clone())].data_type;
+            match inferred {
+                None => inferred = Some(data_type),
+                Some(existing) if existing != data_type => {
+                    return Err(AppError::ConstraintViolation {
+                        reason: format!(
+                            "sources have different data types ({existing:?} and {data_type:?}); specify `value_type` explicitly if they can be read as the same type"
+                        ),
+                    });
                 }
-                QueryNode::MapValues { .. } => {
-                    // MapValues の出力型は子ノードに依存しないため、これより下は推論の対象外とする
-                }
-                _ => {
-                    stack.extend(node.children());
-                }
+                Some(_) => {}
             }
         }
 
         inferred.ok_or_else(|| AppError::ConstraintViolation {
-            reason: "cannot infer the query value type; specify `value_type` explicitly"
-                .to_string(),
+            reason: if has_map_values {
+                "cannot infer the query value type because it contains a mapValues operator; specify `value_type` explicitly"
+            } else {
+                "cannot infer the query value type; specify `value_type` explicitly"
+            }
+            .to_string(),
         })
     }
 
@@ -272,71 +280,49 @@ impl QueryNode {
                 mapping,
                 default,
             } => {
-                let u_type = input.resolve_value_type(tables, *input_type)?;
-                match u_type {
-                    TableDataType::Int => build_map_values::<i64, V>(
-                        input.as_ref(),
-                        app_state,
-                        tables,
-                        mapping,
-                        default,
-                    ),
-                    TableDataType::Float => build_map_values::<
-                        crate::services::query::value::OrderedFloat,
-                        V,
-                    >(
-                        input.as_ref(), app_state, tables, mapping, default
-                    ),
-                    TableDataType::Text | TableDataType::Enum => build_map_values::<String, V>(
-                        input.as_ref(),
-                        app_state,
-                        tables,
-                        mapping,
-                        default,
-                    ),
-                    TableDataType::Boolean => build_map_values::<bool, V>(
-                        input.as_ref(),
-                        app_state,
-                        tables,
-                        mapping,
-                        default,
-                    ),
-                    TableDataType::Presence => build_map_values::<(), V>(
-                        input.as_ref(),
-                        app_state,
-                        tables,
-                        mapping,
-                        default,
-                    ),
-                }
+                // 入力側の型は出力型 `V` とは独立に決まる。
+                let input_type = input.resolve_value_type(tables, *input_type)?;
+                for_value_type!(
+                    input_type,
+                    build_map_values[V],
+                    input.as_ref(),
+                    app_state,
+                    tables,
+                    mapping,
+                    default
+                )
             }
         }
     }
 }
 
+/// `MapValues` を、入力側 `U` から出力側 `V` への写像として組み立てる。
+///
+/// 対応表は JSON リテラルなので、ここで一度だけ `U`/`V` へ解釈しておき、
+/// セルごとの評価では引き当てるだけにする。
 fn build_map_values<U: Value, V: Value>(
     input: &QueryNode,
     app_state: &AppState,
     tables: &ResolvedTables,
-    mapping: &[crate::models::query::MappingEntry],
-    default_val: &serde_json::Value,
+    mapping: &[MappingEntry],
+    default: &serde_json::Value,
 ) -> Result<ValueQuery<V>, AppError> {
-    let inner_query = input.translate::<U>(app_state, tables)?;
+    let input = input.translate::<U>(app_state, tables)?;
 
-    let mut typed_mapping: std::collections::BTreeMap<U, V> = std::collections::BTreeMap::new();
+    let mut lookup: BTreeMap<U, V> = BTreeMap::new();
     for entry in mapping {
-        let key_u = U::from_json(&entry.from)?;
-        let val_v = V::from_json(&entry.to)?;
-        typed_mapping.insert(key_u, val_v);
+        let from = U::from_json(&entry.from)?;
+        let to = V::from_json(&entry.to)?;
+        // 後勝ちで黙って上書きすると、発火しない対応表エントリに気づけない。
+        if lookup.insert(from, to).is_some() {
+            return Err(AppError::ConstraintViolation {
+                reason: format!("duplicate mapping key: {}", entry.from),
+            });
+        }
     }
-    let typed_default = V::from_json(default_val)?;
+    let default = V::from_json(default)?;
 
-    Ok(inner_query.map_values(move |u| {
-        typed_mapping
-            .get(&u)
-            .cloned()
-            .unwrap_or_else(|| typed_default.clone())
-    }))
+    Ok(input.map_values(move |value| lookup.get(&value).unwrap_or(&default).clone()))
 }
 
 /// クエリを実行し、対象空間IDの値を返す。
