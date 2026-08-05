@@ -25,7 +25,7 @@ fn default_port() -> u16 {
     std::env::var("PORT")
         .ok()
         .and_then(|value| value.parse().ok())
-        .unwrap_or(5173)
+        .unwrap_or(5172)
 }
 
 struct TracerShutdownGuard(Option<opentelemetry_sdk::trace::SdkTracerProvider>);

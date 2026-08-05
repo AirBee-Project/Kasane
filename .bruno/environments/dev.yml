@@ -1,10 +1,10 @@
 name: dev
 variables:
   - name: baseUrl
-    value: http://localhost:5173
+    value: http://localhost:5172
   - name: userName
     value: root
   - name: password
-    value: neko
+    value: password
   - name: accessToken
     value: ""
