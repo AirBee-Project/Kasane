@@ -10,7 +10,6 @@ impl<'a> KasaneDbWrite<'a> {
     /// Databaseの情報を取得する
     #[tracing::instrument(skip_all)]
     pub fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
-
         let db = self.db.databases;
         if let Some(meta) = db.get(&self.write_txn, name)? {
             Ok(Some(DatabaseInfoResponse {

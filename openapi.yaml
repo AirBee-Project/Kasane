@@ -901,7 +901,7 @@ components:
           type:
           - string
           - 'null'
-          example: This is an example database
+          example: データベースの説明文
     CreateTableRequest:
       type: object
       description: 時空間IDと値が対応するTableを作成する
@@ -930,7 +930,7 @@ components:
           type:
           - string
           - 'null'
-          example: This is a table description
+          example: テーブルの説明です
     CreateUserRequest:
       type: object
       required:
@@ -1185,7 +1185,7 @@ components:
           type:
           - string
           - 'null'
-          example: This is an example database
+          example: データベースの説明文
     ExecuteQueryRequest:
       type: object
       description: Tableに対するQueryを表現する型
@@ -2113,7 +2113,7 @@ components:
           type:
           - string
           - 'null'
-          example: This is a table description
+          example: テーブルの説明文です
     TableListResponse:
       type: array
       items:
@@ -2144,7 +2144,7 @@ components:
           type:
           - string
           - 'null'
-          example: This is a table description
+          example: テーブルの説明文です
     UpdateAdminRequest:
       type: object
       required:
@@ -2165,7 +2165,7 @@ components:
           type:
           - string
           - 'null'
-          example: This is an updated example database
+          example: 更新されたデータベースの説明です
     UpdatePasswordRequest:
       type: object
       required:
@@ -2308,7 +2308,7 @@ components:
           type:
           - string
           - 'null'
-          example: This is an updated table description
+          example: 更新されたテーブルの説明文です
     UserInfoResponse:
       type: object
       required:

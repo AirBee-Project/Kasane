@@ -14,7 +14,7 @@ pub struct TableSummary {
     pub max_zoom_level: u8,
     #[schema(example = json!({"type": "Int", "min": 0, "max": 100}))]
     pub constraints: Option<TableConstraints>,
-    #[schema(example = "This is a table description")]
+    #[schema(example = "テーブルの説明文です")]
     pub description: Option<String>,
 }
 
@@ -31,7 +31,7 @@ pub struct TableInfoResponse {
     pub count: u64,
     #[schema(example = json!({"type": "Int", "min": 0, "max": 100}))]
     pub constraints: Option<TableConstraints>,
-    #[schema(example = "This is a table description")]
+    #[schema(example = "テーブルの説明文です")]
     pub description: Option<String>,
 }
 

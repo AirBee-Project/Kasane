@@ -12,7 +12,7 @@ pub struct DatabaseMetadata {
 pub struct DatabaseInfoResponse {
     #[schema(example = "example_database")]
     pub name: String,
-    #[schema(example = "This is an example database")]
+    #[schema(example = "データベースの説明文")]
     pub description: Option<String>,
 }
 
@@ -20,7 +20,7 @@ pub struct DatabaseInfoResponse {
 pub struct CreateDatabaseRequest {
     #[schema(example = "example_database")]
     pub name: String,
-    #[schema(example = "This is an example database")]
+    #[schema(example = "データベースの説明文")]
     pub description: Option<String>,
 }
 
@@ -28,7 +28,7 @@ pub struct CreateDatabaseRequest {
 pub struct UpdateDatabaseRequest {
     #[schema(example = "example_database_renamed")]
     pub new_name: Option<String>,
-    #[schema(example = "This is an updated example database")]
+    #[schema(example = "更新されたデータベースの説明です")]
     pub description: Option<String>,
 }
 

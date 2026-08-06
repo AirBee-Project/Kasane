@@ -15,7 +15,7 @@ pub struct CreateTableRequest {
     /// 値に対する制約。指定しない場合は制約なしとなる。
     #[schema(example = json!({"type": "Int", "min": 0, "max": 100}))]
     pub constraints: Option<TableConstraints>,
-    #[schema(example = "This is a table description")]
+    #[schema(example = "テーブルの説明です")]
     pub description: Option<String>,
 }
 
@@ -73,7 +73,7 @@ pub struct UpdateTableRequest {
     #[serde(default = "default_validate_existing_data")]
     #[schema(example = true, default = true)]
     pub validate_existing_data: bool,
-    #[schema(example = "This is an updated table description")]
+    #[schema(example = "更新されたテーブルの説明文です")]
     pub description: Option<String>,
 }
 

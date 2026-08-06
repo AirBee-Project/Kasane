@@ -22,7 +22,6 @@ impl<'a> KasaneDbWrite<'a> {
             }
         };
 
-
         let db = self.db.tables;
         if let Some(m) = db.get(&self.write_txn, &(db_meta.id, table_name))? {
             Ok(Some(Table {
