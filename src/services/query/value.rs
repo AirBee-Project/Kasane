@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use kasane_logic::{
-    CellValue, Query,
+    Query, SafeValue,
     merge_policy::{Average, Difference, KeepExisting, Max, Min, Overwrite, Sum},
 };
 
@@ -64,7 +64,7 @@ macro_rules! for_value_type {
 
 /// 浮動小数（f64）を `Ord` にするラッパー。
 ///
-/// [`CellValue`] は `Ord` を要求するが浮動小数は `PartialOrd` しか持たないため、
+/// [`SafeValue`] は `Ord` を要求するが浮動小数は `PartialOrd` しか持たないため、
 /// `total_cmp` による全順序を与える（NaN でも panic しない）。
 ///
 /// # `ordered-float` クレートを使わない理由
@@ -200,7 +200,7 @@ fn check_range<T: PartialOrd + std::fmt::Display>(
 // ---------------------------------------------------------------------------
 
 /// アプリで扱える値型。格納・復元・JSON 変換・クエリ演算を型ごとに引き受ける。
-pub trait Value: CellValue + Ord + 'static {
+pub trait Value: SafeValue + Ord + 'static {
     /// エラーメッセージ用の型名。
     fn type_name() -> &'static str;
 

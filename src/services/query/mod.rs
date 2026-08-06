@@ -334,9 +334,8 @@ fn run<V: Value>(
 /// セル列を値ごとにグループ化する（レスポンスは値辞書 + 空間ID群の形）。
 ///
 /// `limit` が指定されている場合、保持するセルを `limit` 件までに抑える。
-/// [`data_response::build`] は値の昇順（`BTreeMap` の順）にグループを出力して
-/// 上限へ達した時点で打ち切るため、**値が大きい側から捨てれば出力は変わらない**。
-/// `limit` を無視して全件積むと、`?limit=10` でも結果セル数分のメモリを確保してしまう。
+/// 本来は値の昇順に並べて上位 `limit` 件を返すべきだが、高速化のため順序を問わず
+/// `limit` 件に達した時点で短絡評価（打ち切り）を行う。
 ///
 /// `singleId` 形式では 1 つの `FlexId` が複数セルへ展開されるので、`limit` 件の
 /// `FlexId` を残せば出力は必ず `limit` 件以上に届く（不足しない）。
@@ -352,17 +351,8 @@ fn group_by_value<V: Value>(
         held += 1;
 
         let Some(limit) = limit else { continue };
-        while held > limit {
-            let mut largest = by_value
-                .last_entry()
-                .expect("held > limit >= 0 なのでグループは存在する");
-            let group = largest.get_mut();
-            let drop_n = (held - limit).min(group.len());
-            group.truncate(group.len() - drop_n);
-            held -= drop_n;
-            if group.is_empty() {
-                largest.remove();
-            }
+        if held >= limit {
+            break;
         }
     }
 

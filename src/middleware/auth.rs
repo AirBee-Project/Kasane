@@ -33,22 +33,10 @@ pub async fn require_auth(
     let token = &auth_header[7..];
     let claims = verify_jwt(token)?;
 
-    let user_opt = { app_state.auth_cache.get(&claims.sub) };
-
-    let user = match user_opt {
-        Some(u) => u,
-        None => {
-            let user = app_state
-                .db
-                .read_users(|repo| repo.get_user(&claims.sub))?
-                .ok_or(AppError::Auth(AuthError::TokenRevoked))?;
-
-            app_state
-                .auth_cache
-                .insert(claims.sub.clone(), user.clone());
-            user
-        }
-    };
+    let user = app_state
+        .db
+        .read_users(|repo| repo.get_user(&claims.sub))?
+        .ok_or(AppError::Auth(AuthError::TokenRevoked))?;
 
     if claims.uid != user.id.to_string() || claims.ver != user.token_version {
         return Err(AuthError::TokenRevoked.into());

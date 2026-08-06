@@ -1,36 +1,16 @@
-//! `tables_data`のKey `(TableId, FlexId)`は、
-//! 実データを持つ **リーフ**（[`kasane_logic::SpatialIdMap`] のバイト列）か、
-//! 分割後に子シャードのキー（領域 [`FlexId`]）を **ポインタ** として並べた **中間ノード**のいずれか。
-//!
-//! リーフが [`MAX_FLEX_ID_PER_SHARD`] を超えると分割され、親エントリは子へのポインタノードへ置き換わる。
-//! ルーティングはこのポインタを辿って対象リーフへ到達する。
-
 use heed::types::Bytes;
 use heed::{Database, RoTxn, WithoutTls};
-use kasane_logic::{ArchivedMap, FlexId, SpatialIdMap};
+use kasane_logic::{ArchivedSpatialIdMap, FlexId, SpatialIdMap};
 
 use crate::db_init::TableIdAndFlexId;
 use crate::error::AppError;
 use crate::models::id::TableId;
 
 /// 1つのシャードが保持できる [`FlexId`] 数の上限。これを超えたシャードは動的に分割される。
-///
-/// # この値の決め方
-/// 書き込みは read-modify-write（リーフ全体を `SpatialIdMap::from_bytes` で
-/// `Arc` 木へ復元 → 変更 → `to_bytes`）なので、**1回の書き込みコストはリーフサイズに
-/// ほぼ線形**に効く。一方リーフを小さくするとリーフ数が増え、ルーティングの降下段数と
-/// LMDB エントリ数が増える。
-///
-/// 実データ（建物ボクセル）でこの上限を掃引して決めた値。大きすぎると書き込みが重くなり、
-/// 小さすぎるとリーフ数の増加が効き始める。変更する場合は書き込み・広域検索・点検索の
-/// 3つを併せて計測すること（片方だけ見ると逆方向へ最適化しやすい）。
 pub const MAX_FLEX_ID_PER_SHARD: usize = 512;
 
 /// 兄弟シャードの合算件数がこの値以下になったら再びmergeして1つのシャードにする。
 pub const MERGE_FLEX_ID_THRESHOLD: usize = MAX_FLEX_ID_PER_SHARD / 2;
-
-/// [`FlexId`] の `spatial_encode` のバイト長。
-const FLEX_ID_LEN: usize = 14;
 
 const TAG_LEAF: u8 = 0;
 const TAG_POINTERS: u8 = 1;
@@ -59,17 +39,17 @@ impl ShardEntry {
             }
             Some(&TAG_POINTERS) => {
                 let body = &bytes[1..];
-                if !body.len().is_multiple_of(FLEX_ID_LEN) {
+                if !body.len().is_multiple_of(FlexId::ENCODED_LEN) {
                     return Err(AppError::InternalError(
                         "invalid pointer node length".to_string(),
                     ));
                 }
-                let mut regions = Vec::with_capacity(body.len() / FLEX_ID_LEN);
-                for chunk in body.chunks_exact(FLEX_ID_LEN) {
-                    let mut b = [0u8; FLEX_ID_LEN];
+                let mut regions = Vec::with_capacity(body.len() / FlexId::ENCODED_LEN);
+                for chunk in body.as_chunks::<{ FlexId::ENCODED_LEN }>().0 {
+                    let mut b = [0u8; FlexId::ENCODED_LEN];
                     b.copy_from_slice(chunk);
                     regions
-                        .push(FlexId::spatial_decode(&b).map_err(|e| {
+                        .push(FlexId::decode(&b).map_err(|e| {
                             AppError::InternalError(format!("flex_id decode: {e}"))
                         })?);
                 }
@@ -107,10 +87,10 @@ impl ShardEntry {
 
     /// 子シャード領域へのポインタノードをエンコードする。
     pub fn encode_pointers(regions: &[FlexId]) -> Vec<u8> {
-        let mut out = Vec::with_capacity(1 + regions.len() * FLEX_ID_LEN);
+        let mut out = Vec::with_capacity(1 + regions.len() * FlexId::ENCODED_LEN);
         out.push(TAG_POINTERS);
         for region in regions {
-            out.extend_from_slice(&region.spatial_encode());
+            out.extend_from_slice(&region.encode());
         }
         out
     }
@@ -200,7 +180,7 @@ fn descend_range(
     range: &kasane_logic::RangeId,
     out: &mut Vec<FlexId>,
 ) -> Result<(), AppError> {
-    let Some(bytes) = tables_data.get(txn, &(table_id, region.clone()))? else {
+    let Some(bytes) = tables_data.get(txn, &(table_id, region))? else {
         // 未作成領域＝データ無し。読み取りでは辿る必要がない。
         return Ok(());
     };
@@ -231,7 +211,7 @@ fn descend_batched<'a>(
     if ids.is_empty() {
         return Ok(());
     }
-    match tables_data.get(txn, &(table_id, region.clone()))? {
+    match tables_data.get(txn, &(table_id, region))? {
         // 未作成リーフ or 実データリーフ → ここへ到達した全 flex_id が担当。
         None => {
             out.entry(region)
@@ -279,7 +259,7 @@ pub fn find_parent_pointer(
 
     let mut cur = root;
     loop {
-        match tables_data.get(txn, &(table_id, cur.clone()))? {
+        match tables_data.get(txn, &(table_id, cur))? {
             Some(bytes) => match ShardEntry::child_pointers(bytes)? {
                 Some(children) => {
                     // region が直接の子なら、cur が親。
@@ -289,7 +269,7 @@ pub fn find_parent_pointer(
                     // region を含む子へ降りる（region ⊆ child）。
                     match children
                         .into_iter()
-                        .find(|c| c.intersection(region) == Some(region.clone()))
+                        .find(|c| c.intersection(region) == Some(*region))
                     {
                         Some(child) => cur = child,
                         None => return Ok(None),
@@ -324,14 +304,14 @@ pub fn load_leaf_archived<'txn>(
     txn: &'txn RoTxn<WithoutTls>,
     table_id: TableId,
     region: &FlexId,
-) -> Result<Option<ArchivedMap<'txn>>, AppError> {
-    match tables_data.get(txn, &(table_id, region.clone()))? {
+) -> Result<Option<ArchivedSpatialIdMap<'txn>>, AppError> {
+    match tables_data.get(txn, &(table_id, *region))? {
         Some(entry) => match leaf_payload(entry)? {
             // 自分自身の to_bytes が書いた正当なバイト列。
             // 形式バージョンだけは検証されるので、古い形式のデータは黙って誤読されず
             // ここでエラーになる。
             Some(map_bytes) => Ok(Some(
-                unsafe { ArchivedMap::access(map_bytes) }
+                unsafe { ArchivedSpatialIdMap::access(map_bytes) }
                     .map_err(|e| AppError::InternalError(format!("leaf format: {e}")))?,
             )),
             None => Err(AppError::InternalError(
@@ -349,7 +329,7 @@ pub fn load_leaf_map(
     table_id: TableId,
     region: &FlexId,
 ) -> Result<SpatialIdMap<Vec<u8>>, AppError> {
-    match tables_data.get(txn, &(table_id, region.clone()))? {
+    match tables_data.get(txn, &(table_id, *region))? {
         Some(bytes) => match ShardEntry::decode(bytes)? {
             ShardEntry::Leaf(map_bytes) => {
                 unsafe { SpatialIdMap::<Vec<u8>>::from_bytes(&map_bytes) }
@@ -359,6 +339,6 @@ pub fn load_leaf_map(
                 "routed to a pointer node".to_string(),
             )),
         },
-        None => Ok(SpatialIdMap::new_in_shard(region.clone())),
+        None => Ok(SpatialIdMap::new_in_shard(*region)),
     }
 }

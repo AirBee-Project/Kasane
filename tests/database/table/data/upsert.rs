@@ -38,6 +38,8 @@ async fn test_table_data_upsert_basic() {
             f: 0,
             x: 100,
             y: 100,
+            i: None,
+            t: None,
         },
     );
 
@@ -51,6 +53,8 @@ async fn test_table_data_upsert_basic() {
             f: 0,
             x: 101,
             y: 100,
+            i: None,
+            t: None,
         },
     );
 }

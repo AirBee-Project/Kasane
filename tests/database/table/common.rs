@@ -16,10 +16,7 @@ impl TestApp {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let db = kasane::db_init::initialize_database(temp_dir.path().to_str().unwrap());
 
-        let app_state = kasane::AppState {
-            db: db.clone(),
-            auth_cache: std::sync::Arc::new(kasane::auth_cache::AuthCache::new()),
-        };
+        let app_state = kasane::AppState { db };
         let token = kasane::services::auth::generate_jwt(&app_state, "root").unwrap();
         let auth_header = axum::http::HeaderValue::from_str(&format!("Bearer {}", token)).unwrap();
 

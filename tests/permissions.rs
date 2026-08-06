@@ -3,7 +3,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use kasane::{AppState, db_init, kasane};
-use std::sync::Arc;
+
 use tower::ServiceExt;
 
 pub struct PermissionTestApp {
@@ -18,10 +18,7 @@ impl PermissionTestApp {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let db = db_init::initialize_database(temp_dir.path().to_str().unwrap());
 
-        let app_state = AppState {
-            db: db.clone(),
-            auth_cache: Arc::new(kasane::auth_cache::AuthCache::new()),
-        };
+        let app_state = AppState { db };
         // We DO NOT inject the root token automatically here.
         // The tests will need to explicitly send the Authorization header.
         let app = kasane(app_state.clone());
@@ -952,7 +949,7 @@ async fn test_copy_and_rename_permissions() {
 
     // renamed_db に名前が変更されたので、以降は renamed_db を対象とする。
     // user_a (Read) の権限が renamed_db に引き継がれていることを確認
-    // user_a が renamed_db/copy に POST すると、Read権限があるので 201 Created でコピーできるはず。
+    // user_a が renamed_db/copy に POST すると、Global Admin ではないので 403 Forbidden になる。
     let req = Request::builder()
         .method("POST")
         .uri("/databases/renamed_db/copy")
@@ -961,10 +958,31 @@ async fn test_copy_and_rename_permissions() {
         .body(Body::from(r#"{"copy_name": "copied_db"}"#))
         .unwrap();
     let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+    // root が renamed_db/copy に POST して成功させる。
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/renamed_db/copy")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", root_token))
+        .body(Body::from(r#"{"copy_name": "copied_db"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
-    // 3. コピー先データベース (copied_db) に対する Manage 権限自動付与の検証
-    // コピーを実行した user_a は copied_db に対する Manage 権限を持っているはず。
+    // テスト継続のため root (Global Admin) が user_a に copied_db の Manage 権限を付与する。
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/users/user_a/privileges/copied_db")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", root_token))
+        .body(Body::from(r#"{"role": "Manage"}"#))
+        .unwrap();
+    test_app.app.clone().oneshot(req).await.unwrap();
+
+    // 3. コピー先データベース (copied_db) に対する user_a の Manage 権限を検証
+    // 手動で付与した Manage 権限により、user_a は copied_db にテーブルを作成できるはず (201)。
     // そのため、user_a は copied_db にテーブルを作成できるはず (201)。
     let req = Request::builder()
         .method("POST")

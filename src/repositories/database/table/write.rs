@@ -22,16 +22,6 @@ impl<'a> KasaneDbWrite<'a> {
             }
         };
 
-        if let Some(meta_data) = self.table_caches.get(&(db_meta.id, table_name.to_string())) {
-            return Ok(Some(Table {
-                id: meta_data.id,
-                name: table_name.to_string(),
-                data_type: meta_data.data_type,
-                max_zoom_level: meta_data.max_zoom_level,
-                constraints: meta_data.constraints.clone(),
-                description: meta_data.description.clone(),
-            }));
-        }
 
         let db = self.db.tables;
         if let Some(m) = db.get(&self.write_txn, &(db_meta.id, table_name))? {
@@ -146,9 +136,6 @@ impl<'a> KasaneDbWrite<'a> {
         db.put(&mut self.write_txn, &(db_meta.id, table_name), &meta)?;
         db_index.put(&mut self.write_txn, &id, &())?;
 
-        self.table_caches
-            .insert((db_meta.id, table_name.to_string()), meta);
-
         Ok(Table {
             id,
             name: table_name.to_string(),
@@ -239,12 +226,8 @@ impl<'a> KasaneDbWrite<'a> {
         let db = self.db.tables;
         if changed_name {
             db.delete(&mut self.write_txn, &(db_meta.id, table_name))?;
-            self.table_caches
-                .remove(&(db_meta.id, table_name.to_string()));
         }
         db.put(&mut self.write_txn, &(db_meta.id, &table.name), &meta)?;
-        self.table_caches
-            .insert((db_meta.id, table.name.clone()), meta);
 
         Ok(table)
     }
@@ -480,10 +463,6 @@ impl<'a> KasaneDbWrite<'a> {
             .table_id_index
             .delete(&mut self.write_txn, &table.id)?;
 
-        // 3. キャッシュから除去。
-        self.table_caches
-            .remove(&(db_meta.id, table_name.to_string()));
-
         Ok(())
     }
 
@@ -598,12 +577,6 @@ impl<'a> KasaneDbWrite<'a> {
         for k in index_to_insert {
             value_index.put(&mut self.write_txn, &k, &())?;
         }
-
-        // 10. キャッシュの更新
-        self.table_caches.insert(
-            (copy_db_meta.id, copy_table_name.to_string()),
-            copy_table_meta,
-        );
 
         Ok(Table {
             id: copy_table_id,

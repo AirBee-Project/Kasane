@@ -1,7 +1,11 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::net::SocketAddr;
 
 use clap::Parser;
-use kasane::{AppState, auth_cache::AuthCache, db_init, kasane};
+use kasane::{AppState, db_init, kasane};
+
+#[cfg(feature = "production")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -21,11 +25,13 @@ fn default_port() -> u16 {
     std::env::var("PORT")
         .ok()
         .and_then(|value| value.parse().ok())
-        .unwrap_or(5173)
+        .unwrap_or(5172)
 }
 
+#[cfg(feature = "production")]
 struct TracerShutdownGuard(Option<opentelemetry_sdk::trace::SdkTracerProvider>);
 
+#[cfg(feature = "production")]
 impl Drop for TracerShutdownGuard {
     fn drop(&mut self) {
         let Some(provider) = self.0.take() else {
@@ -51,15 +57,15 @@ async fn main() {
     dotenvy::dotenv().ok();
 
     // ログおよびテレメトリの初期化
+    #[cfg(feature = "production")]
     let _tracer_provider = TracerShutdownGuard(kasane::telemetry::init_telemetry());
+    #[cfg(not(feature = "production"))]
+    kasane::telemetry::init_telemetry();
 
     let args = Args::parse();
     let db = db_init::initialize_database(&args.database_path);
 
-    let app = kasane(AppState {
-        db,
-        auth_cache: Arc::new(AuthCache::new()),
-    });
+    let app = kasane(AppState { db });
 
     let address = SocketAddr::from(([0, 0, 0, 0], args.port));
     let listener = tokio::net::TcpListener::bind(address).await.unwrap();

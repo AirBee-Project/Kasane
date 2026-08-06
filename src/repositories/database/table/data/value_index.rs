@@ -1,19 +1,6 @@
-//! 値→空間の二次インデックス（値フィルタ用）のキー構成・エンコード。
-//!
-//! `value_index` の各エントリ（値なし）はキー
-//! `table_id(16) ‖ enc(value)(可変) ‖ flexid.spatial_encode(14)` を持つ。
-//!
-//! - `flexid` は末尾固定 14 バイトなので、値長を知らずとも取り出せる。
-//! - `enc(value)` は**順序保存エンコード**（バイト辞書順＝値の自然順）。これにより
-//!   等価はプレフィックススキャン、範囲はレンジスキャンで引ける。
-
-use kasane_logic::FlexId;
-
 use crate::error::AppError;
 use crate::models::{database::table::TableDataType, id::TableId};
-
-/// [`FlexId`] の `spatial_encode` のバイト長。
-const FLEX_ID_LEN: usize = 14;
+use kasane_logic::FlexId;
 
 /// 格納バイト列を「バイト辞書順＝値の自然順」になるよう変換する。
 ///
@@ -51,8 +38,8 @@ pub fn order_preserving(data_type: TableDataType, value: &[u8]) -> Vec<u8> {
 
 /// インデックスキー `table_id ‖ vkey ‖ flexid` を組み立てる。
 pub fn make_key(table_id: TableId, vkey: &[u8], flexid: &FlexId) -> Vec<u8> {
-    let encoded = flexid.spatial_encode();
-    let mut key = Vec::with_capacity(16 + vkey.len() + FLEX_ID_LEN);
+    let encoded = flexid.encode();
+    let mut key = Vec::with_capacity(16 + vkey.len() + FlexId::ENCODED_LEN);
     key.extend_from_slice(&table_id.into_bytes());
     key.extend_from_slice(vkey);
     key.extend_from_slice(&encoded);
@@ -67,15 +54,14 @@ pub fn make_prefix(table_id: TableId, vkey: &[u8]) -> Vec<u8> {
     prefix
 }
 
-/// インデックスキー末尾 14 バイトから [`FlexId`] を復元する。
+/// インデックスキー末尾 [`FlexId::ENCODED_LEN`] バイトから [`FlexId`] を復元する。
 pub fn flexid_from_key(key: &[u8]) -> Result<FlexId, AppError> {
-    if key.len() < 16 + FLEX_ID_LEN {
+    if key.len() < 16 + FlexId::ENCODED_LEN {
         return Err(AppError::InternalError(
             "value_index key too short".to_string(),
         ));
     }
-    let mut bytes = [0u8; FLEX_ID_LEN];
-    bytes.copy_from_slice(&key[key.len() - FLEX_ID_LEN..]);
-    FlexId::spatial_decode(&bytes)
-        .map_err(|e| AppError::InternalError(format!("flex_id decode: {e}")))
+    let mut bytes = [0u8; FlexId::ENCODED_LEN];
+    bytes.copy_from_slice(&key[key.len() - FlexId::ENCODED_LEN..]);
+    FlexId::decode(&bytes).map_err(|e| AppError::InternalError(format!("flex_id decode: {e}")))
 }

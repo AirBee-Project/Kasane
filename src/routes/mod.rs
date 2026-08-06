@@ -49,12 +49,14 @@ pub fn create_router(app_state: AppState) -> Router {
 
     let auth_router = Router::new().route("/auth/login", post(crate::handlers::auth::login));
 
+    #[allow(unused_mut)]
     let mut router = Router::new()
         .merge(auth_router)
         .merge(protected_router)
         .merge(openapi::routes());
 
     // OpenTelemetryが有効な場合のみミドルウェアを追加する
+    #[cfg(feature = "production")]
     if std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").is_ok() {
         router =
             router.route_layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default());

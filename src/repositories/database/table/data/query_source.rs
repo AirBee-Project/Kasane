@@ -6,7 +6,7 @@
 
 use heed::types::Bytes;
 use heed::{Database, Env, WithoutTls};
-use kasane_logic::{CellValue, Error as LogicError, FlexId, RangeId, Source, WorkingTree};
+use kasane_logic::{Error as LogicError, FlexId, RangeId, SafeValue, Source, WorkingTree};
 
 use super::shard;
 use crate::db_init::TableIdAndFlexId;
@@ -52,7 +52,7 @@ impl<V> TableSource<V> {
 
 impl<V> Source for TableSource<V>
 where
-    V: CellValue + 'static,
+    V: SafeValue + 'static,
 {
     /// 演算はインメモリの作業木で行う。ディスク側が担うのは入力の読み出しだけ。
     type Value = V;

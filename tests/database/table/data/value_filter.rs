@@ -20,7 +20,7 @@ fn enc(v: i32) -> Vec<u8> {
 fn xs(flex_ids: &[kasane_logic::FlexId]) -> HashSet<u32> {
     flex_ids
         .iter()
-        .flat_map(|f| f.clone().single_ids().map(|s| s.x()))
+        .flat_map(|f| (*f).single_ids().map(|s| s.x()))
         .collect()
 }
 

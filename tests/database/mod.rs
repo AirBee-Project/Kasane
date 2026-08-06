@@ -3,7 +3,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use kasane::{AppState, db_init, kasane};
-use std::sync::Arc;
+
 use tower::ServiceExt;
 
 pub struct DbTestApp {
@@ -17,10 +17,7 @@ impl DbTestApp {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let db = db_init::initialize_database(temp_dir.path().to_str().unwrap());
 
-        let app_state = AppState {
-            db: db.clone(),
-            auth_cache: Arc::new(kasane::auth_cache::AuthCache::new()),
-        };
+        let app_state = AppState { db };
         let token = kasane::services::auth::generate_jwt(&app_state, "root").unwrap();
         let auth_header = axum::http::HeaderValue::from_str(&format!("Bearer {}", token)).unwrap();
 

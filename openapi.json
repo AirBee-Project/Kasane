@@ -154,7 +154,7 @@
           "Tables"
         ],
         "summary": "テーブルの作成",
-        "description": "指定したデータベース内に新しいテーブルを作成します。この操作はデータベースのWrite以上の権限が必要です。",
+        "description": "指定したデータベース内に新しいテーブルを作成します。この操作はデータベースのManage以上の権限が必要です。",
         "operationId": "table_create",
         "parameters": [
           {
@@ -252,7 +252,7 @@
           "Tables"
         ],
         "summary": "テーブルの削除",
-        "description": "指定したテーブルを削除します。この操作はデータベースのWrite以上の権限が必要です。",
+        "description": "指定したテーブルを削除します。この操作はデータベースのManage以上の権限が必要です。",
         "operationId": "remove_table",
         "parameters": [
           {
@@ -674,84 +674,6 @@
         ]
       }
     },
-    "/databases/{db_name}/tables/{table_name}/data/search/stream": {
-      "post": {
-        "tags": [
-          "Data"
-        ],
-        "summary": "データのストリーミング取得",
-        "description": "空間IDと値をNDJSON形式のストリームとして順次取得します。この操作はデータベースのRead以上の権限が必要です。",
-        "operationId": "data_get_stream",
-        "parameters": [
-          {
-            "name": "db_name",
-            "in": "path",
-            "description": "データベース名",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "example_database"
-          },
-          {
-            "name": "table_name",
-            "in": "path",
-            "description": "テーブル名",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "example_table"
-          },
-          {
-            "name": "format",
-            "in": "query",
-            "description": "出力フォーマット(singleId, rangeId, flexId)",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/OutputFormat"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "description": "最大取得件数",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GetDataRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer_auth": []
-          }
-        ]
-      }
-    },
     "/databases/{name}": {
       "get": {
         "tags": [
@@ -881,7 +803,7 @@
           "Databases"
         ],
         "summary": "データベースのコピー",
-        "description": "指定したデータベースをコピーします。コピー元データベースに対するRead権限が必要です。",
+        "description": "指定したデータベースをコピーします。この操作はGlobal Admin権限が必要です。",
         "operationId": "database_copy",
         "parameters": [
           {
@@ -920,7 +842,7 @@
             "description": "リクエストが不正（パラメータエラー、または不正なデータベース名）"
           },
           "403": {
-            "description": "権限不足（コピー元DBのRead権限がない場合）"
+            "description": "権限不足（Global Admin権限がない場合）"
           },
           "404": {
             "description": "コピー元データベースが存在しない"
@@ -931,7 +853,9 @@
         },
         "security": [
           {
-            "bearer_auth": []
+            "bearer_auth": [
+              "global_admin"
+            ]
           }
         ]
       }
@@ -1553,6 +1477,7 @@
             "type": "array",
             "items": {
               "type": "object",
+              "description": "高さ・経度・緯度・時間の4軸すべてを「ズームレベル + インデックス」で表す拡張時空間IDを表す型。\n時間を指定する場合は `t_zoomlevel` と `t_index` を必ず両方指定すること。\n両方省略した場合は「全時間」を表す。",
               "required": [
                 "fZoomlevel",
                 "fIndex",
@@ -1565,6 +1490,7 @@
                 "fZoomlevel": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "高さ方向のズームレベル。",
                   "example": 20,
                   "maximum": 30,
                   "minimum": 0
@@ -1572,11 +1498,13 @@
                 "fIndex": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "高さ方向のインデックス。",
                   "example": 0
                 },
                 "xZoomlevel": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "経度方向のズームレベル。",
                   "example": 20,
                   "maximum": 30,
                   "minimum": 0
@@ -1584,12 +1512,14 @@
                 "xIndex": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "経度方向のインデックス。",
                   "example": 931386,
                   "minimum": 0
                 },
                 "yZoomlevel": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "緯度方向のズームレベル。",
                   "example": 20,
                   "maximum": 30,
                   "minimum": 0
@@ -1597,7 +1527,29 @@
                 "yIndex": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "緯度方向のインデックス。",
                   "example": 412905,
+                  "minimum": 0
+                },
+                "tZoomlevel": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int32",
+                  "description": "時間軸のズームレベル",
+                  "example": 25,
+                  "maximum": 35,
+                  "minimum": 0
+                },
+                "tIndex": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "時間軸のインデックス。",
+                  "example": 7,
                   "minimum": 0
                 }
               }
@@ -1620,6 +1572,7 @@
             "type": "array",
             "items": {
               "type": "object",
+              "description": "区間表現の時空間IDを表す型。\n\n時間を指定する場合は `i` と `t` を必ず両方指定すること。\n両方省略した場合は「全時間」を表す。",
               "required": [
                 "z",
                 "f",
@@ -1630,6 +1583,7 @@
                 "z": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "ズームレベル。",
                   "example": 20,
                   "maximum": 30,
                   "minimum": 0
@@ -1640,6 +1594,7 @@
                     "type": "integer",
                     "format": "int32"
                   },
+                  "description": "高さ方向の範囲 `[min, max]`（両端を含む）。",
                   "example": [
                     0,
                     0
@@ -1652,6 +1607,7 @@
                     "format": "int32",
                     "minimum": 0
                   },
+                  "description": "経度方向の範囲 `[min, max]`（両端を含む）。",
                   "example": [
                     931388,
                     931390
@@ -1664,9 +1620,37 @@
                     "format": "int32",
                     "minimum": 0
                   },
+                  "description": "緯度方向の範囲 `[min, max]`（両端を含む）。",
                   "example": [
                     412900,
                     412907
+                  ]
+                },
+                "i": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "時間間隔（単位: 秒）。1970-01-01T00:00:00Z を起点とする。任意の値は指定できず、 次の暦の単位のいずれかのみ指定できる: `1`、`60`、`3600`、`86400`、`34359738368`（システムの全時間）。",
+                  "example": 3600,
+                  "maximum": 34359738368,
+                  "minimum": 1
+                },
+                "t": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0
+                  },
+                  "description": "時間インデックスの区間表現。",
+                  "example": [
+                    0,
+                    5
                   ]
                 }
               }
@@ -1689,6 +1673,7 @@
             "type": "array",
             "items": {
               "type": "object",
+              "description": "通常の時空間IDを表す型。\n\n時間を指定する場合は `i` と `t` を必ず両方指定すること。\n両方省略した場合は「全時間」を表す。",
               "required": [
                 "z",
                 "f",
@@ -1699,6 +1684,7 @@
                 "z": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "ズームレベル。",
                   "example": 20,
                   "maximum": 30,
                   "minimum": 0
@@ -1706,18 +1692,42 @@
                 "f": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "高さ方向のインデックス。",
                   "example": 0
                 },
                 "x": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "経度方向のインデックス。",
                   "example": 931386,
                   "minimum": 0
                 },
                 "y": {
                   "type": "integer",
                   "format": "int32",
+                  "description": "緯度方向のインデックス。",
                   "example": 412905,
+                  "minimum": 0
+                },
+                "i": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "時間間隔（単位: 秒）。1970-01-01T00:00:00Z を起点とする。任意の値は指定できず、 次の暦の単位のいずれかのみ指定できる: `1`、`60`、`3600`、`86400`、`34359738368`（システムの全時間）。",
+                  "example": 3600,
+                  "maximum": 34359738368,
+                  "minimum": 1
+                },
+                "t": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "時間インデックス。",
+                  "example": 1,
                   "minimum": 0
                 }
               }
@@ -1874,6 +1884,7 @@
       },
       "FlexId": {
         "type": "object",
+        "description": "高さ・経度・緯度・時間の4軸すべてを「ズームレベル + インデックス」で表す拡張時空間IDを表す型。\n時間を指定する場合は `t_zoomlevel` と `t_index` を必ず両方指定すること。\n両方省略した場合は「全時間」を表す。",
         "required": [
           "fZoomlevel",
           "fIndex",
@@ -1886,6 +1897,7 @@
           "fZoomlevel": {
             "type": "integer",
             "format": "int32",
+            "description": "高さ方向のズームレベル。",
             "example": 20,
             "maximum": 30,
             "minimum": 0
@@ -1893,11 +1905,13 @@
           "fIndex": {
             "type": "integer",
             "format": "int32",
+            "description": "高さ方向のインデックス。",
             "example": 0
           },
           "xZoomlevel": {
             "type": "integer",
             "format": "int32",
+            "description": "経度方向のズームレベル。",
             "example": 20,
             "maximum": 30,
             "minimum": 0
@@ -1905,12 +1919,14 @@
           "xIndex": {
             "type": "integer",
             "format": "int32",
+            "description": "経度方向のインデックス。",
             "example": 931386,
             "minimum": 0
           },
           "yZoomlevel": {
             "type": "integer",
             "format": "int32",
+            "description": "緯度方向のズームレベル。",
             "example": 20,
             "maximum": 30,
             "minimum": 0
@@ -1918,7 +1934,29 @@
           "yIndex": {
             "type": "integer",
             "format": "int32",
+            "description": "緯度方向のインデックス。",
             "example": 412905,
+            "minimum": 0
+          },
+          "tZoomlevel": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "時間軸のズームレベル",
+            "example": 25,
+            "maximum": 35,
+            "minimum": 0
+          },
+          "tIndex": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "時間軸のインデックス。",
+            "example": 7,
             "minimum": 0
           }
         }
@@ -2548,6 +2586,7 @@
       },
       "RangeId": {
         "type": "object",
+        "description": "区間表現の時空間IDを表す型。\n\n時間を指定する場合は `i` と `t` を必ず両方指定すること。\n両方省略した場合は「全時間」を表す。",
         "required": [
           "z",
           "f",
@@ -2558,6 +2597,7 @@
           "z": {
             "type": "integer",
             "format": "int32",
+            "description": "ズームレベル。",
             "example": 20,
             "maximum": 30,
             "minimum": 0
@@ -2568,6 +2608,7 @@
               "type": "integer",
               "format": "int32"
             },
+            "description": "高さ方向の範囲 `[min, max]`（両端を含む）。",
             "example": [
               0,
               0
@@ -2580,6 +2621,7 @@
               "format": "int32",
               "minimum": 0
             },
+            "description": "経度方向の範囲 `[min, max]`（両端を含む）。",
             "example": [
               931388,
               931390
@@ -2592,9 +2634,37 @@
               "format": "int32",
               "minimum": 0
             },
+            "description": "緯度方向の範囲 `[min, max]`（両端を含む）。",
             "example": [
               412900,
               412907
+            ]
+          },
+          "i": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "時間間隔（単位: 秒）。1970-01-01T00:00:00Z を起点とする。任意の値は指定できず、 次の暦の単位のいずれかのみ指定できる: `1`、`60`、`3600`、`86400`、`34359738368`（システムの全時間）。",
+            "example": 3600,
+            "maximum": 34359738368,
+            "minimum": 1
+          },
+          "t": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            },
+            "description": "時間インデックスの区間表現。",
+            "example": [
+              0,
+              5
             ]
           }
         }
@@ -2619,6 +2689,7 @@
       },
       "SingleId": {
         "type": "object",
+        "description": "通常の時空間IDを表す型。\n\n時間を指定する場合は `i` と `t` を必ず両方指定すること。\n両方省略した場合は「全時間」を表す。",
         "required": [
           "z",
           "f",
@@ -2629,6 +2700,7 @@
           "z": {
             "type": "integer",
             "format": "int32",
+            "description": "ズームレベル。",
             "example": 20,
             "maximum": 30,
             "minimum": 0
@@ -2636,18 +2708,42 @@
           "f": {
             "type": "integer",
             "format": "int32",
+            "description": "高さ方向のインデックス。",
             "example": 0
           },
           "x": {
             "type": "integer",
             "format": "int32",
+            "description": "経度方向のインデックス。",
             "example": 931386,
             "minimum": 0
           },
           "y": {
             "type": "integer",
             "format": "int32",
+            "description": "緯度方向のインデックス。",
             "example": 412905,
+            "minimum": 0
+          },
+          "i": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "時間間隔（単位: 秒）。1970-01-01T00:00:00Z を起点とする。任意の値は指定できず、 次の暦の単位のいずれかのみ指定できる: `1`、`60`、`3600`、`86400`、`34359738368`（システムの全時間）。",
+            "example": 3600,
+            "maximum": 34359738368,
+            "minimum": 1
+          },
+          "t": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "時間インデックス。",
+            "example": 1,
             "minimum": 0
           }
         }
@@ -2711,211 +2807,6 @@
                     "type": "string",
                     "enum": [
                       "flexId"
-                    ]
-                  }
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "StreamDataEventFlex": {
-        "type": "object",
-        "required": [
-          "valueRef",
-          "spatialIds"
-        ],
-        "properties": {
-          "valueRef": {
-            "type": "string"
-          },
-          "spatialIds": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/FlexId"
-            }
-          }
-        }
-      },
-      "StreamDataEventRange": {
-        "type": "object",
-        "required": [
-          "valueRef",
-          "spatialIds"
-        ],
-        "properties": {
-          "valueRef": {
-            "type": "string"
-          },
-          "spatialIds": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RangeId"
-            }
-          }
-        }
-      },
-      "StreamDataEventSingle": {
-        "type": "object",
-        "required": [
-          "valueRef",
-          "spatialIds"
-        ],
-        "properties": {
-          "valueRef": {
-            "type": "string"
-          },
-          "spatialIds": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SingleId"
-            }
-          }
-        }
-      },
-      "StreamDictionaryEvent": {
-        "type": "object",
-        "required": [
-          "valueRef",
-          "value"
-        ],
-        "properties": {
-          "valueRef": {
-            "type": "string"
-          },
-          "value": {}
-        }
-      },
-      "StreamEventFlex": {
-        "oneOf": [
-          {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/StreamDictionaryEvent"
-              },
-              {
-                "type": "object",
-                "required": [
-                  "type"
-                ],
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "dictionary"
-                    ]
-                  }
-                }
-              }
-            ]
-          },
-          {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/StreamDataEventFlex"
-              },
-              {
-                "type": "object",
-                "required": [
-                  "type"
-                ],
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "data"
-                    ]
-                  }
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "StreamEventRange": {
-        "oneOf": [
-          {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/StreamDictionaryEvent"
-              },
-              {
-                "type": "object",
-                "required": [
-                  "type"
-                ],
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "dictionary"
-                    ]
-                  }
-                }
-              }
-            ]
-          },
-          {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/StreamDataEventRange"
-              },
-              {
-                "type": "object",
-                "required": [
-                  "type"
-                ],
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "data"
-                    ]
-                  }
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "StreamEventSingle": {
-        "oneOf": [
-          {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/StreamDictionaryEvent"
-              },
-              {
-                "type": "object",
-                "required": [
-                  "type"
-                ],
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "dictionary"
-                    ]
-                  }
-                }
-              }
-            ]
-          },
-          {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/StreamDataEventSingle"
-              },
-              {
-                "type": "object",
-                "required": [
-                  "type"
-                ],
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "data"
                     ]
                   }
                 }

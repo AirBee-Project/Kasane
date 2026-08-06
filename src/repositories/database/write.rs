@@ -10,15 +10,6 @@ impl<'a> KasaneDbWrite<'a> {
     /// Databaseの情報を取得する
     #[tracing::instrument(skip_all)]
     pub fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
-        if self.database_caches.contains_key(name) {
-            return Ok(Some(DatabaseInfoResponse {
-                name: name.to_string(),
-                description: self
-                    .database_caches
-                    .get(name)
-                    .and_then(|m| m.description.clone()),
-            }));
-        }
 
         let db = self.db.databases;
         if let Some(meta) = db.get(&self.write_txn, name)? {
@@ -52,8 +43,6 @@ impl<'a> KasaneDbWrite<'a> {
 
         let db = self.db.databases;
         db.put(&mut self.write_txn, name, &meta)?;
-
-        self.database_caches.insert(name.to_string(), meta);
 
         Ok(DatabaseInfoResponse {
             name: name.to_string(),
@@ -99,7 +88,6 @@ impl<'a> KasaneDbWrite<'a> {
 
         let db = self.db.databases;
         db.delete(&mut self.write_txn, name)?;
-        self.database_caches.remove(name);
 
         Ok(())
     }
@@ -150,14 +138,8 @@ impl<'a> KasaneDbWrite<'a> {
         if name != final_new_name {
             // lmdbから古いエントリを削除し、新しいエントリを追加
             db.delete(&mut self.write_txn, name)?;
-            self.database_caches.remove(name);
         }
         db.put(&mut self.write_txn, final_new_name, &meta)?;
-
-        // キャッシュの更新
-        self.database_caches
-            .insert(final_new_name.to_string(), meta);
-
         Ok(())
     }
 
@@ -197,8 +179,6 @@ impl<'a> KasaneDbWrite<'a> {
 
         let db = self.db.databases;
         db.put(&mut self.write_txn, copy_name, &copy_meta)?;
-        self.database_caches
-            .insert(copy_name.to_string(), copy_meta);
 
         // 4. コピー元データベース内の全テーブル名を取得
         let db_tables = self.db.tables;
