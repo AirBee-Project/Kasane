@@ -43,10 +43,10 @@ pub fn init_telemetry() -> Option<opentelemetry_sdk::trace::SdkTracerProvider> {
             .build()
             .expect("OTLP(HTTP) Exporterの構築に失敗しました");
 
-        let mut attributes = vec![opentelemetry::KeyValue::new(
-            "service.namespace",
-            "database",
-        )];
+        let mut attributes = vec![
+            opentelemetry::KeyValue::new("service.namespace", "database"),
+            opentelemetry::KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
+        ];
 
         if let Ok(val) = std::env::var("CLOUD_REGION") {
             attributes.push(opentelemetry::KeyValue::new("cloud.region", val));
