@@ -12,7 +12,8 @@ http:
     type: json
     data: |-
       {
-        "name": ""
+        "name": "",
+        "description": "データベースの説明文"
       }
   auth:
     type: bearer
@@ -34,7 +35,8 @@ examples:
         type: json
         data: |-
           {
-            "name": ""
+            "name": "",
+            "description": "データベースの説明文"
           }
     response:
       status: 201
@@ -46,5 +48,6 @@ examples:
         type: json
         data: |-
           {
-            "name": ""
+            "name": "",
+            "description": "データベースの説明文"
           }

@@ -9,4 +9,5 @@ pub struct Table {
     pub data_type: TableDataType,
     pub max_zoom_level: u8,
     pub constraints: Option<TableConstraints>,
+    pub description: Option<String>,
 }

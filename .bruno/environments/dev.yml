@@ -7,4 +7,4 @@ variables:
   - name: password
     value: password
   - name: accessToken
-    value: ""
+    value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJyb290IiwidWlkIjoiMDE5ZmQ0ODQtN2FhNC03OGMwLWJiMDEtMzExODFmMDAwMGExIiwidmVyIjowLCJleHAiOjE3ODYwNjMyODd9.gCHf2nmmbzqZEzicLgkWKsVmpgYS8Gk4J-RTta8evxA

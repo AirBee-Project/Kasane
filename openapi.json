@@ -748,9 +748,9 @@
         "tags": [
           "Databases"
         ],
-        "summary": "データベース名の更新",
-        "description": "指定したデータベースの名前を変更します。対象データベースのManage以上の権限が必要です。",
-        "operationId": "database_rename",
+        "summary": "データベースの更新",
+        "description": "指定したデータベースの名前や説明を変更します。対象データベースのManage以上の権限が必要です。",
+        "operationId": "database_update",
         "parameters": [
           {
             "name": "name",
@@ -1387,6 +1387,13 @@
           "name": {
             "type": "string",
             "example": "example_database"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "データベースの説明文"
           }
         }
       },
@@ -1423,6 +1430,13 @@
                 "description": "値に対する制約。指定しない場合は制約なしとなる。"
               }
             ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "テーブルの説明です"
           }
         }
       },
@@ -1730,6 +1744,13 @@
           "name": {
             "type": "string",
             "example": "example_database"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "データベースの説明文"
           }
         }
       },
@@ -3023,6 +3044,13 @@
                 "$ref": "#/components/schemas/TableConstraints"
               }
             ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "テーブルの説明文です"
           }
         }
       },
@@ -3063,6 +3091,13 @@
                 "$ref": "#/components/schemas/TableConstraints"
               }
             ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "テーブルの説明文です"
           }
         }
       },
@@ -3080,13 +3115,20 @@
       },
       "UpdateDatabaseRequest": {
         "type": "object",
-        "required": [
-          "new_name"
-        ],
         "properties": {
           "new_name": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "example": "example_database_renamed"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "更新されたデータベースの説明です"
           }
         }
       },
@@ -3293,6 +3335,13 @@
             "description": "既存データが新しい制約を満たしているか検証するかどうか。\n\n- `true` (デフォルト): 既存データが新しい制約に違反している場合、更新を却下してエラー (400) を返します。\n- `false`: 既存データの走査をスキップして即座に変更を適用します。高速に変更できますが、制約に適合しない不整合なデータが残るリスクがあります。",
             "default": true,
             "example": true
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "更新されたテーブルの説明文です"
           }
         }
       },

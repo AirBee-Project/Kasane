@@ -28,6 +28,7 @@ impl<'a> KasaneDbRead<'a> {
                 data_type: m.data_type,
                 max_zoom_level: m.max_zoom_level,
                 constraints: m.constraints,
+                description: m.description,
             }))
         } else {
             Ok(None)
@@ -70,6 +71,7 @@ impl<'a> KasaneDbRead<'a> {
                 data_type: m.data_type,
                 max_zoom_level: m.max_zoom_level,
                 constraints: m.constraints,
+                description: m.description,
             });
         }
         Ok(tables)

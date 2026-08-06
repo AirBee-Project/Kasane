@@ -30,6 +30,7 @@ impl<'a> KasaneDbWrite<'a> {
                 data_type: m.data_type,
                 max_zoom_level: m.max_zoom_level,
                 constraints: m.constraints,
+                description: m.description,
             }))
         } else {
             Ok(None)
@@ -45,6 +46,7 @@ impl<'a> KasaneDbWrite<'a> {
         data_type: TableDataType,
         max_zoom_level: u8,
         constraints: Option<TableConstraints>,
+        description: Option<String>,
     ) -> Result<Table, AppError> {
         if db_name.is_empty() {
             return Err(AppError::DatabaseNotFound {
@@ -126,6 +128,7 @@ impl<'a> KasaneDbWrite<'a> {
             data_type,
             max_zoom_level,
             constraints: actual_constraints.clone(),
+            description: description.clone(),
         };
 
         let db = self.db.tables;
@@ -138,6 +141,7 @@ impl<'a> KasaneDbWrite<'a> {
             data_type,
             max_zoom_level,
             constraints: actual_constraints,
+            description,
         })
     }
 
@@ -149,6 +153,7 @@ impl<'a> KasaneDbWrite<'a> {
         table_name: &str,
         new_name: Option<&str>,
         new_constraints: Option<Option<crate::models::database::table::UpdateTableConstraints>>,
+        description: Option<Option<String>>,
         validate_existing_data: bool,
     ) -> Result<Table, AppError> {
         let db_meta = {
@@ -205,11 +210,16 @@ impl<'a> KasaneDbWrite<'a> {
             }
         }
 
+        if let Some(desc) = description {
+            table.description = desc;
+        }
+
         let meta = TableMetadata {
             id: table.id,
             data_type: table.data_type,
             max_zoom_level: table.max_zoom_level,
             constraints: table.constraints.clone(),
+            description: table.description.clone(),
         };
 
         let db = self.db.tables;
@@ -521,6 +531,7 @@ impl<'a> KasaneDbWrite<'a> {
             data_type: src_table_meta.data_type,
             max_zoom_level: src_table_meta.max_zoom_level,
             constraints: src_table_meta.constraints.clone(),
+            description: src_table_meta.description.clone(),
         };
 
         // 7. 新しいテーブルメタデータと ID インデックスを書き込み
@@ -572,6 +583,7 @@ impl<'a> KasaneDbWrite<'a> {
             data_type: src_table_meta.data_type,
             max_zoom_level: src_table_meta.max_zoom_level,
             constraints: src_table_meta.constraints,
+            description: src_table_meta.description,
         })
     }
 }

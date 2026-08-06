@@ -8,9 +8,10 @@ impl<'a> KasaneDbRead<'a> {
             return Ok(None);
         }
         let db = self.db.databases;
-        if db.get(&self.read_txn, name)?.is_some() {
+        if let Some(meta) = db.get(&self.read_txn, name)? {
             Ok(Some(DatabaseInfoResponse {
                 name: name.to_string(),
+                description: meta.description,
             }))
         } else {
             Ok(None)
@@ -23,9 +24,10 @@ impl<'a> KasaneDbRead<'a> {
         let db = self.db.databases;
         let mut list = Vec::new();
         for res in db.iter(&self.read_txn)? {
-            let (k, _) = res.map_err(AppError::from)?;
+            let (k, meta) = res.map_err(AppError::from)?;
             list.push(DatabaseInfoResponse {
                 name: k.to_string(),
+                description: meta.description,
             });
         }
         Ok(list)

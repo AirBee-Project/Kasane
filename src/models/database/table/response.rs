@@ -14,6 +14,8 @@ pub struct TableSummary {
     pub max_zoom_level: u8,
     #[schema(example = json!({"type": "Int", "min": 0, "max": 100}))]
     pub constraints: Option<TableConstraints>,
+    #[schema(example = "テーブルの説明文です")]
+    pub description: Option<String>,
 }
 
 /// 単一テーブルの詳細情報。保持する空間ID(FlexId)の総数 `count` を必ず含む。
@@ -29,6 +31,8 @@ pub struct TableInfoResponse {
     pub count: u64,
     #[schema(example = json!({"type": "Int", "min": 0, "max": 100}))]
     pub constraints: Option<TableConstraints>,
+    #[schema(example = "テーブルの説明文です")]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]

@@ -25,7 +25,8 @@ http:
           "min": 0,
           "max": 100
         },
-        "validate_existing_data": true
+        "validate_existing_data": true,
+        "description": "更新されたテーブルの説明文です"
       }
   auth:
     type: bearer
@@ -60,7 +61,8 @@ examples:
               "min": 0,
               "max": 100
             },
-            "validate_existing_data": true
+            "validate_existing_data": true,
+            "description": "更新されたテーブルの説明文です"
           }
     response:
       status: 200

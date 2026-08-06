@@ -494,9 +494,9 @@ paths:
     patch:
       tags:
       - Databases
-      summary: データベース名の更新
-      description: 指定したデータベースの名前を変更します。対象データベースのManage以上の権限が必要です。
-      operationId: database_rename
+      summary: データベースの更新
+      description: 指定したデータベースの名前や説明を変更します。対象データベースのManage以上の権限が必要です。
+      operationId: database_update
       parameters:
       - name: name
         in: path
@@ -897,6 +897,11 @@ components:
         name:
           type: string
           example: example_database
+        description:
+          type:
+          - string
+          - 'null'
+          example: データベースの説明文
     CreateTableRequest:
       type: object
       description: 時空間IDと値が対応するTableを作成する
@@ -921,6 +926,11 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/TableConstraints'
             description: 値に対する制約。指定しない場合は制約なしとなる。
+        description:
+          type:
+          - string
+          - 'null'
+          example: テーブルの説明です
     CreateUserRequest:
       type: object
       required:
@@ -1171,6 +1181,11 @@ components:
         name:
           type: string
           example: example_database
+        description:
+          type:
+          - string
+          - 'null'
+          example: データベースの説明文
     ExecuteQueryRequest:
       type: object
       description: Tableに対するQueryを表現する型
@@ -2094,6 +2109,11 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/TableConstraints'
+        description:
+          type:
+          - string
+          - 'null'
+          example: テーブルの説明文です
     TableListResponse:
       type: array
       items:
@@ -2120,6 +2140,11 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/TableConstraints'
+        description:
+          type:
+          - string
+          - 'null'
+          example: テーブルの説明文です
     UpdateAdminRequest:
       type: object
       required:
@@ -2130,12 +2155,17 @@ components:
           example: false
     UpdateDatabaseRequest:
       type: object
-      required:
-      - new_name
       properties:
         new_name:
-          type: string
+          type:
+          - string
+          - 'null'
           example: example_database_renamed
+        description:
+          type:
+          - string
+          - 'null'
+          example: 更新されたデータベースの説明です
     UpdatePasswordRequest:
       type: object
       required:
@@ -2274,6 +2304,11 @@ components:
             - `false`: 既存データの走査をスキップして即座に変更を適用します。高速に変更できますが、制約に適合しない不整合なデータが残るリスクがあります。
           default: true
           example: true
+        description:
+          type:
+          - string
+          - 'null'
+          example: 更新されたテーブルの説明文です
     UserInfoResponse:
       type: object
       required:

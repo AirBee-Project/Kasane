@@ -16,7 +16,8 @@ http:
     type: json
     data: |-
       {
-        "new_name": "example_database_renamed"
+        "new_name": "example_database_renamed",
+        "description": "更新されたデータベースの説明です"
       }
   auth:
     type: bearer
@@ -42,7 +43,8 @@ examples:
         type: json
         data: |-
           {
-            "new_name": "new_database_name"
+            "new_name": "new_database_name",
+            "description": "更新されたデータベースの説明です"
           }
     response:
       status: 200

@@ -219,3 +219,149 @@ async fn test_update_table_constraints_type_mismatch() {
     let response = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+/// テーブルのdescription更新が正常に行えるかを検証する。
+async fn test_update_table_description_success() {
+    let test_app = TestApp::new();
+    test_app.create_database("test_db").await;
+
+    let create_body = serde_json::json!({
+        "name": "desc_table",
+        "data_type": "Int",
+        "max_zoom_level": 25,
+        "description": "Initial description."
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/test_db/tables")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
+        .unwrap();
+
+    let _ = test_app.app.clone().oneshot(req).await.unwrap();
+
+    let update_body = serde_json::json!({
+        "description": "Updated description."
+    });
+
+    let req = Request::builder()
+        .method("PATCH")
+        .uri("/databases/test_db/tables/desc_table")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&update_body).unwrap()))
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases/test_db/tables/desc_table")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(json["description"], "Updated description.");
+
+    // 削除（null 指定）
+    let update_body = serde_json::json!({
+        "description": null
+    });
+    let req = Request::builder()
+        .method("PATCH")
+        .uri("/databases/test_db/tables/desc_table")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&update_body).unwrap()))
+        .unwrap();
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases/test_db/tables/desc_table")
+        .body(Body::empty())
+        .unwrap();
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert!(json.get("description").is_none() || json["description"].is_null());
+
+    // 再度設定して、nameだけの更新時にdescriptionが維持されるか確認
+    let update_body = serde_json::json!({
+        "description": "Temp description"
+    });
+    let req = Request::builder()
+        .method("PATCH")
+        .uri("/databases/test_db/tables/desc_table")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&update_body).unwrap()))
+        .unwrap();
+    let _ = test_app.app.clone().oneshot(req).await.unwrap();
+
+    let update_body = serde_json::json!({
+        "name": "desc_table_renamed"
+    });
+    let req = Request::builder()
+        .method("PATCH")
+        .uri("/databases/test_db/tables/desc_table")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&update_body).unwrap()))
+        .unwrap();
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases/test_db/tables/desc_table_renamed")
+        .body(Body::empty())
+        .unwrap();
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["description"], "Temp description");
+}
+
+#[tokio::test]
+/// テーブルのdescription更新で4096文字を超える場合にエラーになるかを検証する。
+async fn test_update_table_description_too_long() {
+    let test_app = TestApp::new();
+    test_app.create_database("test_db").await;
+
+    let create_body = serde_json::json!({
+        "name": "desc_table_too_long",
+        "data_type": "Int",
+        "max_zoom_level": 25
+    });
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/test_db/tables")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
+        .unwrap();
+    let _ = test_app.app.clone().oneshot(req).await.unwrap();
+
+    let long_desc = "a".repeat(kasane::models::database::MAX_DESCRIPTION_LENGTH + 1);
+    let update_body = serde_json::json!({
+        "description": long_desc
+    });
+
+    let req = Request::builder()
+        .method("PATCH")
+        .uri("/databases/test_db/tables/desc_table_too_long")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&update_body).unwrap()))
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}

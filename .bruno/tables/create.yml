@@ -18,7 +18,8 @@ http:
       {
         "name": "example_table",
         "data_type": "Text",
-        "max_zoom_level": 25
+        "max_zoom_level": 25,
+        "description": "テーブルの説明文です"
       }
   auth:
     type: bearer
@@ -46,7 +47,8 @@ examples:
           {
             "name": "example_table",
             "data_type": "Text",
-            "max_zoom_level": 25
+            "max_zoom_level": 25,
+            "description": "テーブルの説明文です"
           }
     response:
       status: 201
@@ -69,7 +71,8 @@ examples:
           {
             "name": "example_table",
             "data_type": "Text",
-            "max_zoom_level": 25
+            "max_zoom_level": 25,
+            "description": "テーブルの説明文です"
           }
     response:
       status: 400
@@ -92,7 +95,8 @@ examples:
           {
             "name": "example_table",
             "data_type": "Text",
-            "max_zoom_level": 25
+            "max_zoom_level": 25,
+            "description": "テーブルの説明文です"
           }
     response:
       status: 409
