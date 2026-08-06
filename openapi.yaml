@@ -1706,16 +1706,7 @@ components:
             enum:
             - merge
       - type: object
-        description: |-
-          値を対応表に基づいて変換する。対応表にない値は `default` になる。
-
-          変換するのは「値を持つセル」だけで、値の無いセルは `default` にはならず
-          欠損のまま残る（`merge` の `default` とは意味が異なる）。
-
-          `output_type` は必須で、このノードが結果の値型を決める位置にあるとき
-          リクエストの `value_type` を省略してもこの型が使われる。逆にリクエストの
-          `value_type` などから決まる実際の値型と `output_type` が食い違う場合は 400 になる。
-          `Float` の照合は完全一致で、`-0.0` は `0.0` として扱われる。
+        description: 値を対応表に基づいて変換する。対応表にない値は `default` になる。
         required:
         - input
         - output_type
