@@ -7,7 +7,7 @@ use crate::error::AppError;
 use crate::models::id::TableId;
 
 /// 1つのシャードが保持できる [`FlexId`] 数の上限。これを超えたシャードは動的に分割される。
-pub const MAX_FLEX_ID_PER_SHARD: usize = 512;
+pub const MAX_FLEX_ID_PER_SHARD: usize = 1024;
 
 /// 兄弟シャードの合算件数がこの値以下になったら再びmergeして1つのシャードにする。
 pub const MERGE_FLEX_ID_THRESHOLD: usize = MAX_FLEX_ID_PER_SHARD / 2;
