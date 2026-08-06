@@ -148,6 +148,7 @@ impl<'a> KasaneDbRead<'a> {
     /// 同じバイト列を何百万回もハッシュすることになる。そこでまず**この葉ローカルの辞書
     /// インデックス（u32）**でグルーピングし（整数ハッシュは軽い）、葉に現れた distinct 値の
     /// 数だけ実バイト列へ復元して全体マップへマージする。
+    #[allow(clippy::too_many_arguments)]
     fn resolve_leaf(
         tables_data: &heed::Database<crate::db_init::TableIdAndFlexId, heed::types::Bytes>,
         txn: &heed::RoTxn<heed::WithoutTls>,
