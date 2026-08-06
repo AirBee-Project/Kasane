@@ -96,12 +96,12 @@ pub async fn update(
     app_state: &AppState,
     name: &str,
     new_name: Option<String>,
-    description: Option<String>,
+    description: Option<Option<String>>,
 ) -> Result<(), AppError> {
     if let Some(new_n) = &new_name {
         crate::services::helpers::name_valid::name_valid(new_n)?;
     }
-    if let Some(desc) = &description
+    if let Some(Some(desc)) = &description
         && desc.chars().count() > crate::models::database::MAX_DESCRIPTION_LENGTH
     {
         return Err(AppError::InvalidName {

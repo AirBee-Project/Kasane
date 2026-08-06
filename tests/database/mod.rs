@@ -311,6 +311,60 @@ async fn test_database_description() {
     let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["description"], "Updated description.");
+
+    // 5. descriptionをnullで更新（削除）
+    let req = Request::builder()
+        .method("PATCH")
+        .uri("/databases/desc_db")
+        .header("Content-Type", "application/json")
+        .body(Body::from(r#"{"description": null}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 6. 更新後の情報を取得してnullになっているか確認
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases/desc_db")
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(json.get("description").is_none() || json["description"].is_null());
+
+    // 7. descriptionなしで名前のみ更新（descriptionが維持されるか確認）
+    // まず再設定
+    let req = Request::builder()
+        .method("PATCH")
+        .uri("/databases/desc_db")
+        .header("Content-Type", "application/json")
+        .body(Body::from(r#"{"description": "Temp desc"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 名前のみ更新
+    let req = Request::builder()
+        .method("PATCH")
+        .uri("/databases/desc_db")
+        .header("Content-Type", "application/json")
+        .body(Body::from(r#"{"new_name": "desc_db_renamed"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases/desc_db_renamed")
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["description"], "Temp desc");
 }
 
 #[tokio::test]

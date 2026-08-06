@@ -28,8 +28,9 @@ pub struct CreateDatabaseRequest {
 pub struct UpdateDatabaseRequest {
     #[schema(example = "example_database_renamed")]
     pub new_name: Option<String>,
-    #[schema(example = "更新されたデータベースの説明です")]
-    pub description: Option<String>,
+    #[serde(default, deserialize_with = "crate::models::helpers::double_option")]
+    #[schema(value_type = Option<String>, example = "更新されたデータベースの説明です")]
+    pub description: Option<Option<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]

@@ -97,7 +97,7 @@ impl<'a> KasaneDbWrite<'a> {
         &mut self,
         name: &str,
         new_name: Option<String>,
-        description: Option<String>,
+        description: Option<Option<String>>,
     ) -> Result<(), AppError> {
         let final_new_name = new_name.as_deref().unwrap_or(name);
 
@@ -130,7 +130,7 @@ impl<'a> KasaneDbWrite<'a> {
 
         // 説明の更新
         if let Some(desc) = description {
-            meta.description = Some(desc);
+            meta.description = desc;
         }
 
         let db = self.db.databases;
