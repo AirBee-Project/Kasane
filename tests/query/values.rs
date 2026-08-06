@@ -864,6 +864,7 @@ async fn map_values_converts_types_and_applies_fallback() {
             "spatial_ids": ids(800000, 4),
             "query": {
                 "type": "mapValues",
+                "output_type": "Int",
                 "mapping": [
                     { "from": "Sunny", "to": 100 },
                     { "from": "Cloudy", "to": 50 },
@@ -907,6 +908,7 @@ async fn map_values_converts_int_to_text() {
             "spatial_ids": ids(801000, 3),
             "query": {
                 "type": "mapValues",
+                "output_type": "Text",
                 "mapping": [
                     { "from": 1, "to": "One" },
                     { "from": 2, "to": "Two" }
@@ -951,6 +953,7 @@ async fn map_values_converts_boolean_to_int() {
             "spatial_ids": ids(802000, 2),
             "query": {
                 "type": "mapValues",
+                "output_type": "Int",
                 "mapping": [
                     { "from": true, "to": 1 },
                     { "from": false, "to": 0 }
@@ -992,6 +995,7 @@ async fn map_values_converts_float_to_boolean() {
             "spatial_ids": ids(803000, 3),
             "query": {
                 "type": "mapValues",
+                "output_type": "Boolean",
                 "mapping": [
                     { "from": 1.5, "to": true },
                     { "from": 2.5, "to": false }
@@ -1010,9 +1014,9 @@ async fn map_values_converts_float_to_boolean() {
     assert_eq!(total_ids(&result), 3);
 }
 
-/// mapValues が結果の値型を決める位置にあるとき、`value_type` の省略は 400。
+/// mapValues が `output_type` を持つため、リクエストの `value_type` を省略しても正常に推論される。
 #[tokio::test]
-async fn map_values_rejects_missing_value_type() {
+async fn map_values_infers_type_from_output_type() {
     let app = TestApp::new();
     app.create_database("test_db").await;
     seed(
@@ -1029,6 +1033,7 @@ async fn map_values_rejects_missing_value_type() {
             "spatial_ids": ids(804000, 1),
             "query": {
                 "type": "mapValues",
+                "output_type": "Text",
                 "mapping": [
                     { "from": 1, "to": "One" }
                 ],
@@ -1040,14 +1045,9 @@ async fn map_values_rejects_missing_value_type() {
     )
     .await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(
-        result["error"]
-            .as_str()
-            .unwrap()
-            .contains("cannot infer the query value type because it contains a mapValues operator"),
-        "error: {result}"
-    );
+    assert_eq!(status, StatusCode::OK, "body: {result}");
+    assert_eq!(result["dictionary"], serde_json::json!(["One"]));
+    assert_eq!(total_ids(&result), 1);
 }
 
 /// merge の両辺が mapValues でも、リクエストの `value_type` が両方の出力型になる。
@@ -1074,12 +1074,14 @@ async fn map_values_as_both_merge_operands() {
                 "default": "Z",
                 "left": {
                     "type": "mapValues",
+                    "output_type": "Text",
                     "mapping": [{ "from": 1, "to": "A" }],
                     "default": "Z",
                     "input": source("t_map_merge")
                 },
                 "right": {
                     "type": "mapValues",
+                    "output_type": "Text",
                     "mapping": [{ "from": 1, "to": "B" }],
                     "default": "Z",
                     "input": source("t_map_merge")
@@ -1095,55 +1097,28 @@ async fn map_values_as_both_merge_operands() {
     assert_eq!(total_ids(&result), 1);
 }
 
-/// mapValues を直接入れ子にする場合、内側の出力型は推論できないので
-/// 外側の `input_type` で明示する必要がある。
+/// mapValues を直接入れ子にする場合、内側の出力型は外側の入力型として自動解決される。
 #[tokio::test]
-async fn map_values_nested_requires_input_type() {
+async fn map_values_nested_infers_input_type_automatically() {
     let app = TestApp::new();
     app.create_database("test_db").await;
     seed(&app, "t_map_nest", "Int", &[(805100, serde_json::json!(1))]).await;
 
     let inner = serde_json::json!({
         "type": "mapValues",
+        "output_type": "Text",
         "mapping": [{ "from": 1, "to": "One" }],
         "default": "X",
         "input": source("t_map_nest")
     });
 
-    // 外側が内側の出力型を推論できず 400。
     let (status, result) = post_query(
         &app,
         &serde_json::json!({
-            "value_type": "Int",
             "spatial_ids": ids(805100, 1),
             "query": {
                 "type": "mapValues",
-                "mapping": [{ "from": "One", "to": 11 }],
-                "default": -1,
-                "input": inner
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(
-        result["error"]
-            .as_str()
-            .unwrap()
-            .contains("mapValues operator"),
-        "error: {result}"
-    );
-
-    // `input_type` を明示すれば通る。
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "value_type": "Int",
-            "spatial_ids": ids(805100, 1),
-            "query": {
-                "type": "mapValues",
-                "input_type": "Text",
+                "output_type": "Int",
                 "mapping": [{ "from": "One", "to": 11 }],
                 "default": -1,
                 "input": inner
@@ -1170,6 +1145,7 @@ async fn map_values_rejects_duplicate_mapping_keys() {
             "spatial_ids": ids(806000, 1),
             "query": {
                 "type": "mapValues",
+                "output_type": "Text",
                 "mapping": [
                     { "from": 1, "to": "One" },
                     { "from": 1, "to": "Uno" }
@@ -1212,6 +1188,7 @@ async fn map_values_allows_empty_mapping() {
             "spatial_ids": ids(807000, 1),
             "query": {
                 "type": "mapValues",
+                "output_type": "Text",
                 "mapping": [],
                 "default": "Other",
                 "input": source("t_map_empty")
@@ -1224,49 +1201,6 @@ async fn map_values_allows_empty_mapping() {
     assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(result["dictionary"], serde_json::json!(["Other"]));
     assert_eq!(total_ids(&result), 1);
-}
-
-/// ソースの型として読めない `input_type` は拒否される。
-#[tokio::test]
-async fn map_values_rejects_wrong_input_type() {
-    let app = TestApp::new();
-    app.create_database("test_db").await;
-    seed(
-        &app,
-        "t_map_wrong_input",
-        "Text",
-        &[(808000, serde_json::json!("A"))],
-    )
-    .await;
-
-    // ソースは Text なのに、input_type で Int だと主張している。
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "value_type": "Text",
-            "spatial_ids": ids(808000, 1),
-            "query": {
-                "type": "mapValues",
-                "input_type": "Int",
-                "mapping": [
-                    { "from": 1, "to": "One" }
-                ],
-                "default": "Other",
-                "input": source("t_map_wrong_input")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(
-        result["error"]
-            .as_str()
-            .unwrap()
-            .contains("cannot be read as the query value type Int"),
-        "error: {result}"
-    );
 }
 
 /// Float の対応表で `-0.0` と `0.0` が同一視される。
@@ -1293,6 +1227,7 @@ async fn map_values_treats_negative_zero_as_zero() {
             "spatial_ids": ids(811000, 1),
             "query": {
                 "type": "mapValues",
+                "output_type": "Int",
                 "mapping": [{ "from": -0.0, "to": 7 }],
                 "default": -1,
                 "input": source("t_map_negzero")
@@ -1312,6 +1247,7 @@ async fn map_values_treats_negative_zero_as_zero() {
             "spatial_ids": ids(811000, 1),
             "query": {
                 "type": "mapValues",
+                "output_type": "Int",
                 "mapping": [{ "from": 0.0, "to": 7 }, { "from": -0.0, "to": 8 }],
                 "default": -1,
                 "input": source("t_map_negzero")
@@ -1356,6 +1292,7 @@ async fn map_values_supports_enum_source() {
             "spatial_ids": ids(809000, 2),
             "query": {
                 "type": "mapValues",
+                "output_type": "Int",
                 "mapping": [
                     { "from": "A", "to": 10 },
                     { "from": "B", "to": 20 }
@@ -1398,6 +1335,7 @@ async fn map_values_keeps_missing_cells() {
             "spatial_ids": ids(810000, 3),
             "query": {
                 "type": "mapValues",
+                "output_type": "Text",
                 "mapping": [
                     { "from": 1, "to": "One" }
                 ],
@@ -1413,4 +1351,48 @@ async fn map_values_keeps_missing_cells() {
     // 1 -> "One"、3 -> default の "Other"。空の 810001 は "Other" にならない。
     assert_eq!(result["dictionary"], serde_json::json!(["One", "Other"]));
     assert_eq!(total_ids(&result), 2);
+}
+
+/// `output_type` がリクエストの `value_type` と食い違う場合は 400 で拒否される
+/// （`output_type` は宣言だけでなく、実際に使われる値型と一致することを検証される）。
+#[tokio::test]
+async fn map_values_rejects_output_type_mismatch() {
+    let app = TestApp::new();
+    app.create_database("test_db").await;
+    seed(
+        &app,
+        "t_map_output_mismatch",
+        "Int",
+        &[(812000, serde_json::json!(1))],
+    )
+    .await;
+
+    let (status, result) = post_query(
+        &app,
+        &serde_json::json!({
+            // クエリ全体の値型は Text だが、mapValues の output_type は Int だと主張している。
+            "value_type": "Text",
+            "spatial_ids": ids(812000, 1),
+            "query": {
+                "type": "mapValues",
+                "output_type": "Int",
+                "mapping": [
+                    { "from": 1, "to": "5" }
+                ],
+                "default": "-1",
+                "input": source("t_map_output_mismatch")
+            }
+        }),
+        "?format=singleId",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        result["error"]
+            .as_str()
+            .unwrap()
+            .contains("mapValues output_type"),
+        "error: {result}"
+    );
 }

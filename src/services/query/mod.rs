@@ -75,11 +75,6 @@ impl QueryNode {
     /// 全ソースの `data_type` が一致していればそれを採用する。一致しない場合は、
     /// 同じ値型として読める組合せ（`Text` と `Enum`）であっても推論はしないので、
     /// `value_type` の明示を要求する。
-    ///
-    /// `MapValues` の出力型は対応表のリテラルだけで決まりソースに依存しないため、
-    /// その部分木は走査せず、推論にも寄与しない（`sources()` は逆に、テーブル解決の
-    /// ため `MapValues` の下も辿る）。結果として `MapValues` しか持たないクエリの
-    /// 出力型は推論できず、`value_type` の明示が要る。
     fn resolve_value_type(
         &self,
         tables: &ResolvedTables,
@@ -90,20 +85,20 @@ impl QueryNode {
         }
 
         let mut inferred: Option<TableDataType> = None;
-        let mut has_map_values = false;
         let mut stack = vec![self];
 
         while let Some(node) = stack.pop() {
-            if matches!(node, QueryNode::MapValues { .. }) {
-                has_map_values = true;
-                continue;
-            }
-            stack.extend(node.children());
-
-            let QueryNode::Source { database, table } = node else {
-                continue;
+            let data_type = match node {
+                QueryNode::Source { database, table } => {
+                    tables[&(database.clone(), table.clone())].data_type
+                }
+                QueryNode::MapValues { output_type, .. } => *output_type,
+                _ => {
+                    stack.extend(node.children());
+                    continue;
+                }
             };
-            let data_type = tables[&(database.clone(), table.clone())].data_type;
+
             match inferred {
                 None => inferred = Some(data_type),
                 Some(existing) if existing != data_type => {
@@ -118,12 +113,8 @@ impl QueryNode {
         }
 
         inferred.ok_or_else(|| AppError::ConstraintViolation {
-            reason: if has_map_values {
-                "cannot infer the query value type because it contains a mapValues operator; specify `value_type` explicitly"
-            } else {
-                "cannot infer the query value type; specify `value_type` explicitly"
-            }
-            .to_string(),
+            reason: "cannot infer the query value type; specify `value_type` explicitly"
+                .to_string(),
         })
     }
 
@@ -276,12 +267,25 @@ impl QueryNode {
 
             QueryNode::MapValues {
                 input,
-                input_type,
+                output_type,
                 mapping,
                 default,
             } => {
-                // 入力側の型は出力型 `V` とは独立に決まる。
-                let input_type = input.resolve_value_type(tables, *input_type)?;
+                // `output_type` は宣言だけで終わらせず、実際に組み立てる値型 `V` と
+                // 一致することを検証する。多くの場合 `V` はリクエストの `value_type`
+                // など、この式より外側で決まった型がそのまま流れてくるため、
+                // `output_type` が実際には無視される余地がある。
+                if !V::accepts(*output_type) {
+                    return Err(AppError::ConstraintViolation {
+                        reason: format!(
+                            "mapValues output_type {output_type:?} does not match the query value type {}",
+                            V::type_name()
+                        ),
+                    });
+                }
+
+                // 入力側の型は常に入力元の部分木から推論する。
+                let input_type = input.resolve_value_type(tables, None)?;
                 for_value_type!(
                     input_type,
                     build_map_values[V],

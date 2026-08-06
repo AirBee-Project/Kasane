@@ -2541,9 +2541,10 @@
           },
           {
             "type": "object",
-            "description": "値を対応表に基づいて変換する。対応表にない値は `default` になる。\n\n変換するのは「値を持つセル」だけで、値の無いセルは `default` にはならず\n欠損のまま残る（`merge` の `default` とは意味が異なる）。\n\n出力型は対応表のリテラルだけで決まり推論できないため、このノードが結果の値型を\n決める位置にあるならリクエストの `value_type` を明示する必要がある。\n`Float` の照合は完全一致で、`-0.0` は `0.0` として扱われる。",
+            "description": "値を対応表に基づいて変換する。対応表にない値は `default` になる。\n\n変換するのは「値を持つセル」だけで、値の無いセルは `default` にはならず\n欠損のまま残る（`merge` の `default` とは意味が異なる）。\n\n`output_type` は必須で、このノードが結果の値型を決める位置にあるとき\nリクエストの `value_type` を省略してもこの型が使われる。逆にリクエストの\n`value_type` などから決まる実際の値型と `output_type` が食い違う場合は 400 になる。\n`Float` の照合は完全一致で、`-0.0` は `0.0` として扱われる。",
             "required": [
               "input",
+              "output_type",
               "mapping",
               "default",
               "type"
@@ -2552,16 +2553,9 @@
               "input": {
                 "$ref": "#/components/schemas/QueryNode"
               },
-              "input_type": {
-                "oneOf": [
-                  {
-                    "type": "null"
-                  },
-                  {
-                    "$ref": "#/components/schemas/TableDataType",
-                    "description": "入力側の型。省略時はソースから推論する。\n`input` 自体が `mapValues` の場合は推論できないため、指定が必須。"
-                  }
-                ]
+              "output_type": {
+                "$ref": "#/components/schemas/TableDataType",
+                "description": "この MapValues が出力する型。対応表の `to` や `default` はこの型として解釈される。"
               },
               "mapping": {
                 "type": "array",
