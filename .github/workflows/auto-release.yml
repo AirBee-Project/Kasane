@@ -1,0 +1,51 @@
+name: Auto Tag and Release on PR Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine version bump from PR labels
+        id: determine-bump
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          # デフォルトの上がり幅（ラベルが無い場合はパッチとする）
+          BUMP="patch" 
+          
+          # ラベルに応じて上がり幅を決定する（major > minor > patch の優先度）
+          if echo "$LABELS" | grep -qi '"major"'; then
+            BUMP="major"
+          elif echo "$LABELS" | grep -qi '"minor"'; then
+            BUMP="minor"
+          elif echo "$LABELS" | grep -qi '"patch"'; then
+            BUMP="patch"
+          fi
+          
+          echo "Selected bump type: $BUMP"
+          echo "bump=$BUMP" >> $GITHUB_OUTPUT
+
+      - name: Bump version and push tag
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: ${{ steps.determine-bump.outputs.bump }}
+          
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.tag_version.outputs.new_tag }}
+          name: Release ${{ steps.tag_version.outputs.new_tag }}
+          body: ${{ steps.tag_version.outputs.changelog }}
