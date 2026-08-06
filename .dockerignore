@@ -1,0 +1,12 @@
+target/
+.git/
+.github/
+.vscode/
+.claude/
+.bruno/
+docs/
+tests/
+examples/
+openapi.json
+openapi.yaml
+README.md
