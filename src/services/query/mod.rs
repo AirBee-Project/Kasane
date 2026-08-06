@@ -311,8 +311,14 @@ fn build_map_values<U: Value, V: Value>(
 
     let mut lookup: BTreeMap<U, V> = BTreeMap::new();
     for entry in mapping {
-        let from = U::from_json(&entry.from)?;
-        let to = V::from_json(&entry.to)?;
+        let from = U::from_json(&entry.from)?.normalize_for_map();
+        let to = V::from_json(&entry.to).map_err(|e| AppError::ConstraintViolation {
+            reason: format!(
+                "mapValues mapping value could not be parsed as the inferred type {}: {}",
+                V::type_name(),
+                e
+            ),
+        })?;
         // 後勝ちで黙って上書きすると、発火しない対応表エントリに気づけない。
         if lookup.insert(from, to).is_some() {
             return Err(AppError::ConstraintViolation {
@@ -320,9 +326,20 @@ fn build_map_values<U: Value, V: Value>(
             });
         }
     }
-    let default = V::from_json(default)?;
+    let default = V::from_json(default).map_err(|e| AppError::ConstraintViolation {
+        reason: format!(
+            "mapValues default value could not be parsed as the inferred type {}: {}",
+            V::type_name(),
+            e
+        ),
+    })?;
 
-    Ok(input.map_values(move |value| lookup.get(&value).unwrap_or(&default).clone()))
+    Ok(input.map_values(move |value| {
+        lookup
+            .get(&value.normalize_for_map())
+            .unwrap_or(&default)
+            .clone()
+    }))
 }
 
 /// クエリを実行し、対象空間IDの値を返す。

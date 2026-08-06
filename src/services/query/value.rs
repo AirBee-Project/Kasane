@@ -229,6 +229,14 @@ pub trait Value: CellValue + Ord + 'static {
     /// リクエスト中のリテラル（挿入値・フィルタ境界・merge の既定値）から作る。
     fn from_json(value: &serde_json::Value) -> Result<Self, AppError>;
 
+    /// 比較などで同値とみなすべき表現を正規化する（主に OrderedFloat の -0.0 対応用）。
+    fn normalize_for_map(self) -> Self
+    where
+        Self: Sized,
+    {
+        self
+    }
+
     fn zoom_out(
         q: ValueQuery<Self>,
         z: u8,
@@ -478,6 +486,14 @@ impl Value for OrderedFloat {
         serde_json::Number::from_f64(self.0)
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null)
+    }
+
+    fn normalize_for_map(self) -> Self {
+        if self.0 == 0.0 {
+            OrderedFloat(0.0)
+        } else {
+            self
+        }
     }
 
     fn from_json(value: &serde_json::Value) -> Result<Self, AppError> {
