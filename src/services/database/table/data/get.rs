@@ -46,7 +46,7 @@ pub async fn get(
                 let ids =
                     process_spatial_ids(&spatial_ids, table.max_zoom_level, &zoom_level_policy)?;
 
-                let groups = db.data_get(table.id, ids)?;
+                let groups = db.data_get(table.id, ids, query_limit)?;
 
                 Ok((table.data_type, table.constraints, groups))
             })?;

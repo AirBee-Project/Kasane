@@ -60,7 +60,7 @@ fn read_rect(
     y1: u32,
 ) -> std::collections::HashMap<(u32, u32), i32> {
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), db);
-    let got = r.data_get(table_id, rect(x0, x1, y0, y1)).unwrap();
+    let got = r.data_get(table_id, rect(x0, x1, y0, y1), None).unwrap();
     let mut out = std::collections::HashMap::new();
     for (value, flex_ids) in got {
         let v = i32::from_be_bytes(value.as_slice().try_into().unwrap());
