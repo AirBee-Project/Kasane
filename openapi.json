@@ -2112,6 +2112,22 @@
           }
         }
       },
+      "MappingEntry": {
+        "type": "object",
+        "description": "対応表エントリ",
+        "required": [
+          "from",
+          "to"
+        ],
+        "properties": {
+          "from": {
+            "description": "変換前の値"
+          },
+          "to": {
+            "description": "変換後の値"
+          }
+        }
+      },
       "MergePolicyKind": {
         "type": "string",
         "description": "同一空間に複数の値が集まったときの集約規則。",
@@ -2578,6 +2594,42 @@
                 "type": "string",
                 "enum": [
                   "merge"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "値を対応表に基づいて変換する。対応表にない値は `default` になる。",
+            "required": [
+              "input",
+              "output_type",
+              "mapping",
+              "default",
+              "type"
+            ],
+            "properties": {
+              "input": {
+                "$ref": "#/components/schemas/QueryNode"
+              },
+              "output_type": {
+                "$ref": "#/components/schemas/TableDataType",
+                "description": "この MapValues が出力する型。対応表の `to` や `default` はこの型として解釈される。"
+              },
+              "mapping": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MappingEntry"
+                },
+                "description": "変換前後の対応表。`from` の重複は 400 で拒否される。"
+              },
+              "default": {
+                "description": "対応表に存在しない値に使う既定値"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "mapValues"
                 ]
               }
             }
