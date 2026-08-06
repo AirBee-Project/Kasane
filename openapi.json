@@ -2240,11 +2240,13 @@
               "z": {
                 "type": "integer",
                 "format": "int32",
+                "example": 25,
                 "minimum": 0
               },
               "index": {
                 "type": "integer",
-                "format": "int32"
+                "format": "int32",
+                "example": 1
               },
               "type": {
                 "type": "string",
@@ -2270,11 +2272,13 @@
               "z": {
                 "type": "integer",
                 "format": "int32",
+                "example": 25,
                 "minimum": 0
               },
               "index": {
                 "type": "integer",
-                "format": "int32"
+                "format": "int32",
+                "example": 1
               },
               "type": {
                 "type": "string",
@@ -2300,11 +2304,13 @@
               "z": {
                 "type": "integer",
                 "format": "int32",
+                "example": 25,
                 "minimum": 0
               },
               "index": {
                 "type": "integer",
-                "format": "int32"
+                "format": "int32",
+                "example": 1
               },
               "type": {
                 "type": "string",
@@ -2330,6 +2336,7 @@
               "z": {
                 "type": "integer",
                 "format": "int32",
+                "example": 24,
                 "minimum": 0
               },
               "policy": {
@@ -2361,16 +2368,19 @@
               "z": {
                 "type": "integer",
                 "format": "int32",
+                "example": 25,
                 "minimum": 0
               },
               "start": {
                 "type": "integer",
                 "format": "int32",
+                "example": 7300000,
                 "minimum": 0
               },
               "end": {
                 "type": "integer",
                 "format": "int32",
+                "example": 7300063,
                 "minimum": 0
               },
               "policy": {
@@ -2402,16 +2412,19 @@
               "z": {
                 "type": "integer",
                 "format": "int32",
+                "example": 25,
                 "minimum": 0
               },
               "start": {
                 "type": "integer",
                 "format": "int32",
+                "example": 3276800,
                 "minimum": 0
               },
               "end": {
                 "type": "integer",
                 "format": "int32",
+                "example": 3276863,
                 "minimum": 0
               },
               "policy": {
@@ -2443,15 +2456,18 @@
               "z": {
                 "type": "integer",
                 "format": "int32",
+                "example": 25,
                 "minimum": 0
               },
               "start": {
                 "type": "integer",
-                "format": "int32"
+                "format": "int32",
+                "example": -5
               },
               "end": {
                 "type": "integer",
-                "format": "int32"
+                "format": "int32",
+                "example": 5
               },
               "policy": {
                 "$ref": "#/components/schemas/MergePolicyKind"
@@ -2481,11 +2497,13 @@
               "z": {
                 "type": "integer",
                 "format": "int32",
+                "example": 25,
                 "minimum": 0
               },
               "radius": {
                 "type": "integer",
                 "format": "int32",
+                "example": 3,
                 "minimum": 0
               },
               "policy": {
@@ -2516,11 +2534,13 @@
               "z": {
                 "type": "integer",
                 "format": "int32",
+                "example": 25,
                 "minimum": 0
               },
               "radius": {
                 "type": "integer",
                 "format": "int32",
+                "example": 3,
                 "minimum": 0
               },
               "policy": {
@@ -2551,11 +2571,13 @@
               "z": {
                 "type": "integer",
                 "format": "int32",
+                "example": 25,
                 "minimum": 0
               },
               "radius": {
                 "type": "integer",
                 "format": "int32",
+                "example": 3,
                 "minimum": 0
               },
               "policy": {
