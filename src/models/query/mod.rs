@@ -27,19 +27,26 @@ pub enum MergePolicyKind {
 #[serde(tag = "mode", rename_all = "camelCase")]
 pub enum FilterCondition {
     /// `value` に一致する値だけを残す
-    Equals { value: serde_json::Value },
+    Equals {
+        #[schema(example = json!("some_value"))]
+        value: serde_json::Value,
+    },
     /// 値が `min..=max`に入る値だけを残す
     InRange {
         #[serde(default)]
+        #[schema(example = json!(0))]
         min: Option<serde_json::Value>,
         #[serde(default)]
+        #[schema(example = json!(100))]
         max: Option<serde_json::Value>,
     },
     /// 値が `min..=max`に入る値を取り除く
     NotInRange {
         #[serde(default)]
+        #[schema(example = json!(0))]
         min: Option<serde_json::Value>,
         #[serde(default)]
+        #[schema(example = json!(100))]
         max: Option<serde_json::Value>,
     },
 }
@@ -48,8 +55,10 @@ pub enum FilterCondition {
 #[derive(Debug, Deserialize, ToSchema, Clone)]
 pub struct MappingEntry {
     /// 変換前の値
+    #[schema(example = json!(1))]
     pub from: serde_json::Value,
     /// 変換後の値
+    #[schema(example = json!("one"))]
     pub to: serde_json::Value,
 }
 
@@ -75,21 +84,27 @@ pub enum QueryNode {
     ShiftX {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
+        #[schema(example = 25)]
         z: u8,
+        #[schema(example = 1)]
         index: i32,
     },
     /// Y方向へ平行移動する
     ShiftY {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
+        #[schema(example = 25)]
         z: u8,
+        #[schema(example = 1)]
         index: i32,
     },
     /// F(高度)方向へ平行移動する
     ShiftF {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
+        #[schema(example = 25)]
         z: u8,
+        #[schema(example = 1)]
         index: i32,
     },
 
@@ -97,7 +112,9 @@ pub enum QueryNode {
     ZoomOut {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
+        #[schema(example = 24)]
         z: u8,
+        #[schema(example = "average")]
         policy: MergePolicyKind,
     },
 
@@ -105,27 +122,39 @@ pub enum QueryNode {
     ExtrudeX {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
+        #[schema(example = 25)]
         z: u8,
+        #[schema(example = 7300000)]
         start: u32,
+        #[schema(example = 7300063)]
         end: u32,
+        #[schema(example = "overwrite")]
         policy: MergePolicyKind,
     },
     /// Y方向の絶対座標範囲へ引き延ばす
     ExtrudeY {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
+        #[schema(example = 25)]
         z: u8,
+        #[schema(example = 3276800)]
         start: u32,
+        #[schema(example = 3276863)]
         end: u32,
+        #[schema(example = "overwrite")]
         policy: MergePolicyKind,
     },
     /// F方向の絶対座標範囲へ引き延ばす
     ExtrudeF {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
+        #[schema(example = 25)]
         z: u8,
+        #[schema(example = -5)]
         start: i32,
+        #[schema(example = 5)]
         end: i32,
+        #[schema(example = "overwrite")]
         policy: MergePolicyKind,
     },
 
@@ -133,24 +162,33 @@ pub enum QueryNode {
     FalloffLinearX {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
+        #[schema(example = 25)]
         z: u8,
+        #[schema(example = 3)]
         radius: u32,
+        #[schema(example = "max")]
         policy: MergePolicyKind,
     },
     /// Y方向へ、指定距離で0になるよう値を線形減衰させる
     FalloffLinearY {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
+        #[schema(example = 25)]
         z: u8,
+        #[schema(example = 3)]
         radius: u32,
+        #[schema(example = "max")]
         policy: MergePolicyKind,
     },
     /// F方向へ、指定距離で0になるよう値を線形減衰させる
     FalloffLinearF {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
+        #[schema(example = 25)]
         z: u8,
+        #[schema(example = 3)]
         radius: u32,
+        #[schema(example = "max")]
         policy: MergePolicyKind,
     },
 
@@ -161,7 +199,9 @@ pub enum QueryNode {
         left: Box<QueryNode>,
         #[schema(no_recursion)]
         right: Box<QueryNode>,
+        #[schema(example = json!(0))]
         default: serde_json::Value,
+        #[schema(example = "overwrite")]
         policy: MergePolicyKind,
     },
 
@@ -170,10 +210,12 @@ pub enum QueryNode {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
         /// この MapValues が出力する型。対応表の `to` や `default` はこの型として解釈される。
+        #[schema(example = "Int")]
         output_type: crate::models::database::table::TableDataType,
         /// 変換前後の対応表。`from` の重複は 400 で拒否される。
         mapping: Vec<MappingEntry>,
         /// 対応表に存在しない値に使う既定値
+        #[schema(example = json!("unknown"))]
         default: serde_json::Value,
     },
 }
