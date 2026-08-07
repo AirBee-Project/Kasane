@@ -1,4 +1,4 @@
-name: Manual Release and Docker Publish
+name: Manual Release
 
 on:
   workflow_dispatch:
@@ -28,6 +28,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+          fetch-depth: 0
           
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -100,7 +102,7 @@ jobs:
           tag_name: v${{ steps.version.outputs.version }}
           generate_release_notes: true
           body: |
-            ### 🐳 Docker Image
+            ### Docker Image
             `ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}`
             
             You can pull the image using:
