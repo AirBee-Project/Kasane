@@ -22,10 +22,15 @@ jobs:
   verify:
     name: Verify (Production)
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install mold
         uses: rui314/setup-mold@v1
@@ -71,22 +76,12 @@ jobs:
             --features "production" \
             --run-ignored all
 
-      - name: Verify OpenAPI spec matches generated
+      - name: Generate OpenAPI spec
         shell: bash
-        run: |
-          set -euo pipefail
+        run: cargo test generate_openapi_spec --no-fail-fast
 
-          # Generate OpenAPI spec
-          cargo test generate_openapi_spec --no-fail-fast
-
-          # Show diff if changed
-          git diff -- openapi.json openapi.yaml || true
-
-          # Fail if generated specs differ
-          if git diff --quiet openapi.json openapi.yaml; then
-            echo "✓ OpenAPI specs are up to date"
-          else
-            echo "✗ OpenAPI specs are out of date."
-            echo "Run 'cargo test generate_openapi_spec' and commit the results."
-            exit 1
-          fi
+      - name: Auto-commit OpenAPI spec if changed
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: auto-update openapi spec"
+          file_pattern: "openapi.json openapi.yaml"

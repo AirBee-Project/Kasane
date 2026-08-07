@@ -5,7 +5,7 @@ info:
   license:
     name: MIT
     identifier: MIT
-  version: 0.3.2
+  version: latest
 paths:
   /auth/login:
     post:

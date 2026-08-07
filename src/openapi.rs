@@ -48,7 +48,8 @@ impl utoipa::Modify for SecurityAddon {
     info(
         title = "Kasane",
         description = "時空間IDデータベース",
-        license(name = "MIT", identifier = "MIT")
+        license(name = "MIT", identifier = "MIT"),
+        version = "latest"
     ),
     modifiers(&SecurityAddon),
     servers(),
