@@ -1,4 +1,4 @@
-name: Auto Tag and Release on PR Merge
+name: Bump Cargo Version on PR Merge
 
 on:
   pull_request:
@@ -7,14 +7,17 @@ on:
       - main
 
 jobs:
-  release:
+  bump-version:
     if: github.event.pull_request.merged == true && !contains(github.event.pull_request.labels.*.name, 'skip-release')
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Determine version bump from PR labels
         id: determine-bump
@@ -22,8 +25,8 @@ jobs:
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
         run: |
           # デフォルトの上がり幅（ラベルが無い場合はパッチとする）
-          BUMP="patch" 
-          
+          BUMP="patch"
+
           # ラベルに応じて上がり幅を決定する（major > minor > patch の優先度）
           if echo "$LABELS" | grep -qi '"major"'; then
             BUMP="major"
@@ -32,20 +35,52 @@ jobs:
           elif echo "$LABELS" | grep -qi '"patch"'; then
             BUMP="patch"
           fi
-          
+
           echo "Selected bump type: $BUMP"
           echo "bump=$BUMP" >> $GITHUB_OUTPUT
 
-      - name: Bump version and push tag
-        id: tag_version
-        uses: mathieudutour/github-tag-action@v6.2
+      - name: Compute next version
+        id: next-version
+        run: |
+          CURRENT_VERSION=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+          case "${{ steps.determine-bump.outputs.bump }}" in
+            major)
+              MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1)); PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "Current version: $CURRENT_VERSION -> New version: $NEW_VERSION"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-edit
+        uses: taiki-e/install-action@cargo-edit
+
+      - name: Bump Cargo.toml and Cargo.lock
+        run: cargo set-version ${{ steps.next-version.outputs.version }}
+
+      - name: Create version bump PR
+        uses: peter-evans/create-pull-request@v6
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          default_bump: ${{ steps.determine-bump.outputs.bump }}
-          
-      - name: Create GitHub Release
-        uses: ncipollo/release-action@v1
-        with:
-          tag: ${{ steps.tag_version.outputs.new_tag }}
-          name: Release ${{ steps.tag_version.outputs.new_tag }}
-          body: ${{ steps.tag_version.outputs.changelog }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: chore/bump-version-${{ steps.next-version.outputs.version }}
+          base: main
+          commit-message: "chore: bump version to ${{ steps.next-version.outputs.version }}"
+          title: "chore: bump version to ${{ steps.next-version.outputs.version }}"
+          body: |
+            #${{ github.event.pull_request.number }} のマージに伴う自動バージョンアップです。
+          labels: skip-release
+          add-paths: |
+            Cargo.toml
+            Cargo.lock
