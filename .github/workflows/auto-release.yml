@@ -64,8 +64,11 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install cargo-binstall
+        uses: taiki-e/install-action@cargo-binstall
+
       - name: Install cargo-edit
-        uses: taiki-e/install-action@cargo-edit
+        run: cargo binstall --no-confirm cargo-edit
 
       - name: Bump Cargo.toml and Cargo.lock
         run: cargo set-version ${{ steps.next-version.outputs.version }}
