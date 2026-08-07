@@ -1,4 +1,4 @@
-name: Bump Cargo Version and Build Image on PR Merge
+name: Bump Cargo Version on PR Merge
 
 on:
   pull_request:
@@ -13,9 +13,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    outputs:
-      version: ${{ steps.next-version.outputs.version }}
-      branch: chore/bump-version-${{ steps.next-version.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -90,14 +87,3 @@ jobs:
           add-paths: |
             Cargo.toml
             Cargo.lock
-
-  # バージョンアップ後、そのバンプ済みブランチの内容でDockerイメージをビルドする
-  build-image:
-    needs: bump-version
-    permissions:
-      contents: read
-      packages: write
-    uses: ./.github/workflows/docker-build-push.yml
-    with:
-      version: ${{ needs.bump-version.outputs.version }}
-      ref: ${{ needs.bump-version.outputs.branch }}
