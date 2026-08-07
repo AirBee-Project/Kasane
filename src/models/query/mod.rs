@@ -108,7 +108,7 @@ pub enum QueryNode {
         index: i32,
     },
 
-    /// 指定ズームレベルまで解像度を落とし、`policy` で集約する
+    /// 指定された値までズームレベルを落とし、`policy` で集約する
     ZoomOut {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
