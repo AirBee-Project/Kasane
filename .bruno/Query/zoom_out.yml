@@ -46,10 +46,9 @@ settings:
 examples:
   - name: 200 Response
     description: >-
-      指定ズームレベルまで解像度を落とし、集まった子セルを policy で集約する。
+      指定の値までズームレベルを落とし、重なった値を policy で集約する。
       policy は overwrite / keepExisting / max / min（全型）と
       sum / difference / average（Int と Float のみ）。
-      要求する spatial_ids は zoomOut 後の解像度に合わせる
     request:
       url: "{{baseUrl}}/query"
       method: POST

@@ -2322,7 +2322,7 @@
           },
           {
             "type": "object",
-            "description": "指定ズームレベルまで解像度を落とし、`policy` で集約する",
+            "description": "指定された値までズームレベルを落とし、`policy` で集約する",
             "required": [
               "input",
               "z",
