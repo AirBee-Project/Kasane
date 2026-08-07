@@ -45,6 +45,11 @@ impl utoipa::Modify for SecurityAddon {
 
 #[derive(OpenApi)]
 #[openapi(
+    info(
+        title = "Kasane",
+        description = "時空間IDデータベース",
+        license(name = "MIT", identifier = "MIT")
+    ),
     modifiers(&SecurityAddon),
     servers(),
     paths(

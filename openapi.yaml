@@ -1,9 +1,10 @@
 openapi: 3.1.0
 info:
-  title: kasane
-  description: ''
+  title: Kasane
+  description: 時空間IDデータベース
   license:
-    name: ''
+    name: MIT
+    identifier: MIT
   version: 0.3.1
 paths:
   /auth/login:
