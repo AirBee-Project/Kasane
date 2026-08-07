@@ -53,12 +53,13 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
+          # Unstaged changes exist here because we already bumped Cargo.toml.
+          # We don't need to pull because actions/checkout fetches the latest main with full history.
           
-          # Fetch and rebase to ensure we have the very latest from main
-          # This prevents "rejected (fetch first)" errors if someone pushed recently
-          git pull origin main --rebase
+          # Regenerate OpenAPI specs with the new version
+          cargo test generate_openapi_spec
           
-          git add Cargo.toml Cargo.lock
+          git add Cargo.toml Cargo.lock openapi.json openapi.yaml
           git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
           
           # Push from the current detached HEAD to the remote main branch
