@@ -53,16 +53,16 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          # Unstaged changes exist here because we already bumped Cargo.toml.
-          # We don't need to pull because actions/checkout fetches the latest main with full history.
+          # すでにCargo.tomlを更新しているため、ここでは未コミットの変更が存在します。
+          # actions/checkoutで最新のmainブランチを全履歴付きで取得しているため、pullは不要です。
           
-          # Regenerate OpenAPI specs with the new version
+          # 新しいバージョン番号でOpenAPI仕様書を再生成する
           cargo test generate_openapi_spec
           
           git add Cargo.toml Cargo.lock openapi.json openapi.yaml
           git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
           
-          # Push from the current detached HEAD to the remote main branch
+          # ローカルのmainブランチからリモートのmainブランチへPushする
           git push origin HEAD:main
           git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
