@@ -53,10 +53,8 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          
-          # Fetch and rebase to ensure we have the very latest from main
-          # This prevents "rejected (fetch first)" errors if someone pushed recently
-          git pull origin main --rebase
+          # Unstaged changes exist here because we already bumped Cargo.toml.
+          # We don't need to pull because actions/checkout fetches the latest main with full history.
           
           git add Cargo.toml Cargo.lock
           git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
