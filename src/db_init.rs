@@ -237,7 +237,7 @@ pub fn initialize_database(path: &str) -> AppDb {
     write_txn.commit().unwrap();
     tracing::info!("Database initialized successfully");
 
-    let app_db = AppDb {
+    AppDb {
         env,
         databases,
         tables,
@@ -246,7 +246,5 @@ pub fn initialize_database(path: &str) -> AppDb {
         user_privileges,
         tables_data,
         value_index,
-    };
-
-    app_db
+    }
 }
