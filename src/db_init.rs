@@ -142,10 +142,6 @@ pub struct AppDb {
     /// 値→空間の二次インデックス（値フィルタ用）。
     /// Key 生バイト列: `table_id(16) ‖ 順序保存エンコード値(可変) ‖ flexid.encode(FlexId::ENCODED_LEN)` -> 値なし
     pub value_index: Database<Bytes, Unit>,
-
-    /// 書き込みバッチャーへの送信チャネル
-    pub write_sender:
-        tokio::sync::mpsc::Sender<crate::repositories::database::table::data::batch::WriteOp>,
 }
 
 #[tracing::instrument]
@@ -241,9 +237,7 @@ pub fn initialize_database(path: &str) -> AppDb {
     write_txn.commit().unwrap();
     tracing::info!("Database initialized successfully");
 
-    let (tx, rx) = crate::repositories::database::table::data::batch::spawn_batcher();
-
-    let app_db = AppDb {
+    AppDb {
         env,
         databases,
         tables,
@@ -252,10 +246,5 @@ pub fn initialize_database(path: &str) -> AppDb {
         user_privileges,
         tables_data,
         value_index,
-        write_sender: tx,
-    };
-
-    crate::repositories::database::table::data::batch::run_batcher(app_db.clone(), rx);
-
-    app_db
+    }
 }

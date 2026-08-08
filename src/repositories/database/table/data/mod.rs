@@ -1,4 +1,3 @@
-pub mod batch;
 pub mod query_source;
 pub mod read;
 pub mod shard;
