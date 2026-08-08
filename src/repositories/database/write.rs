@@ -40,8 +40,11 @@ impl<'a> KasaneDbWrite<'a> {
             description: description.clone(),
         };
 
-        let db = self.db.databases;
-        db.put(&mut self.write_txn, name, &meta)?;
+        let db_id = crate::models::id::DatabaseId(id);
+        self.db.databases.put(&mut self.write_txn, name, &meta)?;
+        self.db
+            .database_id_index
+            .put(&mut self.write_txn, &db_id, name)?;
 
         Ok(DatabaseInfoResponse {
             name: name.to_string(),
@@ -57,36 +60,21 @@ impl<'a> KasaneDbWrite<'a> {
                 name: name.to_string(),
             });
         }
-        let db_id = {
-            let db = self.db.databases;
-            if let Some(meta_data) = db.get(&self.write_txn, name)? {
-                meta_data.id
-            } else {
-                return Err(AppError::DatabaseNotFound {
-                    name: name.to_string(),
-                });
-            }
+        let db = self.db.databases;
+        let Some(meta) = db.get(&self.write_txn, name)? else {
+            return Err(AppError::DatabaseNotFound {
+                name: name.to_string(),
+            });
         };
 
-        // データベース削除前に、関連するユーザー権限をすべて削除する。
-        // `user_privileges` は (UserId, DatabaseId) をキーにしているため、全走査して対象の DatabaseId を探す。
-
-        // Todo:全探索を防ぐべき。PrefixにするとKeyが長くなってしまうので、逆引きのTableを整備すればよい。
-        // データベースとTableはそんなに変化がないので逆引きがあっても問題ない。いつかやる
-        let privs_table = self.db.user_privileges;
-        let mut priv_keys_to_delete = Vec::new();
-        for item in privs_table.iter(&self.write_txn)? {
-            let (k, _) = item?;
-            if k.1 == db_id {
-                priv_keys_to_delete.push(k);
-            }
-        }
-        for k in priv_keys_to_delete {
-            privs_table.delete(&mut self.write_txn, &k)?;
-        }
-
-        let db = self.db.databases;
+        // ユーザーが持つ権限はデータベース ID で保存されており、削除したデータベースの
+        // ID が再利用されることはない。よって残った権限ルールが後から作られた同名の
+        // データベースに効くことはなく、ここで掃除する必要はない
+        // （逆引きインデックスから消えるので、表示上は解決できないルールとして隠れる）。
         db.delete(&mut self.write_txn, name)?;
+        self.db
+            .database_id_index
+            .delete(&mut self.write_txn, &meta.id)?;
 
         Ok(())
     }
@@ -137,6 +125,9 @@ impl<'a> KasaneDbWrite<'a> {
         if name != final_new_name {
             // lmdbから古いエントリを削除し、新しいエントリを追加
             db.delete(&mut self.write_txn, name)?;
+            self.db
+                .database_id_index
+                .put(&mut self.write_txn, &meta.id, final_new_name)?;
         }
         db.put(&mut self.write_txn, final_new_name, &meta)?;
         Ok(())
@@ -148,7 +139,6 @@ impl<'a> KasaneDbWrite<'a> {
         &mut self,
         src_db_name: &str,
         copy_name: &str,
-        user_id: Option<crate::models::id::UserId>,
     ) -> Result<DatabaseInfoResponse, AppError> {
         // コピー先データベース名の妥当性検証
         crate::services::helpers::name_valid::name_valid(copy_name)?;
@@ -176,8 +166,12 @@ impl<'a> KasaneDbWrite<'a> {
             description: src_db_meta.description.clone(),
         };
 
-        let db = self.db.databases;
-        db.put(&mut self.write_txn, copy_name, &copy_meta)?;
+        self.db
+            .databases
+            .put(&mut self.write_txn, copy_name, &copy_meta)?;
+        self.db
+            .database_id_index
+            .put(&mut self.write_txn, &copy_db_id, copy_name)?;
 
         // 4. コピー元データベース内の全テーブル名を取得
         let db_tables = self.db.tables;
@@ -199,16 +193,6 @@ impl<'a> KasaneDbWrite<'a> {
         // 5. 各テーブルをコピー
         for table_name in table_names {
             self.table_copy(src_db_name, &table_name, copy_name, &table_name)?;
-        }
-
-        // 6. コピー実行ユーザーに対して新しいデータベースの Manage 権限を自動付与
-        if let Some(uid) = user_id {
-            let privs_table = self.db.user_privileges;
-            privs_table.put(
-                &mut self.write_txn,
-                &(uid, copy_db_id),
-                &(crate::models::users::UserRole::Manage as u8),
-            )?;
         }
 
         Ok(DatabaseInfoResponse {

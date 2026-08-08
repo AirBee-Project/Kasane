@@ -48,8 +48,14 @@ pub async fn table_update_handler(
     Path((db_name, table_name)): Path<(String, String)>,
     Json(payload): Json<UpdateTableRequest>,
 ) -> Result<Json<TableSummary>, AppError> {
-    crate::middleware::auth::check_privilege(&state, &auth_user, &db_name, UserRole::Manage)
-        .await?;
+    // 権限はテーブル ID に紐づくので、改名しても権限はそのテーブルに追従する。
+    crate::middleware::auth::check_table(
+        &state,
+        &auth_user,
+        &db_name,
+        &table_name,
+        UserRole::Manage,
+    )?;
 
     let result = table_update_service::table_update(
         state.clone(),

@@ -37,8 +37,13 @@ pub async fn data_insert(
     Path((db_name, table_name)): Path<(String, String)>,
     Json(payload): Json<InsertDataRequest>,
 ) -> Result<StatusCode, AppError> {
-    crate::middleware::auth::check_privilege(&app_state, &auth_user, &db_name, UserRole::Write)
-        .await?;
+    crate::middleware::auth::check_table(
+        &app_state,
+        &auth_user,
+        &db_name,
+        &table_name,
+        UserRole::Write,
+    )?;
 
     data_insert_service::insert(
         &app_state,

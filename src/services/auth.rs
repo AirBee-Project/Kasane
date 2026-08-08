@@ -1,3 +1,4 @@
+use crate::repositories::MetaRead;
 use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -74,7 +75,7 @@ pub fn dummy_verify_password(password: &str) {
 pub fn generate_jwt(app_state: &AppState, username: &str) -> Result<String, AppError> {
     let meta = app_state
         .db
-        .read_users(|repo| repo.get_user_meta(username))?
+        .read(|repo| repo.user_meta(username))?
         .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
     let expiration = SystemTime::now()

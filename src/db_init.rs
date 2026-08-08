@@ -39,41 +39,6 @@ impl<'a> heed::BytesDecode<'a> for DbIdAndName {
     }
 }
 
-pub struct UserIdAndDbId;
-
-impl<'a> heed::BytesEncode<'a> for UserIdAndDbId {
-    type EItem = (crate::models::id::UserId, crate::models::id::DatabaseId);
-
-    fn bytes_encode(
-        item: &'a Self::EItem,
-    ) -> Result<Cow<'a, [u8]>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut bytes = Vec::with_capacity(32);
-        bytes.extend_from_slice(&item.0.into_bytes());
-        bytes.extend_from_slice(&item.1.into_bytes());
-        Ok(Cow::Owned(bytes))
-    }
-}
-
-impl<'a> heed::BytesDecode<'a> for UserIdAndDbId {
-    type DItem = (crate::models::id::UserId, crate::models::id::DatabaseId);
-
-    fn bytes_decode(
-        bytes: &'a [u8],
-    ) -> Result<Self::DItem, Box<dyn std::error::Error + Send + Sync>> {
-        if bytes.len() != 32 {
-            return Err("invalid length".into());
-        }
-        let mut uid = [0u8; 16];
-        uid.copy_from_slice(&bytes[0..16]);
-        let mut dbid = [0u8; 16];
-        dbid.copy_from_slice(&bytes[16..32]);
-        Ok((
-            crate::models::id::UserId(uuid::Uuid::from_bytes(uid)),
-            crate::models::id::DatabaseId(uuid::Uuid::from_bytes(dbid)),
-        ))
-    }
-}
-
 pub struct TableIdAndFlexId;
 
 impl<'a> heed::BytesEncode<'a> for TableIdAndFlexId {
@@ -123,17 +88,18 @@ pub struct AppDb {
     /// Key: `DatabaseId` と テーブル名 (`DbIdAndName`) -> Value: `TableMetadata`
     pub tables: Database<DbIdAndName, SerdeJson<TableMetadata>>,
 
-    /// `TableId` の存在確認やルックアップに用いるインデックス
-    /// Key: `TableId` -> Value: `Unit` (値なし)
-    pub table_id_index: Database<SerdeBincode<crate::models::id::TableId>, Unit>,
+    /// `DatabaseId` からデータベース名を引くための逆引きインデックス。
+    /// 権限は ID で保存されるため、それを名前へ戻すのに使う。
+    /// Key: `DatabaseId` -> Value: データベース名 (`Str`)
+    pub database_id_index: Database<SerdeBincode<crate::models::id::DatabaseId>, Str>,
+
+    /// `TableId` の存在確認と、テーブル名の逆引きに用いるインデックス。
+    /// Key: `TableId` -> Value: テーブル名 (`Str`)
+    pub table_id_index: Database<SerdeBincode<crate::models::id::TableId>, Str>,
 
     /// 登録済みのユーザーを管理する
     /// Key: ユーザーID（現状は UUID などの文字列）(`Str`) -> Value: ユーザー名など (`Str`)
     pub users: Database<Str, Str>,
-
-    /// ユーザーごとのデータベースに対する権限（ロール）を管理する
-    /// Key: `UserId` と `DatabaseId` (`UserIdAndDbId`) -> Value: 権限レベル (`UserRole` を表す `u8`)
-    pub user_privileges: Database<UserIdAndDbId, SerdeBincode<u8>>,
 
     /// FlexTree
     /// Key: `TableId` と 空間ID（`FlexId`）(`TableIdAndFlexId`) -> SpatialIdMapのバイト列(rkvy)
@@ -199,13 +165,13 @@ pub fn initialize_database(path: &str) -> AppDb {
         .create_database(&mut write_txn, Some("databases"))
         .unwrap();
     let tables = env.create_database(&mut write_txn, Some("tables")).unwrap();
+    let database_id_index = env
+        .create_database(&mut write_txn, Some("database_id_index"))
+        .unwrap();
     let table_id_index = env
         .create_database(&mut write_txn, Some("table_id_index"))
         .unwrap();
     let users = env.create_database(&mut write_txn, Some("users")).unwrap();
-    let user_privileges = env
-        .create_database(&mut write_txn, Some("user_privileges"))
-        .unwrap();
     let tables_data = env
         .create_database(&mut write_txn, Some("tables_data"))
         .unwrap();
@@ -225,8 +191,10 @@ pub fn initialize_database(path: &str) -> AppDb {
         let root_meta = UserMetadata {
             id: Uuid::now_v7(),
             password_hash: hash,
-            is_global_admin: true,
             token_version: 0,
+            privileges: vec![crate::models::users::StoredPrivilege::Global {
+                role: crate::models::users::UserRole::Admin,
+            }],
         };
         let json = serde_json::to_string(&root_meta).unwrap();
         users
@@ -241,9 +209,9 @@ pub fn initialize_database(path: &str) -> AppDb {
         env,
         databases,
         tables,
+        database_id_index,
         table_id_index,
         users,
-        user_privileges,
         tables_data,
         value_index,
     }

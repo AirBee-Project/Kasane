@@ -45,18 +45,24 @@ pub async fn table_copy(
 ) -> Result<impl IntoResponse, AppError> {
     let dest_db_name = request.copy_db_name.as_deref().unwrap_or(&db_name);
 
-    // 1. コピー元データベースのRead権限チェック
-    crate::middleware::auth::check_privilege(&app_state, &auth_user, &db_name, UserRole::Read)
-        .await?;
+    // 1. コピー元テーブルへの Read 権限
+    crate::middleware::auth::check_table(
+        &app_state,
+        &auth_user,
+        &db_name,
+        &table_name,
+        UserRole::Read,
+    )?;
 
-    // 2. コピー先データベースのManage権限チェック（新しくテーブルを作成するため）
-    crate::middleware::auth::check_privilege(
+    // 2. コピー先データベースへの Manage 権限。
+    //    作られるのは request.copy_table_name という新しいテーブルなので、
+    //    コピー元テーブルに対するテーブルスコープの権限では通してはならない。
+    crate::middleware::auth::check_database(
         &app_state,
         &auth_user,
         dest_db_name,
         UserRole::Manage,
-    )
-    .await?;
+    )?;
 
     let res = table_copy_service::copy(
         &app_state,

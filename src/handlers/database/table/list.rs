@@ -12,7 +12,9 @@ use crate::{
 
 /// テーブル一覧の取得
 ///
-/// 指定したデータベース内に存在するテーブルの一覧を取得します。この操作はデータベースのRead以上の権限が必要です。
+/// 指定したデータベース内に存在するテーブルのうち、呼び出したユーザーが Read 以上の権限を
+/// 持つものだけを返します。テーブル単位の権限しか持たないユーザーも、そのテーブルだけが
+/// 見える形で一覧を取得できます。
 #[utoipa::path(
     get,
     path = "/databases/{db_name}/tables",
@@ -31,14 +33,8 @@ pub async fn table_list(
     Extension(auth_user): Extension<AuthUser>,
     Path(db_name): Path<String>,
 ) -> Result<Json<TableListResponse>, AppError> {
-    crate::middleware::auth::check_privilege(
-        &app_state,
-        &auth_user,
-        &db_name,
-        crate::models::users::UserRole::Read,
-    )
-    .await?;
+    crate::middleware::auth::check_database_visible(&app_state, &auth_user, &db_name)?;
 
-    let tables = table_list_service::list(&app_state, &db_name).await?;
+    let tables = table_list_service::list(&app_state, &db_name, &auth_user).await?;
     Ok(Json(tables))
 }

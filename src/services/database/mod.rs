@@ -1,5 +1,9 @@
-use crate::{AppState, error::AppError, models::database::DatabaseInfoResponse};
-use std::collections::HashSet;
+use crate::{
+    AppState,
+    error::AppError,
+    models::database::DatabaseInfoResponse,
+    models::users::{Scope, User, UserRole},
+};
 
 pub async fn info(app_state: &AppState, name: &str) -> Result<DatabaseInfoResponse, AppError> {
     match app_state.db.read(|r| r.database_info(name))? {
@@ -12,30 +16,20 @@ pub async fn info(app_state: &AppState, name: &str) -> Result<DatabaseInfoRespon
 
 /// データベース一覧を取得する。
 ///
-/// GlobalAdmin は全データベースを取得できる。それ以外のユーザーは、
-/// 何らかの権限（Read 以上）を保持しているデータベースのみを取得できる。
+/// 配下のどれかに Read 以上で到達できるデータベースだけを返す。テーブル単位の権限しか
+/// 持たないユーザーにも、そのテーブルを含むデータベースは見える（見えないと自分の
+/// テーブルへ辿り着く手段が無くなるため）。
 pub async fn list(
     app_state: &AppState,
-    is_global_admin: bool,
-    user_id: crate::models::id::UserId,
+    user: &User,
 ) -> Result<Vec<DatabaseInfoResponse>, AppError> {
-    if is_global_admin {
-        return app_state.db.read(|r| r.database_list());
-    }
-
-    // 一般ユーザーは権限を持つデータベースのみ閲覧可能
-    let accessible: HashSet<String> = app_state
-        .db
-        .read_users(|repo| repo.get_user_privileges(user_id))?
-        .into_iter()
-        .map(|(db_name, _role)| db_name)
-        .collect();
-
-    let all = app_state.db.read(|r| r.database_list())?;
-    Ok(all
-        .into_iter()
-        .filter(|info| accessible.contains(&info.name))
-        .collect())
+    app_state.db.read(|r| {
+        Ok(r.database_list()?
+            .into_iter()
+            .filter(|(db_id, _)| user.can(Scope::AnyIn(*db_id), UserRole::Read))
+            .map(|(_, info)| info)
+            .collect())
+    })
 }
 
 pub async fn create(
@@ -127,11 +121,14 @@ pub async fn update(
     .map_err(|e| AppError::InternalError(e.to_string()))?
 }
 
+/// データベースを複製する。
+///
+/// この操作は `global` スコープの Manage 以上を要求する。そのロールは複製先を含む
+/// すべてのデータベースに届くので、呼び出し元へ個別に権限を付け直す必要はない。
 pub async fn copy(
     app_state: &AppState,
     name: &str,
     copy_name: &str,
-    user_id: Option<crate::models::id::UserId>,
 ) -> Result<DatabaseInfoResponse, AppError> {
     let app_state = app_state.clone();
     let name = name.to_string();
@@ -139,11 +136,7 @@ pub async fn copy(
 
     let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
-        span.in_scope(|| {
-            app_state
-                .db
-                .write(|db| db.database_copy(&name, &copy_name, user_id))
-        })
+        span.in_scope(|| app_state.db.write(|db| db.database_copy(&name, &copy_name)))
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?

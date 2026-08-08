@@ -1,5 +1,8 @@
 pub mod database;
+pub mod meta;
 pub mod users;
+
+pub use meta::MetaRead;
 
 pub struct KasaneDbRead<'a> {
     pub read_txn: heed::RoTxn<'a, heed::WithoutTls>,
@@ -36,7 +39,6 @@ impl<'a> KasaneDbWrite<'a> {
 use crate::error::AppError;
 use crate::models::database::table::TableDataType;
 use crate::models::id::TableId;
-use crate::repositories::users::{KasaneUsersRead, KasaneUsersWrite};
 use kasane_logic::SpatialIdSet;
 
 impl crate::db_init::AppDb {
@@ -59,31 +61,6 @@ impl crate::db_init::AppDb {
         f: impl FnOnce(&mut KasaneDbWrite<'_>) -> Result<T, AppError>,
     ) -> Result<T, AppError> {
         let mut w = KasaneDbWrite::new(self.env.write_txn()?, self);
-        match f(&mut w) {
-            Ok(out) => {
-                w.commit()?;
-                Ok(out)
-            }
-            // エラー時は commit せず w を drop すると、RwTxn は自動で abort される。
-            Err(e) => Err(e),
-        }
-    }
-
-    /// ユーザー用リポジトリの読み取り版。
-    pub fn read_users<T>(
-        &self,
-        f: impl FnOnce(&KasaneUsersRead<'_>) -> Result<T, AppError>,
-    ) -> Result<T, AppError> {
-        let txn = self.env.read_txn()?;
-        f(&KasaneUsersRead::new(txn, self))
-    }
-
-    /// ユーザー用リポジトリの書き込み版。成功時 commit、失敗時 abort。
-    pub fn write_users<T>(
-        &self,
-        f: impl FnOnce(&mut KasaneUsersWrite<'_>) -> Result<T, AppError>,
-    ) -> Result<T, AppError> {
-        let mut w = KasaneUsersWrite::new(self.env.write_txn()?, self);
         match f(&mut w) {
             Ok(out) => {
                 w.commit()?;

@@ -6,18 +6,18 @@ use axum::{
 
 use crate::{
     AppState,
-    error::{AppError, AuthError},
-    middleware::auth::AuthUser,
+    error::AppError,
+    middleware::auth::{AuthUser, check_global_admin, check_self_or_admin},
     models::users::{
-        CreateUserRequest, PrivilegeInfoResponse, UpdateAdminRequest, UpdatePasswordRequest,
-        UpdatePrivilegeRequest, UserInfoResponse,
+        CreateUserRequest, PrivilegeTarget, PrivilegesResponse, SetPrivilegeRequest,
+        UpdatePasswordRequest, UserInfoResponse,
     },
     services::users as users_service,
 };
 
 /// ユーザー一覧の取得
 ///
-/// ユーザーの一覧を取得します。この操作はGlobal Adminのみ実行可能です。
+/// ユーザーの一覧を権限つきで取得します。この操作は `global` スコープの `admin` ロールが必要です。
 #[utoipa::path(
     get,
     path = "/users",
@@ -32,22 +32,23 @@ pub async fn list_users(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
 ) -> Result<Json<Vec<UserInfoResponse>>, AppError> {
-    if !auth_user.user.is_global_admin {
-        return Err(AuthError::RequiresGlobalAdmin.into());
-    }
+    check_global_admin(&auth_user)?;
     let users = users_service::list_users(&app_state)?;
     Ok(Json(users))
 }
 
 /// 新規ユーザー作成
 ///
-/// 新しいユーザーを作成し、パスワードやGlobal Adminを設定します。この操作はGlobal Adminのみ実行可能です。
+/// 新しいユーザーを作成します。`privileges` を指定すると作成と同時に権限を付与できます。
+/// この操作は `global` スコープの `admin` ロールが必要です。
 #[utoipa::path(
     post,
     path = "/users",
     request_body = CreateUserRequest,
     responses(
         (status = 201),
+        (status = 400, description = "権限ルールが不正（global 以外での admin 指定など）"),
+        (status = 404, description = "権限ルールが参照するデータベースまたはテーブルが存在しない"),
         (status = 409, description = "同名のユーザーが既に存在する")
     ),
     security(("bearer_auth" = ["global_admin"])),
@@ -59,16 +60,14 @@ pub async fn create_user(
     Extension(auth_user): Extension<AuthUser>,
     Json(payload): Json<CreateUserRequest>,
 ) -> Result<StatusCode, AppError> {
-    if !auth_user.user.is_global_admin {
-        return Err(AuthError::RequiresGlobalAdmin.into());
-    }
+    check_global_admin(&auth_user)?;
     users_service::create_user(&app_state, payload).await?;
     Ok(StatusCode::CREATED)
 }
 
 /// ユーザーの削除
 ///
-/// 指定したユーザーを削除します。この操作はGlobal Adminのみ実行可能です。
+/// 指定したユーザーを削除します。この操作は `global` スコープの `admin` ロールが必要です。
 #[utoipa::path(
     delete,
     path = "/users/{username}",
@@ -77,6 +76,7 @@ pub async fn create_user(
     ),
     responses(
         (status = 204),
+        (status = 403, description = "rootユーザーは削除不可"),
         (status = 404, description = "ユーザーが存在しない")
     ),
     security(("bearer_auth" = ["global_admin"])),
@@ -88,16 +88,15 @@ pub async fn delete_user(
     Extension(auth_user): Extension<AuthUser>,
     Path(username): Path<String>,
 ) -> Result<StatusCode, AppError> {
-    if !auth_user.user.is_global_admin {
-        return Err(AuthError::RequiresGlobalAdmin.into());
-    }
+    check_global_admin(&auth_user)?;
     users_service::delete_user(&app_state, &username).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// ユーザーの個別取得
+/// ユーザー情報の取得
 ///
-/// 指定したユーザーの基本情報を取得します。Global Adminまたはユーザー本人のみ実行可能です。
+/// 指定したユーザーの情報を取得します。本人、または `global` スコープの `admin` ロールを持つ
+/// ユーザーのみ実行可能です。
 #[utoipa::path(
     get,
     path = "/users/{username}",
@@ -106,7 +105,6 @@ pub async fn delete_user(
     ),
     responses(
         (status = 200, body = UserInfoResponse),
-        (status = 403, description = "権限がない（他人の情報を取得しようとした）"),
         (status = 404, description = "ユーザーが存在しない")
     ),
     security(("bearer_auth" = [])),
@@ -118,16 +116,15 @@ pub async fn get_user(
     Extension(auth_user): Extension<AuthUser>,
     Path(username): Path<String>,
 ) -> Result<Json<UserInfoResponse>, AppError> {
-    if !auth_user.user.is_global_admin && auth_user.user.username != username {
-        return Err(AuthError::NotSelfOrAdmin.into());
-    }
+    check_self_or_admin(&auth_user, &username)?;
     let user = users_service::get_user(&app_state, &username)?;
     Ok(Json(user))
 }
 
-/// パスワードの更新
+/// パスワードの変更
 ///
-/// 指定したユーザーのパスワードを更新します。ユーザー本人が自分自身のパスワードを変更するか、Global Adminが他人のパスワードをリセットする場合に利用可能です。
+/// 指定したユーザーのパスワードを変更します。本人、または `global` スコープの `admin` ロールを
+/// 持つユーザーのみ実行可能です。変更すると発行済みトークンはすべて失効します。
 #[utoipa::path(
     put,
     path = "/users/{username}/password",
@@ -149,52 +146,20 @@ pub async fn update_password(
     Path(username): Path<String>,
     Json(payload): Json<UpdatePasswordRequest>,
 ) -> Result<StatusCode, AppError> {
-    if !auth_user.user.is_global_admin && auth_user.user.username != username {
-        return Err(AuthError::NotSelfOrAdmin.into());
-    }
+    check_self_or_admin(&auth_user, &username)?;
 
-    if username == "root" && auth_user.user.username != "root" {
-        return Err(AuthError::RootProtected.into());
-    }
     users_service::update_password(&app_state, &username, payload).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Global Admin権限の変更
+/// 権限一覧の取得
 ///
-/// 指定したユーザーのGlobal Admin権限を付与または剥奪します。この操作はGlobal Adminのみ実行可能です。
-#[utoipa::path(
-    put,
-    path = "/users/{username}/admin",
-    params(
-        ("username" = String, Path, description = "ユーザー名", example = "example_user")
-    ),
-    request_body = UpdateAdminRequest,
-    responses(
-        (status = 204),
-        (status = 403, description = "rootユーザーの権限は変更不可"),
-        (status = 404, description = "ユーザーが存在しない")
-    ),
-    security(("bearer_auth" = ["global_admin"])),
-    tag = "Users"
-)]
-#[tracing::instrument(skip_all)]
-pub async fn set_admin(
-    State(app_state): State<AppState>,
-    Extension(auth_user): Extension<AuthUser>,
-    Path(username): Path<String>,
-    Json(payload): Json<UpdateAdminRequest>,
-) -> Result<StatusCode, AppError> {
-    if !auth_user.user.is_global_admin {
-        return Err(AuthError::RequiresGlobalAdmin.into());
-    }
-    users_service::set_admin(&app_state, &username, payload.is_global_admin).await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-/// データベース権限の取得
+/// 指定したユーザーが持つ権限ルールの一覧を取得します。
 ///
-/// 指定したユーザーが持つデータベースごとのアクセス権限（Read, Write, Manage）の一覧を取得します。この操作はグローバル管理者のみ実行可能です。
+/// 既に削除されたデータベース・テーブルを指すルールは名前へ解決できないため一覧に現れません
+/// （そうしたルールは認可判定でも一致しないため、表示と実効権限が食い違うことはありません）。
+///
+/// 本人、または `global` スコープの `admin` ロールを持つユーザーのみ実行可能です。
 #[utoipa::path(
     get,
     path = "/users/{username}/privileges",
@@ -202,10 +167,10 @@ pub async fn set_admin(
         ("username" = String, Path, description = "ユーザー名", example = "example_user")
     ),
     responses(
-        (status = 200, body = [PrivilegeInfoResponse]),
+        (status = 200, body = PrivilegesResponse),
         (status = 404, description = "ユーザーが存在しない")
     ),
-    security(("bearer_auth" = ["global_admin"])),
+    security(("bearer_auth" = [])),
     tag = "Users"
 )]
 #[tracing::instrument(skip_all)]
@@ -213,72 +178,217 @@ pub async fn get_privileges(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
     Path(username): Path<String>,
-) -> Result<Json<Vec<PrivilegeInfoResponse>>, AppError> {
-    if !auth_user.user.is_global_admin {
-        return Err(AuthError::RequiresGlobalAdmin.into());
-    }
-    let privs = users_service::get_privileges(&app_state, &username)?;
-    Ok(Json(privs))
+) -> Result<Json<PrivilegesResponse>, AppError> {
+    check_self_or_admin(&auth_user, &username)?;
+    let privileges = users_service::get_privileges(&app_state, &username)?;
+    Ok(Json(PrivilegesResponse { privileges }))
 }
 
-/// データベース権限の設定
+/// サーバー全体に対する権限の設定
 ///
-/// 指定したユーザーに対し、特定のデータベースへのアクセス権限（Read, Write, Manage）を設定します。この操作はグローバル管理者のみ実行可能です。
+/// 既に設定されていればロールを置き換えます。`admin` を指定できるのはこのスコープだけです。
 #[utoipa::path(
     put,
-    path = "/users/{username}/privileges/{db_name}",
+    path = "/users/{username}/privileges/global",
     params(
-        ("username" = String, Path, description = "ユーザー名", example = "example_user"),
-        ("db_name" = String, Path, description = "データベース名", example = "example_database")
+        ("username" = String, Path, description = "ユーザー名", example = "example_user")
     ),
-    request_body = UpdatePrivilegeRequest,
+    request_body = SetPrivilegeRequest,
     responses(
         (status = 204),
-        (status = 404, description = "ユーザーまたはデータベースが存在しない")
+        (status = 400, description = "保持できる権限数の上限を超えた"),
+        (status = 403, description = "rootユーザーの権限は変更不可"),
+        (status = 404, description = "ユーザーが存在しない")
     ),
     security(("bearer_auth" = ["global_admin"])),
     tag = "Users"
 )]
 #[tracing::instrument(skip_all)]
-pub async fn set_privilege(
+pub async fn set_global_privilege(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
-    Path((username, db_name)): Path<(String, String)>,
-    Json(payload): Json<UpdatePrivilegeRequest>,
+    Path(username): Path<String>,
+    Json(payload): Json<SetPrivilegeRequest>,
 ) -> Result<StatusCode, AppError> {
-    if !auth_user.user.is_global_admin {
-        return Err(AuthError::RequiresGlobalAdmin.into());
-    }
-    users_service::set_privilege(&app_state, &username, &db_name, payload).await?;
+    check_global_admin(&auth_user)?;
+    users_service::grant_privilege(
+        &app_state,
+        &username,
+        PrivilegeTarget::Global.with_role(payload.role),
+    )
+    .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// データベース権限の削除
+/// サーバー全体に対する権限の剥奪
 ///
-/// 指定したユーザーから、特定のデータベースへのアクセス権限を削除します。この操作はグローバル管理者のみ実行可能です。
+/// ロールを問わず、このスコープの権限を取り除きます。
 #[utoipa::path(
     delete,
-    path = "/users/{username}/privileges/{db_name}",
+    path = "/users/{username}/privileges/global",
+    params(
+        ("username" = String, Path, description = "ユーザー名", example = "example_user")
+    ),
+    responses(
+        (status = 204),
+        (status = 403, description = "rootユーザーの権限は変更不可"),
+        (status = 404, description = "ユーザーが存在しない、またはこのスコープの権限を持っていない")
+    ),
+    security(("bearer_auth" = ["global_admin"])),
+    tag = "Users"
+)]
+#[tracing::instrument(skip_all)]
+pub async fn delete_global_privilege(
+    State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(username): Path<String>,
+) -> Result<StatusCode, AppError> {
+    check_global_admin(&auth_user)?;
+    users_service::revoke_privilege(&app_state, &username, PrivilegeTarget::Global).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// データベースに対する権限の設定
+///
+/// 既に設定されていればロールを置き換えます。配下のテーブルすべてに効きます。
+/// 権限はデータベース ID に紐づくため、改名しても追従します。
+#[utoipa::path(
+    put,
+    path = "/users/{username}/privileges/databases/{db_name}",
     params(
         ("username" = String, Path, description = "ユーザー名", example = "example_user"),
         ("db_name" = String, Path, description = "データベース名", example = "example_database")
     ),
+    request_body = SetPrivilegeRequest,
     responses(
         (status = 204),
+        (status = 400, description = "admin はこのスコープに指定できない／上限超過"),
+        (status = 403, description = "rootユーザーの権限は変更不可"),
         (status = 404, description = "ユーザーまたはデータベースが存在しない")
     ),
     security(("bearer_auth" = ["global_admin"])),
     tag = "Users"
 )]
 #[tracing::instrument(skip_all)]
-pub async fn delete_privilege(
+pub async fn set_database_privilege(
+    State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path((username, db_name)): Path<(String, String)>,
+    Json(payload): Json<SetPrivilegeRequest>,
+) -> Result<StatusCode, AppError> {
+    check_global_admin(&auth_user)?;
+    users_service::grant_privilege(
+        &app_state,
+        &username,
+        PrivilegeTarget::Database { db_name }.with_role(payload.role),
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// データベースに対する権限の剥奪
+#[utoipa::path(
+    delete,
+    path = "/users/{username}/privileges/databases/{db_name}",
+    params(
+        ("username" = String, Path, description = "ユーザー名", example = "example_user"),
+        ("db_name" = String, Path, description = "データベース名", example = "example_database")
+    ),
+    responses(
+        (status = 204),
+        (status = 403, description = "rootユーザーの権限は変更不可"),
+        (status = 404, description = "ユーザー・データベースが存在しない、または権限を持っていない")
+    ),
+    security(("bearer_auth" = ["global_admin"])),
+    tag = "Users"
+)]
+#[tracing::instrument(skip_all)]
+pub async fn delete_database_privilege(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
     Path((username, db_name)): Path<(String, String)>,
 ) -> Result<StatusCode, AppError> {
-    if !auth_user.user.is_global_admin {
-        return Err(AuthError::RequiresGlobalAdmin.into());
-    }
-    users_service::delete_privilege(&app_state, &username, &db_name).await?;
+    check_global_admin(&auth_user)?;
+    users_service::revoke_privilege(&app_state, &username, PrivilegeTarget::Database { db_name })
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// テーブルに対する権限の設定
+///
+/// 既に設定されていればロールを置き換えます。
+/// 権限はテーブル ID に紐づくため、改名しても追従します。
+#[utoipa::path(
+    put,
+    path = "/users/{username}/privileges/databases/{db_name}/tables/{table_name}",
+    params(
+        ("username" = String, Path, description = "ユーザー名", example = "example_user"),
+        ("db_name" = String, Path, description = "データベース名", example = "example_database"),
+        ("table_name" = String, Path, description = "テーブル名", example = "example_table")
+    ),
+    request_body = SetPrivilegeRequest,
+    responses(
+        (status = 204),
+        (status = 400, description = "admin はこのスコープに指定できない／上限超過"),
+        (status = 403, description = "rootユーザーの権限は変更不可"),
+        (status = 404, description = "ユーザー・データベース・テーブルのいずれかが存在しない")
+    ),
+    security(("bearer_auth" = ["global_admin"])),
+    tag = "Users"
+)]
+#[tracing::instrument(skip_all)]
+pub async fn set_table_privilege(
+    State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path((username, db_name, table_name)): Path<(String, String, String)>,
+    Json(payload): Json<SetPrivilegeRequest>,
+) -> Result<StatusCode, AppError> {
+    check_global_admin(&auth_user)?;
+    users_service::grant_privilege(
+        &app_state,
+        &username,
+        PrivilegeTarget::Table {
+            db_name,
+            table_name,
+        }
+        .with_role(payload.role),
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// テーブルに対する権限の剥奪
+#[utoipa::path(
+    delete,
+    path = "/users/{username}/privileges/databases/{db_name}/tables/{table_name}",
+    params(
+        ("username" = String, Path, description = "ユーザー名", example = "example_user"),
+        ("db_name" = String, Path, description = "データベース名", example = "example_database"),
+        ("table_name" = String, Path, description = "テーブル名", example = "example_table")
+    ),
+    responses(
+        (status = 204),
+        (status = 403, description = "rootユーザーの権限は変更不可"),
+        (status = 404, description = "対象が存在しない、または権限を持っていない")
+    ),
+    security(("bearer_auth" = ["global_admin"])),
+    tag = "Users"
+)]
+#[tracing::instrument(skip_all)]
+pub async fn delete_table_privilege(
+    State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path((username, db_name, table_name)): Path<(String, String, String)>,
+) -> Result<StatusCode, AppError> {
+    check_global_admin(&auth_user)?;
+    users_service::revoke_privilege(
+        &app_state,
+        &username,
+        PrivilegeTarget::Table {
+            db_name,
+            table_name,
+        },
+    )
+    .await?;
     Ok(StatusCode::NO_CONTENT)
 }

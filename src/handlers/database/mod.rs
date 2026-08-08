@@ -1,10 +1,11 @@
 use crate::middleware::auth::AuthUser;
 use crate::{
     AppState,
-    error::{AppError, AuthError},
+    error::AppError,
     models::database::{
         CopyDatabaseRequest, CreateDatabaseRequest, DatabaseInfoResponse, UpdateDatabaseRequest,
     },
+    models::users::UserRole,
 };
 use axum::Extension;
 use axum::{
@@ -16,7 +17,7 @@ use axum::{
 
 /// データベースの作成
 ///
-/// 新しいデータベースを作成します。この操作はGlobal Admin権限が必要です。
+/// 新しいデータベースを作成します。この操作は `global` スコープの `manage` 以上のロールが必要です。
 #[utoipa::path(
     post,
     path = "/databases",
@@ -33,9 +34,7 @@ pub async fn database_create(
     Extension(auth_user): Extension<AuthUser>,
     Json(request): Json<CreateDatabaseRequest>,
 ) -> Result<Response, AppError> {
-    if !auth_user.user.is_global_admin {
-        return Err(AuthError::RequiresGlobalAdmin.into());
-    }
+    crate::middleware::auth::check_global_role(&auth_user, UserRole::Manage)?;
     let res =
         crate::services::database::create(&app_state, request.name.as_str(), request.description)
             .await?;
@@ -68,13 +67,7 @@ pub async fn database_info(
     Extension(auth_user): Extension<AuthUser>,
     Path(db_name): Path<String>,
 ) -> Result<Json<DatabaseInfoResponse>, AppError> {
-    crate::middleware::auth::check_privilege(
-        &app_state,
-        &auth_user,
-        &db_name,
-        crate::models::users::UserRole::Read,
-    )
-    .await?;
+    crate::middleware::auth::check_database_visible(&app_state, &auth_user, &db_name)?;
     let res = crate::services::database::info(&app_state, &db_name).await?;
     Ok(Json(res))
 }
@@ -99,12 +92,7 @@ pub async fn database_list(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
 ) -> Result<Json<Vec<DatabaseInfoResponse>>, AppError> {
-    let res = crate::services::database::list(
-        &app_state,
-        auth_user.user.is_global_admin,
-        crate::models::id::UserId(auth_user.user.id),
-    )
-    .await?;
+    let res = crate::services::database::list(&app_state, &auth_user).await?;
     Ok(Json(res))
 }
 
@@ -129,9 +117,7 @@ pub async fn remove_database(
     Extension(auth_user): Extension<AuthUser>,
     Path(db_name): Path<String>,
 ) -> Result<StatusCode, AppError> {
-    if !auth_user.user.is_global_admin {
-        return Err(AuthError::RequiresGlobalAdmin.into());
-    }
+    crate::middleware::auth::check_global_role(&auth_user, UserRole::Manage)?;
     crate::services::database::remove(&app_state, db_name.as_str()).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -163,13 +149,7 @@ pub async fn database_update(
     Path(db_name): Path<String>,
     Json(request): Json<UpdateDatabaseRequest>,
 ) -> Result<StatusCode, AppError> {
-    crate::middleware::auth::check_privilege(
-        &app_state,
-        &auth_user,
-        &db_name,
-        crate::models::users::UserRole::Manage,
-    )
-    .await?;
+    crate::middleware::auth::check_database(&app_state, &auth_user, &db_name, UserRole::Manage)?;
     crate::services::database::update(&app_state, &db_name, request.new_name, request.description)
         .await?;
     Ok(StatusCode::OK)
@@ -202,9 +182,7 @@ pub async fn database_copy(
     Path(db_name): Path<String>,
     Json(request): Json<CopyDatabaseRequest>,
 ) -> Result<Response, AppError> {
-    if !auth_user.user.is_global_admin {
-        return Err(AuthError::RequiresGlobalAdmin.into());
-    }
+    crate::middleware::auth::check_global_role(&auth_user, UserRole::Manage)?;
 
     if db_name == request.copy_name {
         return Err(AppError::Conflict(
@@ -212,14 +190,7 @@ pub async fn database_copy(
         ));
     }
 
-    let user_id = if auth_user.user.is_global_admin {
-        None
-    } else {
-        Some(crate::models::id::UserId(auth_user.user.id))
-    };
-
-    let res =
-        crate::services::database::copy(&app_state, &db_name, &request.copy_name, user_id).await?;
+    let res = crate::services::database::copy(&app_state, &db_name, &request.copy_name).await?;
 
     Ok((
         StatusCode::CREATED,

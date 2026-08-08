@@ -15,8 +15,8 @@ use crate::models::database::{
 };
 use crate::models::spatial_id::SpatialId;
 use crate::models::users::{
-    CreateUserRequest, PrivilegeInfoResponse, UpdateAdminRequest, UpdatePasswordRequest,
-    UpdatePrivilegeRequest, UserInfoResponse, UserRole,
+    CreateUserRequest, PrivilegeRule, PrivilegesResponse, SetPrivilegeRequest,
+    UpdatePasswordRequest, UserInfoResponse, UserRole,
 };
 
 /// `bearer_auth` セキュリティスキーム（JWT Bearer）を OpenAPI コンポーネントに登録する。
@@ -58,10 +58,13 @@ impl utoipa::Modify for SecurityAddon {
         crate::handlers::users::get_user,
         crate::handlers::users::delete_user,
         crate::handlers::users::update_password,
-        crate::handlers::users::set_admin,
         crate::handlers::users::get_privileges,
-        crate::handlers::users::set_privilege,
-        crate::handlers::users::delete_privilege,
+        crate::handlers::users::set_global_privilege,
+        crate::handlers::users::delete_global_privilege,
+        crate::handlers::users::set_database_privilege,
+        crate::handlers::users::delete_database_privilege,
+        crate::handlers::users::set_table_privilege,
+        crate::handlers::users::delete_table_privilege,
         // GET  /databases
         crate::handlers::database::database_list,
         // POST /databases
@@ -105,9 +108,9 @@ impl utoipa::Modify for SecurityAddon {
         CreateUserRequest,
         UserInfoResponse,
         UpdatePasswordRequest,
-        UpdatePrivilegeRequest,
-        UpdateAdminRequest,
-        PrivilegeInfoResponse,
+        SetPrivilegeRequest,
+        PrivilegesResponse,
+        PrivilegeRule,
         UserRole,
         // Database
         CreateDatabaseRequest,

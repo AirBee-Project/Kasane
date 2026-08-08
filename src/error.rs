@@ -28,9 +28,13 @@ pub enum AuthError {
     RequiresGlobalAdmin,
     /// 本人または GlobalAdmin のみ許可される操作を、第三者が要求した。
     NotSelfOrAdmin,
-    /// 対象データベースに対する権限が不足している。
-    InsufficientPrivilege { db_name: String, required: UserRole },
-    /// root ユーザーに対して許可されない操作（削除・管理者権限変更など）。
+    /// 対象データベース（またはその中の特定テーブル）に対する権限が不足している。
+    InsufficientPrivilege {
+        db_name: String,
+        table_name: Option<String>,
+        required: UserRole,
+    },
+    /// root ユーザーに対して許可されない操作（削除・権限変更など）。
     RootProtected,
 }
 
@@ -75,7 +79,18 @@ impl fmt::Display for AuthError {
             AuthError::InvalidCredentials => write!(f, "Invalid username or password"),
             AuthError::RequiresGlobalAdmin => write!(f, "Requires GlobalAdmin privileges"),
             AuthError::NotSelfOrAdmin => write!(f, "You can only modify your own account"),
-            AuthError::InsufficientPrivilege { db_name, required } => write!(
+            AuthError::InsufficientPrivilege {
+                db_name,
+                table_name: Some(table_name),
+                required,
+            } => write!(
+                f,
+                "Insufficient privileges for table '{}.{}' (requires {:?})",
+                db_name, table_name, required
+            ),
+            AuthError::InsufficientPrivilege {
+                db_name, required, ..
+            } => write!(
                 f,
                 "Insufficient privileges for database '{}' (requires {:?})",
                 db_name, required
@@ -137,6 +152,10 @@ pub enum AppError {
         max_zoom_level: u8,
         input_zoom_level: u8,
     },
+    /// 権限ルールの内容が不正（`global` 以外での `admin`、同一対象へのロール矛盾など）。
+    InvalidPrivilege {
+        reason: String,
+    },
 }
 
 impl AppError {
@@ -159,6 +178,7 @@ impl AppError {
             AppError::InvalidName { .. } => StatusCode::BAD_REQUEST,
             AppError::LogicError(_) => StatusCode::BAD_REQUEST,
             AppError::ZoomLevelPolicy { .. } => StatusCode::BAD_REQUEST,
+            AppError::InvalidPrivilege { .. } => StatusCode::BAD_REQUEST,
         }
     }
 
@@ -182,6 +202,7 @@ impl AppError {
             AppError::InvalidName { .. } => "invalid_name",
             AppError::LogicError(_) => "logic_error",
             AppError::ZoomLevelPolicy { .. } => "zoom_level_policy",
+            AppError::InvalidPrivilege { .. } => "invalid_privilege",
         }
     }
 }
@@ -233,6 +254,9 @@ impl fmt::Display for AppError {
                 "Zoom level policy violation: expected max {}, got {}",
                 max_zoom_level, input_zoom_level
             ),
+            AppError::InvalidPrivilege { reason } => {
+                write!(f, "Invalid privilege rule: {}", reason)
+            }
         }
     }
 }
