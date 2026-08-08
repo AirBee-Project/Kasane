@@ -36,7 +36,6 @@ impl<'a> KasaneDbWrite<'a> {
 use crate::error::AppError;
 use crate::models::database::table::TableDataType;
 use crate::models::id::TableId;
-use crate::repositories::database::table::data::batch::WriteOp;
 use crate::repositories::users::{KasaneUsersRead, KasaneUsersWrite};
 use kasane_logic::SpatialIdSet;
 
@@ -95,20 +94,7 @@ impl crate::db_init::AppDb {
         }
     }
 
-    async fn enqueue_write(
-        &self,
-        op: WriteOp,
-        rx: tokio::sync::oneshot::Receiver<Result<(), AppError>>,
-    ) -> Result<(), AppError> {
-        self.write_sender
-            .send(op)
-            .await
-            .map_err(|_| AppError::InternalError("WriteBatcher channel is closed".to_string()))?;
-        rx.await
-            .map_err(|_| AppError::InternalError("WriteBatcher failed to reply".to_string()))?
-    }
-
-    /// 検証済みの insert をバッチャーへ投入し、コミット完了まで待つ。
+    /// 検証済みの insert を実行し、コミット完了まで待つ。
     pub async fn batch_data_insert(
         &self,
         table_id: TableId,
@@ -116,21 +102,15 @@ impl crate::db_init::AppDb {
         ids: SpatialIdSet,
         value: Vec<u8>,
     ) -> Result<(), AppError> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.enqueue_write(
-            WriteOp::Insert {
-                table_id,
-                data_type,
-                ids,
-                value,
-                reply: tx,
-            },
-            rx,
-        )
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || {
+            db.write(|w| w.data_insert(table_id, data_type, ids, &value))
+        })
         .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?
     }
 
-    /// 検証済みの upsert をバッチャーへ投入し、コミット完了まで待つ。
+    /// 検証済みの upsert を実行し、コミット完了まで待つ。
     pub async fn batch_data_upsert(
         &self,
         table_id: TableId,
@@ -138,37 +118,24 @@ impl crate::db_init::AppDb {
         ids: SpatialIdSet,
         value: Vec<u8>,
     ) -> Result<(), AppError> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.enqueue_write(
-            WriteOp::Upsert {
-                table_id,
-                data_type,
-                ids,
-                value,
-                reply: tx,
-            },
-            rx,
-        )
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || {
+            db.write(|w| w.data_upsert(table_id, data_type, ids, &value))
+        })
         .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?
     }
 
-    /// 検証済みの remove をバッチャーへ投入し、コミット完了まで待つ。
+    /// 検証済みの remove を実行し、コミット完了まで待つ。
     pub async fn batch_data_remove(
         &self,
         table_id: TableId,
         data_type: TableDataType,
         ids: SpatialIdSet,
     ) -> Result<(), AppError> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.enqueue_write(
-            WriteOp::Remove {
-                table_id,
-                data_type,
-                ids,
-                reply: tx,
-            },
-            rx,
-        )
-        .await
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || db.write(|w| w.data_remove(table_id, data_type, ids)))
+            .await
+            .map_err(|e| AppError::InternalError(e.to_string()))?
     }
 }
