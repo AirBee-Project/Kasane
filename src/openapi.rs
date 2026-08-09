@@ -61,6 +61,9 @@ const PRIVILEGE_LEGEND: &str = r#"
         description = PRIVILEGE_LEGEND,
         license(name = "MIT", url = "https://opensource.org/licenses/MIT")
     ),
+    servers(
+        (url = "/", description = "Local server")
+    ),
     paths(
         // Auth
         crate::handlers::auth::login,
