@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "kasane",
-    "description": "\n## 権限について\n\n各エンドポイントの説明にある **必要な権限** は、その操作に必要な最小の権限です。\n`スコープ` / `ロール` の形式で表します。\n\n**スコープ**は `global` ⊃ `database` ⊃ `table` の階層で、上位スコープの権限は下位をすべて含みます。\nたとえば `global` / `read` を持つユーザーは、すべてのデータベース・テーブルを読めます。\n`database` / `table` と書かれている場合、対象はパスで指定したデータベース・テーブルです。\n\n**ロール**は `read` < `write` < `manage` < `admin` の順に強く、上位ロールは下位をすべて含みます。\n\n- `read` — 参照\n- `write` — データの書き込み\n- `manage` — テーブルやデータベースそのものの管理\n- `admin` — ユーザーと権限の管理。制御面の権限であり、`global` スコープにのみ指定できます\n\n`global` / `manage` は全データベースのデータを自由に扱えますが、ユーザーや権限は操作できません。\nユーザー管理を行えるのは `global` / `admin` だけです。\n",
+    "description": "\n## 権限について\n`スコープ` / `ロール` の形式で表します。\n\n- `read` — データの読み込み\n- `write` — データの書き込み\n- `manage` — テーブルやデータベース自体の管理\n- `admin` — ユーザーと権限の管理\n",
     "license": {
       "name": ""
     },
@@ -3722,10 +3722,6 @@
       "description": "Authentication endpoints"
     },
     {
-      "name": "System",
-      "description": "System operations"
-    },
-    {
       "name": "Databases",
       "description": "Database operations"
     },
@@ -3744,6 +3740,10 @@
     {
       "name": "Users",
       "description": "User management operations"
+    },
+    {
+      "name": "System",
+      "description": "System operations"
     }
   ]
 }
