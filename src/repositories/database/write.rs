@@ -3,7 +3,7 @@ use uuid::Uuid;
 use crate::{
     error::AppError,
     models::database::{DatabaseInfoResponse, DatabaseMetadata},
-    repositories::KasaneDbWrite,
+    repositories::{KasaneDbWrite, meta::MetaRead},
 };
 
 impl<'a> KasaneDbWrite<'a> {
@@ -60,18 +60,24 @@ impl<'a> KasaneDbWrite<'a> {
                 name: name.to_string(),
             });
         }
-        let db = self.db.databases;
-        let Some(meta) = db.get(&self.write_txn, name)? else {
+        let Some(meta) = self.db.databases.get(&self.write_txn, name)? else {
             return Err(AppError::DatabaseNotFound {
                 name: name.to_string(),
             });
         };
 
+        // 配下テーブルの列挙と削除は、この 1 つの書き込みトランザクション内で行う。
+        // 列挙だけを別の読み取りトランザクションで済ませると、その隙間に作られた
+        // テーブルが削除対象から漏れ、親を失って到達不能なまま残ってしまう。
+        for table_name in self.table_names(meta.id)? {
+            self.table_remove(name, &table_name)?;
+        }
+
         // ユーザーが持つ権限はデータベース ID で保存されており、削除したデータベースの
         // ID が再利用されることはない。よって残った権限ルールが後から作られた同名の
         // データベースに効くことはなく、ここで掃除する必要はない
         // （逆引きインデックスから消えるので、表示上は解決できないルールとして隠れる）。
-        db.delete(&mut self.write_txn, name)?;
+        self.db.databases.delete(&mut self.write_txn, name)?;
         self.db
             .database_id_index
             .delete(&mut self.write_txn, &meta.id)?;
@@ -174,21 +180,7 @@ impl<'a> KasaneDbWrite<'a> {
             .put(&mut self.write_txn, &copy_db_id, copy_name)?;
 
         // 4. コピー元データベース内の全テーブル名を取得
-        let db_tables = self.db.tables;
-        let mut table_names = Vec::new();
-        let src_db_id_bytes = src_db_meta.id.into_bytes();
-        for iter in db_tables
-            .remap_types::<heed::types::Bytes, heed::types::Bytes>()
-            .prefix_iter(&self.write_txn, src_db_id_bytes.as_slice())?
-        {
-            let (k_bytes, _) = iter?;
-            if k_bytes.len() > 16 {
-                let name = std::str::from_utf8(&k_bytes[16..]).map_err(|e| {
-                    AppError::InternalError(format!("Invalid table name encoding: {}", e))
-                })?;
-                table_names.push(name.to_string());
-            }
-        }
+        let table_names = self.table_names(src_db_meta.id)?;
 
         // 5. 各テーブルをコピー
         for table_name in table_names {

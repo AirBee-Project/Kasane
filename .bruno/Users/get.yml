@@ -45,7 +45,13 @@ examples:
         data: |-
           {
             "username": "alice",
-            "is_global_admin": false
+            "privileges": [
+              {
+                "scope": "database",
+                "db_name": "example_database",
+                "role": "manage"
+              }
+            ]
           }
   - name: 404 Response
     description: User not found

@@ -1,0 +1,112 @@
+info:
+  name: set_global
+  type: http
+  seq: 2
+  tags:
+    - Users
+
+docs: |-
+  サーバー全体に対する権限を設定する（無ければ追加、あれば置き換え）。
+
+  必要な権限: global / admin
+
+  role は read / write / manage / admin。制御面の admin を指定できるのはこのスコープだけ。
+
+http:
+  method: PUT
+  url: "{{baseUrl}}/users/:username/privileges/global"
+  params:
+    - name: username
+      value: ""
+      type: path
+      description: Username
+  body:
+    type: json
+    data: |-
+      {
+        "role": "manage"
+      }
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 204 Response
+    description: Privilege set successfully
+    request:
+      url: "{{baseUrl}}/users/:username/privileges/global"
+      method: PUT
+      params:
+        - name: username
+          value: alice
+          type: path
+          description: Username
+      body:
+        type: json
+        data: |-
+          {
+            "role": "admin"
+          }
+    response:
+      status: 204
+      statusText: No Content
+      body:
+        type: text
+        data: ""
+  - name: 403 Response
+    description: root user privileges cannot be changed
+    request:
+      url: "{{baseUrl}}/users/:username/privileges/global"
+      method: PUT
+      params:
+        - name: username
+          value: root
+          type: path
+          description: Username
+      body:
+        type: json
+        data: |-
+          {
+            "role": "admin"
+          }
+    response:
+      status: 403
+      statusText: Forbidden
+      headers:
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "error": "This operation is not allowed on the root user",
+            "code": "root_protected"
+          }
+  - name: 404 Response
+    description: User not found
+    request:
+      url: "{{baseUrl}}/users/:username/privileges/global"
+      method: PUT
+      params:
+        - name: username
+          value: unknown
+          type: path
+          description: Username
+      body:
+        type: json
+        data: |-
+          {
+            "role": "manage"
+          }
+    response:
+      status: 404
+      statusText: Not Found
+      body:
+        type: text
+        data: ""

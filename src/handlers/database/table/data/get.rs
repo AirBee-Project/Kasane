@@ -12,7 +12,9 @@ use axum::{
 
 /// データの一括取得
 ///
-/// 空間IDと値をJSON配列として一括で取得します。この操作はデータベースのRead以上の権限が必要です。
+/// **必要な権限**: `table` / `read`
+///
+/// 空間IDと値をJSON配列として一括で取得します。
 #[utoipa::path(
     post,
     path = "/databases/{db_name}/tables/{table_name}/data/search",

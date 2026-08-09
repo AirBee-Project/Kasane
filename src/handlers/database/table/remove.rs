@@ -10,7 +10,9 @@ use axum::Extension;
 
 /// テーブルの削除
 ///
-/// 指定したテーブルを削除します。この操作はデータベースのManage以上の権限が必要です。
+/// **必要な権限**: `table` / `manage`
+///
+/// 指定したテーブルを削除します。
 #[utoipa::path(
     delete,
     path = "/databases/{db_name}/tables/{table_name}",

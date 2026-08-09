@@ -17,8 +17,9 @@ use crate::services::query as query_service;
 
 /// クエリの実行
 ///
+/// **必要な権限**: 参照する全テーブルに `table` / `read`
+///
 /// 複数のテーブルを対象にクエリ式を実行し、指定した空間IDの結果を取得します。
-/// クエリ式が参照する**すべてのテーブル**に対して Read 以上の権限が必要です。
 #[utoipa::path(
     post,
     path = "/query",

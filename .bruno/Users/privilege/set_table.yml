@@ -1,0 +1,119 @@
+info:
+  name: set_table
+  type: http
+  seq: 6
+  tags:
+    - Users
+
+docs: |-
+  テーブル 1 つに対する権限を設定する（無ければ追加、あれば置き換え）。
+
+  必要な権限: global / admin
+
+  role は read / write / manage。admin はこのスコープでは指定できない（422）。
+
+  テーブルスコープの manage は「既にあるテーブルの管理」だけを許す。
+  新しいテーブルの作成には database / manage が必要。
+
+  権限はテーブル ID に紐づくため、テーブルを改名しても追従する。
+
+http:
+  method: PUT
+  url: "{{baseUrl}}/users/:username/privileges/databases/:db_name/tables/:table_name"
+  params:
+    - name: username
+      value: ""
+      type: path
+      description: Username
+    - name: db_name
+      value: ""
+      type: path
+      description: Database name
+    - name: table_name
+      value: ""
+      type: path
+      description: Table name
+  body:
+    type: json
+    data: |-
+      {
+        "role": "read"
+      }
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 204 Response
+    description: Privilege set successfully
+    request:
+      url: "{{baseUrl}}/users/:username/privileges/databases/:db_name/tables/:table_name"
+      method: PUT
+      params:
+        - name: username
+          value: alice
+          type: path
+          description: Username
+        - name: db_name
+          value: example_database
+          type: path
+          description: Database name
+        - name: table_name
+          value: example_table
+          type: path
+          description: Table name
+      body:
+        type: json
+        data: |-
+          {
+            "role": "write"
+          }
+    response:
+      status: 204
+      statusText: No Content
+      body:
+        type: text
+        data: ""
+  - name: 404 Response
+    description: User, database or table not found
+    request:
+      url: "{{baseUrl}}/users/:username/privileges/databases/:db_name/tables/:table_name"
+      method: PUT
+      params:
+        - name: username
+          value: alice
+          type: path
+          description: Username
+        - name: db_name
+          value: example_database
+          type: path
+          description: Database name
+        - name: table_name
+          value: unknown_table
+          type: path
+          description: Table name
+      body:
+        type: json
+        data: |-
+          {
+            "role": "read"
+          }
+    response:
+      status: 404
+      statusText: Not Found
+      headers:
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "error": "Table 'unknown_table' not found",
+            "code": "table_not_found"
+          }

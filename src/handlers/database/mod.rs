@@ -17,7 +17,9 @@ use axum::{
 
 /// データベースの作成
 ///
-/// 新しいデータベースを作成します。この操作は `global` スコープの `manage` 以上のロールが必要です。
+/// **必要な権限**: `global` / `manage`
+///
+/// 新しいデータベースを作成します。
 #[utoipa::path(
     post,
     path = "/databases",
@@ -25,7 +27,7 @@ use axum::{
     responses(
         (status = 201, body = DatabaseInfoResponse)
     ),
-    security(("bearer_auth" = ["global_admin"])),
+    security(("bearer_auth" = [])),
     tag = "Databases"
 )]
 #[tracing::instrument(skip_all)]
@@ -48,12 +50,14 @@ pub async fn database_create(
 
 /// データベース情報の取得
 ///
-/// 指定したデータベースの詳細情報を取得します。対象データベースのRead以上の権限が必要です。
+/// **必要な権限**: `database` / `read`（配下テーブルの権限でも可）
+///
+/// 指定したデータベースの詳細情報を取得します。
 #[utoipa::path(
     get,
-    path = "/databases/{name}",
+    path = "/databases/{db_name}",
     params(
-        ("name" = String, Path, description = "データベース名", example = "example_database")
+        ("db_name" = String, Path, description = "データベース名", example = "example_database")
     ),
     responses(
         (status = 200, body = DatabaseInfoResponse)
@@ -74,10 +78,10 @@ pub async fn database_info(
 
 /// データベース一覧の取得
 ///
-/// ユーザー権限に応じて、アクセス可能なデータベースの一覧を取得します。
+/// **必要な権限**: なし（認証のみ・結果は権限で絞られる）
 ///
-/// - **グローバル管理者**: システム内の全データベースが見えます。
-/// - **一般ユーザー**: 自分が権限を持っているデータベースだけが見えます。
+/// 呼び出したユーザーが Read 以上で到達できるデータベースだけを返します。
+/// テーブル単位の権限しか持たない場合も、そのテーブルを含むデータベースは一覧に現れます。
 #[utoipa::path(
     get,
     path = "/databases",
@@ -98,17 +102,19 @@ pub async fn database_list(
 
 /// データベースの削除
 ///
-/// 指定したデータベースを削除します。この操作はGlobal Admin権限が必要です。
+/// **必要な権限**: `global` / `manage`
+///
+/// 指定したデータベースを削除します。
 #[utoipa::path(
     delete,
-    path = "/databases/{name}",
+    path = "/databases/{db_name}",
     params(
-        ("name" = String, Path, description = "データベース名", example = "example_database")
+        ("db_name" = String, Path, description = "データベース名", example = "example_database")
     ),
     responses(
         (status = 204)
     ),
-    security(("bearer_auth" = ["global_admin"])),
+    security(("bearer_auth" = [])),
     tag = "Databases"
 )]
 #[tracing::instrument(skip_all)]
@@ -124,12 +130,15 @@ pub async fn remove_database(
 
 /// データベースの更新
 ///
-/// 指定したデータベースの名前や説明を変更します。対象データベースのManage以上の権限が必要です。
+/// **必要な権限**: `database` / `manage`
+///
+/// 指定したデータベースの名前や説明を変更します。
+/// 権限はデータベース ID に紐づくため、改名しても権限は追従します。
 #[utoipa::path(
     patch,
-    path = "/databases/{name}",
+    path = "/databases/{db_name}",
     params(
-        ("name" = String, Path, description = "データベース名", example = "example_database")
+        ("db_name" = String, Path, description = "データベース名", example = "example_database")
     ),
     request_body = UpdateDatabaseRequest,
     responses(
@@ -157,12 +166,14 @@ pub async fn database_update(
 
 /// データベースのコピー
 ///
-/// 指定したデータベースをコピーします。この操作はGlobal Admin権限が必要です。
+/// **必要な権限**: `global` / `manage`
+///
+/// 指定したデータベースをコピーします。
 #[utoipa::path(
     post,
-    path = "/databases/{name}/copy",
+    path = "/databases/{db_name}/copy",
     params(
-        ("name" = String, Path, description = "コピー元データベース名", example = "source_database")
+        ("db_name" = String, Path, description = "コピー元データベース名", example = "source_database")
     ),
     request_body = CopyDatabaseRequest,
     responses(
@@ -172,7 +183,7 @@ pub async fn database_update(
         (status = 404, description = "コピー元データベースが存在しない"),
         (status = 409, description = "コピー先データベース、またはコピー元と同名のデータベースがすでに存在する")
     ),
-    security(("bearer_auth" = ["global_admin"])),
+    security(("bearer_auth" = [])),
     tag = "Databases"
 )]
 #[tracing::instrument(skip_all)]

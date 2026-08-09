@@ -11,10 +11,10 @@ use axum::{
 
 /// データの上書き・追加
 ///
+/// **必要な権限**: `table` / `write`
+///
 /// 指定した空間IDに対して、指定した値を書き込みます。
 /// 既に値が存在する空間IDに対しては、その値を完全に上書きします。
-///
-/// この操作はデータベースのWrite以上の権限が必要です。
 #[utoipa::path(
     put,
     path = "/databases/{db_name}/tables/{table_name}/data",

@@ -1222,25 +1222,34 @@ async fn test_global_manage_is_not_server_admin() {
 }
 
 #[tokio::test]
-/// `admin` ロールは global スコープ以外では付与できないことを検証する。
+/// `admin` ロールは global スコープ以外では受け付けられないことを検証する。
+///
+/// データベース・テーブルスコープのリクエスト型は `admin` を持たない `DataRole` なので、
+/// 実行時の検証ではなくデシリアライズの時点で弾かれる（他のスキーマ違反と同じ 422）。
 async fn test_admin_role_is_rejected_outside_global_scope() {
     let test_app = PermissionTestApp::new();
     let root_token = test_app.root_token();
 
     create_db(&test_app.app, &root_token, "scoped_db").await;
+    create_table(&test_app.app, &root_token, "scoped_db", "scoped_table").await;
     create_user_and_token(&test_app.app, &root_token, "climber", false).await;
 
-    let res = put_privilege(
-        &test_app.app,
-        &root_token,
-        "climber",
-        Some("scoped_db"),
-        None,
-        "admin",
-    )
-    .await;
-    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
-    assert_eq!(json_body(res).await["code"], "invalid_privilege");
+    for (db, table) in [
+        (Some("scoped_db"), None),
+        (Some("scoped_db"), Some("scoped_table")),
+    ] {
+        let res = put_privilege(&test_app.app, &root_token, "climber", db, table, "admin").await;
+        assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    // global スコープでだけ通る。
+    let res = put_privilege(&test_app.app, &root_token, "climber", None, None, "admin").await;
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    // 何も保存されていないこと（データスコープ側）を確認する。
+    let privileges = fetch_privileges(&test_app.app, &root_token, "climber").await;
+    assert_eq!(privileges.len(), 1);
+    assert_eq!(privileges[0]["scope"], "global");
 }
 
 #[tokio::test]
@@ -1669,4 +1678,183 @@ async fn test_stale_privileges_do_not_accumulate_over_cycles() {
             .await
             .is_empty()
     );
+}
+
+#[tokio::test]
+/// `global` スコープの `read` が「全データベース・全テーブルを読めるが一切書けない」
+/// 権限として機能することを検証する。
+async fn test_global_read_can_read_everything_but_write_nothing() {
+    let test_app = PermissionTestApp::new();
+    let root_token = test_app.root_token();
+
+    create_db(&test_app.app, &root_token, "alpha_db").await;
+    create_db(&test_app.app, &root_token, "beta_db").await;
+    create_table(&test_app.app, &root_token, "alpha_db", "t_one").await;
+    create_table(&test_app.app, &root_token, "beta_db", "t_two").await;
+
+    let token = create_user_and_token(&test_app.app, &root_token, "reader", false).await;
+    let res = put_privilege(&test_app.app, &root_token, "reader", None, None, "read").await;
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    // データベースは全件見える
+    let res = get(&test_app.app, &token, "/databases").await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let names: Vec<String> = json_body(res)
+        .await
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| d["name"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(names, vec!["alpha_db", "beta_db"]);
+
+    // テーブルも全件見える（後から作られたデータベースにも及ぶ）
+    create_db(&test_app.app, &root_token, "gamma_db").await;
+    create_table(&test_app.app, &root_token, "gamma_db", "t_three").await;
+    let res = get(&test_app.app, &token, "/databases/gamma_db/tables").await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(json_body(res).await.as_array().unwrap().len(), 1);
+
+    // テーブル詳細もクエリも通る
+    let res = get(&test_app.app, &token, "/databases/alpha_db/tables/t_one").await;
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/query")
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Content-Type", "application/json")
+        .body(Body::from(
+            serde_json::json!({
+                "value_type": "Int",
+                "spatial_ids": [{ "type": "rangeId", "z": 5, "f": [0, 0], "x": [0, 1], "y": [0, 1] }],
+                "query": { "type": "source", "database": "beta_db", "table": "t_two" }
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 書き込みはすべて拒否される
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/databases/alpha_db/tables/t_one/data")
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Content-Type", "application/json")
+        .body(Body::from(
+            serde_json::json!({
+                "spatial_ids": [{ "type": "singleId", "z": 5, "f": 0, "x": 0, "y": 0 }],
+                "value": 1
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+    // テーブル作成・削除も不可
+    let res = post_table(&test_app.app, &token, "alpha_db", "nope").await;
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+    let req = Request::builder()
+        .method("DELETE")
+        .uri("/databases/alpha_db/tables/t_one")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+    // データベース作成も、ユーザー管理も不可
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases")
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Content-Type", "application/json")
+        .body(Body::from(r#"{"name": "nope_db"}"#))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+    let res = get(&test_app.app, &token, "/users").await;
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+}
+
+/// `table_id_index` に残っているテーブルの総数。到達不能になったテーブルの検出に使う。
+fn indexed_table_count(app_state: &AppState) -> usize {
+    app_state
+        .db
+        .read(|repo| Ok(repo.db.table_id_index.len(&repo.read_txn)? as usize))
+        .unwrap()
+}
+
+#[tokio::test]
+/// データベースを削除すると、配下のテーブルが 1 つ残らず消えることを検証する。
+///
+/// 列挙と削除が別トランザクションに分かれていると、その隙間に作られたテーブルが
+/// 親を失って到達不能なまま残る。ここでは削除の完全性そのものを固定する。
+async fn test_database_remove_leaves_no_orphan_tables() {
+    let test_app = PermissionTestApp::new();
+    let root_token = test_app.root_token();
+
+    create_db(&test_app.app, &root_token, "doomed_db").await;
+    create_db(&test_app.app, &root_token, "kept_db").await;
+    for i in 0..3 {
+        create_table(&test_app.app, &root_token, "doomed_db", &format!("t_{}", i)).await;
+    }
+    create_table(&test_app.app, &root_token, "kept_db", "survivor").await;
+    assert_eq!(indexed_table_count(&test_app.app_state), 4);
+
+    let req = Request::builder()
+        .method("DELETE")
+        .uri("/databases/doomed_db")
+        .header("Authorization", format!("Bearer {}", root_token))
+        .body(Body::empty())
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    // 残るのは kept_db の 1 件だけ。doomed_db 配下は索引ごと消えている。
+    assert_eq!(indexed_table_count(&test_app.app_state), 1);
+
+    // 同名で作り直しても、以前のテーブルは見えない。
+    create_db(&test_app.app, &root_token, "doomed_db").await;
+    let res = get(&test_app.app, &root_token, "/databases/doomed_db/tables").await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert!(json_body(res).await.as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+/// 上限を超える権限ルールが、名前解決を走らせる前に件数だけで拒否されることを検証する。
+async fn test_privilege_rules_are_capped_before_resolution() {
+    let test_app = PermissionTestApp::new();
+    let root_token = test_app.root_token();
+
+    // 実在しないデータベースを指すルールを上限超えの件数だけ並べる。
+    // 名前解決が先に走るなら database_not_found が返るはずだが、
+    // 件数チェックが先なので invalid_privilege になる。
+    let privileges: Vec<serde_json::Value> = (0..1001)
+        .map(|i| {
+            serde_json::json!({ "scope": "database", "db_name": format!("ghost_{}", i), "role": "read" })
+        })
+        .collect();
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/users")
+        .header("Authorization", format!("Bearer {}", root_token))
+        .header("Content-Type", "application/json")
+        .body(Body::from(
+            serde_json::json!({
+                "username": "hoarder",
+                "password": "password",
+                "privileges": privileges
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(json_body(res).await["code"], "invalid_privilege");
 }

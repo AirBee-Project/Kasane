@@ -9,11 +9,14 @@
 //! ストレージ実装を差し替える（TiKV 等）場合の境界もここになる。全走査に依存する
 //! 逆引きは持たず、`database_id_index` / `table_id_index` への点参照だけで済ませている。
 
+use heed::BytesDecode;
+
+use crate::db_init::DbIdAndName;
 use crate::error::AppError;
 use crate::models::id::{DatabaseId, TableId};
 use crate::models::users::{
     MAX_PRIVILEGE_RULES, PrivilegeRule, PrivilegeTarget, StoredPrivilege, StoredTarget,
-    UserMetadata, UserRole,
+    UserMetadata,
 };
 use crate::repositories::{KasaneDbRead, KasaneDbWrite};
 
@@ -27,6 +30,8 @@ pub trait MetaRead {
     /// `TableId` からテーブル名を引く（`table_id_index` への点参照）。
     fn table_name(&self, table_id: TableId) -> Result<Option<String>, AppError>;
     fn user_meta(&self, username: &str) -> Result<Option<UserMetadata>, AppError>;
+    /// データベース配下のテーブル名を列挙する。
+    fn table_names(&self, db_id: DatabaseId) -> Result<Vec<String>, AppError>;
 
     // --- 上に載る共通ロジック ---
 
@@ -45,22 +50,23 @@ pub trait MetaRead {
     /// API 表現（名前ベース）の権限ルール列を保存形式（ID ベース）へ解決する。
     ///
     /// - 存在しないデータベース／テーブルを指すルールは 404 で拒否する
-    /// - `admin` ロールは `global` スコープ以外では拒否する
     /// - 同じ対象を指すルールが複数あればロールが一致する場合のみ 1 件に畳み、
     ///   食い違う場合は 400 で拒否する（実効ロールが暗黙に max になるのを避ける）
     fn resolve_privileges(
         &self,
         rules: &[PrivilegeRule],
     ) -> Result<Vec<StoredPrivilege>, AppError> {
+        // 名前解決の前に件数で弾く。解決はルールごとにカタログを引くので、
+        // どうせ上限で拒否する入力に対して先に走らせない。
+        if rules.len() > MAX_PRIVILEGE_RULES {
+            return Err(AppError::InvalidPrivilege {
+                reason: format!("a user cannot hold more than {MAX_PRIVILEGE_RULES} privileges"),
+            });
+        }
+
         let mut resolved: Vec<StoredPrivilege> = Vec::with_capacity(rules.len());
 
         for rule in rules {
-            if rule.role() == UserRole::Admin && !matches!(rule, PrivilegeRule::Global { .. }) {
-                return Err(AppError::InvalidPrivilege {
-                    reason: "role 'admin' can only be granted at the 'global' scope".to_string(),
-                });
-            }
-
             let stored = match rule {
                 PrivilegeRule::Global { role } => StoredPrivilege::Global { role: *role },
                 PrivilegeRule::Database { db_name, role } => StoredPrivilege::Database {
@@ -96,16 +102,10 @@ pub trait MetaRead {
             resolved.push(stored);
         }
 
-        if resolved.len() > MAX_PRIVILEGE_RULES {
-            return Err(AppError::InvalidPrivilege {
-                reason: format!("a user cannot hold more than {MAX_PRIVILEGE_RULES} privileges"),
-            });
-        }
-
         Ok(resolved)
     }
 
-    /// 1 件のルールを解決する。`admin` を `global` 以外へ与えようとした場合は 400。
+    /// 1 件のルールを解決する。
     fn resolve_privilege(&self, rule: &PrivilegeRule) -> Result<StoredPrivilege, AppError> {
         Ok(self
             .resolve_privileges(std::slice::from_ref(rule))?
@@ -248,6 +248,24 @@ macro_rules! impl_meta_read {
                     })?)),
                     None => Ok(None),
                 }
+            }
+
+            fn table_names(&self, db_id: DatabaseId) -> Result<Vec<String>, AppError> {
+                let prefix = db_id.into_bytes();
+                let mut names = Vec::new();
+                for item in self
+                    .db
+                    .tables
+                    .remap_types::<heed::types::Bytes, heed::types::Bytes>()
+                    .prefix_iter(&self.$txn, prefix.as_slice())?
+                {
+                    let (k_bytes, _) = item?;
+                    let (_, name) = DbIdAndName::bytes_decode(k_bytes).map_err(|e| {
+                        AppError::InternalError(format!("Failed to decode table key: {e}"))
+                    })?;
+                    names.push(name.to_string());
+                }
+                Ok(names)
             }
         }
     };

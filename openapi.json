@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "kasane",
-    "description": "",
+    "description": "\n## 権限について\n\n各エンドポイントの説明にある **必要な権限** は、その操作に必要な最小の権限です。\n`スコープ` / `ロール` の形式で表します。\n\n**スコープ**は `global` ⊃ `database` ⊃ `table` の階層で、上位スコープの権限は下位をすべて含みます。\nたとえば `global` / `read` を持つユーザーは、すべてのデータベース・テーブルを読めます。\n`database` / `table` と書かれている場合、対象はパスで指定したデータベース・テーブルです。\n\n**ロール**は `read` < `write` < `manage` < `admin` の順に強く、上位ロールは下位をすべて含みます。\n\n- `read` — 参照\n- `write` — データの書き込み\n- `manage` — テーブルやデータベースそのものの管理\n- `admin` — ユーザーと権限の管理。制御面の権限であり、`global` スコープにのみ指定できます\n\n`global` / `manage` は全データベースのデータを自由に扱えますが、ユーザーや権限は操作できません。\nユーザー管理を行えるのは `global` / `admin` だけです。\n",
     "license": {
       "name": ""
     },
@@ -15,7 +15,7 @@
           "Auth"
         ],
         "summary": "ユーザーログインとJWTの発行",
-        "description": "ユーザー名とパスワードを検証し、Bearerトークンを発行します。",
+        "description": "**必要な権限**: なし（認証不要）\n\nユーザー名とパスワードを検証し、Bearerトークンを発行します。",
         "operationId": "login",
         "requestBody": {
           "content": {
@@ -50,7 +50,7 @@
           "Databases"
         ],
         "summary": "データベース一覧の取得",
-        "description": "ユーザー権限に応じて、アクセス可能なデータベースの一覧を取得します。\n\n- **グローバル管理者**: システム内の全データベースが見えます。\n- **一般ユーザー**: 自分が権限を持っているデータベースだけが見えます。",
+        "description": "**必要な権限**: なし（認証のみ・結果は権限で絞られる）\n\n呼び出したユーザーが Read 以上で到達できるデータベースだけを返します。\nテーブル単位の権限しか持たない場合も、そのテーブルを含むデータベースは一覧に現れます。",
         "operationId": "database_list",
         "responses": {
           "200": {
@@ -78,7 +78,7 @@
           "Databases"
         ],
         "summary": "データベースの作成",
-        "description": "新しいデータベースを作成します。この操作は `global` スコープの `manage` 以上のロールが必要です。",
+        "description": "**必要な権限**: `global` / `manage`\n\n新しいデータベースを作成します。",
         "operationId": "database_create",
         "requestBody": {
           "content": {
@@ -104,9 +104,189 @@
         },
         "security": [
           {
-            "bearer_auth": [
-              "global_admin"
-            ]
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/databases/{db_name}": {
+      "get": {
+        "tags": [
+          "Databases"
+        ],
+        "summary": "データベース情報の取得",
+        "description": "**必要な権限**: `database` / `read`（配下テーブルの権限でも可）\n\n指定したデータベースの詳細情報を取得します。",
+        "operationId": "database_info",
+        "parameters": [
+          {
+            "name": "db_name",
+            "in": "path",
+            "description": "データベース名",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "example_database"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseInfoResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Databases"
+        ],
+        "summary": "データベースの削除",
+        "description": "**必要な権限**: `global` / `manage`\n\n指定したデータベースを削除します。",
+        "operationId": "remove_database",
+        "parameters": [
+          {
+            "name": "db_name",
+            "in": "path",
+            "description": "データベース名",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "example_database"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "Databases"
+        ],
+        "summary": "データベースの更新",
+        "description": "**必要な権限**: `database` / `manage`\n\n指定したデータベースの名前や説明を変更します。\n権限はデータベース ID に紐づくため、改名しても権限は追従します。",
+        "operationId": "database_update",
+        "parameters": [
+          {
+            "name": "db_name",
+            "in": "path",
+            "description": "データベース名",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "example_database"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDatabaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "400": {
+            "description": "リクエストが不正（パラメータエラー、または新しいデータベース名が不正）"
+          },
+          "403": {
+            "description": "権限不足（Manage権限がない場合）"
+          },
+          "404": {
+            "description": "変更元のデータベースが存在しない"
+          },
+          "409": {
+            "description": "変更後のデータベース名がすでに存在する"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/databases/{db_name}/copy": {
+      "post": {
+        "tags": [
+          "Databases"
+        ],
+        "summary": "データベースのコピー",
+        "description": "**必要な権限**: `global` / `manage`\n\n指定したデータベースをコピーします。",
+        "operationId": "database_copy",
+        "parameters": [
+          {
+            "name": "db_name",
+            "in": "path",
+            "description": "コピー元データベース名",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "source_database"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyDatabaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseInfoResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエストが不正（パラメータエラー、または不正なデータベース名）"
+          },
+          "403": {
+            "description": "権限不足（Global Admin権限がない場合）"
+          },
+          "404": {
+            "description": "コピー元データベースが存在しない"
+          },
+          "409": {
+            "description": "コピー先データベース、またはコピー元と同名のデータベースがすでに存在する"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
           }
         ]
       }
@@ -117,7 +297,7 @@
           "Tables"
         ],
         "summary": "テーブル一覧の取得",
-        "description": "指定したデータベース内に存在するテーブルのうち、呼び出したユーザーが Read 以上の権限を\n持つものだけを返します。テーブル単位の権限しか持たないユーザーも、そのテーブルだけが\n見える形で一覧を取得できます。",
+        "description": "**必要な権限**: `database` / `read`（配下テーブルの権限でも可・結果は権限で絞られる）\n\n指定したデータベース内に存在するテーブルのうち、呼び出したユーザーが Read 以上の権限を\n持つものだけを返します。",
         "operationId": "table_list",
         "parameters": [
           {
@@ -154,7 +334,7 @@
           "Tables"
         ],
         "summary": "テーブルの作成",
-        "description": "指定したデータベース内に新しいテーブルを作成します。この操作はデータベースのManage以上の権限が必要です。",
+        "description": "**必要な権限**: `database` / `manage`\n\n指定したデータベース内に新しいテーブルを作成します。\n新規作成はデータベース全体への変更なので、テーブル単位の権限では実行できません。",
         "operationId": "table_create",
         "parameters": [
           {
@@ -202,7 +382,7 @@
           "Tables"
         ],
         "summary": "テーブル情報の取得",
-        "description": "指定したテーブルの詳細情報を取得します。この操作はデータベースのRead以上の権限が必要です。",
+        "description": "**必要な権限**: `table` / `read`\n\n指定したテーブルの詳細情報を取得します。",
         "operationId": "table_info",
         "parameters": [
           {
@@ -252,7 +432,7 @@
           "Tables"
         ],
         "summary": "テーブルの削除",
-        "description": "指定したテーブルを削除します。この操作はデータベースのManage以上の権限が必要です。",
+        "description": "**必要な権限**: `table` / `manage`\n\n指定したテーブルを削除します。",
         "operationId": "remove_table",
         "parameters": [
           {
@@ -295,7 +475,7 @@
           "Tables"
         ],
         "summary": "テーブルの更新",
-        "description": "テーブルの名前変更や値の制約を更新します。この操作はデータベースの Manage 権限が必要です。\n\n制約を変更する際、既存のデータが新しい制約に適合しているかを検証する挙動を `validate_existing_data` フラグで制御できます。\n- `true`（デフォルト）の場合、既存データが新しい制約に違反していればエラーとして更新を却下します。\n- `false` の場合、既存データのチェックをスキップして高速に変更を適用します（不整合なデータが残る可能性があります）。",
+        "description": "**必要な権限**: `table` / `manage`\n\nテーブルの名前変更や値の制約を更新します。\n権限はテーブル ID に紐づくため、改名しても権限は追従します。\n\n制約を変更する際、既存のデータが新しい制約に適合しているかを検証する挙動を `validate_existing_data` フラグで制御できます。\n- `true`（デフォルト）の場合、既存データが新しい制約に違反していればエラーとして更新を却下します。\n- `false` の場合、既存データのチェックをスキップして高速に変更を適用します（不整合なデータが残る可能性があります）。",
         "operationId": "table_update_handler",
         "parameters": [
           {
@@ -367,7 +547,7 @@
           "Tables"
         ],
         "summary": "テーブルのコピー",
-        "description": "指定したテーブルを別のデータベース、または同じデータベース内に異なる名前でコピーします。\nコピー元データベースに対するRead権限と、コピー先データベースに対するManage権限が必要です。",
+        "description": "**必要な権限**: コピー元 `table` / `read` ＋ コピー先 `database` / `manage`\n\n指定したテーブルを別のデータベース、または同じデータベース内に異なる名前でコピーします。\nコピー先には新しいテーブルが作られるため、テーブル単位の権限では実行できません。",
         "operationId": "table_copy",
         "parameters": [
           {
@@ -438,7 +618,7 @@
           "Data"
         ],
         "summary": "データの上書き・追加",
-        "description": "指定した空間IDに対して、指定した値を書き込みます。\n既に値が存在する空間IDに対しては、その値を完全に上書きします。\n\nこの操作はデータベースのWrite以上の権限が必要です。",
+        "description": "**必要な権限**: `table` / `write`\n\n指定した空間IDに対して、指定した値を書き込みます。\n既に値が存在する空間IDに対しては、その値を完全に上書きします。",
         "operationId": "data_insert",
         "parameters": [
           {
@@ -491,7 +671,7 @@
           "Data"
         ],
         "summary": "データの削除",
-        "description": "指定した空間IDをテーブルからを削除します。この操作はデータベースのWrite以上の権限が必要です。",
+        "description": "**必要な権限**: `table` / `write`\n\n指定した空間IDをテーブルから削除します。",
         "operationId": "data_remove",
         "parameters": [
           {
@@ -544,7 +724,7 @@
           "Data"
         ],
         "summary": "データの部分追加",
-        "description": "指定した空間IDに対して、指定した値を書き込みます。\n\n- **指定した空間IDがすでに存在する場合**: 既存のデータは維持されます。\n- **指定した空間IDが存在しない場合**: データが書き込まれます。\n\nこの操作はデータベースのWrite以上の権限が必要です。",
+        "description": "**必要な権限**: `table` / `write`\n\n指定した空間IDに対して、指定した値を書き込みます。\n\n- **指定した空間IDがすでに存在する場合**: 既存のデータは維持されます。\n- **指定した空間IDが存在しない場合**: データが書き込まれます。",
         "operationId": "data_upsert",
         "parameters": [
           {
@@ -599,7 +779,7 @@
           "Data"
         ],
         "summary": "データの一括取得",
-        "description": "空間IDと値をJSON配列として一括で取得します。この操作はデータベースのRead以上の権限が必要です。",
+        "description": "**必要な権限**: `table` / `read`\n\n空間IDと値をJSON配列として一括で取得します。",
         "operationId": "data_get",
         "parameters": [
           {
@@ -674,199 +854,13 @@
         ]
       }
     },
-    "/databases/{name}": {
-      "get": {
-        "tags": [
-          "Databases"
-        ],
-        "summary": "データベース情報の取得",
-        "description": "指定したデータベースの詳細情報を取得します。対象データベースのRead以上の権限が必要です。",
-        "operationId": "database_info",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "description": "データベース名",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "example_database"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DatabaseInfoResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer_auth": []
-          }
-        ]
-      },
-      "delete": {
-        "tags": [
-          "Databases"
-        ],
-        "summary": "データベースの削除",
-        "description": "指定したデータベースを削除します。この操作はGlobal Admin権限が必要です。",
-        "operationId": "remove_database",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "description": "データベース名",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "example_database"
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer_auth": [
-              "global_admin"
-            ]
-          }
-        ]
-      },
-      "patch": {
-        "tags": [
-          "Databases"
-        ],
-        "summary": "データベースの更新",
-        "description": "指定したデータベースの名前や説明を変更します。対象データベースのManage以上の権限が必要です。",
-        "operationId": "database_update",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "description": "データベース名",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "example_database"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateDatabaseRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "成功"
-          },
-          "400": {
-            "description": "リクエストが不正（パラメータエラー、または新しいデータベース名が不正）"
-          },
-          "403": {
-            "description": "権限不足（Manage権限がない場合）"
-          },
-          "404": {
-            "description": "変更元のデータベースが存在しない"
-          },
-          "409": {
-            "description": "変更後のデータベース名がすでに存在する"
-          }
-        },
-        "security": [
-          {
-            "bearer_auth": []
-          }
-        ]
-      }
-    },
-    "/databases/{name}/copy": {
-      "post": {
-        "tags": [
-          "Databases"
-        ],
-        "summary": "データベースのコピー",
-        "description": "指定したデータベースをコピーします。この操作はGlobal Admin権限が必要です。",
-        "operationId": "database_copy",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "description": "コピー元データベース名",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "source_database"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CopyDatabaseRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DatabaseInfoResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "リクエストが不正（パラメータエラー、または不正なデータベース名）"
-          },
-          "403": {
-            "description": "権限不足（Global Admin権限がない場合）"
-          },
-          "404": {
-            "description": "コピー元データベースが存在しない"
-          },
-          "409": {
-            "description": "コピー先データベース、またはコピー元と同名のデータベースがすでに存在する"
-          }
-        },
-        "security": [
-          {
-            "bearer_auth": [
-              "global_admin"
-            ]
-          }
-        ]
-      }
-    },
     "/query": {
       "post": {
         "tags": [
           "Query"
         ],
         "summary": "クエリの実行",
-        "description": "複数のテーブルを対象にクエリ式を実行し、指定した空間IDの結果を取得します。\nクエリ式が参照する**すべてのテーブル**に対して Read 以上の権限が必要です。",
+        "description": "**必要な権限**: 参照する全テーブルに `table` / `read`\n\n複数のテーブルを対象にクエリ式を実行し、指定した空間IDの結果を取得します。",
         "operationId": "execute_query",
         "parameters": [
           {
@@ -933,7 +927,7 @@
           "System"
         ],
         "summary": "サーバーのステータスとバージョン情報を取得する。",
-        "description": "ログイン済みのユーザーであれば誰でもアクセス可能です。",
+        "description": "**必要な権限**: なし（認証のみ）",
         "operationId": "get_system_info",
         "responses": {
           "200": {
@@ -960,7 +954,7 @@
           "Users"
         ],
         "summary": "ユーザー一覧の取得",
-        "description": "ユーザーの一覧を権限つきで取得します。この操作は `global` スコープの `admin` ロールが必要です。",
+        "description": "**必要な権限**: `global` / `admin`\n\nユーザーの一覧を権限つきで取得します。",
         "operationId": "list_users",
         "responses": {
           "200": {
@@ -979,9 +973,7 @@
         },
         "security": [
           {
-            "bearer_auth": [
-              "global_admin"
-            ]
+            "bearer_auth": []
           }
         ]
       },
@@ -990,7 +982,7 @@
           "Users"
         ],
         "summary": "新規ユーザー作成",
-        "description": "新しいユーザーを作成します。`privileges` を指定すると作成と同時に権限を付与できます。\nこの操作は `global` スコープの `admin` ロールが必要です。",
+        "description": "**必要な権限**: `global` / `admin`\n\n新しいユーザーを作成します。`privileges` を指定すると作成と同時に権限を付与できます。",
         "operationId": "create_user",
         "requestBody": {
           "content": {
@@ -1018,9 +1010,7 @@
         },
         "security": [
           {
-            "bearer_auth": [
-              "global_admin"
-            ]
+            "bearer_auth": []
           }
         ]
       }
@@ -1031,7 +1021,7 @@
           "Users"
         ],
         "summary": "ユーザー情報の取得",
-        "description": "指定したユーザーの情報を取得します。本人、または `global` スコープの `admin` ロールを持つ\nユーザーのみ実行可能です。",
+        "description": "**必要な権限**: 本人 または `global` / `admin`\n\n指定したユーザーの情報を取得します。",
         "operationId": "get_user",
         "parameters": [
           {
@@ -1071,7 +1061,7 @@
           "Users"
         ],
         "summary": "ユーザーの削除",
-        "description": "指定したユーザーを削除します。この操作は `global` スコープの `admin` ロールが必要です。",
+        "description": "**必要な権限**: `global` / `admin`\n\n指定したユーザーを削除します。",
         "operationId": "delete_user",
         "parameters": [
           {
@@ -1098,9 +1088,7 @@
         },
         "security": [
           {
-            "bearer_auth": [
-              "global_admin"
-            ]
+            "bearer_auth": []
           }
         ]
       }
@@ -1111,7 +1099,7 @@
           "Users"
         ],
         "summary": "パスワードの変更",
-        "description": "指定したユーザーのパスワードを変更します。本人、または `global` スコープの `admin` ロールを\n持つユーザーのみ実行可能です。変更すると発行済みトークンはすべて失効します。",
+        "description": "**必要な権限**: 本人 または `global` / `admin`\n\n指定したユーザーのパスワードを変更します。変更すると発行済みトークンはすべて失効します。",
         "operationId": "update_password",
         "parameters": [
           {
@@ -1156,7 +1144,7 @@
           "Users"
         ],
         "summary": "権限一覧の取得",
-        "description": "指定したユーザーが持つ権限ルールの一覧を取得します。\n\n既に削除されたデータベース・テーブルを指すルールは名前へ解決できないため一覧に現れません\n（そうしたルールは認可判定でも一致しないため、表示と実効権限が食い違うことはありません）。\n\n本人、または `global` スコープの `admin` ロールを持つユーザーのみ実行可能です。",
+        "description": "**必要な権限**: 本人 または `global` / `admin`\n\n指定したユーザーが持つ権限ルールの一覧を取得します。\n\n既に削除されたデータベース・テーブルを指すルールは名前へ解決できないため一覧に現れません\n（そうしたルールは認可判定でも一致しないため、表示と実効権限が食い違うことはありません）。",
         "operationId": "get_privileges",
         "parameters": [
           {
@@ -1198,7 +1186,7 @@
           "Users"
         ],
         "summary": "データベースに対する権限の設定",
-        "description": "既に設定されていればロールを置き換えます。配下のテーブルすべてに効きます。\n権限はデータベース ID に紐づくため、改名しても追従します。",
+        "description": "**必要な権限**: `global` / `admin`\n\n既に設定されていればロールを置き換えます。配下のテーブルすべてに効きます。\n権限はデータベース ID に紐づくため、改名しても追従します。",
         "operationId": "set_database_privilege",
         "parameters": [
           {
@@ -1226,7 +1214,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetPrivilegeRequest"
+                "$ref": "#/components/schemas/SetDataPrivilegeRequest"
               }
             }
           },
@@ -1237,7 +1225,7 @@
             "description": ""
           },
           "400": {
-            "description": "admin はこのスコープに指定できない／上限超過"
+            "description": "保持できる権限数の上限を超えた"
           },
           "403": {
             "description": "rootユーザーの権限は変更不可"
@@ -1248,9 +1236,7 @@
         },
         "security": [
           {
-            "bearer_auth": [
-              "global_admin"
-            ]
+            "bearer_auth": []
           }
         ]
       },
@@ -1259,6 +1245,7 @@
           "Users"
         ],
         "summary": "データベースに対する権限の剥奪",
+        "description": "**必要な権限**: `global` / `admin`\n\nロールを問わず、このデータベースに対する権限を取り除きます。",
         "operationId": "delete_database_privilege",
         "parameters": [
           {
@@ -1295,9 +1282,7 @@
         },
         "security": [
           {
-            "bearer_auth": [
-              "global_admin"
-            ]
+            "bearer_auth": []
           }
         ]
       }
@@ -1308,7 +1293,7 @@
           "Users"
         ],
         "summary": "テーブルに対する権限の設定",
-        "description": "既に設定されていればロールを置き換えます。\n権限はテーブル ID に紐づくため、改名しても追従します。",
+        "description": "**必要な権限**: `global` / `admin`\n\n既に設定されていればロールを置き換えます。\n権限はテーブル ID に紐づくため、改名しても追従します。",
         "operationId": "set_table_privilege",
         "parameters": [
           {
@@ -1346,7 +1331,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetPrivilegeRequest"
+                "$ref": "#/components/schemas/SetDataPrivilegeRequest"
               }
             }
           },
@@ -1357,7 +1342,7 @@
             "description": ""
           },
           "400": {
-            "description": "admin はこのスコープに指定できない／上限超過"
+            "description": "保持できる権限数の上限を超えた"
           },
           "403": {
             "description": "rootユーザーの権限は変更不可"
@@ -1368,9 +1353,7 @@
         },
         "security": [
           {
-            "bearer_auth": [
-              "global_admin"
-            ]
+            "bearer_auth": []
           }
         ]
       },
@@ -1379,6 +1362,7 @@
           "Users"
         ],
         "summary": "テーブルに対する権限の剥奪",
+        "description": "**必要な権限**: `global` / `admin`\n\nロールを問わず、このテーブルに対する権限を取り除きます。",
         "operationId": "delete_table_privilege",
         "parameters": [
           {
@@ -1425,9 +1409,7 @@
         },
         "security": [
           {
-            "bearer_auth": [
-              "global_admin"
-            ]
+            "bearer_auth": []
           }
         ]
       }
@@ -1438,7 +1420,7 @@
           "Users"
         ],
         "summary": "サーバー全体に対する権限の設定",
-        "description": "既に設定されていればロールを置き換えます。`admin` を指定できるのはこのスコープだけです。",
+        "description": "**必要な権限**: `global` / `admin`\n\n既に設定されていればロールを置き換えます。`admin` を指定できるのはこのスコープだけです。",
         "operationId": "set_global_privilege",
         "parameters": [
           {
@@ -1456,7 +1438,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetPrivilegeRequest"
+                "$ref": "#/components/schemas/SetGlobalPrivilegeRequest"
               }
             }
           },
@@ -1478,9 +1460,7 @@
         },
         "security": [
           {
-            "bearer_auth": [
-              "global_admin"
-            ]
+            "bearer_auth": []
           }
         ]
       },
@@ -1489,7 +1469,7 @@
           "Users"
         ],
         "summary": "サーバー全体に対する権限の剥奪",
-        "description": "ロールを問わず、このスコープの権限を取り除きます。",
+        "description": "**必要な権限**: `global` / `admin`\n\nロールを問わず、このスコープの権限を取り除きます。",
         "operationId": "delete_global_privilege",
         "parameters": [
           {
@@ -1516,9 +1496,7 @@
         },
         "security": [
           {
-            "bearer_auth": [
-              "global_admin"
-            ]
+            "bearer_auth": []
           }
         ]
       }
@@ -1916,6 +1894,15 @@
             }
           }
         }
+      },
+      "DataRole": {
+        "type": "string",
+        "description": "データ面のロール。データベース・テーブルスコープで指定できるのはこの 3 つだけ。\n\n制御面の `admin` を含まないため、`database` / `table` スコープに `admin` を\n与えるリクエストは型として表現できない（デシリアライズの時点で弾かれる）。",
+        "enum": [
+          "read",
+          "write",
+          "manage"
+        ]
       },
       "DatabaseInfoResponse": {
         "type": "object",
@@ -2356,7 +2343,7 @@
           {
             "type": "object",
             "title": "DatabasePrivilege",
-            "description": "データベース配下すべて。",
+            "description": "データベース配下すべて。`admin` は指定できない。",
             "required": [
               "db_name",
               "role",
@@ -2368,7 +2355,7 @@
                 "example": "example_database"
               },
               "role": {
-                "$ref": "#/components/schemas/UserRole"
+                "$ref": "#/components/schemas/DataRole"
               },
               "scope": {
                 "type": "string",
@@ -2381,7 +2368,7 @@
           {
             "type": "object",
             "title": "TablePrivilege",
-            "description": "単一テーブル。",
+            "description": "単一テーブル。`admin` は指定できない。",
             "required": [
               "db_name",
               "table_name",
@@ -2398,7 +2385,7 @@
                 "example": "example_table"
               },
               "role": {
-                "$ref": "#/components/schemas/UserRole"
+                "$ref": "#/components/schemas/DataRole"
               },
               "scope": {
                 "type": "string",
@@ -3022,9 +3009,21 @@
           }
         }
       },
-      "SetPrivilegeRequest": {
+      "SetDataPrivilegeRequest": {
         "type": "object",
-        "description": "1 つの対象に対する権限の設定リクエスト。対象はパスで指定する。",
+        "description": "データベース・テーブルスコープに対する権限の設定リクエスト。\nロールは [`DataRole`](super::entity::DataRole) なので `admin` は表現できない。",
+        "required": [
+          "role"
+        ],
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/DataRole"
+          }
+        }
+      },
+      "SetGlobalPrivilegeRequest": {
+        "type": "object",
+        "description": "`global` スコープに対する権限の設定リクエスト。制御面の `admin` を指定できる唯一の入口。",
         "required": [
           "role"
         ],
@@ -3691,7 +3690,7 @@
       },
       "UserRole": {
         "type": "string",
-        "description": "権限の強さ。数値が大きいほど強く、上位は下位をすべて含む。\n\n`admin` だけはデータ面ではなく制御面（ユーザーの作成・削除・権限付与）を表し、\n`global` スコープにのみ指定できる。`database` / `table` スコープで `admin` を\n指定したリクエストは 400 で拒否される。",
+        "description": "権限の強さ。数値が大きいほど強く、上位は下位をすべて含む。\n\n`admin` は制御面（ユーザーの作成・削除・権限付与）を表し、`global` スコープに\nのみ現れる。データベース・テーブルスコープの保存・API 表現は [`DataRole`] を使う。",
         "enum": [
           "read",
           "write",

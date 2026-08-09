@@ -20,8 +20,15 @@ pub struct UpdatePasswordRequest {
     pub password: String,
 }
 
-/// 1 つの対象に対する権限の設定リクエスト。対象はパスで指定する。
+/// `global` スコープに対する権限の設定リクエスト。制御面の `admin` を指定できる唯一の入口。
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct SetPrivilegeRequest {
+pub struct SetGlobalPrivilegeRequest {
     pub role: super::entity::UserRole,
+}
+
+/// データベース・テーブルスコープに対する権限の設定リクエスト。
+/// ロールは [`DataRole`](super::entity::DataRole) なので `admin` は表現できない。
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SetDataPrivilegeRequest {
+    pub role: super::entity::DataRole,
 }

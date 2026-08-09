@@ -64,23 +64,17 @@ pub async fn create(
     .map_err(|e| AppError::InternalError(e.to_string()))?
 }
 
+/// データベースを配下のテーブルごと削除する。
+///
+/// 列挙と削除の分割は [`KasaneDbWrite::database_remove`](crate::repositories::KasaneDbWrite)
+/// 側で 1 つの書き込みトランザクションに閉じてある。
 pub async fn remove(app_state: &AppState, name: &str) -> Result<(), AppError> {
     let app_state = app_state.clone();
     let name = name.to_string();
 
     let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || -> Result<(), AppError> {
-        let _guard = span.enter();
-        let tables = app_state.db.read(|r| r.table_list(&name))?;
-
-        app_state.db.write(|db| {
-            // First, list all tables and remove them
-            for table in tables {
-                db.table_remove(&name, &table.name)?;
-            }
-            db.database_remove(&name)?;
-            Ok(())
-        })
+    tokio::task::spawn_blocking(move || {
+        span.in_scope(|| app_state.db.write(|db| db.database_remove(&name)))
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?

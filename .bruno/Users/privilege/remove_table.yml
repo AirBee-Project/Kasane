@@ -1,0 +1,96 @@
+info:
+  name: remove_table
+  type: http
+  seq: 7
+  tags:
+    - Users
+
+docs: |-
+  テーブル 1 つに対する権限を剥奪する。ロールは問わず対象ごと落ちる。
+
+  必要な権限: global / admin
+
+  そのテーブルへの権限を持っていない場合は 404。
+
+http:
+  method: DELETE
+  url: "{{baseUrl}}/users/:username/privileges/databases/:db_name/tables/:table_name"
+  params:
+    - name: username
+      value: ""
+      type: path
+      description: Username
+    - name: db_name
+      value: ""
+      type: path
+      description: Database name
+    - name: table_name
+      value: ""
+      type: path
+      description: Table name
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 204 Response
+    description: Privilege revoked successfully
+    request:
+      url: "{{baseUrl}}/users/:username/privileges/databases/:db_name/tables/:table_name"
+      method: DELETE
+      params:
+        - name: username
+          value: alice
+          type: path
+          description: Username
+        - name: db_name
+          value: example_database
+          type: path
+          description: Database name
+        - name: table_name
+          value: example_table
+          type: path
+          description: Table name
+    response:
+      status: 204
+      statusText: No Content
+      body:
+        type: text
+        data: ""
+  - name: 404 Response
+    description: The user has no privilege for that target
+    request:
+      url: "{{baseUrl}}/users/:username/privileges/databases/:db_name/tables/:table_name"
+      method: DELETE
+      params:
+        - name: username
+          value: alice
+          type: path
+          description: Username
+        - name: db_name
+          value: example_database
+          type: path
+          description: Database name
+        - name: table_name
+          value: example_table
+          type: path
+          description: Table name
+    response:
+      status: 404
+      statusText: Not Found
+      headers:
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "error": "Not found: The user has no privilege for that target",
+            "code": "not_found"
+          }

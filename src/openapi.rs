@@ -15,8 +15,8 @@ use crate::models::database::{
 };
 use crate::models::spatial_id::SpatialId;
 use crate::models::users::{
-    CreateUserRequest, PrivilegeRule, PrivilegesResponse, SetPrivilegeRequest,
-    UpdatePasswordRequest, UserInfoResponse, UserRole,
+    CreateUserRequest, DataRole, PrivilegeRule, PrivilegesResponse, SetDataPrivilegeRequest,
+    SetGlobalPrivilegeRequest, UpdatePasswordRequest, UserInfoResponse, UserRole,
 };
 
 /// `bearer_auth` セキュリティスキーム（JWT Bearer）を OpenAPI コンポーネントに登録する。
@@ -43,9 +43,36 @@ impl utoipa::Modify for SecurityAddon {
     }
 }
 
+/// 権限モデルの凡例。
+///
+/// 各エンドポイントの説明にある「必要な権限」は最小要件だけを示す。
+/// 「上位スコープ／上位ロールが下位を含む」という規則はここに一度だけ書き、
+/// 個々のエンドポイントでは繰り返さない。
+const PRIVILEGE_LEGEND: &str = r#"
+## 権限について
+
+各エンドポイントの説明にある **必要な権限** は、その操作に必要な最小の権限です。
+`スコープ` / `ロール` の形式で表します。
+
+**スコープ**は `global` ⊃ `database` ⊃ `table` の階層で、上位スコープの権限は下位をすべて含みます。
+たとえば `global` / `read` を持つユーザーは、すべてのデータベース・テーブルを読めます。
+`database` / `table` と書かれている場合、対象はパスで指定したデータベース・テーブルです。
+
+**ロール**は `read` < `write` < `manage` < `admin` の順に強く、上位ロールは下位をすべて含みます。
+
+- `read` — 参照
+- `write` — データの書き込み
+- `manage` — テーブルやデータベースそのものの管理
+- `admin` — ユーザーと権限の管理。制御面の権限であり、`global` スコープにのみ指定できます
+
+`global` / `manage` は全データベースのデータを自由に扱えますが、ユーザーや権限は操作できません。
+ユーザー管理を行えるのは `global` / `admin` だけです。
+"#;
+
 #[derive(OpenApi)]
 #[openapi(
     modifiers(&SecurityAddon),
+    info(description = PRIVILEGE_LEGEND),
     servers(),
     paths(
         // Auth
@@ -69,13 +96,13 @@ impl utoipa::Modify for SecurityAddon {
         crate::handlers::database::database_list,
         // POST /databases
         crate::handlers::database::database_create,
-        // GET  /databases/{name}
+        // GET  /databases/{db_name}
         crate::handlers::database::database_info,
-        // DELETE /databases/{name}
+        // DELETE /databases/{db_name}
         crate::handlers::database::remove_database,
-        // PATCH /databases/{name}
+        // PATCH /databases/{db_name}
         crate::handlers::database::database_update,
-        // POST /databases/{name}/copy
+        // POST /databases/{db_name}/copy
         crate::handlers::database::database_copy,
         crate::handlers::database::table::create::table_create,
         crate::handlers::database::table::list::table_list,
@@ -108,10 +135,12 @@ impl utoipa::Modify for SecurityAddon {
         CreateUserRequest,
         UserInfoResponse,
         UpdatePasswordRequest,
-        SetPrivilegeRequest,
+        SetGlobalPrivilegeRequest,
+        SetDataPrivilegeRequest,
         PrivilegesResponse,
         PrivilegeRule,
         UserRole,
+        DataRole,
         // Database
         CreateDatabaseRequest,
         UpdateDatabaseRequest,

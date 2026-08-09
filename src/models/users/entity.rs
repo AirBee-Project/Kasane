@@ -50,21 +50,22 @@ pub enum StoredPrivilege {
     /// サーバー全体に対する権限。
     Global { role: UserRole },
     /// 特定のデータベース配下すべてに対する権限。
-    Database { db_id: DatabaseId, role: UserRole },
+    Database { db_id: DatabaseId, role: DataRole },
     /// 特定のテーブル 1 つに対する権限。
     Table {
         db_id: DatabaseId,
         table_id: TableId,
-        role: UserRole,
+        role: DataRole,
     },
 }
 
 impl StoredPrivilege {
     pub fn role(&self) -> UserRole {
         match self {
-            StoredPrivilege::Global { role }
-            | StoredPrivilege::Database { role, .. }
-            | StoredPrivilege::Table { role, .. } => *role,
+            StoredPrivilege::Global { role } => *role,
+            StoredPrivilege::Database { role, .. } | StoredPrivilege::Table { role, .. } => {
+                UserRole::from(*role)
+            }
         }
     }
 
@@ -89,11 +90,25 @@ pub enum StoredTarget {
     Table(TableId),
 }
 
+/// データ面のロール。データベース・テーブルスコープで指定できるのはこの 3 つだけ。
+///
+/// 制御面の `admin` を含まないため、`database` / `table` スコープに `admin` を
+/// 与えるリクエストは型として表現できない（デシリアライズの時点で弾かれる）。
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, utoipa::ToSchema,
+)]
+#[serde(rename_all = "snake_case")]
+#[repr(u8)]
+pub enum DataRole {
+    Read = 1,
+    Write = 2,
+    Manage = 3,
+}
+
 /// 権限の強さ。数値が大きいほど強く、上位は下位をすべて含む。
 ///
-/// `admin` だけはデータ面ではなく制御面（ユーザーの作成・削除・権限付与）を表し、
-/// `global` スコープにのみ指定できる。`database` / `table` スコープで `admin` を
-/// 指定したリクエストは 400 で拒否される。
+/// `admin` は制御面（ユーザーの作成・削除・権限付与）を表し、`global` スコープに
+/// のみ現れる。データベース・テーブルスコープの保存・API 表現は [`DataRole`] を使う。
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, utoipa::ToSchema,
 )]
@@ -104,4 +119,14 @@ pub enum UserRole {
     Write = 2,
     Manage = 3,
     Admin = 4,
+}
+
+impl From<DataRole> for UserRole {
+    fn from(role: DataRole) -> Self {
+        match role {
+            DataRole::Read => UserRole::Read,
+            DataRole::Write => UserRole::Write,
+            DataRole::Manage => UserRole::Manage,
+        }
+    }
 }

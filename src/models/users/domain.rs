@@ -57,19 +57,19 @@ impl User {
                 (
                     StoredPrivilege::Database { db_id, role },
                     Scope::Database(target) | Scope::Table(target, _) | Scope::AnyIn(target),
-                ) if *db_id == target => Some(*role),
+                ) if *db_id == target => Some(UserRole::from(*role)),
 
                 // テーブル単位のルールは、対象がそのテーブル自身であるか、
                 // 「配下のどれかに触れれば足りる」判定のときだけ効く。
                 (StoredPrivilege::Table { table_id, role, .. }, Scope::Table(_, target))
                     if *table_id == target =>
                 {
-                    Some(*role)
+                    Some(UserRole::from(*role))
                 }
                 (StoredPrivilege::Table { db_id, role, .. }, Scope::AnyIn(target))
                     if *db_id == target =>
                 {
-                    Some(*role)
+                    Some(UserRole::from(*role))
                 }
 
                 _ => None,

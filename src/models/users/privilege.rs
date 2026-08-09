@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use super::entity::UserRole;
+use super::entity::{DataRole, UserRole};
 use crate::models::id::{DatabaseId, TableId};
 
 /// 認可判定の対象。どのルールが効くかはスコープごとに違う。
@@ -31,21 +31,21 @@ pub enum PrivilegeRule {
     /// サーバー全体。`role` に `admin` を指定できるのはこのスコープだけ。
     #[schema(title = "GlobalPrivilege")]
     Global { role: UserRole },
-    /// データベース配下すべて。
+    /// データベース配下すべて。`admin` は指定できない。
     #[schema(title = "DatabasePrivilege")]
     Database {
         #[schema(example = "example_database")]
         db_name: String,
-        role: UserRole,
+        role: DataRole,
     },
-    /// 単一テーブル。
+    /// 単一テーブル。`admin` は指定できない。
     #[schema(title = "TablePrivilege")]
     Table {
         #[schema(example = "example_database")]
         db_name: String,
         #[schema(example = "example_table")]
         table_name: String,
-        role: UserRole,
+        role: DataRole,
     },
 }
 
@@ -60,30 +60,13 @@ pub enum PrivilegeTarget {
     Table { db_name: String, table_name: String },
 }
 
-impl PrivilegeTarget {
-    /// 対象にロールを与えて 1 件のルールにする。
-    pub fn with_role(self, role: UserRole) -> PrivilegeRule {
-        match self {
-            PrivilegeTarget::Global => PrivilegeRule::Global { role },
-            PrivilegeTarget::Database { db_name } => PrivilegeRule::Database { db_name, role },
-            PrivilegeTarget::Table {
-                db_name,
-                table_name,
-            } => PrivilegeRule::Table {
-                db_name,
-                table_name,
-                role,
-            },
-        }
-    }
-}
-
 impl PrivilegeRule {
     pub fn role(&self) -> UserRole {
         match self {
-            PrivilegeRule::Global { role }
-            | PrivilegeRule::Database { role, .. }
-            | PrivilegeRule::Table { role, .. } => *role,
+            PrivilegeRule::Global { role } => *role,
+            PrivilegeRule::Database { role, .. } | PrivilegeRule::Table { role, .. } => {
+                UserRole::from(*role)
+            }
         }
     }
 }

@@ -12,7 +12,9 @@ use crate::{
 
 /// テーブル情報の取得
 ///
-/// 指定したテーブルの詳細情報を取得します。この操作はデータベースのRead以上の権限が必要です。
+/// **必要な権限**: `table` / `read`
+///
+/// 指定したテーブルの詳細情報を取得します。
 #[utoipa::path(
     get,
     path = "/databases/{db_name}/tables/{table_name}",
