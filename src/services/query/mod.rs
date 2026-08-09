@@ -407,7 +407,7 @@ fn run<V: Value>(
     // 空間ID1件ずつ `get()` を回すとクエリが件数分再実行されてしまう。
     let optimized = ast.optimize();
     let cells = optimized
-        .run_on_subset(bounds)
+        .run_within(bounds)
         .map_err(AppError::LogicError)?
         .into_iter()
         .filter(|(flex_id, _)| targets.get(flex_id).next().is_some());
