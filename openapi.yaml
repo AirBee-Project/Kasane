@@ -1253,15 +1253,11 @@ components:
           items:
             type: object
             description: |-
-              区間表現の時空間IDを表す型。
-
+              区間表現の時空間IDを表す型。省略された次元はその次元全体を表す。
               時間を指定する場合は `i` と `t` を必ず両方指定すること。
               両方省略した場合は「全時間」を表す。
             required:
             - z
-            - f
-            - x
-            - y
             properties:
               z:
                 type: integer
@@ -1271,7 +1267,9 @@ components:
                 maximum: 30
                 minimum: 0
               f:
-                type: array
+                type:
+                - array
+                - 'null'
                 items:
                   type: integer
                   format: int32
@@ -1280,7 +1278,9 @@ components:
                 - 0
                 - 0
               x:
-                type: array
+                type:
+                - array
+                - 'null'
                 items:
                   type: integer
                   format: int32
@@ -1290,7 +1290,9 @@ components:
                 - 931388
                 - 931390
               y:
-                type: array
+                type:
+                - array
+                - 'null'
                 items:
                   type: integer
                   format: int32
@@ -2117,15 +2119,11 @@ components:
     RangeId:
       type: object
       description: |-
-        区間表現の時空間IDを表す型。
-
+        区間表現の時空間IDを表す型。省略された次元はその次元全体を表す。
         時間を指定する場合は `i` と `t` を必ず両方指定すること。
         両方省略した場合は「全時間」を表す。
       required:
       - z
-      - f
-      - x
-      - y
       properties:
         z:
           type: integer
@@ -2135,7 +2133,9 @@ components:
           maximum: 30
           minimum: 0
         f:
-          type: array
+          type:
+          - array
+          - 'null'
           items:
             type: integer
             format: int32
@@ -2144,7 +2144,9 @@ components:
           - 0
           - 0
         x:
-          type: array
+          type:
+          - array
+          - 'null'
           items:
             type: integer
             format: int32
@@ -2154,7 +2156,9 @@ components:
           - 931388
           - 931390
         y:
-          type: array
+          type:
+          - array
+          - 'null'
           items:
             type: integer
             format: int32
