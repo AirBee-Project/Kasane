@@ -25,20 +25,23 @@ pub fn create_router(app_state: AppState) -> Router {
             put(crate::handlers::users::update_password),
         )
         .route(
-            "/users/{username}/admin",
-            put(crate::handlers::users::set_admin),
-        )
-        .route(
             "/users/{username}/privileges",
             get(crate::handlers::users::get_privileges),
         )
         .route(
-            "/users/{username}/privileges/{db_name}",
-            put(crate::handlers::users::set_privilege),
+            "/users/{username}/privileges/global",
+            put(crate::handlers::users::set_global_privilege)
+                .delete(crate::handlers::users::delete_global_privilege),
         )
         .route(
-            "/users/{username}/privileges/{db_name}",
-            delete(crate::handlers::users::delete_privilege),
+            "/users/{username}/privileges/databases/{db_name}",
+            put(crate::handlers::users::set_database_privilege)
+                .delete(crate::handlers::users::delete_database_privilege),
+        )
+        .route(
+            "/users/{username}/privileges/databases/{db_name}/tables/{table_name}",
+            put(crate::handlers::users::set_table_privilege)
+                .delete(crate::handlers::users::delete_table_privilege),
         )
         .route("/query", post(crate::handlers::query::execute_query))
         .nest("/databases", database::routes())

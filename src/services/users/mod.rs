@@ -2,24 +2,45 @@ use crate::{
     AppState,
     error::{AppError, AuthError},
     models::users::{
-        CreateUserRequest, PrivilegeInfoResponse, UpdatePasswordRequest, UpdatePrivilegeRequest,
-        UserInfoResponse, UserMetadata,
+        CreateUserRequest, PrivilegeRule, PrivilegeTarget, UpdatePasswordRequest, UserInfoResponse,
     },
+    repositories::MetaRead,
     services::auth::hash_password,
 };
 use uuid::Uuid;
 
 pub fn list_users(app_state: &AppState) -> Result<Vec<UserInfoResponse>, AppError> {
-    let users = app_state.db.read_users(|repo| repo.get_all_users())?;
-    Ok(users.into_iter().map(UserInfoResponse::from).collect())
+    app_state.db.read(|repo| {
+        repo.get_all_users()?
+            .into_iter()
+            .map(|user| {
+                Ok(UserInfoResponse {
+                    privileges: repo.render_privileges(&user.privileges)?,
+                    username: user.username,
+                })
+            })
+            .collect()
+    })
 }
 
 pub fn get_user(app_state: &AppState, username: &str) -> Result<UserInfoResponse, AppError> {
-    let user = app_state
-        .db
-        .read_users(|repo| repo.get_user(username))?
-        .ok_or_else(|| AppError::NotFound("User not found".into()))?;
-    Ok(UserInfoResponse::from(user))
+    app_state.db.read(|repo| {
+        let user = repo.require_user(username)?;
+        Ok(UserInfoResponse {
+            privileges: repo.render_privileges(&user.privileges)?,
+            username: user.username,
+        })
+    })
+}
+
+pub fn get_privileges(
+    app_state: &AppState,
+    username: &str,
+) -> Result<Vec<PrivilegeRule>, AppError> {
+    app_state.db.read(|repo| {
+        let user = repo.require_user(username)?;
+        repo.render_privileges(&user.privileges)
+    })
 }
 
 pub async fn create_user(app_state: &AppState, req: CreateUserRequest) -> Result<(), AppError> {
@@ -31,15 +52,10 @@ pub async fn create_user(app_state: &AppState, req: CreateUserRequest) -> Result
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
         let _guard = span.enter();
         let hash = hash_password(&req.password)?;
-        let meta = UserMetadata {
-            id: Uuid::now_v7(),
-            password_hash: hash,
-            is_global_admin: req.is_global_admin,
-            token_version: 0,
-        };
+        let id = Uuid::now_v7();
         app_state
             .db
-            .write_users(|repo| repo.create_user(&req.username, &meta))
+            .write(|repo| repo.create_user(&req.username, id, hash, &req.privileges))
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?
@@ -55,16 +71,10 @@ pub async fn delete_user(app_state: &AppState, username: &str) -> Result<(), App
 
     let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
-        span.in_scope(|| {
-            state
-                .db
-                .write_users(|repo| repo.delete_user(&username_owned))
-        })
+        span.in_scope(|| state.db.write(|repo| repo.delete_user(&username_owned)))
     })
     .await
-    .map_err(|e| AppError::InternalError(e.to_string()))??;
-
-    Ok(())
+    .map_err(|e| AppError::InternalError(e.to_string()))?
 }
 
 pub async fn update_password(
@@ -79,126 +89,58 @@ pub async fn update_password(
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
         let _guard = span.enter();
         let hash = hash_password(&req.password)?;
-
-        let meta = state
-            .db
-            .read_users(|repo| repo.get_user_meta(&username_owned))?
-            .ok_or_else(|| AppError::NotFound("User not found".into()))?;
-
-        let mut new_meta = meta;
-        new_meta.password_hash = hash;
-        new_meta.token_version = new_meta.token_version.wrapping_add(1);
-
         state
             .db
-            .write_users(|repo| repo.update_user_meta(&username_owned, &new_meta))
+            .write(|repo| repo.set_password(&username_owned, hash))
     })
     .await
-    .map_err(|e| AppError::InternalError(e.to_string()))??;
-
-    Ok(())
+    .map_err(|e| AppError::InternalError(e.to_string()))?
 }
 
-/// ユーザーの GlobalAdmin 権限を付与・剥奪する。
-pub async fn set_admin(
+/// 1 つの対象に対する権限を設定する（無ければ追加、あれば置き換え）。
+pub async fn grant_privilege(
     app_state: &AppState,
     username: &str,
-    is_global_admin: bool,
+    rule: PrivilegeRule,
+) -> Result<(), AppError> {
+    write_privilege(app_state, username, move |repo, username| {
+        repo.grant_privilege(username, &rule)
+    })
+    .await
+}
+
+/// 1 つの対象に対する権限を剥奪する。
+pub async fn revoke_privilege(
+    app_state: &AppState,
+    username: &str,
+    target: PrivilegeTarget,
+) -> Result<(), AppError> {
+    write_privilege(app_state, username, move |repo, username| {
+        repo.revoke_privilege(username, &target)
+    })
+    .await
+}
+
+/// 権限の書き込みに共通する下準備（root 保護とブロッキング実行）。
+async fn write_privilege(
+    app_state: &AppState,
+    username: &str,
+    apply: impl FnOnce(&mut crate::repositories::KasaneDbWrite<'_>, &str) -> Result<(), AppError>
+    + Send
+    + 'static,
 ) -> Result<(), AppError> {
     if username == "root" {
         return Err(AuthError::RootProtected.into());
     }
 
     let state = app_state.clone();
-    let username_owned = username.to_string();
-
-    let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || -> Result<(), AppError> {
-        let _guard = span.enter();
-        let meta = state
-            .db
-            .read_users(|repo| repo.get_user_meta(&username_owned))?
-            .ok_or_else(|| AppError::NotFound("User not found".into()))?;
-
-        let mut new_meta = meta;
-        new_meta.is_global_admin = is_global_admin;
-        new_meta.token_version = new_meta.token_version.wrapping_add(1);
-
-        state
-            .db
-            .write_users(|repo| repo.update_user_meta(&username_owned, &new_meta))
-    })
-    .await
-    .map_err(|e| AppError::InternalError(e.to_string()))??;
-
-    Ok(())
-}
-
-pub async fn set_privilege(
-    app_state: &AppState,
-    username: &str,
-    db_name: &str,
-    req: UpdatePrivilegeRequest,
-) -> Result<(), AppError> {
-    let app_state = app_state.clone();
     let username = username.to_string();
-    let db_name = db_name.to_string();
 
     let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
         let _guard = span.enter();
-        let user_id = app_state
-            .db
-            .read_users(|repo| repo.get_user(&username))?
-            .ok_or_else(|| AppError::NotFound("User not found".into()))?
-            .id;
-
-        app_state.db.write_users(|repo| {
-            repo.set_privilege(crate::models::id::UserId(user_id), &db_name, req.role)
-        })
+        state.db.write(|repo| apply(repo, &username))
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?
-}
-
-pub async fn delete_privilege(
-    app_state: &AppState,
-    username: &str,
-    db_name: &str,
-) -> Result<(), AppError> {
-    let app_state = app_state.clone();
-    let username = username.to_string();
-    let db_name = db_name.to_string();
-
-    let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || -> Result<(), AppError> {
-        let _guard = span.enter();
-        let user_id = app_state
-            .db
-            .read_users(|repo| repo.get_user(&username))?
-            .ok_or_else(|| AppError::NotFound("User not found".into()))?
-            .id;
-
-        app_state
-            .db
-            .write_users(|repo| repo.remove_privilege(crate::models::id::UserId(user_id), &db_name))
-    })
-    .await
-    .map_err(|e| AppError::InternalError(e.to_string()))?
-}
-
-pub fn get_privileges(
-    app_state: &AppState,
-    username: &str,
-) -> Result<Vec<PrivilegeInfoResponse>, AppError> {
-    let privs = app_state.db.read_users(|repo| {
-        let user = repo
-            .get_user(username)?
-            .ok_or_else(|| AppError::NotFound("User not found".into()))?;
-        repo.get_user_privileges(crate::models::id::UserId(user.id))
-    })?;
-    Ok(privs
-        .into_iter()
-        .map(|(db_name, role)| PrivilegeInfoResponse { db_name, role })
-        .collect())
 }

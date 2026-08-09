@@ -11,7 +11,9 @@ use axum::{
 
 /// データの削除
 ///
-/// 指定した空間IDをテーブルからを削除します。この操作はデータベースのWrite以上の権限が必要です。
+/// **必要な権限**: `table` / `write`
+///
+/// 指定した空間IDをテーブルから削除します。
 #[utoipa::path(
     delete,
     path = "/databases/{db_name}/tables/{table_name}/data",
@@ -34,8 +36,13 @@ pub async fn data_remove(
     Path((db_name, table_name)): Path<(String, String)>,
     Json(payload): Json<RemoveDataRequest>,
 ) -> Result<StatusCode, AppError> {
-    crate::middleware::auth::check_privilege(&app_state, &auth_user, &db_name, UserRole::Write)
-        .await?;
+    crate::middleware::auth::check_table(
+        &app_state,
+        &auth_user,
+        &db_name,
+        &table_name,
+        UserRole::Write,
+    )?;
 
     data_remove_service::remove(
         &app_state,

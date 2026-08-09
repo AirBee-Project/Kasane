@@ -15,7 +15,10 @@ use axum::{
 
 /// テーブルの更新
 ///
-/// テーブルの名前変更や値の制約を更新します。この操作はデータベースの Manage 権限が必要です。
+/// **必要な権限**: `table` / `manage`
+///
+/// テーブルの名前変更や値の制約を更新します。
+/// 権限はテーブル ID に紐づくため、改名しても権限は追従します。
 ///
 /// 制約を変更する際、既存のデータが新しい制約に適合しているかを検証する挙動を `validate_existing_data` フラグで制御できます。
 /// - `true`（デフォルト）の場合、既存データが新しい制約に違反していればエラーとして更新を却下します。
@@ -48,8 +51,14 @@ pub async fn table_update_handler(
     Path((db_name, table_name)): Path<(String, String)>,
     Json(payload): Json<UpdateTableRequest>,
 ) -> Result<Json<TableSummary>, AppError> {
-    crate::middleware::auth::check_privilege(&state, &auth_user, &db_name, UserRole::Manage)
-        .await?;
+    // 権限はテーブル ID に紐づくので、改名しても権限はそのテーブルに追従する。
+    crate::middleware::auth::check_table(
+        &state,
+        &auth_user,
+        &db_name,
+        &table_name,
+        UserRole::Manage,
+    )?;
 
     let result = table_update_service::table_update(
         state.clone(),

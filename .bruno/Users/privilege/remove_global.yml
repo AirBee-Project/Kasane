@@ -1,0 +1,72 @@
+info:
+  name: remove_global
+  type: http
+  seq: 3
+  tags:
+    - Users
+
+docs: |-
+  サーバー全体に対する権限を剥奪する。ロールは問わず対象ごと落ちる。
+
+  必要な権限: global / admin
+
+  そのスコープの権限を持っていない場合は 404。
+
+http:
+  method: DELETE
+  url: "{{baseUrl}}/users/:username/privileges/global"
+  params:
+    - name: username
+      value: ""
+      type: path
+      description: Username
+  auth:
+    type: bearer
+    token: "{{accessToken}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 204 Response
+    description: Privilege revoked successfully
+    request:
+      url: "{{baseUrl}}/users/:username/privileges/global"
+      method: DELETE
+      params:
+        - name: username
+          value: alice
+          type: path
+          description: Username
+    response:
+      status: 204
+      statusText: No Content
+      body:
+        type: text
+        data: ""
+  - name: 404 Response
+    description: The user has no privilege for that target
+    request:
+      url: "{{baseUrl}}/users/:username/privileges/global"
+      method: DELETE
+      params:
+        - name: username
+          value: alice
+          type: path
+          description: Username
+    response:
+      status: 404
+      statusText: Not Found
+      headers:
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "error": "Not found: The user has no privilege for that target",
+            "code": "not_found"
+          }

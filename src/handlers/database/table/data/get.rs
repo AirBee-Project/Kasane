@@ -12,7 +12,9 @@ use axum::{
 
 /// データの一括取得
 ///
-/// 空間IDと値をJSON配列として一括で取得します。この操作はデータベースのRead以上の権限が必要です。
+/// **必要な権限**: `table` / `read`
+///
+/// 空間IDと値をJSON配列として一括で取得します。
 #[utoipa::path(
     post,
     path = "/databases/{db_name}/tables/{table_name}/data/search",
@@ -38,13 +40,13 @@ pub async fn data_get(
     Query(query): Query<GetDataQuery>,
     Json(payload): Json<GetDataRequest>,
 ) -> Result<Json<crate::models::database::table::data::GetDataResponse>, AppError> {
-    crate::middleware::auth::check_privilege(
+    crate::middleware::auth::check_table(
         &app_state,
         &auth_user,
         &db_name,
+        &table_name,
         crate::models::users::UserRole::Read,
-    )
-    .await?;
+    )?;
 
     let result = data_get_service::get(
         &app_state,

@@ -7,9 +7,9 @@ info:
 
 http:
   method: PATCH
-  url: "{{baseUrl}}/databases/:name"
+  url: "{{baseUrl}}/databases/:db_name"
   params:
-    - name: name
+    - name: db_name
       value: ""
       type: path
   body:
@@ -33,10 +33,10 @@ examples:
   - name: 200 Response
     description: Database renamed successfully
     request:
-      url: "{{baseUrl}}/databases/:name"
+      url: "{{baseUrl}}/databases/:db_name"
       method: PATCH
       params:
-        - name: name
+        - name: db_name
           value: old_database_name
           type: path
       body:

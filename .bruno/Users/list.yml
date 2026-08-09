@@ -35,7 +35,16 @@ examples:
         data: |-
           [
             {
-              "username": "",
-              "is_global_admin": false
+              "username": "root",
+              "privileges": [
+                {
+                  "scope": "global",
+                  "role": "admin"
+                }
+              ]
+            },
+            {
+              "username": "alice",
+              "privileges": []
             }
           ]

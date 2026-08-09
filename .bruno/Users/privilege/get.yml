@@ -1,9 +1,17 @@
 info:
   name: get
   type: http
-  seq: 6
+  seq: 1
   tags:
     - Users
+
+docs: |-
+  ユーザーが持つ権限ルールの一覧を取得する。
+
+  必要な権限: 本人 または global / admin
+
+  既に削除されたデータベース・テーブルを指すルールは名前へ解決できないため一覧に現れない。
+  そうしたルールは認可判定でも一致しないので、表示と実効権限が食い違うことはない。
 
 http:
   method: GET
@@ -31,7 +39,7 @@ examples:
       method: GET
       params:
         - name: username
-          value: ""
+          value: alice
           type: path
           description: Username
     response:
@@ -43,12 +51,25 @@ examples:
       body:
         type: json
         data: |-
-          [
-            {
-              "db_name": "",
-              "role": "Read"
-            }
-          ]
+          {
+            "privileges": [
+              {
+                "scope": "global",
+                "role": "read"
+              },
+              {
+                "scope": "database",
+                "db_name": "example_database",
+                "role": "manage"
+              },
+              {
+                "scope": "table",
+                "db_name": "example_database",
+                "table_name": "example_table",
+                "role": "write"
+              }
+            ]
+          }
   - name: 404 Response
     description: User not found
     request:
@@ -56,7 +77,7 @@ examples:
       method: GET
       params:
         - name: username
-          value: ""
+          value: unknown
           type: path
           description: Username
     response:

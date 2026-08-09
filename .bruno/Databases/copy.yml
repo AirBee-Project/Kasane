@@ -7,9 +7,9 @@ info:
 
 http:
   method: POST
-  url: "{{baseUrl}}/databases/:name/copy"
+  url: "{{baseUrl}}/databases/:db_name/copy"
   params:
-    - name: name
+    - name: db_name
       value: ""
       type: path
   body:
@@ -32,10 +32,10 @@ examples:
   - name: 201 Response
     description: Database copied successfully
     request:
-      url: "{{baseUrl}}/databases/:name/copy"
+      url: "{{baseUrl}}/databases/:db_name/copy"
       method: POST
       params:
-        - name: name
+        - name: db_name
           value: source_db
           type: path
       body:

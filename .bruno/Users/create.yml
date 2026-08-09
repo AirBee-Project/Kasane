@@ -5,6 +5,19 @@ info:
   tags:
     - Users
 
+docs: |-
+  ユーザーを作成する。privileges を指定すると作成と同時に権限を付与できる。
+
+  必要な権限: global / admin
+
+  privileges の各要素は scope で判別する:
+    { "scope": "global", "role": "admin" }
+    { "scope": "database", "db_name": "...", "role": "manage" }
+    { "scope": "table", "db_name": "...", "table_name": "...", "role": "read" }
+
+  database / table スコープに admin は指定できない。
+  存在しないデータベース・テーブルを指すルールは 404 で拒否される。
+
 http:
   method: POST
   url: "{{baseUrl}}/users"
@@ -14,7 +27,7 @@ http:
       {
         "username": "alice",
         "password": "secret123",
-        "is_global_admin": false
+        "privileges": []
       }
   auth:
     type: bearer
@@ -38,7 +51,7 @@ examples:
           {
             "username": "alice",
             "password": "secret123",
-            "is_global_admin": false
+            "privileges": []
           }
     response:
       status: 201
@@ -57,7 +70,7 @@ examples:
           {
             "username": "alice",
             "password": "secret123",
-            "is_global_admin": false
+            "privileges": []
           }
     response:
       status: 409

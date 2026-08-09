@@ -12,7 +12,9 @@ use crate::{
 
 /// テーブル情報の取得
 ///
-/// 指定したテーブルの詳細情報を取得します。この操作はデータベースのRead以上の権限が必要です。
+/// **必要な権限**: `table` / `read`
+///
+/// 指定したテーブルの詳細情報を取得します。
 #[utoipa::path(
     get,
     path = "/databases/{db_name}/tables/{table_name}",
@@ -33,13 +35,13 @@ pub async fn table_info(
     Extension(auth_user): Extension<AuthUser>,
     Path((db_name, table_name)): Path<(String, String)>,
 ) -> Result<Json<TableInfoResponse>, AppError> {
-    crate::middleware::auth::check_privilege(
+    crate::middleware::auth::check_table(
         &app_state,
         &auth_user,
         &db_name,
+        &table_name,
         crate::models::users::UserRole::Read,
-    )
-    .await?;
+    )?;
 
     let res = table_info_service::info(&app_state, &db_name, &table_name).await?;
     Ok(Json(res))

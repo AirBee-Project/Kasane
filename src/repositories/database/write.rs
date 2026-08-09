@@ -3,7 +3,7 @@ use uuid::Uuid;
 use crate::{
     error::AppError,
     models::database::{DatabaseInfoResponse, DatabaseMetadata},
-    repositories::KasaneDbWrite,
+    repositories::{KasaneDbWrite, meta::MetaRead},
 };
 
 impl<'a> KasaneDbWrite<'a> {
@@ -40,8 +40,11 @@ impl<'a> KasaneDbWrite<'a> {
             description: description.clone(),
         };
 
-        let db = self.db.databases;
-        db.put(&mut self.write_txn, name, &meta)?;
+        let db_id = crate::models::id::DatabaseId(id);
+        self.db.databases.put(&mut self.write_txn, name, &meta)?;
+        self.db
+            .database_id_index
+            .put(&mut self.write_txn, &db_id, name)?;
 
         Ok(DatabaseInfoResponse {
             name: name.to_string(),
@@ -57,36 +60,27 @@ impl<'a> KasaneDbWrite<'a> {
                 name: name.to_string(),
             });
         }
-        let db_id = {
-            let db = self.db.databases;
-            if let Some(meta_data) = db.get(&self.write_txn, name)? {
-                meta_data.id
-            } else {
-                return Err(AppError::DatabaseNotFound {
-                    name: name.to_string(),
-                });
-            }
+        let Some(meta) = self.db.databases.get(&self.write_txn, name)? else {
+            return Err(AppError::DatabaseNotFound {
+                name: name.to_string(),
+            });
         };
 
-        // データベース削除前に、関連するユーザー権限をすべて削除する。
-        // `user_privileges` は (UserId, DatabaseId) をキーにしているため、全走査して対象の DatabaseId を探す。
-
-        // Todo:全探索を防ぐべき。PrefixにするとKeyが長くなってしまうので、逆引きのTableを整備すればよい。
-        // データベースとTableはそんなに変化がないので逆引きがあっても問題ない。いつかやる
-        let privs_table = self.db.user_privileges;
-        let mut priv_keys_to_delete = Vec::new();
-        for item in privs_table.iter(&self.write_txn)? {
-            let (k, _) = item?;
-            if k.1 == db_id {
-                priv_keys_to_delete.push(k);
-            }
-        }
-        for k in priv_keys_to_delete {
-            privs_table.delete(&mut self.write_txn, &k)?;
+        // 配下テーブルの列挙と削除は、この 1 つの書き込みトランザクション内で行う。
+        // 列挙だけを別の読み取りトランザクションで済ませると、その隙間に作られた
+        // テーブルが削除対象から漏れ、親を失って到達不能なまま残ってしまう。
+        for table_name in self.table_names(meta.id)? {
+            self.table_remove(name, &table_name)?;
         }
 
-        let db = self.db.databases;
-        db.delete(&mut self.write_txn, name)?;
+        // ユーザーが持つ権限はデータベース ID で保存されており、削除したデータベースの
+        // ID が再利用されることはない。よって残った権限ルールが後から作られた同名の
+        // データベースに効くことはなく、ここで掃除する必要はない
+        // （逆引きインデックスから消えるので、表示上は解決できないルールとして隠れる）。
+        self.db.databases.delete(&mut self.write_txn, name)?;
+        self.db
+            .database_id_index
+            .delete(&mut self.write_txn, &meta.id)?;
 
         Ok(())
     }
@@ -137,6 +131,9 @@ impl<'a> KasaneDbWrite<'a> {
         if name != final_new_name {
             // lmdbから古いエントリを削除し、新しいエントリを追加
             db.delete(&mut self.write_txn, name)?;
+            self.db
+                .database_id_index
+                .put(&mut self.write_txn, &meta.id, final_new_name)?;
         }
         db.put(&mut self.write_txn, final_new_name, &meta)?;
         Ok(())
@@ -148,7 +145,6 @@ impl<'a> KasaneDbWrite<'a> {
         &mut self,
         src_db_name: &str,
         copy_name: &str,
-        user_id: Option<crate::models::id::UserId>,
     ) -> Result<DatabaseInfoResponse, AppError> {
         // コピー先データベース名の妥当性検証
         crate::services::helpers::name_valid::name_valid(copy_name)?;
@@ -176,39 +172,19 @@ impl<'a> KasaneDbWrite<'a> {
             description: src_db_meta.description.clone(),
         };
 
-        let db = self.db.databases;
-        db.put(&mut self.write_txn, copy_name, &copy_meta)?;
+        self.db
+            .databases
+            .put(&mut self.write_txn, copy_name, &copy_meta)?;
+        self.db
+            .database_id_index
+            .put(&mut self.write_txn, &copy_db_id, copy_name)?;
 
         // 4. コピー元データベース内の全テーブル名を取得
-        let db_tables = self.db.tables;
-        let mut table_names = Vec::new();
-        let src_db_id_bytes = src_db_meta.id.into_bytes();
-        for iter in db_tables
-            .remap_types::<heed::types::Bytes, heed::types::Bytes>()
-            .prefix_iter(&self.write_txn, src_db_id_bytes.as_slice())?
-        {
-            let (k_bytes, _) = iter?;
-            if k_bytes.len() > 16 {
-                let name = std::str::from_utf8(&k_bytes[16..]).map_err(|e| {
-                    AppError::InternalError(format!("Invalid table name encoding: {}", e))
-                })?;
-                table_names.push(name.to_string());
-            }
-        }
+        let table_names = self.table_names(src_db_meta.id)?;
 
         // 5. 各テーブルをコピー
         for table_name in table_names {
             self.table_copy(src_db_name, &table_name, copy_name, &table_name)?;
-        }
-
-        // 6. コピー実行ユーザーに対して新しいデータベースの Manage 権限を自動付与
-        if let Some(uid) = user_id {
-            let privs_table = self.db.user_privileges;
-            privs_table.put(
-                &mut self.write_txn,
-                &(uid, copy_db_id),
-                &(crate::models::users::UserRole::Manage as u8),
-            )?;
         }
 
         Ok(DatabaseInfoResponse {

@@ -1,139 +1,102 @@
 use crate::{
     error::AppError,
-    models::users::{UserMetadata, UserRole},
+    models::users::{MAX_PRIVILEGE_RULES, PrivilegeRule, PrivilegeTarget, UserMetadata},
+    repositories::{KasaneDbWrite, meta::MetaRead},
 };
-use heed::BytesDecode;
 
-pub struct KasaneUsersWrite<'a> {
-    write_txn: heed::RwTxn<'a>,
-    db: &'a crate::db_init::AppDb,
-}
-
-impl<'a> KasaneUsersWrite<'a> {
-    #[tracing::instrument(skip_all)]
-    pub fn new(write_txn: heed::RwTxn<'a>, db: &'a crate::db_init::AppDb) -> Self {
-        Self { write_txn, db }
-    }
-
-    #[tracing::instrument(skip_all, fields(username = %username))]
-    pub fn create_user(&mut self, username: &str, meta: &UserMetadata) -> Result<(), AppError> {
-        let users_table = self.db.users;
-        if users_table.get(&self.write_txn, username)?.is_some() {
-            return Err(AppError::Conflict("User already exists".to_string()));
-        }
+impl<'a> KasaneDbWrite<'a> {
+    fn put_user_meta(&mut self, username: &str, meta: &UserMetadata) -> Result<(), AppError> {
         let json = serde_json::to_string(meta)
             .map_err(|_| AppError::InternalError("Failed to serialize user metadata".into()))?;
-        users_table.put(&mut self.write_txn, username, json.as_str())?;
+        self.db
+            .users
+            .put(&mut self.write_txn, username, json.as_str())?;
         Ok(())
     }
 
+    /// ユーザーを作成する。`privileges` は名前ベースのまま渡し、同じトランザクション内で
+    /// ID へ解決する（存在しないデータベース／テーブルはここで弾かれる）。
     #[tracing::instrument(skip_all, fields(username = %username))]
-    pub fn update_user_meta(
+    pub fn create_user(
         &mut self,
         username: &str,
-        meta: &UserMetadata,
+        id: uuid::Uuid,
+        password_hash: String,
+        privileges: &[PrivilegeRule],
     ) -> Result<(), AppError> {
-        let users_table = self.db.users;
-        if users_table.get(&self.write_txn, username)?.is_none() {
-            return Err(AppError::NotFound("User not found".to_string()));
+        if self.user_meta(username)?.is_some() {
+            return Err(AppError::Conflict("User already exists".to_string()));
         }
-        let json = serde_json::to_string(meta)
-            .map_err(|_| AppError::InternalError("Failed to serialize user metadata".into()))?;
-        users_table.put(&mut self.write_txn, username, json.as_str())?;
-        Ok(())
+        let meta = UserMetadata {
+            id,
+            password_hash,
+            token_version: 0,
+            privileges: self.resolve_privileges(privileges)?,
+        };
+        self.put_user_meta(username, &meta)
+    }
+
+    /// パスワードを差し替え、`token_version` を進めて発行済みトークンを失効させる。
+    #[tracing::instrument(skip_all, fields(username = %username))]
+    pub fn set_password(&mut self, username: &str, password_hash: String) -> Result<(), AppError> {
+        let mut meta = self.require_user_meta(username)?;
+        meta.password_hash = password_hash;
+        meta.token_version = meta.token_version.wrapping_add(1);
+        self.put_user_meta(username, &meta)
+    }
+
+    /// 1 つの対象に対する権限を設定する（無ければ追加、あれば置き換え）。
+    ///
+    /// 触るのはその対象 1 件だけなので、別の対象に対する同時の付与・剥奪と干渉しない。
+    /// 読み出しから書き込みまでこの 1 つの書き込みトランザクション内で完結する。
+    #[tracing::instrument(skip_all, fields(username = %username))]
+    pub fn grant_privilege(
+        &mut self,
+        username: &str,
+        rule: &PrivilegeRule,
+    ) -> Result<(), AppError> {
+        let stored = self.resolve_privilege(rule)?;
+        let mut meta = self.require_user_meta(username)?;
+
+        self.prune_dangling(&mut meta.privileges)?;
+        meta.privileges.retain(|r| r.target() != stored.target());
+
+        if meta.privileges.len() >= MAX_PRIVILEGE_RULES {
+            return Err(AppError::InvalidPrivilege {
+                reason: format!("a user cannot hold more than {MAX_PRIVILEGE_RULES} privileges"),
+            });
+        }
+        meta.privileges.push(stored);
+        self.put_user_meta(username, &meta)
+    }
+
+    /// 1 つの対象に対する権限を剥奪する。ロールは問わず対象ごと落とす。
+    /// 該当するルールが無ければ `NotFound`。
+    #[tracing::instrument(skip_all, fields(username = %username))]
+    pub fn revoke_privilege(
+        &mut self,
+        username: &str,
+        target: &PrivilegeTarget,
+    ) -> Result<(), AppError> {
+        let target = self.resolve_target(target)?;
+        let mut meta = self.require_user_meta(username)?;
+
+        self.prune_dangling(&mut meta.privileges)?;
+        let before = meta.privileges.len();
+        meta.privileges.retain(|r| r.target() != target);
+        if meta.privileges.len() == before {
+            return Err(AppError::NotFound(
+                "The user has no privilege for that target".into(),
+            ));
+        }
+
+        self.put_user_meta(username, &meta)
     }
 
     #[tracing::instrument(skip_all, fields(username = %username))]
     pub fn delete_user(&mut self, username: &str) -> Result<(), AppError> {
-        let users_table = self.db.users;
-        if let Some(val) = users_table.get(&self.write_txn, username)? {
-            let meta: UserMetadata = serde_json::from_str(val)
-                .map_err(|_| AppError::InternalError("Failed to parse user metadata".into()))?;
-            let user_id = meta.id.into_bytes();
-
-            users_table.delete(&mut self.write_txn, username)?;
-
-            let privs_table = self.db.user_privileges;
-            let mut keys = Vec::new();
-            for item in privs_table
-                .remap_key_type::<heed::types::Bytes>()
-                .prefix_iter(&self.write_txn, user_id.as_slice())?
-            {
-                let (k, _) = item?;
-                keys.push(crate::db_init::UserIdAndDbId::bytes_decode(k).unwrap());
-            }
-            for k in keys {
-                privs_table.delete(&mut self.write_txn, &k)?;
-            }
-            Ok(())
-        } else {
-            Err(AppError::NotFound("User not found".to_string()))
-        }
-    }
-
-    #[tracing::instrument(skip_all, fields(db_name = %db_name))]
-    pub fn set_privilege(
-        &mut self,
-        user_id: crate::models::id::UserId,
-        db_name: &str,
-        role: UserRole,
-    ) -> Result<(), AppError> {
-        if db_name.is_empty() {
-            return Err(AppError::DatabaseNotFound {
-                name: db_name.to_string(),
-            });
-        }
-        let dbs_table = self.db.databases;
-        let db_id = if let Some(val) = dbs_table.get(&self.write_txn, db_name)? {
-            val.id.into_bytes()
-        } else {
-            return Err(AppError::NotFound("Database not found".to_string()));
-        };
-
-        let privs_table = self.db.user_privileges;
-        privs_table.put(
-            &mut self.write_txn,
-            &(
-                user_id,
-                crate::models::id::DatabaseId(uuid::Uuid::from_bytes(db_id)),
-            ),
-            &(role as u8),
-        )?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip_all, fields(db_name = %db_name))]
-    pub fn remove_privilege(
-        &mut self,
-        user_id: crate::models::id::UserId,
-        db_name: &str,
-    ) -> Result<(), AppError> {
-        if db_name.is_empty() {
-            return Err(AppError::DatabaseNotFound {
-                name: db_name.to_string(),
-            });
-        }
-        let dbs_table = self.db.databases;
-        let db_id = if let Some(val) = dbs_table.get(&self.write_txn, db_name)? {
-            val.id.into_bytes()
-        } else {
-            return Err(AppError::NotFound("Database not found".to_string()));
-        };
-
-        let privs_table = self.db.user_privileges;
-        privs_table.delete(
-            &mut self.write_txn,
-            &(
-                user_id,
-                crate::models::id::DatabaseId(uuid::Uuid::from_bytes(db_id)),
-            ),
-        )?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub fn commit(self) -> Result<(), AppError> {
-        self.write_txn.commit()?;
+        self.require_user_meta(username)?;
+        self.db.users.delete(&mut self.write_txn, username)?;
         Ok(())
     }
 }

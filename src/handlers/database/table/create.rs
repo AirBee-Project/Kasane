@@ -15,7 +15,10 @@ use crate::{
 
 /// テーブルの作成
 ///
-/// 指定したデータベース内に新しいテーブルを作成します。この操作はデータベースのManage以上の権限が必要です。
+/// **必要な権限**: `database` / `manage`
+///
+/// 指定したデータベース内に新しいテーブルを作成します。
+/// 新規作成はデータベース全体への変更なので、テーブル単位の権限では実行できません。
 #[utoipa::path(
     post,
     path = "/databases/{db_name}/tables",
@@ -38,8 +41,10 @@ pub async fn table_create(
     Extension(auth_user): Extension<AuthUser>,
     Json(request): Json<CreateTableRequest>,
 ) -> Result<Response, AppError> {
-    crate::middleware::auth::check_privilege(&app_state, &auth_user, &db_name, UserRole::Manage)
-        .await?;
+    // 新しいテーブルの作成はデータベース全体への変更なので、データベースレベルの
+    // Manage を要求する。テーブルスコープのルールは「既にあるテーブルの管理」しか許さない
+    // （まだ存在しないテーブル名へのルールで作成させると、スコープの封じ込めが破れる）。
+    crate::middleware::auth::check_database(&app_state, &auth_user, &db_name, UserRole::Manage)?;
 
     let table_name = request.name.clone();
     table_create_service::create(&app_state, &db_name, &table_name, request).await?;

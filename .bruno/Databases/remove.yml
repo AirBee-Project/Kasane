@@ -7,9 +7,9 @@ info:
 
 http:
   method: DELETE
-  url: "{{baseUrl}}/databases/:name"
+  url: "{{baseUrl}}/databases/:db_name"
   params:
-    - name: name
+    - name: db_name
       value: ""
       type: path
   auth:
@@ -26,10 +26,10 @@ examples:
   - name: 204 Response
     description: Removed successfully
     request:
-      url: "{{baseUrl}}/databases/:name"
+      url: "{{baseUrl}}/databases/:db_name"
       method: DELETE
       params:
-        - name: name
+        - name: db_name
           value: ""
           type: path
     response:

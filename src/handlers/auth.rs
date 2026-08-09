@@ -1,3 +1,4 @@
+use crate::repositories::MetaRead;
 use axum::{Json, extract::State};
 
 use crate::{
@@ -8,6 +9,8 @@ use crate::{
 };
 
 /// ユーザーログインとJWTの発行
+///
+/// **必要な権限**: なし（認証不要）
 ///
 /// ユーザー名とパスワードを検証し、Bearerトークンを発行します。
 #[utoipa::path(
@@ -30,7 +33,7 @@ pub async fn login(
         let _guard = span.enter();
         let meta = app_state
             .db
-            .read_users(|repo| repo.get_user_meta(&payload.username))?;
+            .read(|repo| repo.user_meta(&payload.username))?;
 
         let meta = match meta {
             Some(meta) => meta,

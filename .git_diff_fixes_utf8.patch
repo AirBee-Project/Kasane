@@ -1,0 +1,2754 @@
+﻿diff --git a/openapi.json b/openapi.json
+index 76d6916..86b1ea7 100644
+--- a/openapi.json
++++ b/openapi.json
+@@ -2,7 +2,7 @@
+   "openapi": "3.1.0",
+   "info": {
+     "title": "kasane",
+-    "description": "",
++    "description": "\n## 讓ｩ髯舌↓縺､縺・※\n\n蜷・お繝ｳ繝峨・繧､繝ｳ繝医・隱ｬ譏弱↓縺ゅｋ **蠢・ｦ√↑讓ｩ髯・* 縺ｯ縲√◎縺ｮ謫堺ｽ懊↓蠢・ｦ√↑譛蟆上・讓ｩ髯舌〒縺吶・n`繧ｹ繧ｳ繝ｼ繝輿 / `繝ｭ繝ｼ繝ｫ` 縺ｮ蠖｢蠑上〒陦ｨ縺励∪縺吶・n\n**繧ｹ繧ｳ繝ｼ繝・*縺ｯ `global` 竓・`database` 竓・`table` 縺ｮ髫主ｱ､縺ｧ縲∽ｸ贋ｽ阪せ繧ｳ繝ｼ繝励・讓ｩ髯舌・荳倶ｽ阪ｒ縺吶∋縺ｦ蜷ｫ縺ｿ縺ｾ縺吶・n縺溘→縺医・ `global` / `read` 繧呈戟縺､繝ｦ繝ｼ繧ｶ繝ｼ縺ｯ縲√☆縺ｹ縺ｦ縺ｮ繝・・繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν繧定ｪｭ繧√∪縺吶・n`database` / `table` 縺ｨ譖ｸ縺九ｌ縺ｦ縺・ｋ蝣ｴ蜷医∝ｯｾ雎｡縺ｯ繝代せ縺ｧ謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν縺ｧ縺吶・n\n**繝ｭ繝ｼ繝ｫ**縺ｯ `read` < `write` < `manage` < `admin` 縺ｮ鬆・↓蠑ｷ縺上∽ｸ贋ｽ阪Ο繝ｼ繝ｫ縺ｯ荳倶ｽ阪ｒ縺吶∋縺ｦ蜷ｫ縺ｿ縺ｾ縺吶・n\n- `read` 窶・蜿ら・\n- `write` 窶・繝・・繧ｿ縺ｮ譖ｸ縺崎ｾｼ縺ｿ\n- `manage` 窶・繝・・繝悶Ν繧・ョ繝ｼ繧ｿ繝吶・繧ｹ縺昴・繧ゅ・縺ｮ邂｡逅・n- `admin` 窶・繝ｦ繝ｼ繧ｶ繝ｼ縺ｨ讓ｩ髯舌・邂｡逅・ょ宛蠕｡髱｢縺ｮ讓ｩ髯舌〒縺ゅｊ縲～global` 繧ｹ繧ｳ繝ｼ繝励↓縺ｮ縺ｿ謖・ｮ壹〒縺阪∪縺兔n\n`global` / `manage` 縺ｯ蜈ｨ繝・・繧ｿ繝吶・繧ｹ縺ｮ繝・・繧ｿ繧定・逕ｱ縺ｫ謇ｱ縺医∪縺吶′縲√Θ繝ｼ繧ｶ繝ｼ繧・ｨｩ髯舌・謫堺ｽ懊〒縺阪∪縺帙ｓ縲・n繝ｦ繝ｼ繧ｶ繝ｼ邂｡逅・ｒ陦後∴繧九・縺ｯ `global` / `admin` 縺縺代〒縺吶・n\n`admin` 縺ｯ `manage` 繧貞性繧縺溘ａ縲・*繧ｵ繝ｼ繝舌・邂｡逅・・・縺吶∋縺ｦ縺ｮ繝・・繧ｿ縺ｫ繧ゅい繧ｯ繧ｻ繧ｹ縺ｧ縺阪∪縺・*縲・n縺薙ｌ縺ｯ驕ｿ縺代ｉ繧後∪縺帙ｓ・・admin` 縺ｯ莉ｻ諢上Θ繝ｼ繧ｶ繝ｼ縺ｮ繝代せ繝ｯ繝ｼ繝峨→讓ｩ髯舌ｒ螟画峩縺ｧ縺阪ｋ縺溘ａ縲―n逶ｴ謗･縺ｮ繝・・繧ｿ繧｢繧ｯ繧ｻ繧ｹ縺縺代ｒ遖√§縺ｦ繧りｿょ屓縺ｧ縺阪∪縺呻ｼ峨ゅョ繝ｼ繧ｿ謫堺ｽ懊＠縺句ｿ・ｦ√→縺励↑縺・°逕ｨ繧｢繧ｫ繧ｦ繝ｳ繝医↓縺ｯ\n`admin` 縺ｧ縺ｯ縺ｪ縺・`global` / `manage` 繧貞牡繧雁ｽ薙※縺ｦ縺上□縺輔＞縲・n",
+     "license": {
+       "name": ""
+     },
+@@ -15,7 +15,7 @@
+           "Auth"
+         ],
+         "summary": "繝ｦ繝ｼ繧ｶ繝ｼ繝ｭ繧ｰ繧､繝ｳ縺ｨJWT縺ｮ逋ｺ陦・,
+-        "description": "繝ｦ繝ｼ繧ｶ繝ｼ蜷阪→繝代せ繝ｯ繝ｼ繝峨ｒ讀懆ｨｼ縺励。earer繝医・繧ｯ繝ｳ繧堤匱陦後＠縺ｾ縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: 縺ｪ縺暦ｼ郁ｪ崎ｨｼ荳崎ｦ・ｼ噂n\n繝ｦ繝ｼ繧ｶ繝ｼ蜷阪→繝代せ繝ｯ繝ｼ繝峨ｒ讀懆ｨｼ縺励。earer繝医・繧ｯ繝ｳ繧堤匱陦後＠縺ｾ縺吶・,
+         "operationId": "login",
+         "requestBody": {
+           "content": {
+@@ -50,7 +50,7 @@
+           "Databases"
+         ],
+         "summary": "繝・・繧ｿ繝吶・繧ｹ荳隕ｧ縺ｮ蜿門ｾ・,
+-        "description": "繝ｦ繝ｼ繧ｶ繝ｼ讓ｩ髯舌↓蠢懊§縺ｦ縲√い繧ｯ繧ｻ繧ｹ蜿ｯ閭ｽ縺ｪ繝・・繧ｿ繝吶・繧ｹ縺ｮ荳隕ｧ繧貞叙蠕励＠縺ｾ縺吶・n\n- **繧ｰ繝ｭ繝ｼ繝舌Ν邂｡逅・・*: 繧ｷ繧ｹ繝・Β蜀・・蜈ｨ繝・・繧ｿ繝吶・繧ｹ縺瑚ｦ九∴縺ｾ縺吶・n- **荳闊ｬ繝ｦ繝ｼ繧ｶ繝ｼ**: 閾ｪ蛻・′讓ｩ髯舌ｒ謖√▲縺ｦ縺・ｋ繝・・繧ｿ繝吶・繧ｹ縺縺代′隕九∴縺ｾ縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: 縺ｪ縺暦ｼ郁ｪ崎ｨｼ縺ｮ縺ｿ繝ｻ邨先棡縺ｯ讓ｩ髯舌〒邨槭ｉ繧後ｋ・噂n\n蜻ｼ縺ｳ蜃ｺ縺励◆繝ｦ繝ｼ繧ｶ繝ｼ縺・Read 莉･荳翫〒蛻ｰ驕斐〒縺阪ｋ繝・・繧ｿ繝吶・繧ｹ縺縺代ｒ霑斐＠縺ｾ縺吶・n繝・・繝悶Ν蜊倅ｽ阪・讓ｩ髯舌＠縺区戟縺溘↑縺・ｴ蜷医ｂ縲√◎縺ｮ繝・・繝悶Ν繧貞性繧繝・・繧ｿ繝吶・繧ｹ縺ｯ荳隕ｧ縺ｫ迴ｾ繧後∪縺吶・,
+         "operationId": "database_list",
+         "responses": {
+           "200": {
+@@ -78,7 +78,7 @@
+           "Databases"
+         ],
+         "summary": "繝・・繧ｿ繝吶・繧ｹ縺ｮ菴懈・",
+-        "description": "譁ｰ縺励＞繝・・繧ｿ繝吶・繧ｹ繧剃ｽ懈・縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `manage` 莉･荳翫・繝ｭ繝ｼ繝ｫ縺悟ｿ・ｦ√〒縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `global` / `manage`\n\n譁ｰ縺励＞繝・・繧ｿ繝吶・繧ｹ繧剃ｽ懈・縺励∪縺吶・,
+         "operationId": "database_create",
+         "requestBody": {
+           "content": {
+@@ -104,9 +104,189 @@
+         },
+         "security": [
+           {
+-            "bearer_auth": [
+-              "global_admin"
+-            ]
++            "bearer_auth": []
++          }
++        ]
++      }
++    },
++    "/databases/{db_name}": {
++      "get": {
++        "tags": [
++          "Databases"
++        ],
++        "summary": "繝・・繧ｿ繝吶・繧ｹ諠・ｱ縺ｮ蜿門ｾ・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `database` / `read`・磯・荳九ユ繝ｼ繝悶Ν縺ｮ讓ｩ髯舌〒繧ょ庄・噂n\n謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｮ隧ｳ邏ｰ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶・,
++        "operationId": "database_info",
++        "parameters": [
++          {
++            "name": "db_name",
++            "in": "path",
++            "description": "繝・・繧ｿ繝吶・繧ｹ蜷・,
++            "required": true,
++            "schema": {
++              "type": "string"
++            },
++            "example": "example_database"
++          }
++        ],
++        "responses": {
++          "200": {
++            "description": "",
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/DatabaseInfoResponse"
++                }
++              }
++            }
++          }
++        },
++        "security": [
++          {
++            "bearer_auth": []
++          }
++        ]
++      },
++      "delete": {
++        "tags": [
++          "Databases"
++        ],
++        "summary": "繝・・繧ｿ繝吶・繧ｹ縺ｮ蜑企勁",
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `global` / `manage`\n\n謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繧貞炎髯､縺励∪縺吶・,
++        "operationId": "remove_database",
++        "parameters": [
++          {
++            "name": "db_name",
++            "in": "path",
++            "description": "繝・・繧ｿ繝吶・繧ｹ蜷・,
++            "required": true,
++            "schema": {
++              "type": "string"
++            },
++            "example": "example_database"
++          }
++        ],
++        "responses": {
++          "204": {
++            "description": ""
++          }
++        },
++        "security": [
++          {
++            "bearer_auth": []
++          }
++        ]
++      },
++      "patch": {
++        "tags": [
++          "Databases"
++        ],
++        "summary": "繝・・繧ｿ繝吶・繧ｹ縺ｮ譖ｴ譁ｰ",
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `database` / `manage`\n\n謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｮ蜷榊燕繧・ｪｬ譏弱ｒ螟画峩縺励∪縺吶・n讓ｩ髯舌・繝・・繧ｿ繝吶・繧ｹ ID 縺ｫ邏舌▼縺上◆繧√∵隼蜷阪＠縺ｦ繧よｨｩ髯舌・霑ｽ蠕薙＠縺ｾ縺吶・,
++        "operationId": "database_update",
++        "parameters": [
++          {
++            "name": "db_name",
++            "in": "path",
++            "description": "繝・・繧ｿ繝吶・繧ｹ蜷・,
++            "required": true,
++            "schema": {
++              "type": "string"
++            },
++            "example": "example_database"
++          }
++        ],
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/UpdateDatabaseRequest"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "200": {
++            "description": "謌仙粥"
++          },
++          "400": {
++            "description": "繝ｪ繧ｯ繧ｨ繧ｹ繝医′荳肴ｭ｣・医ヱ繝ｩ繝｡繝ｼ繧ｿ繧ｨ繝ｩ繝ｼ縲√∪縺溘・譁ｰ縺励＞繝・・繧ｿ繝吶・繧ｹ蜷阪′荳肴ｭ｣・・
++          },
++          "403": {
++            "description": "讓ｩ髯蝉ｸ崎ｶｳ・・anage讓ｩ髯舌′縺ｪ縺・ｴ蜷茨ｼ・
++          },
++          "404": {
++            "description": "螟画峩蜈・・繝・・繧ｿ繝吶・繧ｹ縺悟ｭ伜惠縺励↑縺・
++          },
++          "409": {
++            "description": "螟画峩蠕後・繝・・繧ｿ繝吶・繧ｹ蜷阪′縺吶〒縺ｫ蟄伜惠縺吶ｋ"
++          }
++        },
++        "security": [
++          {
++            "bearer_auth": []
++          }
++        ]
++      }
++    },
++    "/databases/{db_name}/copy": {
++      "post": {
++        "tags": [
++          "Databases"
++        ],
++        "summary": "繝・・繧ｿ繝吶・繧ｹ縺ｮ繧ｳ繝斐・",
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `global` / `manage`\n\n謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繧偵さ繝斐・縺励∪縺吶・,
++        "operationId": "database_copy",
++        "parameters": [
++          {
++            "name": "db_name",
++            "in": "path",
++            "description": "繧ｳ繝斐・蜈・ョ繝ｼ繧ｿ繝吶・繧ｹ蜷・,
++            "required": true,
++            "schema": {
++              "type": "string"
++            },
++            "example": "source_database"
++          }
++        ],
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/CopyDatabaseRequest"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "201": {
++            "description": "",
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/DatabaseInfoResponse"
++                }
++              }
++            }
++          },
++          "400": {
++            "description": "繝ｪ繧ｯ繧ｨ繧ｹ繝医′荳肴ｭ｣・医ヱ繝ｩ繝｡繝ｼ繧ｿ繧ｨ繝ｩ繝ｼ縲√∪縺溘・荳肴ｭ｣縺ｪ繝・・繧ｿ繝吶・繧ｹ蜷搾ｼ・
++          },
++          "403": {
++            "description": "讓ｩ髯蝉ｸ崎ｶｳ・・lobal Admin讓ｩ髯舌′縺ｪ縺・ｴ蜷茨ｼ・
++          },
++          "404": {
++            "description": "繧ｳ繝斐・蜈・ョ繝ｼ繧ｿ繝吶・繧ｹ縺悟ｭ伜惠縺励↑縺・
++          },
++          "409": {
++            "description": "繧ｳ繝斐・蜈医ョ繝ｼ繧ｿ繝吶・繧ｹ縲√∪縺溘・繧ｳ繝斐・蜈・→蜷悟錐縺ｮ繝・・繧ｿ繝吶・繧ｹ縺後☆縺ｧ縺ｫ蟄伜惠縺吶ｋ"
++          }
++        },
++        "security": [
++          {
++            "bearer_auth": []
+           }
+         ]
+       }
+@@ -117,7 +297,7 @@
+           "Tables"
+         ],
+         "summary": "繝・・繝悶Ν荳隕ｧ縺ｮ蜿門ｾ・,
+-        "description": "謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ蜀・↓蟄伜惠縺吶ｋ繝・・繝悶Ν縺ｮ縺・■縲∝他縺ｳ蜃ｺ縺励◆繝ｦ繝ｼ繧ｶ繝ｼ縺・Read 莉･荳翫・讓ｩ髯舌ｒ\n謖√▽繧ゅ・縺縺代ｒ霑斐＠縺ｾ縺吶ゅユ繝ｼ繝悶Ν蜊倅ｽ阪・讓ｩ髯舌＠縺区戟縺溘↑縺・Θ繝ｼ繧ｶ繝ｼ繧ゅ√◎縺ｮ繝・・繝悶Ν縺縺代′\n隕九∴繧句ｽ｢縺ｧ荳隕ｧ繧貞叙蠕励〒縺阪∪縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `database` / `read`・磯・荳九ユ繝ｼ繝悶Ν縺ｮ讓ｩ髯舌〒繧ょ庄繝ｻ邨先棡縺ｯ讓ｩ髯舌〒邨槭ｉ繧後ｋ・噂n\n謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ蜀・↓蟄伜惠縺吶ｋ繝・・繝悶Ν縺ｮ縺・■縲∝他縺ｳ蜃ｺ縺励◆繝ｦ繝ｼ繧ｶ繝ｼ縺・Read 莉･荳翫・讓ｩ髯舌ｒ\n謖√▽繧ゅ・縺縺代ｒ霑斐＠縺ｾ縺吶・,
+         "operationId": "table_list",
+         "parameters": [
+           {
+@@ -154,7 +334,7 @@
+           "Tables"
+         ],
+         "summary": "繝・・繝悶Ν縺ｮ菴懈・",
+-        "description": "謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ蜀・↓譁ｰ縺励＞繝・・繝悶Ν繧剃ｽ懈・縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮManage莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `database` / `manage`\n\n謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ蜀・↓譁ｰ縺励＞繝・・繝悶Ν繧剃ｽ懈・縺励∪縺吶・n譁ｰ隕丈ｽ懈・縺ｯ繝・・繧ｿ繝吶・繧ｹ蜈ｨ菴薙∈縺ｮ螟画峩縺ｪ縺ｮ縺ｧ縲√ユ繝ｼ繝悶Ν蜊倅ｽ阪・讓ｩ髯舌〒縺ｯ螳溯｡後〒縺阪∪縺帙ｓ縲・,
+         "operationId": "table_create",
+         "parameters": [
+           {
+@@ -202,7 +382,7 @@
+           "Tables"
+         ],
+         "summary": "繝・・繝悶Ν諠・ｱ縺ｮ蜿門ｾ・,
+-        "description": "謖・ｮ壹＠縺溘ユ繝ｼ繝悶Ν縺ｮ隧ｳ邏ｰ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮRead莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `table` / `read`\n\n謖・ｮ壹＠縺溘ユ繝ｼ繝悶Ν縺ｮ隧ｳ邏ｰ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶・,
+         "operationId": "table_info",
+         "parameters": [
+           {
+@@ -252,7 +432,7 @@
+           "Tables"
+         ],
+         "summary": "繝・・繝悶Ν縺ｮ蜑企勁",
+-        "description": "謖・ｮ壹＠縺溘ユ繝ｼ繝悶Ν繧貞炎髯､縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮManage莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `table` / `manage`\n\n謖・ｮ壹＠縺溘ユ繝ｼ繝悶Ν繧貞炎髯､縺励∪縺吶・,
+         "operationId": "remove_table",
+         "parameters": [
+           {
+@@ -295,7 +475,7 @@
+           "Tables"
+         ],
+         "summary": "繝・・繝悶Ν縺ｮ譖ｴ譁ｰ",
+-        "description": "繝・・繝悶Ν縺ｮ蜷榊燕螟画峩繧・､縺ｮ蛻ｶ邏・ｒ譖ｴ譁ｰ縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮ Manage 讓ｩ髯舌′蠢・ｦ√〒縺吶・n\n蛻ｶ邏・ｒ螟画峩縺吶ｋ髫帙∵里蟄倥・繝・・繧ｿ縺梧眠縺励＞蛻ｶ邏・↓驕ｩ蜷医＠縺ｦ縺・ｋ縺九ｒ讀懆ｨｼ縺吶ｋ謖吝虚繧・`validate_existing_data` 繝輔Λ繧ｰ縺ｧ蛻ｶ蠕｡縺ｧ縺阪∪縺吶・n- `true`・医ョ繝輔か繝ｫ繝茨ｼ峨・蝣ｴ蜷医∵里蟄倥ョ繝ｼ繧ｿ縺梧眠縺励＞蛻ｶ邏・↓驕募渚縺励※縺・ｌ縺ｰ繧ｨ繝ｩ繝ｼ縺ｨ縺励※譖ｴ譁ｰ繧貞唆荳九＠縺ｾ縺吶・n- `false` 縺ｮ蝣ｴ蜷医∵里蟄倥ョ繝ｼ繧ｿ縺ｮ繝√ぉ繝・け繧偵せ繧ｭ繝・・縺励※鬮倬溘↓螟画峩繧帝←逕ｨ縺励∪縺呻ｼ井ｸ肴紛蜷医↑繝・・繧ｿ縺梧ｮ九ｋ蜿ｯ閭ｽ諤ｧ縺後≠繧翫∪縺呻ｼ峨・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `table` / `manage`\n\n繝・・繝悶Ν縺ｮ蜷榊燕螟画峩繧・､縺ｮ蛻ｶ邏・ｒ譖ｴ譁ｰ縺励∪縺吶・n讓ｩ髯舌・繝・・繝悶Ν ID 縺ｫ邏舌▼縺上◆繧√∵隼蜷阪＠縺ｦ繧よｨｩ髯舌・霑ｽ蠕薙＠縺ｾ縺吶・n\n蛻ｶ邏・ｒ螟画峩縺吶ｋ髫帙∵里蟄倥・繝・・繧ｿ縺梧眠縺励＞蛻ｶ邏・↓驕ｩ蜷医＠縺ｦ縺・ｋ縺九ｒ讀懆ｨｼ縺吶ｋ謖吝虚繧・`validate_existing_data` 繝輔Λ繧ｰ縺ｧ蛻ｶ蠕｡縺ｧ縺阪∪縺吶・n- `true`・医ョ繝輔か繝ｫ繝茨ｼ峨・蝣ｴ蜷医∵里蟄倥ョ繝ｼ繧ｿ縺梧眠縺励＞蛻ｶ邏・↓驕募渚縺励※縺・ｌ縺ｰ繧ｨ繝ｩ繝ｼ縺ｨ縺励※譖ｴ譁ｰ繧貞唆荳九＠縺ｾ縺吶・n- `false` 縺ｮ蝣ｴ蜷医∵里蟄倥ョ繝ｼ繧ｿ縺ｮ繝√ぉ繝・け繧偵せ繧ｭ繝・・縺励※鬮倬溘↓螟画峩繧帝←逕ｨ縺励∪縺呻ｼ井ｸ肴紛蜷医↑繝・・繧ｿ縺梧ｮ九ｋ蜿ｯ閭ｽ諤ｧ縺後≠繧翫∪縺呻ｼ峨・,
+         "operationId": "table_update_handler",
+         "parameters": [
+           {
+@@ -367,7 +547,7 @@
+           "Tables"
+         ],
+         "summary": "繝・・繝悶Ν縺ｮ繧ｳ繝斐・",
+-        "description": "謖・ｮ壹＠縺溘ユ繝ｼ繝悶Ν繧貞挨縺ｮ繝・・繧ｿ繝吶・繧ｹ縲√∪縺溘・蜷後§繝・・繧ｿ繝吶・繧ｹ蜀・↓逡ｰ縺ｪ繧句錐蜑阪〒繧ｳ繝斐・縺励∪縺吶・n繧ｳ繝斐・蜈・ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｫ蟇ｾ縺吶ｋRead讓ｩ髯舌→縲√さ繝斐・蜈医ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｫ蟇ｾ縺吶ｋManage讓ｩ髯舌′蠢・ｦ√〒縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: 繧ｳ繝斐・蜈・`table` / `read` ・・繧ｳ繝斐・蜈・`database` / `manage`\n\n謖・ｮ壹＠縺溘ユ繝ｼ繝悶Ν繧貞挨縺ｮ繝・・繧ｿ繝吶・繧ｹ縲√∪縺溘・蜷後§繝・・繧ｿ繝吶・繧ｹ蜀・↓逡ｰ縺ｪ繧句錐蜑阪〒繧ｳ繝斐・縺励∪縺吶・n繧ｳ繝斐・蜈医↓縺ｯ譁ｰ縺励＞繝・・繝悶Ν縺御ｽ懊ｉ繧後ｋ縺溘ａ縲√ユ繝ｼ繝悶Ν蜊倅ｽ阪・讓ｩ髯舌〒縺ｯ螳溯｡後〒縺阪∪縺帙ｓ縲・,
+         "operationId": "table_copy",
+         "parameters": [
+           {
+@@ -438,7 +618,7 @@
+           "Data"
+         ],
+         "summary": "繝・・繧ｿ縺ｮ荳頑嶌縺阪・霑ｽ蜉",
+-        "description": "謖・ｮ壹＠縺溽ｩｺ髢的D縺ｫ蟇ｾ縺励※縲∵欠螳壹＠縺溷､繧呈嶌縺崎ｾｼ縺ｿ縺ｾ縺吶・n譌｢縺ｫ蛟､縺悟ｭ伜惠縺吶ｋ遨ｺ髢的D縺ｫ蟇ｾ縺励※縺ｯ縲√◎縺ｮ蛟､繧貞ｮ悟・縺ｫ荳頑嶌縺阪＠縺ｾ縺吶・n\n縺薙・謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮWrite莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `table` / `write`\n\n謖・ｮ壹＠縺溽ｩｺ髢的D縺ｫ蟇ｾ縺励※縲∵欠螳壹＠縺溷､繧呈嶌縺崎ｾｼ縺ｿ縺ｾ縺吶・n譌｢縺ｫ蛟､縺悟ｭ伜惠縺吶ｋ遨ｺ髢的D縺ｫ蟇ｾ縺励※縺ｯ縲√◎縺ｮ蛟､繧貞ｮ悟・縺ｫ荳頑嶌縺阪＠縺ｾ縺吶・,
+         "operationId": "data_insert",
+         "parameters": [
+           {
+@@ -491,7 +671,7 @@
+           "Data"
+         ],
+         "summary": "繝・・繧ｿ縺ｮ蜑企勁",
+-        "description": "謖・ｮ壹＠縺溽ｩｺ髢的D繧偵ユ繝ｼ繝悶Ν縺九ｉ繧貞炎髯､縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮWrite莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `table` / `write`\n\n謖・ｮ壹＠縺溽ｩｺ髢的D繧偵ユ繝ｼ繝悶Ν縺九ｉ蜑企勁縺励∪縺吶・,
+         "operationId": "data_remove",
+         "parameters": [
+           {
+@@ -544,7 +724,7 @@
+           "Data"
+         ],
+         "summary": "繝・・繧ｿ縺ｮ驛ｨ蛻・ｿｽ蜉",
+-        "description": "謖・ｮ壹＠縺溽ｩｺ髢的D縺ｫ蟇ｾ縺励※縲∵欠螳壹＠縺溷､繧呈嶌縺崎ｾｼ縺ｿ縺ｾ縺吶・n\n- **謖・ｮ壹＠縺溽ｩｺ髢的D縺後☆縺ｧ縺ｫ蟄伜惠縺吶ｋ蝣ｴ蜷・*: 譌｢蟄倥・繝・・繧ｿ縺ｯ邯ｭ謖√＆繧後∪縺吶・n- **謖・ｮ壹＠縺溽ｩｺ髢的D縺悟ｭ伜惠縺励↑縺・ｴ蜷・*: 繝・・繧ｿ縺梧嶌縺崎ｾｼ縺ｾ繧後∪縺吶・n\n縺薙・謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮWrite莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `table` / `write`\n\n謖・ｮ壹＠縺溽ｩｺ髢的D縺ｫ蟇ｾ縺励※縲∵欠螳壹＠縺溷､繧呈嶌縺崎ｾｼ縺ｿ縺ｾ縺吶・n\n- **謖・ｮ壹＠縺溽ｩｺ髢的D縺後☆縺ｧ縺ｫ蟄伜惠縺吶ｋ蝣ｴ蜷・*: 譌｢蟄倥・繝・・繧ｿ縺ｯ邯ｭ謖√＆繧後∪縺吶・n- **謖・ｮ壹＠縺溽ｩｺ髢的D縺悟ｭ伜惠縺励↑縺・ｴ蜷・*: 繝・・繧ｿ縺梧嶌縺崎ｾｼ縺ｾ繧後∪縺吶・,
+         "operationId": "data_upsert",
+         "parameters": [
+           {
+@@ -599,7 +779,7 @@
+           "Data"
+         ],
+         "summary": "繝・・繧ｿ縺ｮ荳諡ｬ蜿門ｾ・,
+-        "description": "遨ｺ髢的D縺ｨ蛟､繧谷SON驟榊・縺ｨ縺励※荳諡ｬ縺ｧ蜿門ｾ励＠縺ｾ縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮRead莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `table` / `read`\n\n遨ｺ髢的D縺ｨ蛟､繧谷SON驟榊・縺ｨ縺励※荳諡ｬ縺ｧ蜿門ｾ励＠縺ｾ縺吶・,
+         "operationId": "data_get",
+         "parameters": [
+           {
+@@ -674,199 +854,13 @@
+         ]
+       }
+     },
+-    "/databases/{name}": {
+-      "get": {
+-        "tags": [
+-          "Databases"
+-        ],
+-        "summary": "繝・・繧ｿ繝吶・繧ｹ諠・ｱ縺ｮ蜿門ｾ・,
+-        "description": "謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｮ隧ｳ邏ｰ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶ょｯｾ雎｡繝・・繧ｿ繝吶・繧ｹ縺ｮRead莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・,
+-        "operationId": "database_info",
+-        "parameters": [
+-          {
+-            "name": "name",
+-            "in": "path",
+-            "description": "繝・・繧ｿ繝吶・繧ｹ蜷・,
+-            "required": true,
+-            "schema": {
+-              "type": "string"
+-            },
+-            "example": "example_database"
+-          }
+-        ],
+-        "responses": {
+-          "200": {
+-            "description": "",
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/DatabaseInfoResponse"
+-                }
+-              }
+-            }
+-          }
+-        },
+-        "security": [
+-          {
+-            "bearer_auth": []
+-          }
+-        ]
+-      },
+-      "delete": {
+-        "tags": [
+-          "Databases"
+-        ],
+-        "summary": "繝・・繧ｿ繝吶・繧ｹ縺ｮ蜑企勁",
+-        "description": "謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繧貞炎髯､縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・Global Admin讓ｩ髯舌′蠢・ｦ√〒縺吶・,
+-        "operationId": "remove_database",
+-        "parameters": [
+-          {
+-            "name": "name",
+-            "in": "path",
+-            "description": "繝・・繧ｿ繝吶・繧ｹ蜷・,
+-            "required": true,
+-            "schema": {
+-              "type": "string"
+-            },
+-            "example": "example_database"
+-          }
+-        ],
+-        "responses": {
+-          "204": {
+-            "description": ""
+-          }
+-        },
+-        "security": [
+-          {
+-            "bearer_auth": [
+-              "global_admin"
+-            ]
+-          }
+-        ]
+-      },
+-      "patch": {
+-        "tags": [
+-          "Databases"
+-        ],
+-        "summary": "繝・・繧ｿ繝吶・繧ｹ縺ｮ譖ｴ譁ｰ",
+-        "description": "謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｮ蜷榊燕繧・ｪｬ譏弱ｒ螟画峩縺励∪縺吶ょｯｾ雎｡繝・・繧ｿ繝吶・繧ｹ縺ｮManage莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・,
+-        "operationId": "database_update",
+-        "parameters": [
+-          {
+-            "name": "name",
+-            "in": "path",
+-            "description": "繝・・繧ｿ繝吶・繧ｹ蜷・,
+-            "required": true,
+-            "schema": {
+-              "type": "string"
+-            },
+-            "example": "example_database"
+-          }
+-        ],
+-        "requestBody": {
+-          "content": {
+-            "application/json": {
+-              "schema": {
+-                "$ref": "#/components/schemas/UpdateDatabaseRequest"
+-              }
+-            }
+-          },
+-          "required": true
+-        },
+-        "responses": {
+-          "200": {
+-            "description": "謌仙粥"
+-          },
+-          "400": {
+-            "description": "繝ｪ繧ｯ繧ｨ繧ｹ繝医′荳肴ｭ｣・医ヱ繝ｩ繝｡繝ｼ繧ｿ繧ｨ繝ｩ繝ｼ縲√∪縺溘・譁ｰ縺励＞繝・・繧ｿ繝吶・繧ｹ蜷阪′荳肴ｭ｣・・
+-          },
+-          "403": {
+-            "description": "讓ｩ髯蝉ｸ崎ｶｳ・・anage讓ｩ髯舌′縺ｪ縺・ｴ蜷茨ｼ・
+-          },
+-          "404": {
+-            "description": "螟画峩蜈・・繝・・繧ｿ繝吶・繧ｹ縺悟ｭ伜惠縺励↑縺・
+-          },
+-          "409": {
+-            "description": "螟画峩蠕後・繝・・繧ｿ繝吶・繧ｹ蜷阪′縺吶〒縺ｫ蟄伜惠縺吶ｋ"
+-          }
+-        },
+-        "security": [
+-          {
+-            "bearer_auth": []
+-          }
+-        ]
+-      }
+-    },
+-    "/databases/{name}/copy": {
+-      "post": {
+-        "tags": [
+-          "Databases"
+-        ],
+-        "summary": "繝・・繧ｿ繝吶・繧ｹ縺ｮ繧ｳ繝斐・",
+-        "description": "謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繧偵さ繝斐・縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・Global Admin讓ｩ髯舌′蠢・ｦ√〒縺吶・,
+-        "operationId": "database_copy",
+-        "parameters": [
+-          {
+-            "name": "name",
+-            "in": "path",
+-            "description": "繧ｳ繝斐・蜈・ョ繝ｼ繧ｿ繝吶・繧ｹ蜷・,
+-            "required": true,
+-            "schema": {
+-              "type": "string"
+-            },
+-            "example": "source_database"
+-          }
+-        ],
+-        "requestBody": {
+-          "content": {
+-            "application/json": {
+-              "schema": {
+-                "$ref": "#/components/schemas/CopyDatabaseRequest"
+-              }
+-            }
+-          },
+-          "required": true
+-        },
+-        "responses": {
+-          "201": {
+-            "description": "",
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/DatabaseInfoResponse"
+-                }
+-              }
+-            }
+-          },
+-          "400": {
+-            "description": "繝ｪ繧ｯ繧ｨ繧ｹ繝医′荳肴ｭ｣・医ヱ繝ｩ繝｡繝ｼ繧ｿ繧ｨ繝ｩ繝ｼ縲√∪縺溘・荳肴ｭ｣縺ｪ繝・・繧ｿ繝吶・繧ｹ蜷搾ｼ・
+-          },
+-          "403": {
+-            "description": "讓ｩ髯蝉ｸ崎ｶｳ・・lobal Admin讓ｩ髯舌′縺ｪ縺・ｴ蜷茨ｼ・
+-          },
+-          "404": {
+-            "description": "繧ｳ繝斐・蜈・ョ繝ｼ繧ｿ繝吶・繧ｹ縺悟ｭ伜惠縺励↑縺・
+-          },
+-          "409": {
+-            "description": "繧ｳ繝斐・蜈医ョ繝ｼ繧ｿ繝吶・繧ｹ縲√∪縺溘・繧ｳ繝斐・蜈・→蜷悟錐縺ｮ繝・・繧ｿ繝吶・繧ｹ縺後☆縺ｧ縺ｫ蟄伜惠縺吶ｋ"
+-          }
+-        },
+-        "security": [
+-          {
+-            "bearer_auth": [
+-              "global_admin"
+-            ]
+-          }
+-        ]
+-      }
+-    },
+     "/query": {
+       "post": {
+         "tags": [
+           "Query"
+         ],
+         "summary": "繧ｯ繧ｨ繝ｪ縺ｮ螳溯｡・,
+-        "description": "隍・焚縺ｮ繝・・繝悶Ν繧貞ｯｾ雎｡縺ｫ繧ｯ繧ｨ繝ｪ蠑上ｒ螳溯｡後＠縲∵欠螳壹＠縺溽ｩｺ髢的D縺ｮ邨先棡繧貞叙蠕励＠縺ｾ縺吶・n繧ｯ繧ｨ繝ｪ蠑上′蜿ら・縺吶ｋ**縺吶∋縺ｦ縺ｮ繝・・繝悶Ν**縺ｫ蟇ｾ縺励※ Read 莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: 蜿ら・縺吶ｋ蜈ｨ繝・・繝悶Ν縺ｫ `table` / `read`\n\n隍・焚縺ｮ繝・・繝悶Ν繧貞ｯｾ雎｡縺ｫ繧ｯ繧ｨ繝ｪ蠑上ｒ螳溯｡後＠縲∵欠螳壹＠縺溽ｩｺ髢的D縺ｮ邨先棡繧貞叙蠕励＠縺ｾ縺吶・,
+         "operationId": "execute_query",
+         "parameters": [
+           {
+@@ -933,7 +927,7 @@
+           "System"
+         ],
+         "summary": "繧ｵ繝ｼ繝舌・縺ｮ繧ｹ繝・・繧ｿ繧ｹ縺ｨ繝舌・繧ｸ繝ｧ繝ｳ諠・ｱ繧貞叙蠕励☆繧九・,
+-        "description": "繝ｭ繧ｰ繧､繝ｳ貂医∩縺ｮ繝ｦ繝ｼ繧ｶ繝ｼ縺ｧ縺ゅｌ縺ｰ隱ｰ縺ｧ繧ゅい繧ｯ繧ｻ繧ｹ蜿ｯ閭ｽ縺ｧ縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: 縺ｪ縺暦ｼ郁ｪ崎ｨｼ縺ｮ縺ｿ・・,
+         "operationId": "get_system_info",
+         "responses": {
+           "200": {
+@@ -960,7 +954,7 @@
+           "Users"
+         ],
+         "summary": "繝ｦ繝ｼ繧ｶ繝ｼ荳隕ｧ縺ｮ蜿門ｾ・,
+-        "description": "繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ荳隕ｧ繧呈ｨｩ髯舌▽縺阪〒蜿門ｾ励＠縺ｾ縺吶ゅ％縺ｮ謫堺ｽ懊・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ縺悟ｿ・ｦ√〒縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`\n\n繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ荳隕ｧ繧呈ｨｩ髯舌▽縺阪〒蜿門ｾ励＠縺ｾ縺吶・,
+         "operationId": "list_users",
+         "responses": {
+           "200": {
+@@ -979,9 +973,7 @@
+         },
+         "security": [
+           {
+-            "bearer_auth": [
+-              "global_admin"
+-            ]
++            "bearer_auth": []
+           }
+         ]
+       },
+@@ -990,7 +982,7 @@
+           "Users"
+         ],
+         "summary": "譁ｰ隕上Θ繝ｼ繧ｶ繝ｼ菴懈・",
+-        "description": "譁ｰ縺励＞繝ｦ繝ｼ繧ｶ繝ｼ繧剃ｽ懈・縺励∪縺吶Ａprivileges` 繧呈欠螳壹☆繧九→菴懈・縺ｨ蜷梧凾縺ｫ讓ｩ髯舌ｒ莉倅ｸ弱〒縺阪∪縺吶・n縺薙・謫堺ｽ懊・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ縺悟ｿ・ｦ√〒縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`\n\n譁ｰ縺励＞繝ｦ繝ｼ繧ｶ繝ｼ繧剃ｽ懈・縺励∪縺吶Ａprivileges` 繧呈欠螳壹☆繧九→菴懈・縺ｨ蜷梧凾縺ｫ讓ｩ髯舌ｒ莉倅ｸ弱〒縺阪∪縺吶・,
+         "operationId": "create_user",
+         "requestBody": {
+           "content": {
+@@ -1018,9 +1010,7 @@
+         },
+         "security": [
+           {
+-            "bearer_auth": [
+-              "global_admin"
+-            ]
++            "bearer_auth": []
+           }
+         ]
+       }
+@@ -1031,7 +1021,7 @@
+           "Users"
+         ],
+         "summary": "繝ｦ繝ｼ繧ｶ繝ｼ諠・ｱ縺ｮ蜿門ｾ・,
+-        "description": "謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ縺ｮ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶よ悽莠ｺ縲√∪縺溘・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ繧呈戟縺､\n繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ縺ｿ螳溯｡悟庄閭ｽ縺ｧ縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: 譛ｬ莠ｺ 縺ｾ縺溘・ `global` / `admin`\n\n謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ縺ｮ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶・,
+         "operationId": "get_user",
+         "parameters": [
+           {
+@@ -1071,7 +1061,7 @@
+           "Users"
+         ],
+         "summary": "繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ蜑企勁",
+-        "description": "謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ繧貞炎髯､縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ縺悟ｿ・ｦ√〒縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`\n\n謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ繧貞炎髯､縺励∪縺吶・,
+         "operationId": "delete_user",
+         "parameters": [
+           {
+@@ -1098,9 +1088,7 @@
+         },
+         "security": [
+           {
+-            "bearer_auth": [
+-              "global_admin"
+-            ]
++            "bearer_auth": []
+           }
+         ]
+       }
+@@ -1111,7 +1099,7 @@
+           "Users"
+         ],
+         "summary": "繝代せ繝ｯ繝ｼ繝峨・螟画峩",
+-        "description": "謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ縺ｮ繝代せ繝ｯ繝ｼ繝峨ｒ螟画峩縺励∪縺吶よ悽莠ｺ縲√∪縺溘・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ繧箪n謖√▽繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ縺ｿ螳溯｡悟庄閭ｽ縺ｧ縺吶ょ､画峩縺吶ｋ縺ｨ逋ｺ陦梧ｸ医∩繝医・繧ｯ繝ｳ縺ｯ縺吶∋縺ｦ螟ｱ蜉ｹ縺励∪縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: 譛ｬ莠ｺ 縺ｾ縺溘・ `global` / `admin`\n\n謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ縺ｮ繝代せ繝ｯ繝ｼ繝峨ｒ螟画峩縺励∪縺吶ょ､画峩縺吶ｋ縺ｨ逋ｺ陦梧ｸ医∩繝医・繧ｯ繝ｳ縺ｯ縺吶∋縺ｦ螟ｱ蜉ｹ縺励∪縺吶・,
+         "operationId": "update_password",
+         "parameters": [
+           {
+@@ -1156,7 +1144,7 @@
+           "Users"
+         ],
+         "summary": "讓ｩ髯蝉ｸ隕ｧ縺ｮ蜿門ｾ・,
+-        "description": "謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ縺梧戟縺､讓ｩ髯舌Ν繝ｼ繝ｫ縺ｮ荳隕ｧ繧貞叙蠕励＠縺ｾ縺吶・n\n譌｢縺ｫ蜑企勁縺輔ｌ縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν繧呈欠縺吶Ν繝ｼ繝ｫ縺ｯ蜷榊燕縺ｸ隗｣豎ｺ縺ｧ縺阪↑縺・◆繧∽ｸ隕ｧ縺ｫ迴ｾ繧後∪縺帙ｓ\n・医◎縺・＠縺溘Ν繝ｼ繝ｫ縺ｯ隱榊庄蛻､螳壹〒繧ゆｸ閾ｴ縺励↑縺・◆繧√∬｡ｨ遉ｺ縺ｨ螳溷柑讓ｩ髯舌′鬟溘＞驕輔≧縺薙→縺ｯ縺ゅｊ縺ｾ縺帙ｓ・峨・n\n譛ｬ莠ｺ縲√∪縺溘・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ繧呈戟縺､繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ縺ｿ螳溯｡悟庄閭ｽ縺ｧ縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: 譛ｬ莠ｺ 縺ｾ縺溘・ `global` / `admin`\n\n謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ縺梧戟縺､讓ｩ髯舌Ν繝ｼ繝ｫ縺ｮ荳隕ｧ繧貞叙蠕励＠縺ｾ縺吶・n\n譌｢縺ｫ蜑企勁縺輔ｌ縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν繧呈欠縺吶Ν繝ｼ繝ｫ縺ｯ蜷榊燕縺ｸ隗｣豎ｺ縺ｧ縺阪↑縺・◆繧∽ｸ隕ｧ縺ｫ迴ｾ繧後∪縺帙ｓ\n・医◎縺・＠縺溘Ν繝ｼ繝ｫ縺ｯ隱榊庄蛻､螳壹〒繧ゆｸ閾ｴ縺励↑縺・◆繧√∬｡ｨ遉ｺ縺ｨ螳溷柑讓ｩ髯舌′鬟溘＞驕輔≧縺薙→縺ｯ縺ゅｊ縺ｾ縺帙ｓ・峨・,
+         "operationId": "get_privileges",
+         "parameters": [
+           {
+@@ -1198,7 +1186,7 @@
+           "Users"
+         ],
+         "summary": "繝・・繧ｿ繝吶・繧ｹ縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳・,
+-        "description": "譌｢縺ｫ險ｭ螳壹＆繧後※縺・ｌ縺ｰ繝ｭ繝ｼ繝ｫ繧堤ｽｮ縺肴鋤縺医∪縺吶る・荳九・繝・・繝悶Ν縺吶∋縺ｦ縺ｫ蜉ｹ縺阪∪縺吶・n讓ｩ髯舌・繝・・繧ｿ繝吶・繧ｹ ID 縺ｫ邏舌▼縺上◆繧√∵隼蜷阪＠縺ｦ繧りｿｽ蠕薙＠縺ｾ縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`\n\n譌｢縺ｫ險ｭ螳壹＆繧後※縺・ｌ縺ｰ繝ｭ繝ｼ繝ｫ繧堤ｽｮ縺肴鋤縺医∪縺吶る・荳九・繝・・繝悶Ν縺吶∋縺ｦ縺ｫ蜉ｹ縺阪∪縺吶・n讓ｩ髯舌・繝・・繧ｿ繝吶・繧ｹ ID 縺ｫ邏舌▼縺上◆繧√∵隼蜷阪＠縺ｦ繧りｿｽ蠕薙＠縺ｾ縺吶・,
+         "operationId": "set_database_privilege",
+         "parameters": [
+           {
+@@ -1226,7 +1214,7 @@
+           "content": {
+             "application/json": {
+               "schema": {
+-                "$ref": "#/components/schemas/SetPrivilegeRequest"
++                "$ref": "#/components/schemas/SetDataPrivilegeRequest"
+               }
+             }
+           },
+@@ -1237,7 +1225,7 @@
+             "description": ""
+           },
+           "400": {
+-            "description": "admin 縺ｯ縺薙・繧ｹ繧ｳ繝ｼ繝励↓謖・ｮ壹〒縺阪↑縺・ｼ丈ｸ企剞雜・℃"
++            "description": "菫晄戟縺ｧ縺阪ｋ讓ｩ髯先焚縺ｮ荳企剞繧定ｶ・∴縺・
+           },
+           "403": {
+             "description": "root繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ讓ｩ髯舌・螟画峩荳榊庄"
+@@ -1248,9 +1236,7 @@
+         },
+         "security": [
+           {
+-            "bearer_auth": [
+-              "global_admin"
+-            ]
++            "bearer_auth": []
+           }
+         ]
+       },
+@@ -1259,6 +1245,7 @@
+           "Users"
+         ],
+         "summary": "繝・・繧ｿ繝吶・繧ｹ縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌・蜑･螂ｪ",
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`\n\n繝ｭ繝ｼ繝ｫ繧貞撫繧上★縲√％縺ｮ繝・・繧ｿ繝吶・繧ｹ縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌ｒ蜿悶ｊ髯､縺阪∪縺吶・,
+         "operationId": "delete_database_privilege",
+         "parameters": [
+           {
+@@ -1295,9 +1282,7 @@
+         },
+         "security": [
+           {
+-            "bearer_auth": [
+-              "global_admin"
+-            ]
++            "bearer_auth": []
+           }
+         ]
+       }
+@@ -1308,7 +1293,7 @@
+           "Users"
+         ],
+         "summary": "繝・・繝悶Ν縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳・,
+-        "description": "譌｢縺ｫ險ｭ螳壹＆繧後※縺・ｌ縺ｰ繝ｭ繝ｼ繝ｫ繧堤ｽｮ縺肴鋤縺医∪縺吶・n讓ｩ髯舌・繝・・繝悶Ν ID 縺ｫ邏舌▼縺上◆繧√∵隼蜷阪＠縺ｦ繧りｿｽ蠕薙＠縺ｾ縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`\n\n譌｢縺ｫ險ｭ螳壹＆繧後※縺・ｌ縺ｰ繝ｭ繝ｼ繝ｫ繧堤ｽｮ縺肴鋤縺医∪縺吶・n讓ｩ髯舌・繝・・繝悶Ν ID 縺ｫ邏舌▼縺上◆繧√∵隼蜷阪＠縺ｦ繧りｿｽ蠕薙＠縺ｾ縺吶・,
+         "operationId": "set_table_privilege",
+         "parameters": [
+           {
+@@ -1346,7 +1331,7 @@
+           "content": {
+             "application/json": {
+               "schema": {
+-                "$ref": "#/components/schemas/SetPrivilegeRequest"
++                "$ref": "#/components/schemas/SetDataPrivilegeRequest"
+               }
+             }
+           },
+@@ -1357,7 +1342,7 @@
+             "description": ""
+           },
+           "400": {
+-            "description": "admin 縺ｯ縺薙・繧ｹ繧ｳ繝ｼ繝励↓謖・ｮ壹〒縺阪↑縺・ｼ丈ｸ企剞雜・℃"
++            "description": "菫晄戟縺ｧ縺阪ｋ讓ｩ髯先焚縺ｮ荳企剞繧定ｶ・∴縺・
+           },
+           "403": {
+             "description": "root繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ讓ｩ髯舌・螟画峩荳榊庄"
+@@ -1368,9 +1353,7 @@
+         },
+         "security": [
+           {
+-            "bearer_auth": [
+-              "global_admin"
+-            ]
++            "bearer_auth": []
+           }
+         ]
+       },
+@@ -1379,6 +1362,7 @@
+           "Users"
+         ],
+         "summary": "繝・・繝悶Ν縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌・蜑･螂ｪ",
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`\n\n繝ｭ繝ｼ繝ｫ繧貞撫繧上★縲√％縺ｮ繝・・繝悶Ν縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌ｒ蜿悶ｊ髯､縺阪∪縺吶・,
+         "operationId": "delete_table_privilege",
+         "parameters": [
+           {
+@@ -1425,9 +1409,7 @@
+         },
+         "security": [
+           {
+-            "bearer_auth": [
+-              "global_admin"
+-            ]
++            "bearer_auth": []
+           }
+         ]
+       }
+@@ -1438,7 +1420,7 @@
+           "Users"
+         ],
+         "summary": "繧ｵ繝ｼ繝舌・蜈ｨ菴薙↓蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳・,
+-        "description": "譌｢縺ｫ險ｭ螳壹＆繧後※縺・ｌ縺ｰ繝ｭ繝ｼ繝ｫ繧堤ｽｮ縺肴鋤縺医∪縺吶Ａadmin` 繧呈欠螳壹〒縺阪ｋ縺ｮ縺ｯ縺薙・繧ｹ繧ｳ繝ｼ繝励□縺代〒縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`\n\n譌｢縺ｫ險ｭ螳壹＆繧後※縺・ｌ縺ｰ繝ｭ繝ｼ繝ｫ繧堤ｽｮ縺肴鋤縺医∪縺吶Ａadmin` 繧呈欠螳壹〒縺阪ｋ縺ｮ縺ｯ縺薙・繧ｹ繧ｳ繝ｼ繝励□縺代〒縺吶・,
+         "operationId": "set_global_privilege",
+         "parameters": [
+           {
+@@ -1456,7 +1438,7 @@
+           "content": {
+             "application/json": {
+               "schema": {
+-                "$ref": "#/components/schemas/SetPrivilegeRequest"
++                "$ref": "#/components/schemas/SetGlobalPrivilegeRequest"
+               }
+             }
+           },
+@@ -1478,9 +1460,7 @@
+         },
+         "security": [
+           {
+-            "bearer_auth": [
+-              "global_admin"
+-            ]
++            "bearer_auth": []
+           }
+         ]
+       },
+@@ -1489,7 +1469,7 @@
+           "Users"
+         ],
+         "summary": "繧ｵ繝ｼ繝舌・蜈ｨ菴薙↓蟇ｾ縺吶ｋ讓ｩ髯舌・蜑･螂ｪ",
+-        "description": "繝ｭ繝ｼ繝ｫ繧貞撫繧上★縲√％縺ｮ繧ｹ繧ｳ繝ｼ繝励・讓ｩ髯舌ｒ蜿悶ｊ髯､縺阪∪縺吶・,
++        "description": "**蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`\n\n繝ｭ繝ｼ繝ｫ繧貞撫繧上★縲√％縺ｮ繧ｹ繧ｳ繝ｼ繝励・讓ｩ髯舌ｒ蜿悶ｊ髯､縺阪∪縺吶・,
+         "operationId": "delete_global_privilege",
+         "parameters": [
+           {
+@@ -1516,9 +1496,7 @@
+         },
+         "security": [
+           {
+-            "bearer_auth": [
+-              "global_admin"
+-            ]
++            "bearer_auth": []
+           }
+         ]
+       }
+@@ -1917,6 +1895,15 @@
+           }
+         }
+       },
++      "DataRole": {
++        "type": "string",
++        "description": "繝・・繧ｿ髱｢縺ｮ繝ｭ繝ｼ繝ｫ縲ゅョ繝ｼ繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν繧ｹ繧ｳ繝ｼ繝励〒謖・ｮ壹〒縺阪ｋ縺ｮ縺ｯ縺薙・ 3 縺､縺縺代・n\n蛻ｶ蠕｡髱｢縺ｮ `admin` 繧貞性縺ｾ縺ｪ縺・◆繧√～database` / `table` 繧ｹ繧ｳ繝ｼ繝励↓ `admin` 繧箪n荳弱∴繧九Μ繧ｯ繧ｨ繧ｹ繝医・蝙九→縺励※陦ｨ迴ｾ縺ｧ縺阪↑縺・ｼ医ョ繧ｷ繝ｪ繧｢繝ｩ繧､繧ｺ縺ｮ譎らせ縺ｧ蠑ｾ縺九ｌ繧具ｼ峨・,
++        "enum": [
++          "read",
++          "write",
++          "manage"
++        ]
++      },
+       "DatabaseInfoResponse": {
+         "type": "object",
+         "required": [
+@@ -2356,7 +2343,7 @@
+           {
+             "type": "object",
+             "title": "DatabasePrivilege",
+-            "description": "繝・・繧ｿ繝吶・繧ｹ驟堺ｸ九☆縺ｹ縺ｦ縲・,
++            "description": "繝・・繧ｿ繝吶・繧ｹ驟堺ｸ九☆縺ｹ縺ｦ縲Ａadmin` 縺ｯ謖・ｮ壹〒縺阪↑縺・・,
+             "required": [
+               "db_name",
+               "role",
+@@ -2368,7 +2355,7 @@
+                 "example": "example_database"
+               },
+               "role": {
+-                "$ref": "#/components/schemas/UserRole"
++                "$ref": "#/components/schemas/DataRole"
+               },
+               "scope": {
+                 "type": "string",
+@@ -2381,7 +2368,7 @@
+           {
+             "type": "object",
+             "title": "TablePrivilege",
+-            "description": "蜊倅ｸ繝・・繝悶Ν縲・,
++            "description": "蜊倅ｸ繝・・繝悶Ν縲Ａadmin` 縺ｯ謖・ｮ壹〒縺阪↑縺・・,
+             "required": [
+               "db_name",
+               "table_name",
+@@ -2398,7 +2385,7 @@
+                 "example": "example_table"
+               },
+               "role": {
+-                "$ref": "#/components/schemas/UserRole"
++                "$ref": "#/components/schemas/DataRole"
+               },
+               "scope": {
+                 "type": "string",
+@@ -3022,9 +3009,21 @@
+           }
+         }
+       },
+-      "SetPrivilegeRequest": {
++      "SetDataPrivilegeRequest": {
++        "type": "object",
++        "description": "繝・・繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν繧ｹ繧ｳ繝ｼ繝励↓蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳壹Μ繧ｯ繧ｨ繧ｹ繝医・n繝ｭ繝ｼ繝ｫ縺ｯ [`DataRole`](super::entity::DataRole) 縺ｪ縺ｮ縺ｧ `admin` 縺ｯ陦ｨ迴ｾ縺ｧ縺阪↑縺・・,
++        "required": [
++          "role"
++        ],
++        "properties": {
++          "role": {
++            "$ref": "#/components/schemas/DataRole"
++          }
++        }
++      },
++      "SetGlobalPrivilegeRequest": {
+         "type": "object",
+-        "description": "1 縺､縺ｮ蟇ｾ雎｡縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳壹Μ繧ｯ繧ｨ繧ｹ繝医ょｯｾ雎｡縺ｯ繝代せ縺ｧ謖・ｮ壹☆繧九・,
++        "description": "`global` 繧ｹ繧ｳ繝ｼ繝励↓蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳壹Μ繧ｯ繧ｨ繧ｹ繝医ょ宛蠕｡髱｢縺ｮ `admin` 繧呈欠螳壹〒縺阪ｋ蜚ｯ荳縺ｮ蜈･蜿｣縲・,
+         "required": [
+           "role"
+         ],
+@@ -3691,7 +3690,7 @@
+       },
+       "UserRole": {
+         "type": "string",
+-        "description": "讓ｩ髯舌・蠑ｷ縺輔よ焚蛟､縺悟､ｧ縺阪＞縺ｻ縺ｩ蠑ｷ縺上∽ｸ贋ｽ阪・荳倶ｽ阪ｒ縺吶∋縺ｦ蜷ｫ繧縲・n\n`admin` 縺縺代・繝・・繧ｿ髱｢縺ｧ縺ｯ縺ｪ縺丞宛蠕｡髱｢・医Θ繝ｼ繧ｶ繝ｼ縺ｮ菴懈・繝ｻ蜑企勁繝ｻ讓ｩ髯蝉ｻ倅ｸ趣ｼ峨ｒ陦ｨ縺励―n`global` 繧ｹ繧ｳ繝ｼ繝励↓縺ｮ縺ｿ謖・ｮ壹〒縺阪ｋ縲Ａdatabase` / `table` 繧ｹ繧ｳ繝ｼ繝励〒 `admin` 繧箪n謖・ｮ壹＠縺溘Μ繧ｯ繧ｨ繧ｹ繝医・ 400 縺ｧ諡貞凄縺輔ｌ繧九・,
++        "description": "讓ｩ髯舌・蠑ｷ縺輔よ焚蛟､縺悟､ｧ縺阪＞縺ｻ縺ｩ蠑ｷ縺上∽ｸ贋ｽ阪・荳倶ｽ阪ｒ縺吶∋縺ｦ蜷ｫ繧縲・n\n`admin` 縺ｯ蛻ｶ蠕｡髱｢・医Θ繝ｼ繧ｶ繝ｼ縺ｮ菴懈・繝ｻ蜑企勁繝ｻ讓ｩ髯蝉ｻ倅ｸ趣ｼ峨ｒ陦ｨ縺励～global` 繧ｹ繧ｳ繝ｼ繝励↓\n縺ｮ縺ｿ迴ｾ繧後ｋ縲ゅョ繝ｼ繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν繧ｹ繧ｳ繝ｼ繝励・菫晏ｭ倥・API 陦ｨ迴ｾ縺ｯ [`DataRole`] 繧剃ｽｿ縺・・,
+         "enum": [
+           "read",
+           "write",
+diff --git a/openapi.yaml b/openapi.yaml
+index 74ec80f..48af4ff 100644
+--- a/openapi.yaml
++++ b/openapi.yaml
+@@ -1,7 +1,31 @@
+ openapi: 3.1.0
+ info:
+   title: kasane
+-  description: ''
++  description: |2
++
++    ## 讓ｩ髯舌↓縺､縺・※
++
++    蜷・お繝ｳ繝峨・繧､繝ｳ繝医・隱ｬ譏弱↓縺ゅｋ **蠢・ｦ√↑讓ｩ髯・* 縺ｯ縲√◎縺ｮ謫堺ｽ懊↓蠢・ｦ√↑譛蟆上・讓ｩ髯舌〒縺吶・+    `繧ｹ繧ｳ繝ｼ繝輿 / `繝ｭ繝ｼ繝ｫ` 縺ｮ蠖｢蠑上〒陦ｨ縺励∪縺吶・+
++    **繧ｹ繧ｳ繝ｼ繝・*縺ｯ `global` 竓・`database` 竓・`table` 縺ｮ髫主ｱ､縺ｧ縲∽ｸ贋ｽ阪せ繧ｳ繝ｼ繝励・讓ｩ髯舌・荳倶ｽ阪ｒ縺吶∋縺ｦ蜷ｫ縺ｿ縺ｾ縺吶・+    縺溘→縺医・ `global` / `read` 繧呈戟縺､繝ｦ繝ｼ繧ｶ繝ｼ縺ｯ縲√☆縺ｹ縺ｦ縺ｮ繝・・繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν繧定ｪｭ繧√∪縺吶・+    `database` / `table` 縺ｨ譖ｸ縺九ｌ縺ｦ縺・ｋ蝣ｴ蜷医∝ｯｾ雎｡縺ｯ繝代せ縺ｧ謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν縺ｧ縺吶・+
++    **繝ｭ繝ｼ繝ｫ**縺ｯ `read` < `write` < `manage` < `admin` 縺ｮ鬆・↓蠑ｷ縺上∽ｸ贋ｽ阪Ο繝ｼ繝ｫ縺ｯ荳倶ｽ阪ｒ縺吶∋縺ｦ蜷ｫ縺ｿ縺ｾ縺吶・+
++    - `read` 窶・蜿ら・
++    - `write` 窶・繝・・繧ｿ縺ｮ譖ｸ縺崎ｾｼ縺ｿ
++    - `manage` 窶・繝・・繝悶Ν繧・ョ繝ｼ繧ｿ繝吶・繧ｹ縺昴・繧ゅ・縺ｮ邂｡逅・+    - `admin` 窶・繝ｦ繝ｼ繧ｶ繝ｼ縺ｨ讓ｩ髯舌・邂｡逅・ょ宛蠕｡髱｢縺ｮ讓ｩ髯舌〒縺ゅｊ縲～global` 繧ｹ繧ｳ繝ｼ繝励↓縺ｮ縺ｿ謖・ｮ壹〒縺阪∪縺・+
++    `global` / `manage` 縺ｯ蜈ｨ繝・・繧ｿ繝吶・繧ｹ縺ｮ繝・・繧ｿ繧定・逕ｱ縺ｫ謇ｱ縺医∪縺吶′縲√Θ繝ｼ繧ｶ繝ｼ繧・ｨｩ髯舌・謫堺ｽ懊〒縺阪∪縺帙ｓ縲・+    繝ｦ繝ｼ繧ｶ繝ｼ邂｡逅・ｒ陦後∴繧九・縺ｯ `global` / `admin` 縺縺代〒縺吶・+
++    `admin` 縺ｯ `manage` 繧貞性繧縺溘ａ縲・*繧ｵ繝ｼ繝舌・邂｡逅・・・縺吶∋縺ｦ縺ｮ繝・・繧ｿ縺ｫ繧ゅい繧ｯ繧ｻ繧ｹ縺ｧ縺阪∪縺・*縲・+    縺薙ｌ縺ｯ驕ｿ縺代ｉ繧後∪縺帙ｓ・・admin` 縺ｯ莉ｻ諢上Θ繝ｼ繧ｶ繝ｼ縺ｮ繝代せ繝ｯ繝ｼ繝峨→讓ｩ髯舌ｒ螟画峩縺ｧ縺阪ｋ縺溘ａ縲・+    逶ｴ謗･縺ｮ繝・・繧ｿ繧｢繧ｯ繧ｻ繧ｹ縺縺代ｒ遖√§縺ｦ繧りｿょ屓縺ｧ縺阪∪縺呻ｼ峨ゅョ繝ｼ繧ｿ謫堺ｽ懊＠縺句ｿ・ｦ√→縺励↑縺・°逕ｨ繧｢繧ｫ繧ｦ繝ｳ繝医↓縺ｯ
++    `admin` 縺ｧ縺ｯ縺ｪ縺・`global` / `manage` 繧貞牡繧雁ｽ薙※縺ｦ縺上□縺輔＞縲・   license:
+     name: ''
+   version: 0.3.2
+@@ -11,7 +35,10 @@ paths:
+       tags:
+       - Auth
+       summary: 繝ｦ繝ｼ繧ｶ繝ｼ繝ｭ繧ｰ繧､繝ｳ縺ｨJWT縺ｮ逋ｺ陦・-      description: 繝ｦ繝ｼ繧ｶ繝ｼ蜷阪→繝代せ繝ｯ繝ｼ繝峨ｒ讀懆ｨｼ縺励。earer繝医・繧ｯ繝ｳ繧堤匱陦後＠縺ｾ縺吶・+      description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: 縺ｪ縺暦ｼ郁ｪ崎ｨｼ荳崎ｦ・ｼ・+
++        繝ｦ繝ｼ繧ｶ繝ｼ蜷阪→繝代せ繝ｯ繝ｼ繝峨ｒ讀懆ｨｼ縺励。earer繝医・繧ｯ繝ｳ繧堤匱陦後＠縺ｾ縺吶・       operationId: login
+       requestBody:
+         content:
+@@ -34,10 +61,10 @@ paths:
+       - Databases
+       summary: 繝・・繧ｿ繝吶・繧ｹ荳隕ｧ縺ｮ蜿門ｾ・       description: |-
+-        繝ｦ繝ｼ繧ｶ繝ｼ讓ｩ髯舌↓蠢懊§縺ｦ縲√い繧ｯ繧ｻ繧ｹ蜿ｯ閭ｽ縺ｪ繝・・繧ｿ繝吶・繧ｹ縺ｮ荳隕ｧ繧貞叙蠕励＠縺ｾ縺吶・+        **蠢・ｦ√↑讓ｩ髯・*: 縺ｪ縺暦ｼ郁ｪ崎ｨｼ縺ｮ縺ｿ繝ｻ邨先棡縺ｯ讓ｩ髯舌〒邨槭ｉ繧後ｋ・・ 
+-        - **繧ｰ繝ｭ繝ｼ繝舌Ν邂｡逅・・*: 繧ｷ繧ｹ繝・Β蜀・・蜈ｨ繝・・繧ｿ繝吶・繧ｹ縺瑚ｦ九∴縺ｾ縺吶・-        - **荳闊ｬ繝ｦ繝ｼ繧ｶ繝ｼ**: 閾ｪ蛻・′讓ｩ髯舌ｒ謖√▲縺ｦ縺・ｋ繝・・繧ｿ繝吶・繧ｹ縺縺代′隕九∴縺ｾ縺吶・+        蜻ｼ縺ｳ蜃ｺ縺励◆繝ｦ繝ｼ繧ｶ繝ｼ縺・Read 莉･荳翫〒蛻ｰ驕斐〒縺阪ｋ繝・・繧ｿ繝吶・繧ｹ縺縺代ｒ霑斐＠縺ｾ縺吶・+        繝・・繝悶Ν蜊倅ｽ阪・讓ｩ髯舌＠縺区戟縺溘↑縺・ｴ蜷医ｂ縲√◎縺ｮ繝・・繝悶Ν繧貞性繧繝・・繧ｿ繝吶・繧ｹ縺ｯ荳隕ｧ縺ｫ迴ｾ繧後∪縺吶・       operationId: database_list
+       responses:
+         '200':
+@@ -54,7 +81,10 @@ paths:
+       tags:
+       - Databases
+       summary: 繝・・繧ｿ繝吶・繧ｹ縺ｮ菴懈・
+-      description: 譁ｰ縺励＞繝・・繧ｿ繝吶・繧ｹ繧剃ｽ懈・縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `manage` 莉･荳翫・繝ｭ繝ｼ繝ｫ縺悟ｿ・ｦ√〒縺吶・+      description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `global` / `manage`
++
++        譁ｰ縺励＞繝・・繧ｿ繝吶・繧ｹ繧剃ｽ懈・縺励∪縺吶・       operationId: database_create
+       requestBody:
+         content:
+@@ -70,17 +100,144 @@ paths:
+               schema:
+                 $ref: '#/components/schemas/DatabaseInfoResponse'
+       security:
+-      - bearer_auth:
+-        - global_admin
++      - bearer_auth: []
++  /databases/{db_name}:
++    get:
++      tags:
++      - Databases
++      summary: 繝・・繧ｿ繝吶・繧ｹ諠・ｱ縺ｮ蜿門ｾ・+      description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `database` / `read`・磯・荳九ユ繝ｼ繝悶Ν縺ｮ讓ｩ髯舌〒繧ょ庄・・+
++        謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｮ隧ｳ邏ｰ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶・+      operationId: database_info
++      parameters:
++      - name: db_name
++        in: path
++        description: 繝・・繧ｿ繝吶・繧ｹ蜷・+        required: true
++        schema:
++          type: string
++        example: example_database
++      responses:
++        '200':
++          description: ''
++          content:
++            application/json:
++              schema:
++                $ref: '#/components/schemas/DatabaseInfoResponse'
++      security:
++      - bearer_auth: []
++    delete:
++      tags:
++      - Databases
++      summary: 繝・・繧ｿ繝吶・繧ｹ縺ｮ蜑企勁
++      description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `global` / `manage`
++
++        謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繧貞炎髯､縺励∪縺吶・+      operationId: remove_database
++      parameters:
++      - name: db_name
++        in: path
++        description: 繝・・繧ｿ繝吶・繧ｹ蜷・+        required: true
++        schema:
++          type: string
++        example: example_database
++      responses:
++        '204':
++          description: ''
++      security:
++      - bearer_auth: []
++    patch:
++      tags:
++      - Databases
++      summary: 繝・・繧ｿ繝吶・繧ｹ縺ｮ譖ｴ譁ｰ
++      description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `database` / `manage`
++
++        謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｮ蜷榊燕繧・ｪｬ譏弱ｒ螟画峩縺励∪縺吶・+        讓ｩ髯舌・繝・・繧ｿ繝吶・繧ｹ ID 縺ｫ邏舌▼縺上◆繧√∵隼蜷阪＠縺ｦ繧よｨｩ髯舌・霑ｽ蠕薙＠縺ｾ縺吶・+      operationId: database_update
++      parameters:
++      - name: db_name
++        in: path
++        description: 繝・・繧ｿ繝吶・繧ｹ蜷・+        required: true
++        schema:
++          type: string
++        example: example_database
++      requestBody:
++        content:
++          application/json:
++            schema:
++              $ref: '#/components/schemas/UpdateDatabaseRequest'
++        required: true
++      responses:
++        '200':
++          description: 謌仙粥
++        '400':
++          description: 繝ｪ繧ｯ繧ｨ繧ｹ繝医′荳肴ｭ｣・医ヱ繝ｩ繝｡繝ｼ繧ｿ繧ｨ繝ｩ繝ｼ縲√∪縺溘・譁ｰ縺励＞繝・・繧ｿ繝吶・繧ｹ蜷阪′荳肴ｭ｣・・+        '403':
++          description: 讓ｩ髯蝉ｸ崎ｶｳ・・anage讓ｩ髯舌′縺ｪ縺・ｴ蜷茨ｼ・+        '404':
++          description: 螟画峩蜈・・繝・・繧ｿ繝吶・繧ｹ縺悟ｭ伜惠縺励↑縺・+        '409':
++          description: 螟画峩蠕後・繝・・繧ｿ繝吶・繧ｹ蜷阪′縺吶〒縺ｫ蟄伜惠縺吶ｋ
++      security:
++      - bearer_auth: []
++  /databases/{db_name}/copy:
++    post:
++      tags:
++      - Databases
++      summary: 繝・・繧ｿ繝吶・繧ｹ縺ｮ繧ｳ繝斐・
++      description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `global` / `manage`
++
++        謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繧偵さ繝斐・縺励∪縺吶・+      operationId: database_copy
++      parameters:
++      - name: db_name
++        in: path
++        description: 繧ｳ繝斐・蜈・ョ繝ｼ繧ｿ繝吶・繧ｹ蜷・+        required: true
++        schema:
++          type: string
++        example: source_database
++      requestBody:
++        content:
++          application/json:
++            schema:
++              $ref: '#/components/schemas/CopyDatabaseRequest'
++        required: true
++      responses:
++        '201':
++          description: ''
++          content:
++            application/json:
++              schema:
++                $ref: '#/components/schemas/DatabaseInfoResponse'
++        '400':
++          description: 繝ｪ繧ｯ繧ｨ繧ｹ繝医′荳肴ｭ｣・医ヱ繝ｩ繝｡繝ｼ繧ｿ繧ｨ繝ｩ繝ｼ縲√∪縺溘・荳肴ｭ｣縺ｪ繝・・繧ｿ繝吶・繧ｹ蜷搾ｼ・+        '403':
++          description: 讓ｩ髯蝉ｸ崎ｶｳ・・lobal Admin讓ｩ髯舌′縺ｪ縺・ｴ蜷茨ｼ・+        '404':
++          description: 繧ｳ繝斐・蜈・ョ繝ｼ繧ｿ繝吶・繧ｹ縺悟ｭ伜惠縺励↑縺・+        '409':
++          description: 繧ｳ繝斐・蜈医ョ繝ｼ繧ｿ繝吶・繧ｹ縲√∪縺溘・繧ｳ繝斐・蜈・→蜷悟錐縺ｮ繝・・繧ｿ繝吶・繧ｹ縺後☆縺ｧ縺ｫ蟄伜惠縺吶ｋ
++      security:
++      - bearer_auth: []
+   /databases/{db_name}/tables:
+     get:
+       tags:
+       - Tables
+       summary: 繝・・繝悶Ν荳隕ｧ縺ｮ蜿門ｾ・       description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `database` / `read`・磯・荳九ユ繝ｼ繝悶Ν縺ｮ讓ｩ髯舌〒繧ょ庄繝ｻ邨先棡縺ｯ讓ｩ髯舌〒邨槭ｉ繧後ｋ・・+
+         謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ蜀・↓蟄伜惠縺吶ｋ繝・・繝悶Ν縺ｮ縺・■縲∝他縺ｳ蜃ｺ縺励◆繝ｦ繝ｼ繧ｶ繝ｼ縺・Read 莉･荳翫・讓ｩ髯舌ｒ
+-        謖√▽繧ゅ・縺縺代ｒ霑斐＠縺ｾ縺吶ゅユ繝ｼ繝悶Ν蜊倅ｽ阪・讓ｩ髯舌＠縺区戟縺溘↑縺・Θ繝ｼ繧ｶ繝ｼ繧ゅ√◎縺ｮ繝・・繝悶Ν縺縺代′
+-        隕九∴繧句ｽ｢縺ｧ荳隕ｧ繧貞叙蠕励〒縺阪∪縺吶・+        謖√▽繧ゅ・縺縺代ｒ霑斐＠縺ｾ縺吶・       operationId: table_list
+       parameters:
+       - name: db_name
+@@ -103,7 +260,11 @@ paths:
+       tags:
+       - Tables
+       summary: 繝・・繝悶Ν縺ｮ菴懈・
+-      description: 謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ蜀・↓譁ｰ縺励＞繝・・繝悶Ν繧剃ｽ懈・縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮManage莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・+      description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `database` / `manage`
++
++        謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ蜀・↓譁ｰ縺励＞繝・・繝悶Ν繧剃ｽ懈・縺励∪縺吶・+        譁ｰ隕丈ｽ懈・縺ｯ繝・・繧ｿ繝吶・繧ｹ蜈ｨ菴薙∈縺ｮ螟画峩縺ｪ縺ｮ縺ｧ縲√ユ繝ｼ繝悶Ν蜊倅ｽ阪・讓ｩ髯舌〒縺ｯ螳溯｡後〒縺阪∪縺帙ｓ縲・       operationId: table_create
+       parameters:
+       - name: db_name
+@@ -133,7 +294,10 @@ paths:
+       tags:
+       - Tables
+       summary: 繝・・繝悶Ν諠・ｱ縺ｮ蜿門ｾ・-      description: 謖・ｮ壹＠縺溘ユ繝ｼ繝悶Ν縺ｮ隧ｳ邏ｰ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮRead莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・+      description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `table` / `read`
++
++        謖・ｮ壹＠縺溘ユ繝ｼ繝悶Ν縺ｮ隧ｳ邏ｰ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶・       operationId: table_info
+       parameters:
+       - name: db_name
+@@ -165,7 +329,10 @@ paths:
+       tags:
+       - Tables
+       summary: 繝・・繝悶Ν縺ｮ蜑企勁
+-      description: 謖・ｮ壹＠縺溘ユ繝ｼ繝悶Ν繧貞炎髯､縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮManage莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・+      description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `table` / `manage`
++
++        謖・ｮ壹＠縺溘ユ繝ｼ繝悶Ν繧貞炎髯､縺励∪縺吶・       operationId: remove_table
+       parameters:
+       - name: db_name
+@@ -194,7 +361,10 @@ paths:
+       - Tables
+       summary: 繝・・繝悶Ν縺ｮ譖ｴ譁ｰ
+       description: |-
+-        繝・・繝悶Ν縺ｮ蜷榊燕螟画峩繧・､縺ｮ蛻ｶ邏・ｒ譖ｴ譁ｰ縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮ Manage 讓ｩ髯舌′蠢・ｦ√〒縺吶・+        **蠢・ｦ√↑讓ｩ髯・*: `table` / `manage`
++
++        繝・・繝悶Ν縺ｮ蜷榊燕螟画峩繧・､縺ｮ蛻ｶ邏・ｒ譖ｴ譁ｰ縺励∪縺吶・+        讓ｩ髯舌・繝・・繝悶Ν ID 縺ｫ邏舌▼縺上◆繧√∵隼蜷阪＠縺ｦ繧よｨｩ髯舌・霑ｽ蠕薙＠縺ｾ縺吶・ 
+         蛻ｶ邏・ｒ螟画峩縺吶ｋ髫帙∵里蟄倥・繝・・繧ｿ縺梧眠縺励＞蛻ｶ邏・↓驕ｩ蜷医＠縺ｦ縺・ｋ縺九ｒ讀懆ｨｼ縺吶ｋ謖吝虚繧・`validate_existing_data` 繝輔Λ繧ｰ縺ｧ蛻ｶ蠕｡縺ｧ縺阪∪縺吶・         - `true`・医ョ繝輔か繝ｫ繝茨ｼ峨・蝣ｴ蜷医∵里蟄倥ョ繝ｼ繧ｿ縺梧眠縺励＞蛻ｶ邏・↓驕募渚縺励※縺・ｌ縺ｰ繧ｨ繝ｩ繝ｼ縺ｨ縺励※譖ｴ譁ｰ繧貞唆荳九＠縺ｾ縺吶・@@ -244,8 +414,10 @@ paths:
+       - Tables
+       summary: 繝・・繝悶Ν縺ｮ繧ｳ繝斐・
+       description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: 繧ｳ繝斐・蜈・`table` / `read` ・・繧ｳ繝斐・蜈・`database` / `manage`
++
+         謖・ｮ壹＠縺溘ユ繝ｼ繝悶Ν繧貞挨縺ｮ繝・・繧ｿ繝吶・繧ｹ縲√∪縺溘・蜷後§繝・・繧ｿ繝吶・繧ｹ蜀・↓逡ｰ縺ｪ繧句錐蜑阪〒繧ｳ繝斐・縺励∪縺吶・-        繧ｳ繝斐・蜈・ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｫ蟇ｾ縺吶ｋRead讓ｩ髯舌→縲√さ繝斐・蜈医ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｫ蟇ｾ縺吶ｋManage讓ｩ髯舌′蠢・ｦ√〒縺吶・+        繧ｳ繝斐・蜈医↓縺ｯ譁ｰ縺励＞繝・・繝悶Ν縺御ｽ懊ｉ繧後ｋ縺溘ａ縲√ユ繝ｼ繝悶Ν蜊倅ｽ阪・讓ｩ髯舌〒縺ｯ螳溯｡後〒縺阪∪縺帙ｓ縲・       operationId: table_copy
+       parameters:
+       - name: db_name
+@@ -291,10 +463,10 @@ paths:
+       - Data
+       summary: 繝・・繧ｿ縺ｮ荳頑嶌縺阪・霑ｽ蜉
+       description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `table` / `write`
++
+         謖・ｮ壹＠縺溽ｩｺ髢的D縺ｫ蟇ｾ縺励※縲∵欠螳壹＠縺溷､繧呈嶌縺崎ｾｼ縺ｿ縺ｾ縺吶・         譌｢縺ｫ蛟､縺悟ｭ伜惠縺吶ｋ遨ｺ髢的D縺ｫ蟇ｾ縺励※縺ｯ縲√◎縺ｮ蛟､繧貞ｮ悟・縺ｫ荳頑嶌縺阪＠縺ｾ縺吶・-
+-        縺薙・謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮWrite莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・       operationId: data_insert
+       parameters:
+       - name: db_name
+@@ -328,7 +500,10 @@ paths:
+       tags:
+       - Data
+       summary: 繝・・繧ｿ縺ｮ蜑企勁
+-      description: 謖・ｮ壹＠縺溽ｩｺ髢的D繧偵ユ繝ｼ繝悶Ν縺九ｉ繧貞炎髯､縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮWrite莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・+      description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `table` / `write`
++
++        謖・ｮ壹＠縺溽ｩｺ髢的D繧偵ユ繝ｼ繝悶Ν縺九ｉ蜑企勁縺励∪縺吶・       operationId: data_remove
+       parameters:
+       - name: db_name
+@@ -363,12 +538,12 @@ paths:
+       - Data
+       summary: 繝・・繧ｿ縺ｮ驛ｨ蛻・ｿｽ蜉
+       description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `table` / `write`
++
+         謖・ｮ壹＠縺溽ｩｺ髢的D縺ｫ蟇ｾ縺励※縲∵欠螳壹＠縺溷､繧呈嶌縺崎ｾｼ縺ｿ縺ｾ縺吶・ 
+         - **謖・ｮ壹＠縺溽ｩｺ髢的D縺後☆縺ｧ縺ｫ蟄伜惠縺吶ｋ蝣ｴ蜷・*: 譌｢蟄倥・繝・・繧ｿ縺ｯ邯ｭ謖√＆繧後∪縺吶・         - **謖・ｮ壹＠縺溽ｩｺ髢的D縺悟ｭ伜惠縺励↑縺・ｴ蜷・*: 繝・・繧ｿ縺梧嶌縺崎ｾｼ縺ｾ繧後∪縺吶・-
+-        縺薙・謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮWrite莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・       operationId: data_upsert
+       parameters:
+       - name: db_name
+@@ -403,7 +578,10 @@ paths:
+       tags:
+       - Data
+       summary: 繝・・繧ｿ縺ｮ荳諡ｬ蜿門ｾ・-      description: 遨ｺ髢的D縺ｨ蛟､繧谷SON驟榊・縺ｨ縺励※荳諡ｬ縺ｧ蜿門ｾ励＠縺ｾ縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮRead莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・+      description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `table` / `read`
++
++        遨ｺ髢的D縺ｨ蛟､繧谷SON驟榊・縺ｨ縺励※荳諡ｬ縺ｧ蜿門ｾ励＠縺ｾ縺吶・       operationId: data_get
+       parameters:
+       - name: db_name
+@@ -450,130 +628,15 @@ paths:
+           description: 繝・・繝悶Ν縺悟ｭ伜惠縺励↑縺・       security:
+       - bearer_auth: []
+-  /databases/{name}:
+-    get:
+-      tags:
+-      - Databases
+-      summary: 繝・・繧ｿ繝吶・繧ｹ諠・ｱ縺ｮ蜿門ｾ・-      description: 謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｮ隧ｳ邏ｰ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶ょｯｾ雎｡繝・・繧ｿ繝吶・繧ｹ縺ｮRead莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・-      operationId: database_info
+-      parameters:
+-      - name: name
+-        in: path
+-        description: 繝・・繧ｿ繝吶・繧ｹ蜷・-        required: true
+-        schema:
+-          type: string
+-        example: example_database
+-      responses:
+-        '200':
+-          description: ''
+-          content:
+-            application/json:
+-              schema:
+-                $ref: '#/components/schemas/DatabaseInfoResponse'
+-      security:
+-      - bearer_auth: []
+-    delete:
+-      tags:
+-      - Databases
+-      summary: 繝・・繧ｿ繝吶・繧ｹ縺ｮ蜑企勁
+-      description: 謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繧貞炎髯､縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・Global Admin讓ｩ髯舌′蠢・ｦ√〒縺吶・-      operationId: remove_database
+-      parameters:
+-      - name: name
+-        in: path
+-        description: 繝・・繧ｿ繝吶・繧ｹ蜷・-        required: true
+-        schema:
+-          type: string
+-        example: example_database
+-      responses:
+-        '204':
+-          description: ''
+-      security:
+-      - bearer_auth:
+-        - global_admin
+-    patch:
+-      tags:
+-      - Databases
+-      summary: 繝・・繧ｿ繝吶・繧ｹ縺ｮ譖ｴ譁ｰ
+-      description: 謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｮ蜷榊燕繧・ｪｬ譏弱ｒ螟画峩縺励∪縺吶ょｯｾ雎｡繝・・繧ｿ繝吶・繧ｹ縺ｮManage莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・-      operationId: database_update
+-      parameters:
+-      - name: name
+-        in: path
+-        description: 繝・・繧ｿ繝吶・繧ｹ蜷・-        required: true
+-        schema:
+-          type: string
+-        example: example_database
+-      requestBody:
+-        content:
+-          application/json:
+-            schema:
+-              $ref: '#/components/schemas/UpdateDatabaseRequest'
+-        required: true
+-      responses:
+-        '200':
+-          description: 謌仙粥
+-        '400':
+-          description: 繝ｪ繧ｯ繧ｨ繧ｹ繝医′荳肴ｭ｣・医ヱ繝ｩ繝｡繝ｼ繧ｿ繧ｨ繝ｩ繝ｼ縲√∪縺溘・譁ｰ縺励＞繝・・繧ｿ繝吶・繧ｹ蜷阪′荳肴ｭ｣・・-        '403':
+-          description: 讓ｩ髯蝉ｸ崎ｶｳ・・anage讓ｩ髯舌′縺ｪ縺・ｴ蜷茨ｼ・-        '404':
+-          description: 螟画峩蜈・・繝・・繧ｿ繝吶・繧ｹ縺悟ｭ伜惠縺励↑縺・-        '409':
+-          description: 螟画峩蠕後・繝・・繧ｿ繝吶・繧ｹ蜷阪′縺吶〒縺ｫ蟄伜惠縺吶ｋ
+-      security:
+-      - bearer_auth: []
+-  /databases/{name}/copy:
+-    post:
+-      tags:
+-      - Databases
+-      summary: 繝・・繧ｿ繝吶・繧ｹ縺ｮ繧ｳ繝斐・
+-      description: 謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繧偵さ繝斐・縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・Global Admin讓ｩ髯舌′蠢・ｦ√〒縺吶・-      operationId: database_copy
+-      parameters:
+-      - name: name
+-        in: path
+-        description: 繧ｳ繝斐・蜈・ョ繝ｼ繧ｿ繝吶・繧ｹ蜷・-        required: true
+-        schema:
+-          type: string
+-        example: source_database
+-      requestBody:
+-        content:
+-          application/json:
+-            schema:
+-              $ref: '#/components/schemas/CopyDatabaseRequest'
+-        required: true
+-      responses:
+-        '201':
+-          description: ''
+-          content:
+-            application/json:
+-              schema:
+-                $ref: '#/components/schemas/DatabaseInfoResponse'
+-        '400':
+-          description: 繝ｪ繧ｯ繧ｨ繧ｹ繝医′荳肴ｭ｣・医ヱ繝ｩ繝｡繝ｼ繧ｿ繧ｨ繝ｩ繝ｼ縲√∪縺溘・荳肴ｭ｣縺ｪ繝・・繧ｿ繝吶・繧ｹ蜷搾ｼ・-        '403':
+-          description: 讓ｩ髯蝉ｸ崎ｶｳ・・lobal Admin讓ｩ髯舌′縺ｪ縺・ｴ蜷茨ｼ・-        '404':
+-          description: 繧ｳ繝斐・蜈・ョ繝ｼ繧ｿ繝吶・繧ｹ縺悟ｭ伜惠縺励↑縺・-        '409':
+-          description: 繧ｳ繝斐・蜈医ョ繝ｼ繧ｿ繝吶・繧ｹ縲√∪縺溘・繧ｳ繝斐・蜈・→蜷悟錐縺ｮ繝・・繧ｿ繝吶・繧ｹ縺後☆縺ｧ縺ｫ蟄伜惠縺吶ｋ
+-      security:
+-      - bearer_auth:
+-        - global_admin
+   /query:
+     post:
+       tags:
+       - Query
+       summary: 繧ｯ繧ｨ繝ｪ縺ｮ螳溯｡・       description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: 蜿ら・縺吶ｋ蜈ｨ繝・・繝悶Ν縺ｫ `table` / `read`
++
+         隍・焚縺ｮ繝・・繝悶Ν繧貞ｯｾ雎｡縺ｫ繧ｯ繧ｨ繝ｪ蠑上ｒ螳溯｡後＠縲∵欠螳壹＠縺溽ｩｺ髢的D縺ｮ邨先棡繧貞叙蠕励＠縺ｾ縺吶・-        繧ｯ繧ｨ繝ｪ蠑上′蜿ら・縺吶ｋ**縺吶∋縺ｦ縺ｮ繝・・繝悶Ν**縺ｫ蟇ｾ縺励※ Read 莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・       operationId: execute_query
+       parameters:
+       - name: format
+@@ -615,7 +678,7 @@ paths:
+       tags:
+       - System
+       summary: 繧ｵ繝ｼ繝舌・縺ｮ繧ｹ繝・・繧ｿ繧ｹ縺ｨ繝舌・繧ｸ繝ｧ繝ｳ諠・ｱ繧貞叙蠕励☆繧九・-      description: 繝ｭ繧ｰ繧､繝ｳ貂医∩縺ｮ繝ｦ繝ｼ繧ｶ繝ｼ縺ｧ縺ゅｌ縺ｰ隱ｰ縺ｧ繧ゅい繧ｯ繧ｻ繧ｹ蜿ｯ閭ｽ縺ｧ縺吶・+      description: '**蠢・ｦ√↑讓ｩ髯・*: 縺ｪ縺暦ｼ郁ｪ崎ｨｼ縺ｮ縺ｿ・・
+       operationId: get_system_info
+       responses:
+         '200':
+@@ -631,7 +694,10 @@ paths:
+       tags:
+       - Users
+       summary: 繝ｦ繝ｼ繧ｶ繝ｼ荳隕ｧ縺ｮ蜿門ｾ・-      description: 繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ荳隕ｧ繧呈ｨｩ髯舌▽縺阪〒蜿門ｾ励＠縺ｾ縺吶ゅ％縺ｮ謫堺ｽ懊・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ縺悟ｿ・ｦ√〒縺吶・+      description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++
++        繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ荳隕ｧ繧呈ｨｩ髯舌▽縺阪〒蜿門ｾ励＠縺ｾ縺吶・       operationId: list_users
+       responses:
+         '200':
+@@ -643,15 +709,15 @@ paths:
+                 items:
+                   $ref: '#/components/schemas/UserInfoResponse'
+       security:
+-      - bearer_auth:
+-        - global_admin
++      - bearer_auth: []
+     post:
+       tags:
+       - Users
+       summary: 譁ｰ隕上Θ繝ｼ繧ｶ繝ｼ菴懈・
+       description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++
+         譁ｰ縺励＞繝ｦ繝ｼ繧ｶ繝ｼ繧剃ｽ懈・縺励∪縺吶Ａprivileges` 繧呈欠螳壹☆繧九→菴懈・縺ｨ蜷梧凾縺ｫ讓ｩ髯舌ｒ莉倅ｸ弱〒縺阪∪縺吶・-        縺薙・謫堺ｽ懊・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ縺悟ｿ・ｦ√〒縺吶・       operationId: create_user
+       requestBody:
+         content:
+@@ -669,16 +735,16 @@ paths:
+         '409':
+           description: 蜷悟錐縺ｮ繝ｦ繝ｼ繧ｶ繝ｼ縺梧里縺ｫ蟄伜惠縺吶ｋ
+       security:
+-      - bearer_auth:
+-        - global_admin
++      - bearer_auth: []
+   /users/{username}:
+     get:
+       tags:
+       - Users
+       summary: 繝ｦ繝ｼ繧ｶ繝ｼ諠・ｱ縺ｮ蜿門ｾ・       description: |-
+-        謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ縺ｮ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶よ悽莠ｺ縲√∪縺溘・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ繧呈戟縺､
+-        繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ縺ｿ螳溯｡悟庄閭ｽ縺ｧ縺吶・+        **蠢・ｦ√↑讓ｩ髯・*: 譛ｬ莠ｺ 縺ｾ縺溘・ `global` / `admin`
++
++        謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ縺ｮ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶・       operationId: get_user
+       parameters:
+       - name: username
+@@ -703,7 +769,10 @@ paths:
+       tags:
+       - Users
+       summary: 繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ蜑企勁
+-      description: 謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ繧貞炎髯､縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ縺悟ｿ・ｦ√〒縺吶・+      description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++
++        謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ繧貞炎髯､縺励∪縺吶・       operationId: delete_user
+       parameters:
+       - name: username
+@@ -721,16 +790,16 @@ paths:
+         '404':
+           description: 繝ｦ繝ｼ繧ｶ繝ｼ縺悟ｭ伜惠縺励↑縺・       security:
+-      - bearer_auth:
+-        - global_admin
++      - bearer_auth: []
+   /users/{username}/password:
+     put:
+       tags:
+       - Users
+       summary: 繝代せ繝ｯ繝ｼ繝峨・螟画峩
+       description: |-
+-        謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ縺ｮ繝代せ繝ｯ繝ｼ繝峨ｒ螟画峩縺励∪縺吶よ悽莠ｺ縲√∪縺溘・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ繧・-        謖√▽繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ縺ｿ螳溯｡悟庄閭ｽ縺ｧ縺吶ょ､画峩縺吶ｋ縺ｨ逋ｺ陦梧ｸ医∩繝医・繧ｯ繝ｳ縺ｯ縺吶∋縺ｦ螟ｱ蜉ｹ縺励∪縺吶・+        **蠢・ｦ√↑讓ｩ髯・*: 譛ｬ莠ｺ 縺ｾ縺溘・ `global` / `admin`
++
++        謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ縺ｮ繝代せ繝ｯ繝ｼ繝峨ｒ螟画峩縺励∪縺吶ょ､画峩縺吶ｋ縺ｨ逋ｺ陦梧ｸ医∩繝医・繧ｯ繝ｳ縺ｯ縺吶∋縺ｦ螟ｱ蜉ｹ縺励∪縺吶・       operationId: update_password
+       parameters:
+       - name: username
+@@ -759,12 +828,12 @@ paths:
+       - Users
+       summary: 讓ｩ髯蝉ｸ隕ｧ縺ｮ蜿門ｾ・       description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: 譛ｬ莠ｺ 縺ｾ縺溘・ `global` / `admin`
++
+         謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ縺梧戟縺､讓ｩ髯舌Ν繝ｼ繝ｫ縺ｮ荳隕ｧ繧貞叙蠕励＠縺ｾ縺吶・ 
+         譌｢縺ｫ蜑企勁縺輔ｌ縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν繧呈欠縺吶Ν繝ｼ繝ｫ縺ｯ蜷榊燕縺ｸ隗｣豎ｺ縺ｧ縺阪↑縺・◆繧∽ｸ隕ｧ縺ｫ迴ｾ繧後∪縺帙ｓ
+         ・医◎縺・＠縺溘Ν繝ｼ繝ｫ縺ｯ隱榊庄蛻､螳壹〒繧ゆｸ閾ｴ縺励↑縺・◆繧√∬｡ｨ遉ｺ縺ｨ螳溷柑讓ｩ髯舌′鬟溘＞驕輔≧縺薙→縺ｯ縺ゅｊ縺ｾ縺帙ｓ・峨・-
+-        譛ｬ莠ｺ縲√∪縺溘・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ繧呈戟縺､繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ縺ｿ螳溯｡悟庄閭ｽ縺ｧ縺吶・       operationId: get_privileges
+       parameters:
+       - name: username
+@@ -791,6 +860,8 @@ paths:
+       - Users
+       summary: 繝・・繧ｿ繝吶・繧ｹ縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳・       description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++
+         譌｢縺ｫ險ｭ螳壹＆繧後※縺・ｌ縺ｰ繝ｭ繝ｼ繝ｫ繧堤ｽｮ縺肴鋤縺医∪縺吶る・荳九・繝・・繝悶Ν縺吶∋縺ｦ縺ｫ蜉ｹ縺阪∪縺吶・         讓ｩ髯舌・繝・・繧ｿ繝吶・繧ｹ ID 縺ｫ邏舌▼縺上◆繧√∵隼蜷阪＠縺ｦ繧りｿｽ蠕薙＠縺ｾ縺吶・       operationId: set_database_privilege
+@@ -813,24 +884,27 @@ paths:
+         content:
+           application/json:
+             schema:
+-              $ref: '#/components/schemas/SetPrivilegeRequest'
++              $ref: '#/components/schemas/SetDataPrivilegeRequest'
+         required: true
+       responses:
+         '204':
+           description: ''
+         '400':
+-          description: admin 縺ｯ縺薙・繧ｹ繧ｳ繝ｼ繝励↓謖・ｮ壹〒縺阪↑縺・ｼ丈ｸ企剞雜・℃
++          description: 菫晄戟縺ｧ縺阪ｋ讓ｩ髯先焚縺ｮ荳企剞繧定ｶ・∴縺・         '403':
+           description: root繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ讓ｩ髯舌・螟画峩荳榊庄
+         '404':
+           description: 繝ｦ繝ｼ繧ｶ繝ｼ縺ｾ縺溘・繝・・繧ｿ繝吶・繧ｹ縺悟ｭ伜惠縺励↑縺・       security:
+-      - bearer_auth:
+-        - global_admin
++      - bearer_auth: []
+     delete:
+       tags:
+       - Users
+       summary: 繝・・繧ｿ繝吶・繧ｹ縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌・蜑･螂ｪ
++      description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++
++        繝ｭ繝ｼ繝ｫ繧貞撫繧上★縲√％縺ｮ繝・・繧ｿ繝吶・繧ｹ縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌ｒ蜿悶ｊ髯､縺阪∪縺吶・       operationId: delete_database_privilege
+       parameters:
+       - name: username
+@@ -855,14 +929,15 @@ paths:
+         '404':
+           description: 繝ｦ繝ｼ繧ｶ繝ｼ繝ｻ繝・・繧ｿ繝吶・繧ｹ縺悟ｭ伜惠縺励↑縺・√∪縺溘・讓ｩ髯舌ｒ謖√▲縺ｦ縺・↑縺・       security:
+-      - bearer_auth:
+-        - global_admin
++      - bearer_auth: []
+   /users/{username}/privileges/databases/{db_name}/tables/{table_name}:
+     put:
+       tags:
+       - Users
+       summary: 繝・・繝悶Ν縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳・       description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++
+         譌｢縺ｫ險ｭ螳壹＆繧後※縺・ｌ縺ｰ繝ｭ繝ｼ繝ｫ繧堤ｽｮ縺肴鋤縺医∪縺吶・         讓ｩ髯舌・繝・・繝悶Ν ID 縺ｫ邏舌▼縺上◆繧√∵隼蜷阪＠縺ｦ繧りｿｽ蠕薙＠縺ｾ縺吶・       operationId: set_table_privilege
+@@ -892,24 +967,27 @@ paths:
+         content:
+           application/json:
+             schema:
+-              $ref: '#/components/schemas/SetPrivilegeRequest'
++              $ref: '#/components/schemas/SetDataPrivilegeRequest'
+         required: true
+       responses:
+         '204':
+           description: ''
+         '400':
+-          description: admin 縺ｯ縺薙・繧ｹ繧ｳ繝ｼ繝励↓謖・ｮ壹〒縺阪↑縺・ｼ丈ｸ企剞雜・℃
++          description: 菫晄戟縺ｧ縺阪ｋ讓ｩ髯先焚縺ｮ荳企剞繧定ｶ・∴縺・         '403':
+           description: root繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ讓ｩ髯舌・螟画峩荳榊庄
+         '404':
+           description: 繝ｦ繝ｼ繧ｶ繝ｼ繝ｻ繝・・繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν縺ｮ縺・★繧後°縺悟ｭ伜惠縺励↑縺・       security:
+-      - bearer_auth:
+-        - global_admin
++      - bearer_auth: []
+     delete:
+       tags:
+       - Users
+       summary: 繝・・繝悶Ν縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌・蜑･螂ｪ
++      description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++
++        繝ｭ繝ｼ繝ｫ繧貞撫繧上★縲√％縺ｮ繝・・繝悶Ν縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌ｒ蜿悶ｊ髯､縺阪∪縺吶・       operationId: delete_table_privilege
+       parameters:
+       - name: username
+@@ -941,14 +1019,16 @@ paths:
+         '404':
+           description: 蟇ｾ雎｡縺悟ｭ伜惠縺励↑縺・√∪縺溘・讓ｩ髯舌ｒ謖√▲縺ｦ縺・↑縺・       security:
+-      - bearer_auth:
+-        - global_admin
++      - bearer_auth: []
+   /users/{username}/privileges/global:
+     put:
+       tags:
+       - Users
+       summary: 繧ｵ繝ｼ繝舌・蜈ｨ菴薙↓蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳・-      description: 譌｢縺ｫ險ｭ螳壹＆繧後※縺・ｌ縺ｰ繝ｭ繝ｼ繝ｫ繧堤ｽｮ縺肴鋤縺医∪縺吶Ａadmin` 繧呈欠螳壹〒縺阪ｋ縺ｮ縺ｯ縺薙・繧ｹ繧ｳ繝ｼ繝励□縺代〒縺吶・+      description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++
++        譌｢縺ｫ險ｭ螳壹＆繧後※縺・ｌ縺ｰ繝ｭ繝ｼ繝ｫ繧堤ｽｮ縺肴鋤縺医∪縺吶Ａadmin` 繧呈欠螳壹〒縺阪ｋ縺ｮ縺ｯ縺薙・繧ｹ繧ｳ繝ｼ繝励□縺代〒縺吶・       operationId: set_global_privilege
+       parameters:
+       - name: username
+@@ -962,7 +1042,7 @@ paths:
+         content:
+           application/json:
+             schema:
+-              $ref: '#/components/schemas/SetPrivilegeRequest'
++              $ref: '#/components/schemas/SetGlobalPrivilegeRequest'
+         required: true
+       responses:
+         '204':
+@@ -974,13 +1054,15 @@ paths:
+         '404':
+           description: 繝ｦ繝ｼ繧ｶ繝ｼ縺悟ｭ伜惠縺励↑縺・       security:
+-      - bearer_auth:
+-        - global_admin
++      - bearer_auth: []
+     delete:
+       tags:
+       - Users
+       summary: 繧ｵ繝ｼ繝舌・蜈ｨ菴薙↓蟇ｾ縺吶ｋ讓ｩ髯舌・蜑･螂ｪ
+-      description: 繝ｭ繝ｼ繝ｫ繧貞撫繧上★縲√％縺ｮ繧ｹ繧ｳ繝ｼ繝励・讓ｩ髯舌ｒ蜿悶ｊ髯､縺阪∪縺吶・+      description: |-
++        **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++
++        繝ｭ繝ｼ繝ｫ繧貞撫繧上★縲√％縺ｮ繧ｹ繧ｳ繝ｼ繝励・讓ｩ髯舌ｒ蜿悶ｊ髯､縺阪∪縺吶・       operationId: delete_global_privilege
+       parameters:
+       - name: username
+@@ -998,8 +1080,7 @@ paths:
+         '404':
+           description: 繝ｦ繝ｼ繧ｶ繝ｼ縺悟ｭ伜惠縺励↑縺・√∪縺溘・縺薙・繧ｹ繧ｳ繝ｼ繝励・讓ｩ髯舌ｒ謖√▲縺ｦ縺・↑縺・       security:
+-      - bearer_auth:
+-        - global_admin
++      - bearer_auth: []
+ components:
+   schemas:
+     CopyDatabaseRequest:
+@@ -1309,6 +1390,17 @@ components:
+                 description: 譎る俣繧､繝ｳ繝・ャ繧ｯ繧ｹ縲・                 example: 1
+                 minimum: 0
++    DataRole:
++      type: string
++      description: |-
++        繝・・繧ｿ髱｢縺ｮ繝ｭ繝ｼ繝ｫ縲ゅョ繝ｼ繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν繧ｹ繧ｳ繝ｼ繝励〒謖・ｮ壹〒縺阪ｋ縺ｮ縺ｯ縺薙・ 3 縺､縺縺代・+
++        蛻ｶ蠕｡髱｢縺ｮ `admin` 繧貞性縺ｾ縺ｪ縺・◆繧√～database` / `table` 繧ｹ繧ｳ繝ｼ繝励↓ `admin` 繧・+        荳弱∴繧九Μ繧ｯ繧ｨ繧ｹ繝医・蝙九→縺励※陦ｨ迴ｾ縺ｧ縺阪↑縺・ｼ医ョ繧ｷ繝ｪ繧｢繝ｩ繧､繧ｺ縺ｮ譎らせ縺ｧ蠑ｾ縺九ｌ繧具ｼ峨・+      enum:
++      - read
++      - write
++      - manage
+     DatabaseInfoResponse:
+       type: object
+       required:
+@@ -1620,7 +1712,7 @@ components:
+             - global
+       - type: object
+         title: DatabasePrivilege
+-        description: 繝・・繧ｿ繝吶・繧ｹ驟堺ｸ九☆縺ｹ縺ｦ縲・+        description: 繝・・繧ｿ繝吶・繧ｹ驟堺ｸ九☆縺ｹ縺ｦ縲Ａadmin` 縺ｯ謖・ｮ壹〒縺阪↑縺・・         required:
+         - db_name
+         - role
+@@ -1630,14 +1722,14 @@ components:
+             type: string
+             example: example_database
+           role:
+-            $ref: '#/components/schemas/UserRole'
++            $ref: '#/components/schemas/DataRole'
+           scope:
+             type: string
+             enum:
+             - database
+       - type: object
+         title: TablePrivilege
+-        description: 蜊倅ｸ繝・・繝悶Ν縲・+        description: 蜊倅ｸ繝・・繝悶Ν縲Ａadmin` 縺ｯ謖・ｮ壹〒縺阪↑縺・・         required:
+         - db_name
+         - table_name
+@@ -1651,7 +1743,7 @@ components:
+             type: string
+             example: example_table
+           role:
+-            $ref: '#/components/schemas/UserRole'
++            $ref: '#/components/schemas/DataRole'
+           scope:
+             type: string
+             enum:
+@@ -2109,9 +2201,19 @@ components:
+             $ref: '#/components/schemas/SpatialId'
+         zoom_level_policy:
+           $ref: '#/components/schemas/ZoomLevelPolicy'
+-    SetPrivilegeRequest:
++    SetDataPrivilegeRequest:
++      type: object
++      description: |-
++        繝・・繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν繧ｹ繧ｳ繝ｼ繝励↓蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳壹Μ繧ｯ繧ｨ繧ｹ繝医・+        繝ｭ繝ｼ繝ｫ縺ｯ [`DataRole`](super::entity::DataRole) 縺ｪ縺ｮ縺ｧ `admin` 縺ｯ陦ｨ迴ｾ縺ｧ縺阪↑縺・・+      required:
++      - role
++      properties:
++        role:
++          $ref: '#/components/schemas/DataRole'
++    SetGlobalPrivilegeRequest:
+       type: object
+-      description: 1 縺､縺ｮ蟇ｾ雎｡縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳壹Μ繧ｯ繧ｨ繧ｹ繝医ょｯｾ雎｡縺ｯ繝代せ縺ｧ謖・ｮ壹☆繧九・+      description: '`global` 繧ｹ繧ｳ繝ｼ繝励↓蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳壹Μ繧ｯ繧ｨ繧ｹ繝医ょ宛蠕｡髱｢縺ｮ `admin` 繧呈欠螳壹〒縺阪ｋ蜚ｯ荳縺ｮ蜈･蜿｣縲・
+       required:
+       - role
+       properties:
+@@ -2580,9 +2682,8 @@ components:
+       description: |-
+         讓ｩ髯舌・蠑ｷ縺輔よ焚蛟､縺悟､ｧ縺阪＞縺ｻ縺ｩ蠑ｷ縺上∽ｸ贋ｽ阪・荳倶ｽ阪ｒ縺吶∋縺ｦ蜷ｫ繧縲・ 
+-        `admin` 縺縺代・繝・・繧ｿ髱｢縺ｧ縺ｯ縺ｪ縺丞宛蠕｡髱｢・医Θ繝ｼ繧ｶ繝ｼ縺ｮ菴懈・繝ｻ蜑企勁繝ｻ讓ｩ髯蝉ｻ倅ｸ趣ｼ峨ｒ陦ｨ縺励・-        `global` 繧ｹ繧ｳ繝ｼ繝励↓縺ｮ縺ｿ謖・ｮ壹〒縺阪ｋ縲Ａdatabase` / `table` 繧ｹ繧ｳ繝ｼ繝励〒 `admin` 繧・-        謖・ｮ壹＠縺溘Μ繧ｯ繧ｨ繧ｹ繝医・ 400 縺ｧ諡貞凄縺輔ｌ繧九・+        `admin` 縺ｯ蛻ｶ蠕｡髱｢・医Θ繝ｼ繧ｶ繝ｼ縺ｮ菴懈・繝ｻ蜑企勁繝ｻ讓ｩ髯蝉ｻ倅ｸ趣ｼ峨ｒ陦ｨ縺励～global` 繧ｹ繧ｳ繝ｼ繝励↓
++        縺ｮ縺ｿ迴ｾ繧後ｋ縲ゅョ繝ｼ繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν繧ｹ繧ｳ繝ｼ繝励・菫晏ｭ倥・API 陦ｨ迴ｾ縺ｯ [`DataRole`] 繧剃ｽｿ縺・・       enum:
+       - read
+       - write
+diff --git a/src/handlers/auth.rs b/src/handlers/auth.rs
+index e36e84d..20256de 100644
+--- a/src/handlers/auth.rs
++++ b/src/handlers/auth.rs
+@@ -10,6 +10,8 @@ use crate::{
+ 
+ /// 繝ｦ繝ｼ繧ｶ繝ｼ繝ｭ繧ｰ繧､繝ｳ縺ｨJWT縺ｮ逋ｺ陦・ ///
++/// **蠢・ｦ√↑讓ｩ髯・*: 縺ｪ縺暦ｼ郁ｪ崎ｨｼ荳崎ｦ・ｼ・+///
+ /// 繝ｦ繝ｼ繧ｶ繝ｼ蜷阪→繝代せ繝ｯ繝ｼ繝峨ｒ讀懆ｨｼ縺励。earer繝医・繧ｯ繝ｳ繧堤匱陦後＠縺ｾ縺吶・ #[utoipa::path(
+     post,
+diff --git a/src/handlers/database/mod.rs b/src/handlers/database/mod.rs
+index 5e6f5be..2fa3560 100644
+--- a/src/handlers/database/mod.rs
++++ b/src/handlers/database/mod.rs
+@@ -17,7 +17,9 @@ use axum::{
+ 
+ /// 繝・・繧ｿ繝吶・繧ｹ縺ｮ菴懈・
+ ///
+-/// 譁ｰ縺励＞繝・・繧ｿ繝吶・繧ｹ繧剃ｽ懈・縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `manage` 莉･荳翫・繝ｭ繝ｼ繝ｫ縺悟ｿ・ｦ√〒縺吶・+/// **蠢・ｦ√↑讓ｩ髯・*: `global` / `manage`
++///
++/// 譁ｰ縺励＞繝・・繧ｿ繝吶・繧ｹ繧剃ｽ懈・縺励∪縺吶・ #[utoipa::path(
+     post,
+     path = "/databases",
+@@ -25,7 +27,7 @@ use axum::{
+     responses(
+         (status = 201, body = DatabaseInfoResponse)
+     ),
+-    security(("bearer_auth" = ["global_admin"])),
++    security(("bearer_auth" = [])),
+     tag = "Databases"
+ )]
+ #[tracing::instrument(skip_all)]
+@@ -48,12 +50,14 @@ pub async fn database_create(
+ 
+ /// 繝・・繧ｿ繝吶・繧ｹ諠・ｱ縺ｮ蜿門ｾ・ ///
+-/// 謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｮ隧ｳ邏ｰ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶ょｯｾ雎｡繝・・繧ｿ繝吶・繧ｹ縺ｮRead莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・+/// **蠢・ｦ√↑讓ｩ髯・*: `database` / `read`・磯・荳九ユ繝ｼ繝悶Ν縺ｮ讓ｩ髯舌〒繧ょ庄・・+///
++/// 謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｮ隧ｳ邏ｰ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶・ #[utoipa::path(
+     get,
+-    path = "/databases/{name}",
++    path = "/databases/{db_name}",
+     params(
+-        ("name" = String, Path, description = "繝・・繧ｿ繝吶・繧ｹ蜷・, example = "example_database")
++        ("db_name" = String, Path, description = "繝・・繧ｿ繝吶・繧ｹ蜷・, example = "example_database")
+     ),
+     responses(
+         (status = 200, body = DatabaseInfoResponse)
+@@ -74,10 +78,10 @@ pub async fn database_info(
+ 
+ /// 繝・・繧ｿ繝吶・繧ｹ荳隕ｧ縺ｮ蜿門ｾ・ ///
+-/// 繝ｦ繝ｼ繧ｶ繝ｼ讓ｩ髯舌↓蠢懊§縺ｦ縲√い繧ｯ繧ｻ繧ｹ蜿ｯ閭ｽ縺ｪ繝・・繧ｿ繝吶・繧ｹ縺ｮ荳隕ｧ繧貞叙蠕励＠縺ｾ縺吶・+/// **蠢・ｦ√↑讓ｩ髯・*: 縺ｪ縺暦ｼ郁ｪ崎ｨｼ縺ｮ縺ｿ繝ｻ邨先棡縺ｯ讓ｩ髯舌〒邨槭ｉ繧後ｋ・・ ///
+-/// - **繧ｰ繝ｭ繝ｼ繝舌Ν邂｡逅・・*: 繧ｷ繧ｹ繝・Β蜀・・蜈ｨ繝・・繧ｿ繝吶・繧ｹ縺瑚ｦ九∴縺ｾ縺吶・-/// - **荳闊ｬ繝ｦ繝ｼ繧ｶ繝ｼ**: 閾ｪ蛻・′讓ｩ髯舌ｒ謖√▲縺ｦ縺・ｋ繝・・繧ｿ繝吶・繧ｹ縺縺代′隕九∴縺ｾ縺吶・+/// 蜻ｼ縺ｳ蜃ｺ縺励◆繝ｦ繝ｼ繧ｶ繝ｼ縺・Read 莉･荳翫〒蛻ｰ驕斐〒縺阪ｋ繝・・繧ｿ繝吶・繧ｹ縺縺代ｒ霑斐＠縺ｾ縺吶・+/// 繝・・繝悶Ν蜊倅ｽ阪・讓ｩ髯舌＠縺区戟縺溘↑縺・ｴ蜷医ｂ縲√◎縺ｮ繝・・繝悶Ν繧貞性繧繝・・繧ｿ繝吶・繧ｹ縺ｯ荳隕ｧ縺ｫ迴ｾ繧後∪縺吶・ #[utoipa::path(
+     get,
+     path = "/databases",
+@@ -98,17 +102,19 @@ pub async fn database_list(
+ 
+ /// 繝・・繧ｿ繝吶・繧ｹ縺ｮ蜑企勁
+ ///
+-/// 謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繧貞炎髯､縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・Global Admin讓ｩ髯舌′蠢・ｦ√〒縺吶・+/// **蠢・ｦ√↑讓ｩ髯・*: `global` / `manage`
++///
++/// 謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繧貞炎髯､縺励∪縺吶・ #[utoipa::path(
+     delete,
+-    path = "/databases/{name}",
++    path = "/databases/{db_name}",
+     params(
+-        ("name" = String, Path, description = "繝・・繧ｿ繝吶・繧ｹ蜷・, example = "example_database")
++        ("db_name" = String, Path, description = "繝・・繧ｿ繝吶・繧ｹ蜷・, example = "example_database")
+     ),
+     responses(
+         (status = 204)
+     ),
+-    security(("bearer_auth" = ["global_admin"])),
++    security(("bearer_auth" = [])),
+     tag = "Databases"
+ )]
+ #[tracing::instrument(skip_all)]
+@@ -124,12 +130,15 @@ pub async fn remove_database(
+ 
+ /// 繝・・繧ｿ繝吶・繧ｹ縺ｮ譖ｴ譁ｰ
+ ///
+-/// 謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｮ蜷榊燕繧・ｪｬ譏弱ｒ螟画峩縺励∪縺吶ょｯｾ雎｡繝・・繧ｿ繝吶・繧ｹ縺ｮManage莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・+/// **蠢・ｦ√↑讓ｩ髯・*: `database` / `manage`
++///
++/// 謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｮ蜷榊燕繧・ｪｬ譏弱ｒ螟画峩縺励∪縺吶・+/// 讓ｩ髯舌・繝・・繧ｿ繝吶・繧ｹ ID 縺ｫ邏舌▼縺上◆繧√∵隼蜷阪＠縺ｦ繧よｨｩ髯舌・霑ｽ蠕薙＠縺ｾ縺吶・ #[utoipa::path(
+     patch,
+-    path = "/databases/{name}",
++    path = "/databases/{db_name}",
+     params(
+-        ("name" = String, Path, description = "繝・・繧ｿ繝吶・繧ｹ蜷・, example = "example_database")
++        ("db_name" = String, Path, description = "繝・・繧ｿ繝吶・繧ｹ蜷・, example = "example_database")
+     ),
+     request_body = UpdateDatabaseRequest,
+     responses(
+@@ -157,12 +166,14 @@ pub async fn database_update(
+ 
+ /// 繝・・繧ｿ繝吶・繧ｹ縺ｮ繧ｳ繝斐・
+ ///
+-/// 謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繧偵さ繝斐・縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・Global Admin讓ｩ髯舌′蠢・ｦ√〒縺吶・+/// **蠢・ｦ√↑讓ｩ髯・*: `global` / `manage`
++///
++/// 謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繧偵さ繝斐・縺励∪縺吶・ #[utoipa::path(
+     post,
+-    path = "/databases/{name}/copy",
++    path = "/databases/{db_name}/copy",
+     params(
+-        ("name" = String, Path, description = "繧ｳ繝斐・蜈・ョ繝ｼ繧ｿ繝吶・繧ｹ蜷・, example = "source_database")
++        ("db_name" = String, Path, description = "繧ｳ繝斐・蜈・ョ繝ｼ繧ｿ繝吶・繧ｹ蜷・, example = "source_database")
+     ),
+     request_body = CopyDatabaseRequest,
+     responses(
+@@ -172,7 +183,7 @@ pub async fn database_update(
+         (status = 404, description = "繧ｳ繝斐・蜈・ョ繝ｼ繧ｿ繝吶・繧ｹ縺悟ｭ伜惠縺励↑縺・),
+         (status = 409, description = "繧ｳ繝斐・蜈医ョ繝ｼ繧ｿ繝吶・繧ｹ縲√∪縺溘・繧ｳ繝斐・蜈・→蜷悟錐縺ｮ繝・・繧ｿ繝吶・繧ｹ縺後☆縺ｧ縺ｫ蟄伜惠縺吶ｋ")
+     ),
+-    security(("bearer_auth" = ["global_admin"])),
++    security(("bearer_auth" = [])),
+     tag = "Databases"
+ )]
+ #[tracing::instrument(skip_all)]
+diff --git a/src/handlers/database/table/copy.rs b/src/handlers/database/table/copy.rs
+index d8e73d9..dac4357 100644
+--- a/src/handlers/database/table/copy.rs
++++ b/src/handlers/database/table/copy.rs
+@@ -16,8 +16,10 @@ use crate::{
+ 
+ /// 繝・・繝悶Ν縺ｮ繧ｳ繝斐・
+ ///
++/// **蠢・ｦ√↑讓ｩ髯・*: 繧ｳ繝斐・蜈・`table` / `read` ・・繧ｳ繝斐・蜈・`database` / `manage`
++///
+ /// 謖・ｮ壹＠縺溘ユ繝ｼ繝悶Ν繧貞挨縺ｮ繝・・繧ｿ繝吶・繧ｹ縲√∪縺溘・蜷後§繝・・繧ｿ繝吶・繧ｹ蜀・↓逡ｰ縺ｪ繧句錐蜑阪〒繧ｳ繝斐・縺励∪縺吶・-/// 繧ｳ繝斐・蜈・ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｫ蟇ｾ縺吶ｋRead讓ｩ髯舌→縲√さ繝斐・蜈医ョ繝ｼ繧ｿ繝吶・繧ｹ縺ｫ蟇ｾ縺吶ｋManage讓ｩ髯舌′蠢・ｦ√〒縺吶・+/// 繧ｳ繝斐・蜈医↓縺ｯ譁ｰ縺励＞繝・・繝悶Ν縺御ｽ懊ｉ繧後ｋ縺溘ａ縲√ユ繝ｼ繝悶Ν蜊倅ｽ阪・讓ｩ髯舌〒縺ｯ螳溯｡後〒縺阪∪縺帙ｓ縲・ #[utoipa::path(
+     post,
+     path = "/databases/{db_name}/tables/{table_name}/copy",
+diff --git a/src/handlers/database/table/create.rs b/src/handlers/database/table/create.rs
+index 2f7188b..67ff747 100644
+--- a/src/handlers/database/table/create.rs
++++ b/src/handlers/database/table/create.rs
+@@ -15,7 +15,10 @@ use crate::{
+ 
+ /// 繝・・繝悶Ν縺ｮ菴懈・
+ ///
+-/// 謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ蜀・↓譁ｰ縺励＞繝・・繝悶Ν繧剃ｽ懈・縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮManage莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・+/// **蠢・ｦ√↑讓ｩ髯・*: `database` / `manage`
++///
++/// 謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ蜀・↓譁ｰ縺励＞繝・・繝悶Ν繧剃ｽ懈・縺励∪縺吶・+/// 譁ｰ隕丈ｽ懈・縺ｯ繝・・繧ｿ繝吶・繧ｹ蜈ｨ菴薙∈縺ｮ螟画峩縺ｪ縺ｮ縺ｧ縲√ユ繝ｼ繝悶Ν蜊倅ｽ阪・讓ｩ髯舌〒縺ｯ螳溯｡後〒縺阪∪縺帙ｓ縲・ #[utoipa::path(
+     post,
+     path = "/databases/{db_name}/tables",
+diff --git a/src/handlers/database/table/data/get.rs b/src/handlers/database/table/data/get.rs
+index db4dbd8..acc1264 100644
+--- a/src/handlers/database/table/data/get.rs
++++ b/src/handlers/database/table/data/get.rs
+@@ -12,7 +12,9 @@ use axum::{
+ 
+ /// 繝・・繧ｿ縺ｮ荳諡ｬ蜿門ｾ・ ///
+-/// 遨ｺ髢的D縺ｨ蛟､繧谷SON驟榊・縺ｨ縺励※荳諡ｬ縺ｧ蜿門ｾ励＠縺ｾ縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮRead莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・+/// **蠢・ｦ√↑讓ｩ髯・*: `table` / `read`
++///
++/// 遨ｺ髢的D縺ｨ蛟､繧谷SON驟榊・縺ｨ縺励※荳諡ｬ縺ｧ蜿門ｾ励＠縺ｾ縺吶・ #[utoipa::path(
+     post,
+     path = "/databases/{db_name}/tables/{table_name}/data/search",
+diff --git a/src/handlers/database/table/data/insert.rs b/src/handlers/database/table/data/insert.rs
+index 90b0e75..78afa39 100644
+--- a/src/handlers/database/table/data/insert.rs
++++ b/src/handlers/database/table/data/insert.rs
+@@ -11,10 +11,10 @@ use axum::{
+ 
+ /// 繝・・繧ｿ縺ｮ荳頑嶌縺阪・霑ｽ蜉
+ ///
++/// **蠢・ｦ√↑讓ｩ髯・*: `table` / `write`
++///
+ /// 謖・ｮ壹＠縺溽ｩｺ髢的D縺ｫ蟇ｾ縺励※縲∵欠螳壹＠縺溷､繧呈嶌縺崎ｾｼ縺ｿ縺ｾ縺吶・ /// 譌｢縺ｫ蛟､縺悟ｭ伜惠縺吶ｋ遨ｺ髢的D縺ｫ蟇ｾ縺励※縺ｯ縲√◎縺ｮ蛟､繧貞ｮ悟・縺ｫ荳頑嶌縺阪＠縺ｾ縺吶・-///
+-/// 縺薙・謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮWrite莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・ #[utoipa::path(
+     put,
+     path = "/databases/{db_name}/tables/{table_name}/data",
+diff --git a/src/handlers/database/table/data/remove.rs b/src/handlers/database/table/data/remove.rs
+index 5cdb102..69146f6 100644
+--- a/src/handlers/database/table/data/remove.rs
++++ b/src/handlers/database/table/data/remove.rs
+@@ -11,7 +11,9 @@ use axum::{
+ 
+ /// 繝・・繧ｿ縺ｮ蜑企勁
+ ///
+-/// 謖・ｮ壹＠縺溽ｩｺ髢的D繧偵ユ繝ｼ繝悶Ν縺九ｉ繧貞炎髯､縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮWrite莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・+/// **蠢・ｦ√↑讓ｩ髯・*: `table` / `write`
++///
++/// 謖・ｮ壹＠縺溽ｩｺ髢的D繧偵ユ繝ｼ繝悶Ν縺九ｉ蜑企勁縺励∪縺吶・ #[utoipa::path(
+     delete,
+     path = "/databases/{db_name}/tables/{table_name}/data",
+diff --git a/src/handlers/database/table/data/upsert.rs b/src/handlers/database/table/data/upsert.rs
+index d58df3d..739294d 100644
+--- a/src/handlers/database/table/data/upsert.rs
++++ b/src/handlers/database/table/data/upsert.rs
+@@ -11,12 +11,12 @@ use axum::{
+ 
+ /// 繝・・繧ｿ縺ｮ驛ｨ蛻・ｿｽ蜉
+ ///
++/// **蠢・ｦ√↑讓ｩ髯・*: `table` / `write`
++///
+ /// 謖・ｮ壹＠縺溽ｩｺ髢的D縺ｫ蟇ｾ縺励※縲∵欠螳壹＠縺溷､繧呈嶌縺崎ｾｼ縺ｿ縺ｾ縺吶・ ///
+ /// - **謖・ｮ壹＠縺溽ｩｺ髢的D縺後☆縺ｧ縺ｫ蟄伜惠縺吶ｋ蝣ｴ蜷・*: 譌｢蟄倥・繝・・繧ｿ縺ｯ邯ｭ謖√＆繧後∪縺吶・ /// - **謖・ｮ壹＠縺溽ｩｺ髢的D縺悟ｭ伜惠縺励↑縺・ｴ蜷・*: 繝・・繧ｿ縺梧嶌縺崎ｾｼ縺ｾ繧後∪縺吶・-///
+-/// 縺薙・謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮWrite莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・ #[utoipa::path(
+     patch,
+     path = "/databases/{db_name}/tables/{table_name}/data",
+diff --git a/src/handlers/database/table/info.rs b/src/handlers/database/table/info.rs
+index 8cee697..8317b84 100644
+--- a/src/handlers/database/table/info.rs
++++ b/src/handlers/database/table/info.rs
+@@ -12,7 +12,9 @@ use crate::{
+ 
+ /// 繝・・繝悶Ν諠・ｱ縺ｮ蜿門ｾ・ ///
+-/// 謖・ｮ壹＠縺溘ユ繝ｼ繝悶Ν縺ｮ隧ｳ邏ｰ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮRead莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・+/// **蠢・ｦ√↑讓ｩ髯・*: `table` / `read`
++///
++/// 謖・ｮ壹＠縺溘ユ繝ｼ繝悶Ν縺ｮ隧ｳ邏ｰ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶・ #[utoipa::path(
+     get,
+     path = "/databases/{db_name}/tables/{table_name}",
+diff --git a/src/handlers/database/table/list.rs b/src/handlers/database/table/list.rs
+index c63b7aa..058621e 100644
+--- a/src/handlers/database/table/list.rs
++++ b/src/handlers/database/table/list.rs
+@@ -12,9 +12,10 @@ use crate::{
+ 
+ /// 繝・・繝悶Ν荳隕ｧ縺ｮ蜿門ｾ・ ///
++/// **蠢・ｦ√↑讓ｩ髯・*: `database` / `read`・磯・荳九ユ繝ｼ繝悶Ν縺ｮ讓ｩ髯舌〒繧ょ庄繝ｻ邨先棡縺ｯ讓ｩ髯舌〒邨槭ｉ繧後ｋ・・+///
+ /// 謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ蜀・↓蟄伜惠縺吶ｋ繝・・繝悶Ν縺ｮ縺・■縲∝他縺ｳ蜃ｺ縺励◆繝ｦ繝ｼ繧ｶ繝ｼ縺・Read 莉･荳翫・讓ｩ髯舌ｒ
+-/// 謖√▽繧ゅ・縺縺代ｒ霑斐＠縺ｾ縺吶ゅユ繝ｼ繝悶Ν蜊倅ｽ阪・讓ｩ髯舌＠縺区戟縺溘↑縺・Θ繝ｼ繧ｶ繝ｼ繧ゅ√◎縺ｮ繝・・繝悶Ν縺縺代′
+-/// 隕九∴繧句ｽ｢縺ｧ荳隕ｧ繧貞叙蠕励〒縺阪∪縺吶・+/// 謖√▽繧ゅ・縺縺代ｒ霑斐＠縺ｾ縺吶・ #[utoipa::path(
+     get,
+     path = "/databases/{db_name}/tables",
+diff --git a/src/handlers/database/table/remove.rs b/src/handlers/database/table/remove.rs
+index ae6fa1a..9059d63 100644
+--- a/src/handlers/database/table/remove.rs
++++ b/src/handlers/database/table/remove.rs
+@@ -10,7 +10,9 @@ use axum::Extension;
+ 
+ /// 繝・・繝悶Ν縺ｮ蜑企勁
+ ///
+-/// 謖・ｮ壹＠縺溘ユ繝ｼ繝悶Ν繧貞炎髯､縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮManage莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・+/// **蠢・ｦ√↑讓ｩ髯・*: `table` / `manage`
++///
++/// 謖・ｮ壹＠縺溘ユ繝ｼ繝悶Ν繧貞炎髯､縺励∪縺吶・ #[utoipa::path(
+     delete,
+     path = "/databases/{db_name}/tables/{table_name}",
+diff --git a/src/handlers/database/table/update.rs b/src/handlers/database/table/update.rs
+index 81986da..9ec9873 100644
+--- a/src/handlers/database/table/update.rs
++++ b/src/handlers/database/table/update.rs
+@@ -15,7 +15,10 @@ use axum::{
+ 
+ /// 繝・・繝悶Ν縺ｮ譖ｴ譁ｰ
+ ///
+-/// 繝・・繝悶Ν縺ｮ蜷榊燕螟画峩繧・､縺ｮ蛻ｶ邏・ｒ譖ｴ譁ｰ縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・繝・・繧ｿ繝吶・繧ｹ縺ｮ Manage 讓ｩ髯舌′蠢・ｦ√〒縺吶・+/// **蠢・ｦ√↑讓ｩ髯・*: `table` / `manage`
++///
++/// 繝・・繝悶Ν縺ｮ蜷榊燕螟画峩繧・､縺ｮ蛻ｶ邏・ｒ譖ｴ譁ｰ縺励∪縺吶・+/// 讓ｩ髯舌・繝・・繝悶Ν ID 縺ｫ邏舌▼縺上◆繧√∵隼蜷阪＠縺ｦ繧よｨｩ髯舌・霑ｽ蠕薙＠縺ｾ縺吶・ ///
+ /// 蛻ｶ邏・ｒ螟画峩縺吶ｋ髫帙∵里蟄倥・繝・・繧ｿ縺梧眠縺励＞蛻ｶ邏・↓驕ｩ蜷医＠縺ｦ縺・ｋ縺九ｒ讀懆ｨｼ縺吶ｋ謖吝虚繧・`validate_existing_data` 繝輔Λ繧ｰ縺ｧ蛻ｶ蠕｡縺ｧ縺阪∪縺吶・ /// - `true`・医ョ繝輔か繝ｫ繝茨ｼ峨・蝣ｴ蜷医∵里蟄倥ョ繝ｼ繧ｿ縺梧眠縺励＞蛻ｶ邏・↓驕募渚縺励※縺・ｌ縺ｰ繧ｨ繝ｩ繝ｼ縺ｨ縺励※譖ｴ譁ｰ繧貞唆荳九＠縺ｾ縺吶・diff --git a/src/handlers/query.rs b/src/handlers/query.rs
+index d08d7af..c3af817 100644
+--- a/src/handlers/query.rs
++++ b/src/handlers/query.rs
+@@ -17,8 +17,9 @@ use crate::services::query as query_service;
+ 
+ /// 繧ｯ繧ｨ繝ｪ縺ｮ螳溯｡・ ///
++/// **蠢・ｦ√↑讓ｩ髯・*: 蜿ら・縺吶ｋ蜈ｨ繝・・繝悶Ν縺ｫ `table` / `read`
++///
+ /// 隍・焚縺ｮ繝・・繝悶Ν繧貞ｯｾ雎｡縺ｫ繧ｯ繧ｨ繝ｪ蠑上ｒ螳溯｡後＠縲∵欠螳壹＠縺溽ｩｺ髢的D縺ｮ邨先棡繧貞叙蠕励＠縺ｾ縺吶・-/// 繧ｯ繧ｨ繝ｪ蠑上′蜿ら・縺吶ｋ**縺吶∋縺ｦ縺ｮ繝・・繝悶Ν**縺ｫ蟇ｾ縺励※ Read 莉･荳翫・讓ｩ髯舌′蠢・ｦ√〒縺吶・ #[utoipa::path(
+     post,
+     path = "/query",
+diff --git a/src/handlers/system.rs b/src/handlers/system.rs
+index e4f22af..dba24b4 100644
+--- a/src/handlers/system.rs
++++ b/src/handlers/system.rs
+@@ -3,7 +3,7 @@ use axum::Json;
+ 
+ /// 繧ｵ繝ｼ繝舌・縺ｮ繧ｹ繝・・繧ｿ繧ｹ縺ｨ繝舌・繧ｸ繝ｧ繝ｳ諠・ｱ繧貞叙蠕励☆繧九・ ///
+-/// 繝ｭ繧ｰ繧､繝ｳ貂医∩縺ｮ繝ｦ繝ｼ繧ｶ繝ｼ縺ｧ縺ゅｌ縺ｰ隱ｰ縺ｧ繧ゅい繧ｯ繧ｻ繧ｹ蜿ｯ閭ｽ縺ｧ縺吶・+/// **蠢・ｦ√↑讓ｩ髯・*: 縺ｪ縺暦ｼ郁ｪ崎ｨｼ縺ｮ縺ｿ・・ #[utoipa::path(
+     get,
+     path = "/system/info",
+diff --git a/src/handlers/users/mod.rs b/src/handlers/users/mod.rs
+index 4f2d266..6e39a63 100644
+--- a/src/handlers/users/mod.rs
++++ b/src/handlers/users/mod.rs
+@@ -9,22 +9,25 @@ use crate::{
+     error::AppError,
+     middleware::auth::{AuthUser, check_global_admin, check_self_or_admin},
+     models::users::{
+-        CreateUserRequest, PrivilegeTarget, PrivilegesResponse, SetPrivilegeRequest,
+-        UpdatePasswordRequest, UserInfoResponse,
++        CreateUserRequest, PrivilegeRule, PrivilegeTarget, PrivilegesResponse,
++        SetDataPrivilegeRequest, SetGlobalPrivilegeRequest, UpdatePasswordRequest,
++        UserInfoResponse,
+     },
+     services::users as users_service,
+ };
+ 
+ /// 繝ｦ繝ｼ繧ｶ繝ｼ荳隕ｧ縺ｮ蜿門ｾ・ ///
+-/// 繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ荳隕ｧ繧呈ｨｩ髯舌▽縺阪〒蜿門ｾ励＠縺ｾ縺吶ゅ％縺ｮ謫堺ｽ懊・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ縺悟ｿ・ｦ√〒縺吶・+/// **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++///
++/// 繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ荳隕ｧ繧呈ｨｩ髯舌▽縺阪〒蜿門ｾ励＠縺ｾ縺吶・ #[utoipa::path(
+     get,
+     path = "/users",
+     responses(
+         (status = 200, body = [UserInfoResponse]),
+     ),
+-    security(("bearer_auth" = ["global_admin"])),
++    security(("bearer_auth" = [])),
+     tag = "Users"
+ )]
+ #[tracing::instrument(skip_all)]
+@@ -39,8 +42,9 @@ pub async fn list_users(
+ 
+ /// 譁ｰ隕上Θ繝ｼ繧ｶ繝ｼ菴懈・
+ ///
++/// **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++///
+ /// 譁ｰ縺励＞繝ｦ繝ｼ繧ｶ繝ｼ繧剃ｽ懈・縺励∪縺吶Ａprivileges` 繧呈欠螳壹☆繧九→菴懈・縺ｨ蜷梧凾縺ｫ讓ｩ髯舌ｒ莉倅ｸ弱〒縺阪∪縺吶・-/// 縺薙・謫堺ｽ懊・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ縺悟ｿ・ｦ√〒縺吶・ #[utoipa::path(
+     post,
+     path = "/users",
+@@ -51,7 +55,7 @@ pub async fn list_users(
+         (status = 404, description = "讓ｩ髯舌Ν繝ｼ繝ｫ縺悟盾辣ｧ縺吶ｋ繝・・繧ｿ繝吶・繧ｹ縺ｾ縺溘・繝・・繝悶Ν縺悟ｭ伜惠縺励↑縺・),
+         (status = 409, description = "蜷悟錐縺ｮ繝ｦ繝ｼ繧ｶ繝ｼ縺梧里縺ｫ蟄伜惠縺吶ｋ")
+     ),
+-    security(("bearer_auth" = ["global_admin"])),
++    security(("bearer_auth" = [])),
+     tag = "Users"
+ )]
+ #[tracing::instrument(skip_all)]
+@@ -67,7 +71,9 @@ pub async fn create_user(
+ 
+ /// 繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ蜑企勁
+ ///
+-/// 謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ繧貞炎髯､縺励∪縺吶ゅ％縺ｮ謫堺ｽ懊・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ縺悟ｿ・ｦ√〒縺吶・+/// **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++///
++/// 謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ繧貞炎髯､縺励∪縺吶・ #[utoipa::path(
+     delete,
+     path = "/users/{username}",
+@@ -79,7 +85,7 @@ pub async fn create_user(
+         (status = 403, description = "root繝ｦ繝ｼ繧ｶ繝ｼ縺ｯ蜑企勁荳榊庄"),
+         (status = 404, description = "繝ｦ繝ｼ繧ｶ繝ｼ縺悟ｭ伜惠縺励↑縺・)
+     ),
+-    security(("bearer_auth" = ["global_admin"])),
++    security(("bearer_auth" = [])),
+     tag = "Users"
+ )]
+ #[tracing::instrument(skip_all)]
+@@ -95,8 +101,9 @@ pub async fn delete_user(
+ 
+ /// 繝ｦ繝ｼ繧ｶ繝ｼ諠・ｱ縺ｮ蜿門ｾ・ ///
+-/// 謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ縺ｮ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶よ悽莠ｺ縲√∪縺溘・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ繧呈戟縺､
+-/// 繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ縺ｿ螳溯｡悟庄閭ｽ縺ｧ縺吶・+/// **蠢・ｦ√↑讓ｩ髯・*: 譛ｬ莠ｺ 縺ｾ縺溘・ `global` / `admin`
++///
++/// 謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ縺ｮ諠・ｱ繧貞叙蠕励＠縺ｾ縺吶・ #[utoipa::path(
+     get,
+     path = "/users/{username}",
+@@ -123,8 +130,9 @@ pub async fn get_user(
+ 
+ /// 繝代せ繝ｯ繝ｼ繝峨・螟画峩
+ ///
+-/// 謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ縺ｮ繝代せ繝ｯ繝ｼ繝峨ｒ螟画峩縺励∪縺吶よ悽莠ｺ縲√∪縺溘・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ繧・-/// 謖√▽繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ縺ｿ螳溯｡悟庄閭ｽ縺ｧ縺吶ょ､画峩縺吶ｋ縺ｨ逋ｺ陦梧ｸ医∩繝医・繧ｯ繝ｳ縺ｯ縺吶∋縺ｦ螟ｱ蜉ｹ縺励∪縺吶・+/// **蠢・ｦ√↑讓ｩ髯・*: 譛ｬ莠ｺ 縺ｾ縺溘・ `global` / `admin`
++///
++/// 謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ縺ｮ繝代せ繝ｯ繝ｼ繝峨ｒ螟画峩縺励∪縺吶ょ､画峩縺吶ｋ縺ｨ逋ｺ陦梧ｸ医∩繝医・繧ｯ繝ｳ縺ｯ縺吶∋縺ｦ螟ｱ蜉ｹ縺励∪縺吶・ #[utoipa::path(
+     put,
+     path = "/users/{username}/password",
+@@ -154,12 +162,12 @@ pub async fn update_password(
+ 
+ /// 讓ｩ髯蝉ｸ隕ｧ縺ｮ蜿門ｾ・ ///
++/// **蠢・ｦ√↑讓ｩ髯・*: 譛ｬ莠ｺ 縺ｾ縺溘・ `global` / `admin`
++///
+ /// 謖・ｮ壹＠縺溘Θ繝ｼ繧ｶ繝ｼ縺梧戟縺､讓ｩ髯舌Ν繝ｼ繝ｫ縺ｮ荳隕ｧ繧貞叙蠕励＠縺ｾ縺吶・ ///
+ /// 譌｢縺ｫ蜑企勁縺輔ｌ縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν繧呈欠縺吶Ν繝ｼ繝ｫ縺ｯ蜷榊燕縺ｸ隗｣豎ｺ縺ｧ縺阪↑縺・◆繧∽ｸ隕ｧ縺ｫ迴ｾ繧後∪縺帙ｓ
+ /// ・医◎縺・＠縺溘Ν繝ｼ繝ｫ縺ｯ隱榊庄蛻､螳壹〒繧ゆｸ閾ｴ縺励↑縺・◆繧√∬｡ｨ遉ｺ縺ｨ螳溷柑讓ｩ髯舌′鬟溘＞驕輔≧縺薙→縺ｯ縺ゅｊ縺ｾ縺帙ｓ・峨・-///
+-/// 譛ｬ莠ｺ縲√∪縺溘・ `global` 繧ｹ繧ｳ繝ｼ繝励・ `admin` 繝ｭ繝ｼ繝ｫ繧呈戟縺､繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ縺ｿ螳溯｡悟庄閭ｽ縺ｧ縺吶・ #[utoipa::path(
+     get,
+     path = "/users/{username}/privileges",
+@@ -186,6 +194,8 @@ pub async fn get_privileges(
+ 
+ /// 繧ｵ繝ｼ繝舌・蜈ｨ菴薙↓蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳・ ///
++/// **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++///
+ /// 譌｢縺ｫ險ｭ螳壹＆繧後※縺・ｌ縺ｰ繝ｭ繝ｼ繝ｫ繧堤ｽｮ縺肴鋤縺医∪縺吶Ａadmin` 繧呈欠螳壹〒縺阪ｋ縺ｮ縺ｯ縺薙・繧ｹ繧ｳ繝ｼ繝励□縺代〒縺吶・ #[utoipa::path(
+     put,
+@@ -193,14 +203,14 @@ pub async fn get_privileges(
+     params(
+         ("username" = String, Path, description = "繝ｦ繝ｼ繧ｶ繝ｼ蜷・, example = "example_user")
+     ),
+-    request_body = SetPrivilegeRequest,
++    request_body = SetGlobalPrivilegeRequest,
+     responses(
+         (status = 204),
+         (status = 400, description = "菫晄戟縺ｧ縺阪ｋ讓ｩ髯先焚縺ｮ荳企剞繧定ｶ・∴縺・),
+         (status = 403, description = "root繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ讓ｩ髯舌・螟画峩荳榊庄"),
+         (status = 404, description = "繝ｦ繝ｼ繧ｶ繝ｼ縺悟ｭ伜惠縺励↑縺・)
+     ),
+-    security(("bearer_auth" = ["global_admin"])),
++    security(("bearer_auth" = [])),
+     tag = "Users"
+ )]
+ #[tracing::instrument(skip_all)]
+@@ -208,13 +218,13 @@ pub async fn set_global_privilege(
+     State(app_state): State<AppState>,
+     Extension(auth_user): Extension<AuthUser>,
+     Path(username): Path<String>,
+-    Json(payload): Json<SetPrivilegeRequest>,
++    Json(payload): Json<SetGlobalPrivilegeRequest>,
+ ) -> Result<StatusCode, AppError> {
+     check_global_admin(&auth_user)?;
+     users_service::grant_privilege(
+         &app_state,
+         &username,
+-        PrivilegeTarget::Global.with_role(payload.role),
++        PrivilegeRule::Global { role: payload.role },
+     )
+     .await?;
+     Ok(StatusCode::NO_CONTENT)
+@@ -222,6 +232,8 @@ pub async fn set_global_privilege(
+ 
+ /// 繧ｵ繝ｼ繝舌・蜈ｨ菴薙↓蟇ｾ縺吶ｋ讓ｩ髯舌・蜑･螂ｪ
+ ///
++/// **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++///
+ /// 繝ｭ繝ｼ繝ｫ繧貞撫繧上★縲√％縺ｮ繧ｹ繧ｳ繝ｼ繝励・讓ｩ髯舌ｒ蜿悶ｊ髯､縺阪∪縺吶・ #[utoipa::path(
+     delete,
+@@ -234,7 +246,7 @@ pub async fn set_global_privilege(
+         (status = 403, description = "root繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ讓ｩ髯舌・螟画峩荳榊庄"),
+         (status = 404, description = "繝ｦ繝ｼ繧ｶ繝ｼ縺悟ｭ伜惠縺励↑縺・√∪縺溘・縺薙・繧ｹ繧ｳ繝ｼ繝励・讓ｩ髯舌ｒ謖√▲縺ｦ縺・↑縺・)
+     ),
+-    security(("bearer_auth" = ["global_admin"])),
++    security(("bearer_auth" = [])),
+     tag = "Users"
+ )]
+ #[tracing::instrument(skip_all)]
+@@ -250,6 +262,8 @@ pub async fn delete_global_privilege(
+ 
+ /// 繝・・繧ｿ繝吶・繧ｹ縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳・ ///
++/// **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++///
+ /// 譌｢縺ｫ險ｭ螳壹＆繧後※縺・ｌ縺ｰ繝ｭ繝ｼ繝ｫ繧堤ｽｮ縺肴鋤縺医∪縺吶る・荳九・繝・・繝悶Ν縺吶∋縺ｦ縺ｫ蜉ｹ縺阪∪縺吶・ /// 讓ｩ髯舌・繝・・繧ｿ繝吶・繧ｹ ID 縺ｫ邏舌▼縺上◆繧√∵隼蜷阪＠縺ｦ繧りｿｽ蠕薙＠縺ｾ縺吶・ #[utoipa::path(
+@@ -259,14 +273,14 @@ pub async fn delete_global_privilege(
+         ("username" = String, Path, description = "繝ｦ繝ｼ繧ｶ繝ｼ蜷・, example = "example_user"),
+         ("db_name" = String, Path, description = "繝・・繧ｿ繝吶・繧ｹ蜷・, example = "example_database")
+     ),
+-    request_body = SetPrivilegeRequest,
++    request_body = SetDataPrivilegeRequest,
+     responses(
+         (status = 204),
+-        (status = 400, description = "admin 縺ｯ縺薙・繧ｹ繧ｳ繝ｼ繝励↓謖・ｮ壹〒縺阪↑縺・ｼ丈ｸ企剞雜・℃"),
++        (status = 400, description = "菫晄戟縺ｧ縺阪ｋ讓ｩ髯先焚縺ｮ荳企剞繧定ｶ・∴縺・),
+         (status = 403, description = "root繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ讓ｩ髯舌・螟画峩荳榊庄"),
+         (status = 404, description = "繝ｦ繝ｼ繧ｶ繝ｼ縺ｾ縺溘・繝・・繧ｿ繝吶・繧ｹ縺悟ｭ伜惠縺励↑縺・)
+     ),
+-    security(("bearer_auth" = ["global_admin"])),
++    security(("bearer_auth" = [])),
+     tag = "Users"
+ )]
+ #[tracing::instrument(skip_all)]
+@@ -274,19 +288,26 @@ pub async fn set_database_privilege(
+     State(app_state): State<AppState>,
+     Extension(auth_user): Extension<AuthUser>,
+     Path((username, db_name)): Path<(String, String)>,
+-    Json(payload): Json<SetPrivilegeRequest>,
++    Json(payload): Json<SetDataPrivilegeRequest>,
+ ) -> Result<StatusCode, AppError> {
+     check_global_admin(&auth_user)?;
+     users_service::grant_privilege(
+         &app_state,
+         &username,
+-        PrivilegeTarget::Database { db_name }.with_role(payload.role),
++        PrivilegeRule::Database {
++            db_name,
++            role: payload.role,
++        },
+     )
+     .await?;
+     Ok(StatusCode::NO_CONTENT)
+ }
+ 
+ /// 繝・・繧ｿ繝吶・繧ｹ縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌・蜑･螂ｪ
++///
++/// **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++///
++/// 繝ｭ繝ｼ繝ｫ繧貞撫繧上★縲√％縺ｮ繝・・繧ｿ繝吶・繧ｹ縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌ｒ蜿悶ｊ髯､縺阪∪縺吶・ #[utoipa::path(
+     delete,
+     path = "/users/{username}/privileges/databases/{db_name}",
+@@ -299,7 +320,7 @@ pub async fn set_database_privilege(
+         (status = 403, description = "root繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ讓ｩ髯舌・螟画峩荳榊庄"),
+         (status = 404, description = "繝ｦ繝ｼ繧ｶ繝ｼ繝ｻ繝・・繧ｿ繝吶・繧ｹ縺悟ｭ伜惠縺励↑縺・√∪縺溘・讓ｩ髯舌ｒ謖√▲縺ｦ縺・↑縺・)
+     ),
+-    security(("bearer_auth" = ["global_admin"])),
++    security(("bearer_auth" = [])),
+     tag = "Users"
+ )]
+ #[tracing::instrument(skip_all)]
+@@ -316,6 +337,8 @@ pub async fn delete_database_privilege(
+ 
+ /// 繝・・繝悶Ν縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳・ ///
++/// **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++///
+ /// 譌｢縺ｫ險ｭ螳壹＆繧後※縺・ｌ縺ｰ繝ｭ繝ｼ繝ｫ繧堤ｽｮ縺肴鋤縺医∪縺吶・ /// 讓ｩ髯舌・繝・・繝悶Ν ID 縺ｫ邏舌▼縺上◆繧√∵隼蜷阪＠縺ｦ繧りｿｽ蠕薙＠縺ｾ縺吶・ #[utoipa::path(
+@@ -326,14 +349,14 @@ pub async fn delete_database_privilege(
+         ("db_name" = String, Path, description = "繝・・繧ｿ繝吶・繧ｹ蜷・, example = "example_database"),
+         ("table_name" = String, Path, description = "繝・・繝悶Ν蜷・, example = "example_table")
+     ),
+-    request_body = SetPrivilegeRequest,
++    request_body = SetDataPrivilegeRequest,
+     responses(
+         (status = 204),
+-        (status = 400, description = "admin 縺ｯ縺薙・繧ｹ繧ｳ繝ｼ繝励↓謖・ｮ壹〒縺阪↑縺・ｼ丈ｸ企剞雜・℃"),
++        (status = 400, description = "菫晄戟縺ｧ縺阪ｋ讓ｩ髯先焚縺ｮ荳企剞繧定ｶ・∴縺・),
+         (status = 403, description = "root繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ讓ｩ髯舌・螟画峩荳榊庄"),
+         (status = 404, description = "繝ｦ繝ｼ繧ｶ繝ｼ繝ｻ繝・・繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν縺ｮ縺・★繧後°縺悟ｭ伜惠縺励↑縺・)
+     ),
+-    security(("bearer_auth" = ["global_admin"])),
++    security(("bearer_auth" = [])),
+     tag = "Users"
+ )]
+ #[tracing::instrument(skip_all)]
+@@ -341,23 +364,27 @@ pub async fn set_table_privilege(
+     State(app_state): State<AppState>,
+     Extension(auth_user): Extension<AuthUser>,
+     Path((username, db_name, table_name)): Path<(String, String, String)>,
+-    Json(payload): Json<SetPrivilegeRequest>,
++    Json(payload): Json<SetDataPrivilegeRequest>,
+ ) -> Result<StatusCode, AppError> {
+     check_global_admin(&auth_user)?;
+     users_service::grant_privilege(
+         &app_state,
+         &username,
+-        PrivilegeTarget::Table {
++        PrivilegeRule::Table {
+             db_name,
+             table_name,
+-        }
+-        .with_role(payload.role),
++            role: payload.role,
++        },
+     )
+     .await?;
+     Ok(StatusCode::NO_CONTENT)
+ }
+ 
+ /// 繝・・繝悶Ν縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌・蜑･螂ｪ
++///
++/// **蠢・ｦ√↑讓ｩ髯・*: `global` / `admin`
++///
++/// 繝ｭ繝ｼ繝ｫ繧貞撫繧上★縲√％縺ｮ繝・・繝悶Ν縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌ｒ蜿悶ｊ髯､縺阪∪縺吶・ #[utoipa::path(
+     delete,
+     path = "/users/{username}/privileges/databases/{db_name}/tables/{table_name}",
+@@ -371,7 +398,7 @@ pub async fn set_table_privilege(
+         (status = 403, description = "root繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ讓ｩ髯舌・螟画峩荳榊庄"),
+         (status = 404, description = "蟇ｾ雎｡縺悟ｭ伜惠縺励↑縺・√∪縺溘・讓ｩ髯舌ｒ謖√▲縺ｦ縺・↑縺・)
+     ),
+-    security(("bearer_auth" = ["global_admin"])),
++    security(("bearer_auth" = [])),
+     tag = "Users"
+ )]
+ #[tracing::instrument(skip_all)]
+diff --git a/src/models/users/domain.rs b/src/models/users/domain.rs
+index abaab95..a7ed564 100644
+--- a/src/models/users/domain.rs
++++ b/src/models/users/domain.rs
+@@ -57,19 +57,19 @@ impl User {
+                 (
+                     StoredPrivilege::Database { db_id, role },
+                     Scope::Database(target) | Scope::Table(target, _) | Scope::AnyIn(target),
+-                ) if *db_id == target => Some(*role),
++                ) if *db_id == target => Some(UserRole::from(*role)),
+ 
+                 // 繝・・繝悶Ν蜊倅ｽ阪・繝ｫ繝ｼ繝ｫ縺ｯ縲∝ｯｾ雎｡縺後◎縺ｮ繝・・繝悶Ν閾ｪ霄ｫ縺ｧ縺ゅｋ縺九・                 // 縲碁・荳九・縺ｩ繧後°縺ｫ隗ｦ繧後ｌ縺ｰ雜ｳ繧翫ｋ縲榊愛螳壹・縺ｨ縺阪□縺大柑縺上・                 (StoredPrivilege::Table { table_id, role, .. }, Scope::Table(_, target))
+                     if *table_id == target =>
+                 {
+-                    Some(*role)
++                    Some(UserRole::from(*role))
+                 }
+                 (StoredPrivilege::Table { db_id, role, .. }, Scope::AnyIn(target))
+                     if *db_id == target =>
+                 {
+-                    Some(*role)
++                    Some(UserRole::from(*role))
+                 }
+ 
+                 _ => None,
+diff --git a/src/models/users/entity.rs b/src/models/users/entity.rs
+index 33cd6a0..288a19a 100644
+--- a/src/models/users/entity.rs
++++ b/src/models/users/entity.rs
+@@ -50,21 +50,22 @@ pub enum StoredPrivilege {
+     /// 繧ｵ繝ｼ繝舌・蜈ｨ菴薙↓蟇ｾ縺吶ｋ讓ｩ髯舌・     Global { role: UserRole },
+     /// 迚ｹ螳壹・繝・・繧ｿ繝吶・繧ｹ驟堺ｸ九☆縺ｹ縺ｦ縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌・-    Database { db_id: DatabaseId, role: UserRole },
++    Database { db_id: DatabaseId, role: DataRole },
+     /// 迚ｹ螳壹・繝・・繝悶Ν 1 縺､縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌・     Table {
+         db_id: DatabaseId,
+         table_id: TableId,
+-        role: UserRole,
++        role: DataRole,
+     },
+ }
+ 
+ impl StoredPrivilege {
+     pub fn role(&self) -> UserRole {
+         match self {
+-            StoredPrivilege::Global { role }
+-            | StoredPrivilege::Database { role, .. }
+-            | StoredPrivilege::Table { role, .. } => *role,
++            StoredPrivilege::Global { role } => *role,
++            StoredPrivilege::Database { role, .. } | StoredPrivilege::Table { role, .. } => {
++                UserRole::from(*role)
++            }
+         }
+     }
+ 
+@@ -89,11 +90,25 @@ pub enum StoredTarget {
+     Table(TableId),
+ }
+ 
++/// 繝・・繧ｿ髱｢縺ｮ繝ｭ繝ｼ繝ｫ縲ゅョ繝ｼ繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν繧ｹ繧ｳ繝ｼ繝励〒謖・ｮ壹〒縺阪ｋ縺ｮ縺ｯ縺薙・ 3 縺､縺縺代・+///
++/// 蛻ｶ蠕｡髱｢縺ｮ `admin` 繧貞性縺ｾ縺ｪ縺・◆繧√～database` / `table` 繧ｹ繧ｳ繝ｼ繝励↓ `admin` 繧・+/// 荳弱∴繧九Μ繧ｯ繧ｨ繧ｹ繝医・蝙九→縺励※陦ｨ迴ｾ縺ｧ縺阪↑縺・ｼ医ョ繧ｷ繝ｪ繧｢繝ｩ繧､繧ｺ縺ｮ譎らせ縺ｧ蠑ｾ縺九ｌ繧具ｼ峨・+#[derive(
++    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, utoipa::ToSchema,
++)]
++#[serde(rename_all = "snake_case")]
++#[repr(u8)]
++pub enum DataRole {
++    Read = 1,
++    Write = 2,
++    Manage = 3,
++}
++
+ /// 讓ｩ髯舌・蠑ｷ縺輔よ焚蛟､縺悟､ｧ縺阪＞縺ｻ縺ｩ蠑ｷ縺上∽ｸ贋ｽ阪・荳倶ｽ阪ｒ縺吶∋縺ｦ蜷ｫ繧縲・ ///
+-/// `admin` 縺縺代・繝・・繧ｿ髱｢縺ｧ縺ｯ縺ｪ縺丞宛蠕｡髱｢・医Θ繝ｼ繧ｶ繝ｼ縺ｮ菴懈・繝ｻ蜑企勁繝ｻ讓ｩ髯蝉ｻ倅ｸ趣ｼ峨ｒ陦ｨ縺励・-/// `global` 繧ｹ繧ｳ繝ｼ繝励↓縺ｮ縺ｿ謖・ｮ壹〒縺阪ｋ縲Ａdatabase` / `table` 繧ｹ繧ｳ繝ｼ繝励〒 `admin` 繧・-/// 謖・ｮ壹＠縺溘Μ繧ｯ繧ｨ繧ｹ繝医・ 400 縺ｧ諡貞凄縺輔ｌ繧九・+/// `admin` 縺ｯ蛻ｶ蠕｡髱｢・医Θ繝ｼ繧ｶ繝ｼ縺ｮ菴懈・繝ｻ蜑企勁繝ｻ讓ｩ髯蝉ｻ倅ｸ趣ｼ峨ｒ陦ｨ縺励～global` 繧ｹ繧ｳ繝ｼ繝励↓
++/// 縺ｮ縺ｿ迴ｾ繧後ｋ縲ゅョ繝ｼ繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν繧ｹ繧ｳ繝ｼ繝励・菫晏ｭ倥・API 陦ｨ迴ｾ縺ｯ [`DataRole`] 繧剃ｽｿ縺・・ #[derive(
+     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, utoipa::ToSchema,
+ )]
+@@ -105,3 +120,13 @@ pub enum UserRole {
+     Manage = 3,
+     Admin = 4,
+ }
++
++impl From<DataRole> for UserRole {
++    fn from(role: DataRole) -> Self {
++        match role {
++            DataRole::Read => UserRole::Read,
++            DataRole::Write => UserRole::Write,
++            DataRole::Manage => UserRole::Manage,
++        }
++    }
++}
+diff --git a/src/models/users/mod.rs b/src/models/users/mod.rs
+index 9c279a6..bc28627 100644
+--- a/src/models/users/mod.rs
++++ b/src/models/users/mod.rs
+@@ -5,7 +5,11 @@ pub mod request;
+ pub mod response;
+ 
+ pub use domain::User;
+-pub use entity::{MAX_PRIVILEGE_RULES, StoredPrivilege, StoredTarget, UserMetadata, UserRole};
++pub use entity::{
++    DataRole, MAX_PRIVILEGE_RULES, StoredPrivilege, StoredTarget, UserMetadata, UserRole,
++};
+ pub use privilege::{PrivilegeRule, PrivilegeTarget, Scope};
+-pub use request::{CreateUserRequest, SetPrivilegeRequest, UpdatePasswordRequest};
++pub use request::{
++    CreateUserRequest, SetDataPrivilegeRequest, SetGlobalPrivilegeRequest, UpdatePasswordRequest,
++};
+ pub use response::{PrivilegesResponse, UserInfoResponse};
+diff --git a/src/models/users/privilege.rs b/src/models/users/privilege.rs
+index d1e5a22..d8808cd 100644
+--- a/src/models/users/privilege.rs
++++ b/src/models/users/privilege.rs
+@@ -1,7 +1,7 @@
+ use serde::{Deserialize, Serialize};
+ use utoipa::ToSchema;
+ 
+-use super::entity::UserRole;
++use super::entity::{DataRole, UserRole};
+ use crate::models::id::{DatabaseId, TableId};
+ 
+ /// 隱榊庄蛻､螳壹・蟇ｾ雎｡縲ゅ←縺ｮ繝ｫ繝ｼ繝ｫ縺悟柑縺上°縺ｯ繧ｹ繧ｳ繝ｼ繝励＃縺ｨ縺ｫ驕輔≧縲・@@ -31,21 +31,21 @@ pub enum PrivilegeRule {
+     /// 繧ｵ繝ｼ繝舌・蜈ｨ菴薙Ａrole` 縺ｫ `admin` 繧呈欠螳壹〒縺阪ｋ縺ｮ縺ｯ縺薙・繧ｹ繧ｳ繝ｼ繝励□縺代・     #[schema(title = "GlobalPrivilege")]
+     Global { role: UserRole },
+-    /// 繝・・繧ｿ繝吶・繧ｹ驟堺ｸ九☆縺ｹ縺ｦ縲・+    /// 繝・・繧ｿ繝吶・繧ｹ驟堺ｸ九☆縺ｹ縺ｦ縲Ａadmin` 縺ｯ謖・ｮ壹〒縺阪↑縺・・     #[schema(title = "DatabasePrivilege")]
+     Database {
+         #[schema(example = "example_database")]
+         db_name: String,
+-        role: UserRole,
++        role: DataRole,
+     },
+-    /// 蜊倅ｸ繝・・繝悶Ν縲・+    /// 蜊倅ｸ繝・・繝悶Ν縲Ａadmin` 縺ｯ謖・ｮ壹〒縺阪↑縺・・     #[schema(title = "TablePrivilege")]
+     Table {
+         #[schema(example = "example_database")]
+         db_name: String,
+         #[schema(example = "example_table")]
+         table_name: String,
+-        role: UserRole,
++        role: DataRole,
+     },
+ }
+ 
+@@ -60,30 +60,13 @@ pub enum PrivilegeTarget {
+     Table { db_name: String, table_name: String },
+ }
+ 
+-impl PrivilegeTarget {
+-    /// 蟇ｾ雎｡縺ｫ繝ｭ繝ｼ繝ｫ繧剃ｸ弱∴縺ｦ 1 莉ｶ縺ｮ繝ｫ繝ｼ繝ｫ縺ｫ縺吶ｋ縲・-    pub fn with_role(self, role: UserRole) -> PrivilegeRule {
+-        match self {
+-            PrivilegeTarget::Global => PrivilegeRule::Global { role },
+-            PrivilegeTarget::Database { db_name } => PrivilegeRule::Database { db_name, role },
+-            PrivilegeTarget::Table {
+-                db_name,
+-                table_name,
+-            } => PrivilegeRule::Table {
+-                db_name,
+-                table_name,
+-                role,
+-            },
+-        }
+-    }
+-}
+-
+ impl PrivilegeRule {
+     pub fn role(&self) -> UserRole {
+         match self {
+-            PrivilegeRule::Global { role }
+-            | PrivilegeRule::Database { role, .. }
+-            | PrivilegeRule::Table { role, .. } => *role,
++            PrivilegeRule::Global { role } => *role,
++            PrivilegeRule::Database { role, .. } | PrivilegeRule::Table { role, .. } => {
++                UserRole::from(*role)
++            }
+         }
+     }
+ }
+diff --git a/src/models/users/request.rs b/src/models/users/request.rs
+index 43285cb..d10e87b 100644
+--- a/src/models/users/request.rs
++++ b/src/models/users/request.rs
+@@ -20,8 +20,15 @@ pub struct UpdatePasswordRequest {
+     pub password: String,
+ }
+ 
+-/// 1 縺､縺ｮ蟇ｾ雎｡縺ｫ蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳壹Μ繧ｯ繧ｨ繧ｹ繝医ょｯｾ雎｡縺ｯ繝代せ縺ｧ謖・ｮ壹☆繧九・+/// `global` 繧ｹ繧ｳ繝ｼ繝励↓蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳壹Μ繧ｯ繧ｨ繧ｹ繝医ょ宛蠕｡髱｢縺ｮ `admin` 繧呈欠螳壹〒縺阪ｋ蜚ｯ荳縺ｮ蜈･蜿｣縲・ #[derive(Debug, Deserialize, ToSchema)]
+-pub struct SetPrivilegeRequest {
++pub struct SetGlobalPrivilegeRequest {
+     pub role: super::entity::UserRole,
+ }
++
++/// 繝・・繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν繧ｹ繧ｳ繝ｼ繝励↓蟇ｾ縺吶ｋ讓ｩ髯舌・險ｭ螳壹Μ繧ｯ繧ｨ繧ｹ繝医・+/// 繝ｭ繝ｼ繝ｫ縺ｯ [`DataRole`](super::entity::DataRole) 縺ｪ縺ｮ縺ｧ `admin` 縺ｯ陦ｨ迴ｾ縺ｧ縺阪↑縺・・+#[derive(Debug, Deserialize, ToSchema)]
++pub struct SetDataPrivilegeRequest {
++    pub role: super::entity::DataRole,
++}
+diff --git a/src/openapi.rs b/src/openapi.rs
+index 92908a2..e4046d1 100644
+--- a/src/openapi.rs
++++ b/src/openapi.rs
+@@ -15,8 +15,8 @@ use crate::models::database::{
+ };
+ use crate::models::spatial_id::SpatialId;
+ use crate::models::users::{
+-    CreateUserRequest, PrivilegeRule, PrivilegesResponse, SetPrivilegeRequest,
+-    UpdatePasswordRequest, UserInfoResponse, UserRole,
++    CreateUserRequest, DataRole, PrivilegeRule, PrivilegesResponse, SetDataPrivilegeRequest,
++    SetGlobalPrivilegeRequest, UpdatePasswordRequest, UserInfoResponse, UserRole,
+ };
+ 
+ /// `bearer_auth` 繧ｻ繧ｭ繝･繝ｪ繝・ぅ繧ｹ繧ｭ繝ｼ繝・・WT Bearer・峨ｒ OpenAPI 繧ｳ繝ｳ繝昴・繝阪Φ繝医↓逋ｻ骭ｲ縺吶ｋ縲・@@ -43,9 +43,41 @@ impl utoipa::Modify for SecurityAddon {
+     }
+ }
+ 
++/// 讓ｩ髯舌Δ繝・Ν縺ｮ蜃｡萓九・+///
++/// 蜷・お繝ｳ繝峨・繧､繝ｳ繝医・隱ｬ譏弱↓縺ゅｋ縲悟ｿ・ｦ√↑讓ｩ髯舌阪・譛蟆剰ｦ∽ｻｶ縺縺代ｒ遉ｺ縺吶・+/// 縲御ｸ贋ｽ阪せ繧ｳ繝ｼ繝暦ｼ丈ｸ贋ｽ阪Ο繝ｼ繝ｫ縺御ｸ倶ｽ阪ｒ蜷ｫ繧縲阪→縺・≧隕丞援縺ｯ縺薙％縺ｫ荳蠎ｦ縺縺第嶌縺阪・+/// 蛟九・・繧ｨ繝ｳ繝峨・繧､繝ｳ繝医〒縺ｯ郢ｰ繧願ｿ斐＆縺ｪ縺・・+const PRIVILEGE_LEGEND: &str = r#"
++## 讓ｩ髯舌↓縺､縺・※
++
++蜷・お繝ｳ繝峨・繧､繝ｳ繝医・隱ｬ譏弱↓縺ゅｋ **蠢・ｦ√↑讓ｩ髯・* 縺ｯ縲√◎縺ｮ謫堺ｽ懊↓蠢・ｦ√↑譛蟆上・讓ｩ髯舌〒縺吶・+`繧ｹ繧ｳ繝ｼ繝輿 / `繝ｭ繝ｼ繝ｫ` 縺ｮ蠖｢蠑上〒陦ｨ縺励∪縺吶・+
++**繧ｹ繧ｳ繝ｼ繝・*縺ｯ `global` 竓・`database` 竓・`table` 縺ｮ髫主ｱ､縺ｧ縲∽ｸ贋ｽ阪せ繧ｳ繝ｼ繝励・讓ｩ髯舌・荳倶ｽ阪ｒ縺吶∋縺ｦ蜷ｫ縺ｿ縺ｾ縺吶・+縺溘→縺医・ `global` / `read` 繧呈戟縺､繝ｦ繝ｼ繧ｶ繝ｼ縺ｯ縲√☆縺ｹ縺ｦ縺ｮ繝・・繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν繧定ｪｭ繧√∪縺吶・+`database` / `table` 縺ｨ譖ｸ縺九ｌ縺ｦ縺・ｋ蝣ｴ蜷医∝ｯｾ雎｡縺ｯ繝代せ縺ｧ謖・ｮ壹＠縺溘ョ繝ｼ繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν縺ｧ縺吶・+
++**繝ｭ繝ｼ繝ｫ**縺ｯ `read` < `write` < `manage` < `admin` 縺ｮ鬆・↓蠑ｷ縺上∽ｸ贋ｽ阪Ο繝ｼ繝ｫ縺ｯ荳倶ｽ阪ｒ縺吶∋縺ｦ蜷ｫ縺ｿ縺ｾ縺吶・+
++- `read` 窶・蜿ら・
++- `write` 窶・繝・・繧ｿ縺ｮ譖ｸ縺崎ｾｼ縺ｿ
++- `manage` 窶・繝・・繝悶Ν繧・ョ繝ｼ繧ｿ繝吶・繧ｹ縺昴・繧ゅ・縺ｮ邂｡逅・+- `admin` 窶・繝ｦ繝ｼ繧ｶ繝ｼ縺ｨ讓ｩ髯舌・邂｡逅・ょ宛蠕｡髱｢縺ｮ讓ｩ髯舌〒縺ゅｊ縲～global` 繧ｹ繧ｳ繝ｼ繝励↓縺ｮ縺ｿ謖・ｮ壹〒縺阪∪縺・+
++`global` / `manage` 縺ｯ蜈ｨ繝・・繧ｿ繝吶・繧ｹ縺ｮ繝・・繧ｿ繧定・逕ｱ縺ｫ謇ｱ縺医∪縺吶′縲√Θ繝ｼ繧ｶ繝ｼ繧・ｨｩ髯舌・謫堺ｽ懊〒縺阪∪縺帙ｓ縲・+繝ｦ繝ｼ繧ｶ繝ｼ邂｡逅・ｒ陦後∴繧九・縺ｯ `global` / `admin` 縺縺代〒縺吶・+
++`admin` 縺ｯ `manage` 繧貞性繧縺溘ａ縲・*繧ｵ繝ｼ繝舌・邂｡逅・・・縺吶∋縺ｦ縺ｮ繝・・繧ｿ縺ｫ繧ゅい繧ｯ繧ｻ繧ｹ縺ｧ縺阪∪縺・*縲・+縺薙ｌ縺ｯ驕ｿ縺代ｉ繧後∪縺帙ｓ・・admin` 縺ｯ莉ｻ諢上Θ繝ｼ繧ｶ繝ｼ縺ｮ繝代せ繝ｯ繝ｼ繝峨→讓ｩ髯舌ｒ螟画峩縺ｧ縺阪ｋ縺溘ａ縲・+逶ｴ謗･縺ｮ繝・・繧ｿ繧｢繧ｯ繧ｻ繧ｹ縺縺代ｒ遖√§縺ｦ繧りｿょ屓縺ｧ縺阪∪縺呻ｼ峨ゅョ繝ｼ繧ｿ謫堺ｽ懊＠縺句ｿ・ｦ√→縺励↑縺・°逕ｨ繧｢繧ｫ繧ｦ繝ｳ繝医↓縺ｯ
++`admin` 縺ｧ縺ｯ縺ｪ縺・`global` / `manage` 繧貞牡繧雁ｽ薙※縺ｦ縺上□縺輔＞縲・+"#;
++
+ #[derive(OpenApi)]
+ #[openapi(
+     modifiers(&SecurityAddon),
++    info(description = PRIVILEGE_LEGEND),
+     servers(),
+     paths(
+         // Auth
+@@ -69,13 +101,13 @@ impl utoipa::Modify for SecurityAddon {
+         crate::handlers::database::database_list,
+         // POST /databases
+         crate::handlers::database::database_create,
+-        // GET  /databases/{name}
++        // GET  /databases/{db_name}
+         crate::handlers::database::database_info,
+-        // DELETE /databases/{name}
++        // DELETE /databases/{db_name}
+         crate::handlers::database::remove_database,
+-        // PATCH /databases/{name}
++        // PATCH /databases/{db_name}
+         crate::handlers::database::database_update,
+-        // POST /databases/{name}/copy
++        // POST /databases/{db_name}/copy
+         crate::handlers::database::database_copy,
+         crate::handlers::database::table::create::table_create,
+         crate::handlers::database::table::list::table_list,
+@@ -108,10 +140,12 @@ impl utoipa::Modify for SecurityAddon {
+         CreateUserRequest,
+         UserInfoResponse,
+         UpdatePasswordRequest,
+-        SetPrivilegeRequest,
++        SetGlobalPrivilegeRequest,
++        SetDataPrivilegeRequest,
+         PrivilegesResponse,
+         PrivilegeRule,
+         UserRole,
++        DataRole,
+         // Database
+         CreateDatabaseRequest,
+         UpdateDatabaseRequest,
+diff --git a/src/repositories/database/write.rs b/src/repositories/database/write.rs
+index 63fcc40..2d47e54 100644
+--- a/src/repositories/database/write.rs
++++ b/src/repositories/database/write.rs
+@@ -3,7 +3,7 @@ use uuid::Uuid;
+ use crate::{
+     error::AppError,
+     models::database::{DatabaseInfoResponse, DatabaseMetadata},
+-    repositories::KasaneDbWrite,
++    repositories::{KasaneDbWrite, meta::MetaRead},
+ };
+ 
+ impl<'a> KasaneDbWrite<'a> {
+@@ -60,18 +60,24 @@ impl<'a> KasaneDbWrite<'a> {
+                 name: name.to_string(),
+             });
+         }
+-        let db = self.db.databases;
+-        let Some(meta) = db.get(&self.write_txn, name)? else {
++        let Some(meta) = self.db.databases.get(&self.write_txn, name)? else {
+             return Err(AppError::DatabaseNotFound {
+                 name: name.to_string(),
+             });
+         };
+ 
++        // 驟堺ｸ九ユ繝ｼ繝悶Ν縺ｮ蛻玲嫌縺ｨ蜑企勁縺ｯ縲√％縺ｮ 1 縺､縺ｮ譖ｸ縺崎ｾｼ縺ｿ繝医Λ繝ｳ繧ｶ繧ｯ繧ｷ繝ｧ繝ｳ蜀・〒陦後≧縲・+        // 蛻玲嫌縺縺代ｒ蛻･縺ｮ隱ｭ縺ｿ蜿悶ｊ繝医Λ繝ｳ繧ｶ繧ｯ繧ｷ繝ｧ繝ｳ縺ｧ貂医∪縺帙ｋ縺ｨ縲√◎縺ｮ髫咎俣縺ｫ菴懊ｉ繧後◆
++        // 繝・・繝悶Ν縺悟炎髯､蟇ｾ雎｡縺九ｉ貍上ｌ縲∬ｦｪ繧貞､ｱ縺｣縺ｦ蛻ｰ驕比ｸ崎・縺ｪ縺ｾ縺ｾ谿九▲縺ｦ縺励∪縺・・+        for table_name in self.table_names(meta.id)? {
++            self.table_remove(name, &table_name)?;
++        }
++
+         // 繝ｦ繝ｼ繧ｶ繝ｼ縺梧戟縺､讓ｩ髯舌・繝・・繧ｿ繝吶・繧ｹ ID 縺ｧ菫晏ｭ倥＆繧後※縺翫ｊ縲∝炎髯､縺励◆繝・・繧ｿ繝吶・繧ｹ縺ｮ
+         // ID 縺悟・蛻ｩ逕ｨ縺輔ｌ繧九％縺ｨ縺ｯ縺ｪ縺・ゅｈ縺｣縺ｦ谿九▲縺滓ｨｩ髯舌Ν繝ｼ繝ｫ縺悟ｾ後°繧我ｽ懊ｉ繧後◆蜷悟錐縺ｮ
+         // 繝・・繧ｿ繝吶・繧ｹ縺ｫ蜉ｹ縺上％縺ｨ縺ｯ縺ｪ縺上√％縺薙〒謗・勁縺吶ｋ蠢・ｦ√・縺ｪ縺・         // ・磯・ｼ輔″繧､繝ｳ繝・ャ繧ｯ繧ｹ縺九ｉ豸医∴繧九・縺ｧ縲∬｡ｨ遉ｺ荳翫・隗｣豎ｺ縺ｧ縺阪↑縺・Ν繝ｼ繝ｫ縺ｨ縺励※髫繧後ｋ・峨・-        db.delete(&mut self.write_txn, name)?;
++        self.db.databases.delete(&mut self.write_txn, name)?;
+         self.db
+             .database_id_index
+             .delete(&mut self.write_txn, &meta.id)?;
+@@ -174,21 +180,7 @@ impl<'a> KasaneDbWrite<'a> {
+             .put(&mut self.write_txn, &copy_db_id, copy_name)?;
+ 
+         // 4. 繧ｳ繝斐・蜈・ョ繝ｼ繧ｿ繝吶・繧ｹ蜀・・蜈ｨ繝・・繝悶Ν蜷阪ｒ蜿門ｾ・-        let db_tables = self.db.tables;
+-        let mut table_names = Vec::new();
+-        let src_db_id_bytes = src_db_meta.id.into_bytes();
+-        for iter in db_tables
+-            .remap_types::<heed::types::Bytes, heed::types::Bytes>()
+-            .prefix_iter(&self.write_txn, src_db_id_bytes.as_slice())?
+-        {
+-            let (k_bytes, _) = iter?;
+-            if k_bytes.len() > 16 {
+-                let name = std::str::from_utf8(&k_bytes[16..]).map_err(|e| {
+-                    AppError::InternalError(format!("Invalid table name encoding: {}", e))
+-                })?;
+-                table_names.push(name.to_string());
+-            }
+-        }
++        let table_names = self.table_names(src_db_meta.id)?;
+ 
+         // 5. 蜷・ユ繝ｼ繝悶Ν繧偵さ繝斐・
+         for table_name in table_names {
+diff --git a/src/repositories/meta.rs b/src/repositories/meta.rs
+index 0c18d0a..69d89ea 100644
+--- a/src/repositories/meta.rs
++++ b/src/repositories/meta.rs
+@@ -9,11 +9,14 @@
+ //! 繧ｹ繝医Ξ繝ｼ繧ｸ螳溯｣・ｒ蟾ｮ縺玲崛縺医ｋ・・iKV 遲会ｼ牙ｴ蜷医・蠅・阜繧ゅ％縺薙↓縺ｪ繧九ょ・襍ｰ譟ｻ縺ｫ萓晏ｭ倥☆繧・ //! 騾・ｼ輔″縺ｯ謖√◆縺壹～database_id_index` / `table_id_index` 縺ｸ縺ｮ轤ｹ蜿ら・縺縺代〒貂医∪縺帙※縺・ｋ縲・ 
++use heed::BytesDecode;
++
++use crate::db_init::DbIdAndName;
+ use crate::error::AppError;
+ use crate::models::id::{DatabaseId, TableId};
+ use crate::models::users::{
+     MAX_PRIVILEGE_RULES, PrivilegeRule, PrivilegeTarget, StoredPrivilege, StoredTarget,
+-    UserMetadata, UserRole,
++    UserMetadata,
+ };
+ use crate::repositories::{KasaneDbRead, KasaneDbWrite};
+ 
+@@ -27,6 +30,8 @@ pub trait MetaRead {
+     /// `TableId` 縺九ｉ繝・・繝悶Ν蜷阪ｒ蠑輔￥・・table_id_index` 縺ｸ縺ｮ轤ｹ蜿ら・・峨・     fn table_name(&self, table_id: TableId) -> Result<Option<String>, AppError>;
+     fn user_meta(&self, username: &str) -> Result<Option<UserMetadata>, AppError>;
++    /// 繝・・繧ｿ繝吶・繧ｹ驟堺ｸ九・繝・・繝悶Ν蜷阪ｒ蛻玲嫌縺吶ｋ縲・+    fn table_names(&self, db_id: DatabaseId) -> Result<Vec<String>, AppError>;
+ 
+     // --- 荳翫↓霈峨ｋ蜈ｱ騾壹Ο繧ｸ繝・け ---
+ 
+@@ -45,22 +50,23 @@ pub trait MetaRead {
+     /// API 陦ｨ迴ｾ・亥錐蜑阪・繝ｼ繧ｹ・峨・讓ｩ髯舌Ν繝ｼ繝ｫ蛻励ｒ菫晏ｭ伜ｽ｢蠑擾ｼ・D 繝吶・繧ｹ・峨∈隗｣豎ｺ縺吶ｋ縲・     ///
+     /// - 蟄伜惠縺励↑縺・ョ繝ｼ繧ｿ繝吶・繧ｹ・上ユ繝ｼ繝悶Ν繧呈欠縺吶Ν繝ｼ繝ｫ縺ｯ 404 縺ｧ諡貞凄縺吶ｋ
+-    /// - `admin` 繝ｭ繝ｼ繝ｫ縺ｯ `global` 繧ｹ繧ｳ繝ｼ繝嶺ｻ･螟悶〒縺ｯ諡貞凄縺吶ｋ
+     /// - 蜷後§蟇ｾ雎｡繧呈欠縺吶Ν繝ｼ繝ｫ縺瑚､・焚縺ゅｌ縺ｰ繝ｭ繝ｼ繝ｫ縺御ｸ閾ｴ縺吶ｋ蝣ｴ蜷医・縺ｿ 1 莉ｶ縺ｫ逡ｳ縺ｿ縲・     ///   鬟溘＞驕輔≧蝣ｴ蜷医・ 400 縺ｧ諡貞凄縺吶ｋ・亥ｮ溷柑繝ｭ繝ｼ繝ｫ縺梧囓鮟吶↓ max 縺ｫ縺ｪ繧九・繧帝∩縺代ｋ・・     fn resolve_privileges(
+         &self,
+         rules: &[PrivilegeRule],
+     ) -> Result<Vec<StoredPrivilege>, AppError> {
++        // 蜷榊燕隗｣豎ｺ縺ｮ蜑阪↓莉ｶ謨ｰ縺ｧ蠑ｾ縺上りｧ｣豎ｺ縺ｯ繝ｫ繝ｼ繝ｫ縺斐→縺ｫ繧ｫ繧ｿ繝ｭ繧ｰ繧貞ｼ輔￥縺ｮ縺ｧ縲・+        // 縺ｩ縺・○荳企剞縺ｧ諡貞凄縺吶ｋ蜈･蜉帙↓蟇ｾ縺励※蜈医↓襍ｰ繧峨○縺ｪ縺・・+        if rules.len() > MAX_PRIVILEGE_RULES {
++            return Err(AppError::InvalidPrivilege {
++                reason: format!("a user cannot hold more than {MAX_PRIVILEGE_RULES} privileges"),
++            });
++        }
++
+         let mut resolved: Vec<StoredPrivilege> = Vec::with_capacity(rules.len());
+ 
+         for rule in rules {
+-            if rule.role() == UserRole::Admin && !matches!(rule, PrivilegeRule::Global { .. }) {
+-                return Err(AppError::InvalidPrivilege {
+-                    reason: "role 'admin' can only be granted at the 'global' scope".to_string(),
+-                });
+-            }
+-
+             let stored = match rule {
+                 PrivilegeRule::Global { role } => StoredPrivilege::Global { role: *role },
+                 PrivilegeRule::Database { db_name, role } => StoredPrivilege::Database {
+@@ -96,16 +102,10 @@ pub trait MetaRead {
+             resolved.push(stored);
+         }
+ 
+-        if resolved.len() > MAX_PRIVILEGE_RULES {
+-            return Err(AppError::InvalidPrivilege {
+-                reason: format!("a user cannot hold more than {MAX_PRIVILEGE_RULES} privileges"),
+-            });
+-        }
+-
+         Ok(resolved)
+     }
+ 
+-    /// 1 莉ｶ縺ｮ繝ｫ繝ｼ繝ｫ繧定ｧ｣豎ｺ縺吶ｋ縲Ａadmin` 繧・`global` 莉･螟悶∈荳弱∴繧医≧縺ｨ縺励◆蝣ｴ蜷医・ 400縲・+    /// 1 莉ｶ縺ｮ繝ｫ繝ｼ繝ｫ繧定ｧ｣豎ｺ縺吶ｋ縲・     fn resolve_privilege(&self, rule: &PrivilegeRule) -> Result<StoredPrivilege, AppError> {
+         Ok(self
+             .resolve_privileges(std::slice::from_ref(rule))?
+@@ -249,6 +249,24 @@ macro_rules! impl_meta_read {
+                     None => Ok(None),
+                 }
+             }
++
++            fn table_names(&self, db_id: DatabaseId) -> Result<Vec<String>, AppError> {
++                let prefix = db_id.into_bytes();
++                let mut names = Vec::new();
++                for item in self
++                    .db
++                    .tables
++                    .remap_types::<heed::types::Bytes, heed::types::Bytes>()
++                    .prefix_iter(&self.$txn, prefix.as_slice())?
++                {
++                    let (k_bytes, _) = item?;
++                    let (_, name) = DbIdAndName::bytes_decode(k_bytes).map_err(|e| {
++                        AppError::InternalError(format!("Failed to decode table key: {e}"))
++                    })?;
++                    names.push(name.to_string());
++                }
++                Ok(names)
++            }
+         }
+     };
+ }
+diff --git a/src/routes/database/table/data.rs b/src/routes/database/table/data.rs
+index 73514df..69b72bf 100644
+--- a/src/routes/database/table/data.rs
++++ b/src/routes/database/table/data.rs
+@@ -5,11 +5,11 @@ use axum::routing::{post, put};
+ pub fn routes() -> Router<AppState> {
+     Router::new()
+         .route(
+-            "/{name}/data/search",
++            "/{table_name}/data/search",
+             post(crate::handlers::database::table::data::get::data_get),
+         )
+         .route(
+-            "/{name}/data",
++            "/{table_name}/data",
+             put(crate::handlers::database::table::data::insert::data_insert)
+                 .patch(crate::handlers::database::table::data::upsert::data_upsert)
+                 .delete(crate::handlers::database::table::data::remove::data_remove),
+diff --git a/src/services/database/mod.rs b/src/services/database/mod.rs
+index b7f017a..4fc1b2b 100644
+--- a/src/services/database/mod.rs
++++ b/src/services/database/mod.rs
+@@ -64,23 +64,17 @@ pub async fn create(
+     .map_err(|e| AppError::InternalError(e.to_string()))?
+ }
+ 
++/// 繝・・繧ｿ繝吶・繧ｹ繧帝・荳九・繝・・繝悶Ν縺斐→蜑企勁縺吶ｋ縲・+///
++/// 蛻玲嫌縺ｨ蜑企勁縺ｮ蛻・牡縺ｯ [`KasaneDbWrite::database_remove`](crate::repositories::KasaneDbWrite)
++/// 蛛ｴ縺ｧ 1 縺､縺ｮ譖ｸ縺崎ｾｼ縺ｿ繝医Λ繝ｳ繧ｶ繧ｯ繧ｷ繝ｧ繝ｳ縺ｫ髢峨§縺ｦ縺ゅｋ縲・ pub async fn remove(app_state: &AppState, name: &str) -> Result<(), AppError> {
+     let app_state = app_state.clone();
+     let name = name.to_string();
+ 
+     let span = tracing::Span::current();
+-    tokio::task::spawn_blocking(move || -> Result<(), AppError> {
+-        let _guard = span.enter();
+-        let tables = app_state.db.read(|r| r.table_list(&name))?;
+-
+-        app_state.db.write(|db| {
+-            // First, list all tables and remove them
+-            for table in tables {
+-                db.table_remove(&name, &table.name)?;
+-            }
+-            db.database_remove(&name)?;
+-            Ok(())
+-        })
++    tokio::task::spawn_blocking(move || {
++        span.in_scope(|| app_state.db.write(|db| db.database_remove(&name)))
+     })
+     .await
+     .map_err(|e| AppError::InternalError(e.to_string()))?
+diff --git a/tests/permissions.rs b/tests/permissions.rs
+index 9b1b0f0..d3c1f95 100644
+--- a/tests/permissions.rs
++++ b/tests/permissions.rs
+@@ -1222,25 +1222,34 @@ async fn test_global_manage_is_not_server_admin() {
+ }
+ 
+ #[tokio::test]
+-/// `admin` 繝ｭ繝ｼ繝ｫ縺ｯ global 繧ｹ繧ｳ繝ｼ繝嶺ｻ･螟悶〒縺ｯ莉倅ｸ弱〒縺阪↑縺・％縺ｨ繧呈､懆ｨｼ縺吶ｋ縲・+/// `admin` 繝ｭ繝ｼ繝ｫ縺ｯ global 繧ｹ繧ｳ繝ｼ繝嶺ｻ･螟悶〒縺ｯ蜿励￠莉倥￠繧峨ｌ縺ｪ縺・％縺ｨ繧呈､懆ｨｼ縺吶ｋ縲・+///
++/// 繝・・繧ｿ繝吶・繧ｹ繝ｻ繝・・繝悶Ν繧ｹ繧ｳ繝ｼ繝励・繝ｪ繧ｯ繧ｨ繧ｹ繝亥梛縺ｯ `admin` 繧呈戟縺溘↑縺・`DataRole` 縺ｪ縺ｮ縺ｧ縲・+/// 螳溯｡梧凾縺ｮ讀懆ｨｼ縺ｧ縺ｯ縺ｪ縺上ョ繧ｷ繝ｪ繧｢繝ｩ繧､繧ｺ縺ｮ譎らせ縺ｧ蠑ｾ縺九ｌ繧具ｼ井ｻ悶・繧ｹ繧ｭ繝ｼ繝樣＆蜿阪→蜷後§ 422・峨・ async fn test_admin_role_is_rejected_outside_global_scope() {
+     let test_app = PermissionTestApp::new();
+     let root_token = test_app.root_token();
+ 
+     create_db(&test_app.app, &root_token, "scoped_db").await;
++    create_table(&test_app.app, &root_token, "scoped_db", "scoped_table").await;
+     create_user_and_token(&test_app.app, &root_token, "climber", false).await;
+ 
+-    let res = put_privilege(
+-        &test_app.app,
+-        &root_token,
+-        "climber",
+-        Some("scoped_db"),
+-        None,
+-        "admin",
+-    )
+-    .await;
+-    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+-    assert_eq!(json_body(res).await["code"], "invalid_privilege");
++    for (db, table) in [
++        (Some("scoped_db"), None),
++        (Some("scoped_db"), Some("scoped_table")),
++    ] {
++        let res = put_privilege(&test_app.app, &root_token, "climber", db, table, "admin").await;
++        assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
++    }
++
++    // global 繧ｹ繧ｳ繝ｼ繝励〒縺縺鷹壹ｋ縲・+    let res = put_privilege(&test_app.app, &root_token, "climber", None, None, "admin").await;
++    assert_eq!(res.status(), StatusCode::NO_CONTENT);
++
++    // 菴輔ｂ菫晏ｭ倥＆繧後※縺・↑縺・％縺ｨ・医ョ繝ｼ繧ｿ繧ｹ繧ｳ繝ｼ繝怜・・峨ｒ遒ｺ隱阪☆繧九・+    let privileges = fetch_privileges(&test_app.app, &root_token, "climber").await;
++    assert_eq!(privileges.len(), 1);
++    assert_eq!(privileges[0]["scope"], "global");
+ }
+ 
+ #[tokio::test]
+@@ -1670,3 +1679,182 @@ async fn test_stale_privileges_do_not_accumulate_over_cycles() {
+             .is_empty()
+     );
+ }
++
++#[tokio::test]
++/// `global` 繧ｹ繧ｳ繝ｼ繝励・ `read` 縺後悟・繝・・繧ｿ繝吶・繧ｹ繝ｻ蜈ｨ繝・・繝悶Ν繧定ｪｭ繧√ｋ縺御ｸ蛻・嶌縺代↑縺・・+/// 讓ｩ髯舌→縺励※讖溯・縺吶ｋ縺薙→繧呈､懆ｨｼ縺吶ｋ縲・+async fn test_global_read_can_read_everything_but_write_nothing() {
++    let test_app = PermissionTestApp::new();
++    let root_token = test_app.root_token();
++
++    create_db(&test_app.app, &root_token, "alpha_db").await;
++    create_db(&test_app.app, &root_token, "beta_db").await;
++    create_table(&test_app.app, &root_token, "alpha_db", "t_one").await;
++    create_table(&test_app.app, &root_token, "beta_db", "t_two").await;
++
++    let token = create_user_and_token(&test_app.app, &root_token, "reader", false).await;
++    let res = put_privilege(&test_app.app, &root_token, "reader", None, None, "read").await;
++    assert_eq!(res.status(), StatusCode::NO_CONTENT);
++
++    // 繝・・繧ｿ繝吶・繧ｹ縺ｯ蜈ｨ莉ｶ隕九∴繧・+    let res = get(&test_app.app, &token, "/databases").await;
++    assert_eq!(res.status(), StatusCode::OK);
++    let names: Vec<String> = json_body(res)
++        .await
++        .as_array()
++        .unwrap()
++        .iter()
++        .map(|d| d["name"].as_str().unwrap().to_string())
++        .collect();
++    assert_eq!(names, vec!["alpha_db", "beta_db"]);
++
++    // 繝・・繝悶Ν繧ょ・莉ｶ隕九∴繧具ｼ亥ｾ後°繧我ｽ懊ｉ繧後◆繝・・繧ｿ繝吶・繧ｹ縺ｫ繧ょ所縺ｶ・・+    create_db(&test_app.app, &root_token, "gamma_db").await;
++    create_table(&test_app.app, &root_token, "gamma_db", "t_three").await;
++    let res = get(&test_app.app, &token, "/databases/gamma_db/tables").await;
++    assert_eq!(res.status(), StatusCode::OK);
++    assert_eq!(json_body(res).await.as_array().unwrap().len(), 1);
++
++    // 繝・・繝悶Ν隧ｳ邏ｰ繧ゅけ繧ｨ繝ｪ繧る壹ｋ
++    let res = get(&test_app.app, &token, "/databases/alpha_db/tables/t_one").await;
++    assert_eq!(res.status(), StatusCode::OK);
++
++    let req = Request::builder()
++        .method("POST")
++        .uri("/query")
++        .header("Authorization", format!("Bearer {}", token))
++        .header("Content-Type", "application/json")
++        .body(Body::from(
++            serde_json::json!({
++                "value_type": "Int",
++                "spatial_ids": [{ "type": "rangeId", "z": 5, "f": [0, 0], "x": [0, 1], "y": [0, 1] }],
++                "query": { "type": "source", "database": "beta_db", "table": "t_two" }
++            })
++            .to_string(),
++        ))
++        .unwrap();
++    let res = test_app.app.clone().oneshot(req).await.unwrap();
++    assert_eq!(res.status(), StatusCode::OK);
++
++    // 譖ｸ縺崎ｾｼ縺ｿ縺ｯ縺吶∋縺ｦ諡貞凄縺輔ｌ繧・+    let req = Request::builder()
++        .method("PUT")
++        .uri("/databases/alpha_db/tables/t_one/data")
++        .header("Authorization", format!("Bearer {}", token))
++        .header("Content-Type", "application/json")
++        .body(Body::from(
++            serde_json::json!({
++                "spatial_ids": [{ "type": "singleId", "z": 5, "f": 0, "x": 0, "y": 0 }],
++                "value": 1
++            })
++            .to_string(),
++        ))
++        .unwrap();
++    let res = test_app.app.clone().oneshot(req).await.unwrap();
++    assert_eq!(res.status(), StatusCode::FORBIDDEN);
++
++    // 繝・・繝悶Ν菴懈・繝ｻ蜑企勁繧ゆｸ榊庄
++    let res = post_table(&test_app.app, &token, "alpha_db", "nope").await;
++    assert_eq!(res.status(), StatusCode::FORBIDDEN);
++
++    let req = Request::builder()
++        .method("DELETE")
++        .uri("/databases/alpha_db/tables/t_one")
++        .header("Authorization", format!("Bearer {}", token))
++        .body(Body::empty())
++        .unwrap();
++    let res = test_app.app.clone().oneshot(req).await.unwrap();
++    assert_eq!(res.status(), StatusCode::FORBIDDEN);
++
++    // 繝・・繧ｿ繝吶・繧ｹ菴懈・繧ゅ√Θ繝ｼ繧ｶ繝ｼ邂｡逅・ｂ荳榊庄
++    let req = Request::builder()
++        .method("POST")
++        .uri("/databases")
++        .header("Authorization", format!("Bearer {}", token))
++        .header("Content-Type", "application/json")
++        .body(Body::from(r#"{"name": "nope_db"}"#))
++        .unwrap();
++    let res = test_app.app.clone().oneshot(req).await.unwrap();
++    assert_eq!(res.status(), StatusCode::FORBIDDEN);
++
++    let res = get(&test_app.app, &token, "/users").await;
++    assert_eq!(res.status(), StatusCode::FORBIDDEN);
++}
++
++/// `table_id_index` 縺ｫ谿九▲縺ｦ縺・ｋ繝・・繝悶Ν縺ｮ邱乗焚縲ょ芦驕比ｸ崎・縺ｫ縺ｪ縺｣縺溘ユ繝ｼ繝悶Ν縺ｮ讀懷・縺ｫ菴ｿ縺・・+fn indexed_table_count(app_state: &AppState) -> usize {
++    app_state
++        .db
++        .read(|repo| Ok(repo.db.table_id_index.len(&repo.read_txn)? as usize))
++        .unwrap()
++}
++
++#[tokio::test]
++/// 繝・・繧ｿ繝吶・繧ｹ繧貞炎髯､縺吶ｋ縺ｨ縲・・荳九・繝・・繝悶Ν縺・1 縺､谿九ｉ縺壽ｶ医∴繧九％縺ｨ繧呈､懆ｨｼ縺吶ｋ縲・+///
++/// 蛻玲嫌縺ｨ蜑企勁縺悟挨繝医Λ繝ｳ繧ｶ繧ｯ繧ｷ繝ｧ繝ｳ縺ｫ蛻・°繧後※縺・ｋ縺ｨ縲√◎縺ｮ髫咎俣縺ｫ菴懊ｉ繧後◆繝・・繝悶Ν縺・+/// 隕ｪ繧貞､ｱ縺｣縺ｦ蛻ｰ驕比ｸ崎・縺ｪ縺ｾ縺ｾ谿九ｋ縲ゅ％縺薙〒縺ｯ蜑企勁縺ｮ螳悟・諤ｧ縺昴・繧ゅ・繧貞崋螳壹☆繧九・+async fn test_database_remove_leaves_no_orphan_tables() {
++    let test_app = PermissionTestApp::new();
++    let root_token = test_app.root_token();
++
++    create_db(&test_app.app, &root_token, "doomed_db").await;
++    create_db(&test_app.app, &root_token, "kept_db").await;
++    for i in 0..3 {
++        create_table(&test_app.app, &root_token, "doomed_db", &format!("t_{}", i)).await;
++    }
++    create_table(&test_app.app, &root_token, "kept_db", "survivor").await;
++    assert_eq!(indexed_table_count(&test_app.app_state), 4);
++
++    let req = Request::builder()
++        .method("DELETE")
++        .uri("/databases/doomed_db")
++        .header("Authorization", format!("Bearer {}", root_token))
++        .body(Body::empty())
++        .unwrap();
++    let res = test_app.app.clone().oneshot(req).await.unwrap();
++    assert_eq!(res.status(), StatusCode::NO_CONTENT);
++
++    // 谿九ｋ縺ｮ縺ｯ kept_db 縺ｮ 1 莉ｶ縺縺代Ｅoomed_db 驟堺ｸ九・邏｢蠑輔＃縺ｨ豸医∴縺ｦ縺・ｋ縲・+    assert_eq!(indexed_table_count(&test_app.app_state), 1);
++
++    // 蜷悟錐縺ｧ菴懊ｊ逶ｴ縺励※繧ゅ∽ｻ･蜑阪・繝・・繝悶Ν縺ｯ隕九∴縺ｪ縺・・+    create_db(&test_app.app, &root_token, "doomed_db").await;
++    let res = get(&test_app.app, &root_token, "/databases/doomed_db/tables").await;
++    assert_eq!(res.status(), StatusCode::OK);
++    assert!(json_body(res).await.as_array().unwrap().is_empty());
++}
++
++#[tokio::test]
++/// 荳企剞繧定ｶ・∴繧区ｨｩ髯舌Ν繝ｼ繝ｫ縺後∝錐蜑崎ｧ｣豎ｺ繧定ｵｰ繧峨○繧句燕縺ｫ莉ｶ謨ｰ縺縺代〒諡貞凄縺輔ｌ繧九％縺ｨ繧呈､懆ｨｼ縺吶ｋ縲・+async fn test_privilege_rules_are_capped_before_resolution() {
++    let test_app = PermissionTestApp::new();
++    let root_token = test_app.root_token();
++
++    // 螳溷惠縺励↑縺・ョ繝ｼ繧ｿ繝吶・繧ｹ繧呈欠縺吶Ν繝ｼ繝ｫ繧剃ｸ企剞雜・∴縺ｮ莉ｶ謨ｰ縺縺台ｸｦ縺ｹ繧九・+    // 蜷榊燕隗｣豎ｺ縺悟・縺ｫ襍ｰ繧九↑繧・database_not_found 縺瑚ｿ斐ｋ縺ｯ縺壹□縺後・+    // 莉ｶ謨ｰ繝√ぉ繝・け縺悟・縺ｪ縺ｮ縺ｧ invalid_privilege 縺ｫ縺ｪ繧九・+    let privileges: Vec<serde_json::Value> = (0..1001)
++        .map(|i| {
++            serde_json::json!({ "scope": "database", "db_name": format!("ghost_{}", i), "role": "read" })
++        })
++        .collect();
++
++    let req = Request::builder()
++        .method("POST")
++        .uri("/users")
++        .header("Authorization", format!("Bearer {}", root_token))
++        .header("Content-Type", "application/json")
++        .body(Body::from(
++            serde_json::json!({
++                "username": "hoarder",
++                "password": "password",
++                "privileges": privileges
++            })
++            .to_string(),
++        ))
++        .unwrap();
++    let res = test_app.app.clone().oneshot(req).await.unwrap();
++    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
++    assert_eq!(json_body(res).await["code"], "invalid_privilege");
++}

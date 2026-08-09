@@ -133,7 +133,9 @@ impl<'a> KasaneDbWrite<'a> {
 
         let db = self.db.tables;
         db.put(&mut self.write_txn, &(db_meta.id, table_name), &meta)?;
-        db_index.put(&mut self.write_txn, &id, &())?;
+        self.db
+            .table_id_index
+            .put(&mut self.write_txn, &id, table_name)?;
 
         Ok(Table {
             id,
@@ -225,6 +227,9 @@ impl<'a> KasaneDbWrite<'a> {
         let db = self.db.tables;
         if changed_name {
             db.delete(&mut self.write_txn, &(db_meta.id, table_name))?;
+            self.db
+                .table_id_index
+                .put(&mut self.write_txn, &table.id, &table.name)?;
         }
         db.put(&mut self.write_txn, &(db_meta.id, &table.name), &meta)?;
 
@@ -540,7 +545,7 @@ impl<'a> KasaneDbWrite<'a> {
             &(copy_db_meta.id, copy_table_name),
             &copy_table_meta,
         )?;
-        db_index.put(&mut self.write_txn, &copy_table_id, &())?;
+        db_index.put(&mut self.write_txn, &copy_table_id, copy_table_name)?;
 
         // 8. tables_data のデータを全コピー
         let tables_data = self

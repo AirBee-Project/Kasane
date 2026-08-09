@@ -1,3 +1,4 @@
+use crate::repositories::MetaRead;
 use crate::{error::AppError, models::database::table::Table, repositories::KasaneDbRead};
 
 use heed::BytesDecode;
@@ -38,23 +39,22 @@ impl<'a> KasaneDbRead<'a> {
     /// Tableの一覧を取得する
     #[tracing::instrument(skip_all, fields(db_name = %db_name))]
     pub fn table_list(&self, db_name: &str) -> Result<Vec<Table>, AppError> {
-        if db_name.is_empty() {
-            return Err(AppError::DatabaseNotFound {
+        let db_id = self
+            .database_id(db_name)?
+            .ok_or_else(|| AppError::DatabaseNotFound {
                 name: db_name.to_string(),
-            });
-        }
-        let db_meta = {
-            let db = self.db.databases;
-            if let Some(m) = db.get(&self.read_txn, db_name)? {
-                m
-            } else {
-                return Err(AppError::DatabaseNotFound {
-                    name: db_name.to_string(),
-                });
-            }
-        };
+            })?;
+        self.table_list_by_id(db_id)
+    }
 
-        let db_id_bytes = db_meta.id.into_bytes();
+    /// Tableの一覧を [`DatabaseId`](crate::models::id::DatabaseId) から取得する。
+    /// 既に ID を解決済みの呼び出し側が、名前からの引き直しを避けるために使う。
+    #[tracing::instrument(skip_all)]
+    pub fn table_list_by_id(
+        &self,
+        db_id: crate::models::id::DatabaseId,
+    ) -> Result<Vec<Table>, AppError> {
+        let db_id_bytes = db_id.into_bytes();
         let db = self.db.tables;
 
         let mut tables = Vec::new();

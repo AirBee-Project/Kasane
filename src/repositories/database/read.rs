@@ -1,4 +1,7 @@
-use crate::{error::AppError, models::database::DatabaseInfoResponse, repositories::KasaneDbRead};
+use crate::{
+    error::AppError, models::database::DatabaseInfoResponse, models::id::DatabaseId,
+    repositories::KasaneDbRead,
+};
 
 impl<'a> KasaneDbRead<'a> {
     /// Databaseの情報を取得する
@@ -18,17 +21,23 @@ impl<'a> KasaneDbRead<'a> {
         }
     }
 
-    /// Databaseの一覧を取得する
+    /// Databaseの一覧を [`DatabaseId`] つきで取得する。
+    ///
+    /// 呼び出し側は権限の絞り込みに ID を使うため、同じメタデータを引き直さずに
+    /// 済むよう ID を添えて返す。
     #[tracing::instrument(skip_all)]
-    pub fn database_list(&self) -> Result<Vec<DatabaseInfoResponse>, AppError> {
+    pub fn database_list(&self) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
         let db = self.db.databases;
         let mut list = Vec::new();
         for res in db.iter(&self.read_txn)? {
             let (k, meta) = res.map_err(AppError::from)?;
-            list.push(DatabaseInfoResponse {
-                name: k.to_string(),
-                description: meta.description,
-            });
+            list.push((
+                meta.id,
+                DatabaseInfoResponse {
+                    name: k.to_string(),
+                    description: meta.description,
+                },
+            ));
         }
         Ok(list)
     }

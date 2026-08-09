@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use axum::{
     Extension, Json,
     extract::{Query, State},
@@ -15,8 +17,9 @@ use crate::services::query as query_service;
 
 /// クエリの実行
 ///
+/// **必要な権限**: 参照する全テーブルに `table` / `read`
+///
 /// 複数のテーブルを対象にクエリ式を実行し、指定した空間IDの結果を取得します。
-/// クエリ式が参照する**すべてのデータベース**に対して Read 以上の権限が必要です。
 #[utoipa::path(
     post,
     path = "/query",
@@ -28,7 +31,7 @@ use crate::services::query as query_service;
     responses(
         (status = 200, body = GetDataResponse),
         (status = 400, description = "クエリ式が不正（型の混在・非対応の型など）"),
-        (status = 403, description = "参照先データベースへの権限が不足"),
+        (status = 403, description = "参照先テーブルへの権限が不足"),
         (status = 404, description = "参照先のテーブルが存在しない")
     ),
     security(("bearer_auth" = [])),
@@ -41,17 +44,18 @@ pub async fn execute_query(
     Query(query_params): Query<GetDataQuery>,
     Json(payload): Json<ExecuteQueryRequest>,
 ) -> Result<Json<GetDataResponse>, AppError> {
-    // クエリ式が参照する全データベースに Read 権限が必要。
-    // 重複を除いてから検査する（同じDBを何度も引かない）。
-    let mut checked: Vec<&str> = Vec::new();
-    for (db_name, _table) in payload.query.sources() {
-        if checked.contains(&db_name) {
-            continue;
-        }
-        crate::middleware::auth::check_privilege(&app_state, &auth_user, db_name, UserRole::Read)
-            .await?;
-        checked.push(db_name);
-    }
+    // クエリ式が参照する全テーブルに Read 権限が必要。
+    // データベース単位ではなくテーブル単位で検査するので、テーブルスコープの権限しか
+    // 持たないユーザーでも、そのテーブルだけを参照するクエリなら実行できる。
+    // 重複を除いてから一括で検査する（参照テーブル数に比例してトランザクションを開かない）。
+    let sources: Vec<(&str, &str)> = payload
+        .query
+        .sources()
+        .into_iter()
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    crate::middleware::auth::check_tables(&app_state, &auth_user, &sources, UserRole::Read)?;
 
     let result = query_service::execute(&app_state, payload, &query_params).await?;
     Ok(Json(result))

@@ -1,13 +1,20 @@
 info:
-  name: remove
+  name: remove_database
   type: http
-  seq: 6
+  seq: 5
   tags:
     - Users
 
+docs: |-
+  データベース 1 つに対する権限を剥奪する。ロールは問わず対象ごと落ちる。
+
+  必要な権限: global / admin
+
+  そのデータベースへの権限を持っていない場合は 404。
+
 http:
   method: DELETE
-  url: "{{baseUrl}}/users/:username/privileges/:db_name"
+  url: "{{baseUrl}}/users/:username/privileges/databases/:db_name"
   params:
     - name: username
       value: ""
@@ -29,17 +36,17 @@ settings:
 
 examples:
   - name: 204 Response
-    description: Privilege deleted successfully
+    description: Privilege revoked successfully
     request:
-      url: "{{baseUrl}}/users/:username/privileges/:db_name"
+      url: "{{baseUrl}}/users/:username/privileges/databases/:db_name"
       method: DELETE
       params:
         - name: username
-          value: ""
+          value: alice
           type: path
           description: Username
         - name: db_name
-          value: ""
+          value: example_database
           type: path
           description: Database name
     response:
@@ -49,22 +56,29 @@ examples:
         type: text
         data: ""
   - name: 404 Response
-    description: User or database not found
+    description: The user has no privilege for that target
     request:
-      url: "{{baseUrl}}/users/:username/privileges/:db_name"
+      url: "{{baseUrl}}/users/:username/privileges/databases/:db_name"
       method: DELETE
       params:
         - name: username
-          value: ""
+          value: alice
           type: path
           description: Username
         - name: db_name
-          value: ""
+          value: example_database
           type: path
           description: Database name
     response:
       status: 404
       statusText: Not Found
+      headers:
+        - name: Content-Type
+          value: application/json
       body:
-        type: text
-        data: ""
+        type: json
+        data: |-
+          {
+            "error": "Not found: The user has no privilege for that target",
+            "code": "not_found"
+          }

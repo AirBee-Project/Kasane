@@ -1,10 +1,11 @@
 use crate::middleware::auth::AuthUser;
 use crate::{
     AppState,
-    error::{AppError, AuthError},
+    error::AppError,
     models::database::{
         CopyDatabaseRequest, CreateDatabaseRequest, DatabaseInfoResponse, UpdateDatabaseRequest,
     },
+    models::users::UserRole,
 };
 use axum::Extension;
 use axum::{
@@ -16,7 +17,9 @@ use axum::{
 
 /// データベースの作成
 ///
-/// 新しいデータベースを作成します。この操作はGlobal Admin権限が必要です。
+/// **必要な権限**: `global` / `manage`
+///
+/// 新しいデータベースを作成します。
 #[utoipa::path(
     post,
     path = "/databases",
@@ -24,7 +27,7 @@ use axum::{
     responses(
         (status = 201, body = DatabaseInfoResponse)
     ),
-    security(("bearer_auth" = ["global_admin"])),
+    security(("bearer_auth" = [])),
     tag = "Databases"
 )]
 #[tracing::instrument(skip_all)]
@@ -33,9 +36,7 @@ pub async fn database_create(
     Extension(auth_user): Extension<AuthUser>,
     Json(request): Json<CreateDatabaseRequest>,
 ) -> Result<Response, AppError> {
-    if !auth_user.user.is_global_admin {
-        return Err(AuthError::RequiresGlobalAdmin.into());
-    }
+    crate::middleware::auth::check_global_role(&auth_user, UserRole::Manage)?;
     let res =
         crate::services::database::create(&app_state, request.name.as_str(), request.description)
             .await?;
@@ -49,12 +50,14 @@ pub async fn database_create(
 
 /// データベース情報の取得
 ///
-/// 指定したデータベースの詳細情報を取得します。対象データベースのRead以上の権限が必要です。
+/// **必要な権限**: `database` / `read`（配下テーブルの権限でも可）
+///
+/// 指定したデータベースの詳細情報を取得します。
 #[utoipa::path(
     get,
-    path = "/databases/{name}",
+    path = "/databases/{db_name}",
     params(
-        ("name" = String, Path, description = "データベース名", example = "example_database")
+        ("db_name" = String, Path, description = "データベース名", example = "example_database")
     ),
     responses(
         (status = 200, body = DatabaseInfoResponse)
@@ -68,23 +71,17 @@ pub async fn database_info(
     Extension(auth_user): Extension<AuthUser>,
     Path(db_name): Path<String>,
 ) -> Result<Json<DatabaseInfoResponse>, AppError> {
-    crate::middleware::auth::check_privilege(
-        &app_state,
-        &auth_user,
-        &db_name,
-        crate::models::users::UserRole::Read,
-    )
-    .await?;
+    crate::middleware::auth::check_database_visible(&app_state, &auth_user, &db_name)?;
     let res = crate::services::database::info(&app_state, &db_name).await?;
     Ok(Json(res))
 }
 
 /// データベース一覧の取得
 ///
-/// ユーザー権限に応じて、アクセス可能なデータベースの一覧を取得します。
+/// **必要な権限**: なし（認証のみ・結果は権限で絞られる）
 ///
-/// - **グローバル管理者**: システム内の全データベースが見えます。
-/// - **一般ユーザー**: 自分が権限を持っているデータベースだけが見えます。
+/// 呼び出したユーザーが Read 以上で到達できるデータベースだけを返します。
+/// テーブル単位の権限しか持たない場合も、そのテーブルを含むデータベースは一覧に現れます。
 #[utoipa::path(
     get,
     path = "/databases",
@@ -99,28 +96,25 @@ pub async fn database_list(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
 ) -> Result<Json<Vec<DatabaseInfoResponse>>, AppError> {
-    let res = crate::services::database::list(
-        &app_state,
-        auth_user.user.is_global_admin,
-        crate::models::id::UserId(auth_user.user.id),
-    )
-    .await?;
+    let res = crate::services::database::list(&app_state, &auth_user).await?;
     Ok(Json(res))
 }
 
 /// データベースの削除
 ///
-/// 指定したデータベースを削除します。この操作はGlobal Admin権限が必要です。
+/// **必要な権限**: `global` / `manage`
+///
+/// 指定したデータベースを削除します。
 #[utoipa::path(
     delete,
-    path = "/databases/{name}",
+    path = "/databases/{db_name}",
     params(
-        ("name" = String, Path, description = "データベース名", example = "example_database")
+        ("db_name" = String, Path, description = "データベース名", example = "example_database")
     ),
     responses(
         (status = 204)
     ),
-    security(("bearer_auth" = ["global_admin"])),
+    security(("bearer_auth" = [])),
     tag = "Databases"
 )]
 #[tracing::instrument(skip_all)]
@@ -129,21 +123,22 @@ pub async fn remove_database(
     Extension(auth_user): Extension<AuthUser>,
     Path(db_name): Path<String>,
 ) -> Result<StatusCode, AppError> {
-    if !auth_user.user.is_global_admin {
-        return Err(AuthError::RequiresGlobalAdmin.into());
-    }
+    crate::middleware::auth::check_global_role(&auth_user, UserRole::Manage)?;
     crate::services::database::remove(&app_state, db_name.as_str()).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// データベースの更新
 ///
-/// 指定したデータベースの名前や説明を変更します。対象データベースのManage以上の権限が必要です。
+/// **必要な権限**: `database` / `manage`
+///
+/// 指定したデータベースの名前や説明を変更します。
+/// 権限はデータベース ID に紐づくため、改名しても権限は追従します。
 #[utoipa::path(
     patch,
-    path = "/databases/{name}",
+    path = "/databases/{db_name}",
     params(
-        ("name" = String, Path, description = "データベース名", example = "example_database")
+        ("db_name" = String, Path, description = "データベース名", example = "example_database")
     ),
     request_body = UpdateDatabaseRequest,
     responses(
@@ -163,13 +158,7 @@ pub async fn database_update(
     Path(db_name): Path<String>,
     Json(request): Json<UpdateDatabaseRequest>,
 ) -> Result<StatusCode, AppError> {
-    crate::middleware::auth::check_privilege(
-        &app_state,
-        &auth_user,
-        &db_name,
-        crate::models::users::UserRole::Manage,
-    )
-    .await?;
+    crate::middleware::auth::check_database(&app_state, &auth_user, &db_name, UserRole::Manage)?;
     crate::services::database::update(&app_state, &db_name, request.new_name, request.description)
         .await?;
     Ok(StatusCode::OK)
@@ -177,12 +166,14 @@ pub async fn database_update(
 
 /// データベースのコピー
 ///
-/// 指定したデータベースをコピーします。この操作はGlobal Admin権限が必要です。
+/// **必要な権限**: `global` / `manage`
+///
+/// 指定したデータベースをコピーします。
 #[utoipa::path(
     post,
-    path = "/databases/{name}/copy",
+    path = "/databases/{db_name}/copy",
     params(
-        ("name" = String, Path, description = "コピー元データベース名", example = "source_database")
+        ("db_name" = String, Path, description = "コピー元データベース名", example = "source_database")
     ),
     request_body = CopyDatabaseRequest,
     responses(
@@ -192,7 +183,7 @@ pub async fn database_update(
         (status = 404, description = "コピー元データベースが存在しない"),
         (status = 409, description = "コピー先データベース、またはコピー元と同名のデータベースがすでに存在する")
     ),
-    security(("bearer_auth" = ["global_admin"])),
+    security(("bearer_auth" = [])),
     tag = "Databases"
 )]
 #[tracing::instrument(skip_all)]
@@ -202,9 +193,7 @@ pub async fn database_copy(
     Path(db_name): Path<String>,
     Json(request): Json<CopyDatabaseRequest>,
 ) -> Result<Response, AppError> {
-    if !auth_user.user.is_global_admin {
-        return Err(AuthError::RequiresGlobalAdmin.into());
-    }
+    crate::middleware::auth::check_global_role(&auth_user, UserRole::Manage)?;
 
     if db_name == request.copy_name {
         return Err(AppError::Conflict(
@@ -212,14 +201,7 @@ pub async fn database_copy(
         ));
     }
 
-    let user_id = if auth_user.user.is_global_admin {
-        None
-    } else {
-        Some(crate::models::id::UserId(auth_user.user.id))
-    };
-
-    let res =
-        crate::services::database::copy(&app_state, &db_name, &request.copy_name, user_id).await?;
+    let res = crate::services::database::copy(&app_state, &db_name, &request.copy_name).await?;
 
     Ok((
         StatusCode::CREATED,

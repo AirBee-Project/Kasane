@@ -11,12 +11,12 @@ use axum::{
 
 /// データの部分追加
 ///
+/// **必要な権限**: `table` / `write`
+///
 /// 指定した空間IDに対して、指定した値を書き込みます。
 ///
 /// - **指定した空間IDがすでに存在する場合**: 既存のデータは維持されます。
 /// - **指定した空間IDが存在しない場合**: データが書き込まれます。
-///
-/// この操作はデータベースのWrite以上の権限が必要です。
 #[utoipa::path(
     patch,
     path = "/databases/{db_name}/tables/{table_name}/data",
@@ -39,8 +39,13 @@ pub async fn data_upsert(
     Path((db_name, table_name)): Path<(String, String)>,
     Json(payload): Json<InsertDataRequest>,
 ) -> Result<StatusCode, AppError> {
-    crate::middleware::auth::check_privilege(&app_state, &auth_user, &db_name, UserRole::Write)
-        .await?;
+    crate::middleware::auth::check_table(
+        &app_state,
+        &auth_user,
+        &db_name,
+        &table_name,
+        UserRole::Write,
+    )?;
 
     data_upsert_service::upsert(
         &app_state,
