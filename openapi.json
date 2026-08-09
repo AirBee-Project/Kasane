@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "kasane",
-    "description": "\n## 権限について\n\n各エンドポイントの説明にある **必要な権限** は、その操作に必要な最小の権限です。\n`スコープ` / `ロール` の形式で表します。\n\n**スコープ**は `global` ⊃ `database` ⊃ `table` の階層で、上位スコープの権限は下位をすべて含みます。\nたとえば `global` / `read` を持つユーザーは、すべてのデータベース・テーブルを読めます。\n`database` / `table` と書かれている場合、対象はパスで指定したデータベース・テーブルです。\n\n**ロール**は `read` < `write` < `manage` < `admin` の順に強く、上位ロールは下位をすべて含みます。\n\n- `read` — 参照\n- `write` — データの書き込み\n- `manage` — テーブルやデータベースそのものの管理\n- `admin` — ユーザーと権限の管理。制御面の権限であり、`global` スコープにのみ指定できます\n\n`global` / `manage` は全データベースのデータを自由に扱えますが、ユーザーや権限は操作できません。\nユーザー管理を行えるのは `global` / `admin` だけです。\n",
+    "description": "\n## 権限について\n`スコープ` / `ロール` の形式で表します。\n\n- `read` — データの読み込み\n- `write` — データの書き込み\n- `manage` — テーブルやデータベース自体の管理\n- `admin` — ユーザーと権限の管理\n",
     "license": {
       "name": ""
     },
@@ -42,6 +42,33 @@
             "description": "認証失敗（ユーザー名またはパスワードが不正）"
           }
         }
+      }
+    },
+    "/system/info": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "サーバーのステータスとバージョン情報を取得する。",
+        "description": "**必要な権限**: なし（認証のみ）",
+        "operationId": "get_system_info",
+        "responses": {
+          "200": {
+            "description": "Status and version retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemInfoResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
       }
     },
     "/databases": {
@@ -921,33 +948,6 @@
         ]
       }
     },
-    "/system/info": {
-      "get": {
-        "tags": [
-          "System"
-        ],
-        "summary": "サーバーのステータスとバージョン情報を取得する。",
-        "description": "**必要な権限**: なし（認証のみ）",
-        "operationId": "get_system_info",
-        "responses": {
-          "200": {
-            "description": "Status and version retrieved successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SystemInfoResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer_auth": []
-          }
-        ]
-      }
-    },
     "/users": {
       "get": {
         "tags": [
@@ -1171,6 +1171,93 @@
           },
           "404": {
             "description": "ユーザーが存在しない"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/users/{username}/privileges/global": {
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "サーバー全体に対する権限の設定",
+        "description": "**必要な権限**: `global` / `admin`\n\n既に設定されていればロールを置き換えます。`admin` を指定できるのはこのスコープだけです。",
+        "operationId": "set_global_privilege",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "description": "ユーザー名",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "example_user"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetGlobalPrivilegeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "保持できる権限数の上限を超えた"
+          },
+          "403": {
+            "description": "rootユーザーの権限は変更不可"
+          },
+          "404": {
+            "description": "ユーザーが存在しない"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "サーバー全体に対する権限の剥奪",
+        "description": "**必要な権限**: `global` / `admin`\n\nロールを問わず、このスコープの権限を取り除きます。",
+        "operationId": "delete_global_privilege",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "description": "ユーザー名",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "example_user"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "rootユーザーの権限は変更不可"
+          },
+          "404": {
+            "description": "ユーザーが存在しない、またはこのスコープの権限を持っていない"
           }
         },
         "security": [
@@ -1405,93 +1492,6 @@
           },
           "404": {
             "description": "対象が存在しない、または権限を持っていない"
-          }
-        },
-        "security": [
-          {
-            "bearer_auth": []
-          }
-        ]
-      }
-    },
-    "/users/{username}/privileges/global": {
-      "put": {
-        "tags": [
-          "Users"
-        ],
-        "summary": "サーバー全体に対する権限の設定",
-        "description": "**必要な権限**: `global` / `admin`\n\n既に設定されていればロールを置き換えます。`admin` を指定できるのはこのスコープだけです。",
-        "operationId": "set_global_privilege",
-        "parameters": [
-          {
-            "name": "username",
-            "in": "path",
-            "description": "ユーザー名",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "example_user"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetGlobalPrivilegeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "400": {
-            "description": "保持できる権限数の上限を超えた"
-          },
-          "403": {
-            "description": "rootユーザーの権限は変更不可"
-          },
-          "404": {
-            "description": "ユーザーが存在しない"
-          }
-        },
-        "security": [
-          {
-            "bearer_auth": []
-          }
-        ]
-      },
-      "delete": {
-        "tags": [
-          "Users"
-        ],
-        "summary": "サーバー全体に対する権限の剥奪",
-        "description": "**必要な権限**: `global` / `admin`\n\nロールを問わず、このスコープの権限を取り除きます。",
-        "operationId": "delete_global_privilege",
-        "parameters": [
-          {
-            "name": "username",
-            "in": "path",
-            "description": "ユーザー名",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "example_user"
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "403": {
-            "description": "rootユーザーの権限は変更不可"
-          },
-          "404": {
-            "description": "ユーザーが存在しない、またはこのスコープの権限を持っていない"
           }
         },
         "security": [
@@ -3734,10 +3734,6 @@
       "description": "Authentication endpoints"
     },
     {
-      "name": "Users",
-      "description": "User management operations"
-    },
-    {
       "name": "Databases",
       "description": "Database operations"
     },
@@ -3752,6 +3748,10 @@
     {
       "name": "Query",
       "description": "Cross-table query execution"
+    },
+    {
+      "name": "Users",
+      "description": "User management operations"
     },
     {
       "name": "System",

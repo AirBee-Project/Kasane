@@ -4,23 +4,12 @@ info:
   description: |2
 
     ## 権限について
-
-    各エンドポイントの説明にある **必要な権限** は、その操作に必要な最小の権限です。
     `スコープ` / `ロール` の形式で表します。
 
-    **スコープ**は `global` ⊃ `database` ⊃ `table` の階層で、上位スコープの権限は下位をすべて含みます。
-    たとえば `global` / `read` を持つユーザーは、すべてのデータベース・テーブルを読めます。
-    `database` / `table` と書かれている場合、対象はパスで指定したデータベース・テーブルです。
-
-    **ロール**は `read` < `write` < `manage` < `admin` の順に強く、上位ロールは下位をすべて含みます。
-
-    - `read` — 参照
+    - `read` — データの読み込み
     - `write` — データの書き込み
-    - `manage` — テーブルやデータベースそのものの管理
-    - `admin` — ユーザーと権限の管理。制御面の権限であり、`global` スコープにのみ指定できます
-
-    `global` / `manage` は全データベースのデータを自由に扱えますが、ユーザーや権限は操作できません。
-    ユーザー管理を行えるのは `global` / `admin` だけです。
+    - `manage` — テーブルやデータベース自体の管理
+    - `admin` — ユーザーと権限の管理
   license:
     name: ''
   version: 0.3.2
@@ -50,6 +39,22 @@ paths:
                 $ref: '#/components/schemas/LoginResponse'
         '401':
           description: 認証失敗（ユーザー名またはパスワードが不正）
+  /system/info:
+    get:
+      tags:
+      - System
+      summary: サーバーのステータスとバージョン情報を取得する。
+      description: '**必要な権限**: なし（認証のみ）'
+      operationId: get_system_info
+      responses:
+        '200':
+          description: Status and version retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemInfoResponse'
+      security:
+      - bearer_auth: []
   /databases:
     get:
       tags:
@@ -668,22 +673,6 @@ paths:
           description: 参照先のテーブルが存在しない
       security:
       - bearer_auth: []
-  /system/info:
-    get:
-      tags:
-      - System
-      summary: サーバーのステータスとバージョン情報を取得する。
-      description: '**必要な権限**: なし（認証のみ）'
-      operationId: get_system_info
-      responses:
-        '200':
-          description: Status and version retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SystemInfoResponse'
-      security:
-      - bearer_auth: []
   /users:
     get:
       tags:
@@ -847,6 +836,67 @@ paths:
                 $ref: '#/components/schemas/PrivilegesResponse'
         '404':
           description: ユーザーが存在しない
+      security:
+      - bearer_auth: []
+  /users/{username}/privileges/global:
+    put:
+      tags:
+      - Users
+      summary: サーバー全体に対する権限の設定
+      description: |-
+        **必要な権限**: `global` / `admin`
+
+        既に設定されていればロールを置き換えます。`admin` を指定できるのはこのスコープだけです。
+      operationId: set_global_privilege
+      parameters:
+      - name: username
+        in: path
+        description: ユーザー名
+        required: true
+        schema:
+          type: string
+        example: example_user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetGlobalPrivilegeRequest'
+        required: true
+      responses:
+        '204':
+          description: ''
+        '400':
+          description: 保持できる権限数の上限を超えた
+        '403':
+          description: rootユーザーの権限は変更不可
+        '404':
+          description: ユーザーが存在しない
+      security:
+      - bearer_auth: []
+    delete:
+      tags:
+      - Users
+      summary: サーバー全体に対する権限の剥奪
+      description: |-
+        **必要な権限**: `global` / `admin`
+
+        ロールを問わず、このスコープの権限を取り除きます。
+      operationId: delete_global_privilege
+      parameters:
+      - name: username
+        in: path
+        description: ユーザー名
+        required: true
+        schema:
+          type: string
+        example: example_user
+      responses:
+        '204':
+          description: ''
+        '403':
+          description: rootユーザーの権限は変更不可
+        '404':
+          description: ユーザーが存在しない、またはこのスコープの権限を持っていない
       security:
       - bearer_auth: []
   /users/{username}/privileges/databases/{db_name}:
@@ -1013,67 +1063,6 @@ paths:
           description: rootユーザーの権限は変更不可
         '404':
           description: 対象が存在しない、または権限を持っていない
-      security:
-      - bearer_auth: []
-  /users/{username}/privileges/global:
-    put:
-      tags:
-      - Users
-      summary: サーバー全体に対する権限の設定
-      description: |-
-        **必要な権限**: `global` / `admin`
-
-        既に設定されていればロールを置き換えます。`admin` を指定できるのはこのスコープだけです。
-      operationId: set_global_privilege
-      parameters:
-      - name: username
-        in: path
-        description: ユーザー名
-        required: true
-        schema:
-          type: string
-        example: example_user
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetGlobalPrivilegeRequest'
-        required: true
-      responses:
-        '204':
-          description: ''
-        '400':
-          description: 保持できる権限数の上限を超えた
-        '403':
-          description: rootユーザーの権限は変更不可
-        '404':
-          description: ユーザーが存在しない
-      security:
-      - bearer_auth: []
-    delete:
-      tags:
-      - Users
-      summary: サーバー全体に対する権限の剥奪
-      description: |-
-        **必要な権限**: `global` / `admin`
-
-        ロールを問わず、このスコープの権限を取り除きます。
-      operationId: delete_global_privilege
-      parameters:
-      - name: username
-        in: path
-        description: ユーザー名
-        required: true
-        schema:
-          type: string
-        example: example_user
-      responses:
-        '204':
-          description: ''
-        '403':
-          description: rootユーザーの権限は変更不可
-        '404':
-          description: ユーザーが存在しない、またはこのスコープの権限を持っていない
       security:
       - bearer_auth: []
 components:
@@ -2703,8 +2692,6 @@ components:
 tags:
 - name: Auth
   description: Authentication endpoints
-- name: Users
-  description: User management operations
 - name: Databases
   description: Database operations
 - name: Tables
@@ -2713,5 +2700,7 @@ tags:
   description: Data manipulation operations
 - name: Query
   description: Cross-table query execution
+- name: Users
+  description: User management operations
 - name: System
   description: System operations
