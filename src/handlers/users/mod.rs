@@ -26,6 +26,7 @@ use crate::{
     path = "/users",
     responses(
         (status = 200, body = [UserInfoResponse]),
+        (status = 401, description = "Unauthorized")
     ),
     security(("bearer_auth" = [])),
     tag = "Users"

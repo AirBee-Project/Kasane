@@ -3,8 +3,8 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 
 use crate::models::auth::{LoginRequest, LoginResponse};
 use crate::models::database::table::data::{
-    GetDataQuery, GetDataRequest, GetDataResponse, InsertDataRequest, OutputFormat,
-    RemoveDataRequest, ZoomLevelPolicy,
+    GetDataRequest, GetDataResponse, InsertDataRequest, OutputFormat, RemoveDataRequest,
+    ZoomLevelPolicy,
 };
 use crate::models::database::table::{
     CopyTableRequest, CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse,
@@ -72,8 +72,13 @@ const PRIVILEGE_LEGEND: &str = r#"
 #[derive(OpenApi)]
 #[openapi(
     modifiers(&SecurityAddon),
-    info(description = PRIVILEGE_LEGEND),
-    servers(),
+    info(
+        description = PRIVILEGE_LEGEND,
+        license(name = "MIT", url = "https://opensource.org/licenses/MIT")
+    ),
+    servers(
+        (url = "/", description = "Local server")
+    ),
     paths(
         // Auth
         crate::handlers::auth::login,
@@ -157,7 +162,6 @@ const PRIVILEGE_LEGEND: &str = r#"
         TableListResponse,
         GetDataRequest,
         GetDataResponse,
-        GetDataQuery,
         OutputFormat,
         InsertDataRequest,
         RemoveDataRequest,

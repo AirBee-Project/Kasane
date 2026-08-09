@@ -23,7 +23,8 @@ use crate::{
         ("db_name" = String, Path, description = "データベース名", example = "example_database")
     ),
     responses(
-        (status = 200, body = TableListResponse)
+        (status = 200, body = TableListResponse),
+        (status = 401, description = "Unauthorized")
     ),
     security(("bearer_auth" = [])),
     tag = "Tables"

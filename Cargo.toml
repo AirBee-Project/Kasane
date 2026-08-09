@@ -2,6 +2,7 @@
 name = "kasane"
 version = "0.3.2"
 edition = "2024"
+default-run = "kasane"
 
 [dependencies]
 axum = { version = "0.8.9", features = ["macros"] }

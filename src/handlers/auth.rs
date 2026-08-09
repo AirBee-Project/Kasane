@@ -21,6 +21,7 @@ use crate::{
         (status = 200, body = LoginResponse),
         (status = 401, description = "認証失敗（ユーザー名またはパスワードが不正）")
     ),
+    security(),
     tag = "Auth"
 )]
 #[tracing::instrument(skip_all)]
