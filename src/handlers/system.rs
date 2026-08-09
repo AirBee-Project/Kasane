@@ -8,7 +8,8 @@ use axum::Json;
     get,
     path = "/system/info",
     responses(
-        (status = 200, description = "Status and version retrieved successfully", body = SystemInfoResponse)
+        (status = 200, description = "Status and version retrieved successfully", body = SystemInfoResponse),
+        (status = 401, description = "Unauthorized")
     ),
     security(
         ("bearer_auth" = [])

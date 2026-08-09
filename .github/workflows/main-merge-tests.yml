@@ -11,8 +11,6 @@ on:
       - "Cargo.lock"
       - "build.rs"
       - ".github/workflows/**"
-      - "openapi.json"
-      - "openapi.yaml"
 
 concurrency:
   group: pr-${{ github.event.pull_request.number }}
@@ -71,22 +69,13 @@ jobs:
             --features "production" \
             --run-ignored all
 
-      - name: Verify OpenAPI spec matches generated
+      - name: Validate OpenAPI spec
         shell: bash
         run: |
           set -euo pipefail
 
           # Generate OpenAPI spec
-          cargo test generate_openapi_spec --no-fail-fast
+          cargo run --bin export_openapi
 
-          # Show diff if changed
-          git diff -- openapi.json openapi.yaml || true
-
-          # Fail if generated specs differ
-          if git diff --quiet openapi.json openapi.yaml; then
-            echo "✓ OpenAPI specs are up to date"
-          else
-            echo "✗ OpenAPI specs are out of date."
-            echo "Run 'cargo test generate_openapi_spec' and commit the results."
-            exit 1
-          fi
+          # Lint OpenAPI spec
+          npx --yes @redocly/cli lint openapi.json

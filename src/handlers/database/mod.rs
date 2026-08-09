@@ -25,7 +25,8 @@ use axum::{
     path = "/databases",
     request_body = CreateDatabaseRequest,
     responses(
-        (status = 201, body = DatabaseInfoResponse)
+        (status = 201, body = DatabaseInfoResponse),
+        (status = 401, description = "Unauthorized")
     ),
     security(("bearer_auth" = [])),
     tag = "Databases"
@@ -60,7 +61,8 @@ pub async fn database_create(
         ("db_name" = String, Path, description = "データベース名", example = "example_database")
     ),
     responses(
-        (status = 200, body = DatabaseInfoResponse)
+        (status = 200, body = DatabaseInfoResponse),
+        (status = 401, description = "Unauthorized")
     ),
     security(("bearer_auth" = [])),
     tag = "Databases"
@@ -86,7 +88,8 @@ pub async fn database_info(
     get,
     path = "/databases",
     responses(
-        (status = 200, body = Vec<DatabaseInfoResponse>)
+        (status = 200, body = Vec<DatabaseInfoResponse>),
+        (status = 401, description = "Unauthorized")
     ),
     security(("bearer_auth" = [])),
     tag = "Databases"
@@ -112,7 +115,8 @@ pub async fn database_list(
         ("db_name" = String, Path, description = "データベース名", example = "example_database")
     ),
     responses(
-        (status = 204)
+        (status = 204),
+        (status = 401, description = "Unauthorized")
     ),
     security(("bearer_auth" = [])),
     tag = "Databases"
