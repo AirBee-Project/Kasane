@@ -31,8 +31,7 @@ pub struct RawSingleId {
     pub t: Option<u64>,
 }
 
-/// 区間表現の時空間IDを表す型。
-///
+/// 区間表現の時空間IDを表す型。省略された次元はその次元全体を表す。
 /// 時間を指定する場合は `i` と `t` を必ず両方指定すること。
 /// 両方省略した場合は「全時間」を表す。
 #[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Clone)]
@@ -43,13 +42,15 @@ pub struct RawRangeId {
     pub z: u8,
     /// 高さ方向の範囲 `[min, max]`（両端を含む）。
     #[schema(example = json!([0,0]))]
-    pub f: [i32; 2],
+    pub f: Option<[i32; 2]>,
     /// 経度方向の範囲 `[min, max]`（両端を含む）。
     #[schema(example = json!([931388,931390]))]
-    pub x: [u32; 2],
+    pub x: Option<[u32; 2]>,
     /// 緯度方向の範囲 `[min, max]`（両端を含む）。
     #[schema(example = json!([412900,412907]))]
-    pub y: [u32; 2],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub y: Option<[u32; 2]>,
+
     /// 時間間隔（単位: 秒）。1970-01-01T00:00:00Z を起点とする。任意の値は指定できず、 次の暦の単位のいずれかのみ指定できる: `1`、`60`、`3600`、`86400`、`34359738368`（システムの全時間）。
     #[schema(example = 3600, minimum = 1, maximum = 34359738368u64)]
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -87,11 +87,12 @@ where
                             Some(range_id.t()), // RangeId returns [u64; 2] for t()
                         )
                     };
+                    // 出力では省略記法を使わず、常に具体的な範囲を書き出す。
                     out.push(RawRangeId {
                         z: range_id.z(),
-                        f: range_id.f(),
-                        x: range_id.x(),
-                        y: range_id.y(),
+                        f: Some(range_id.f()),
+                        x: Some(range_id.x()),
+                        y: Some(range_id.y()),
                         i,
                         t,
                     });

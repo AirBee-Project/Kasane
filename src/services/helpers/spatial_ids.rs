@@ -1,4 +1,6 @@
-use kasane_logic::{AllowedIntervals, FlexId, Interval, RangeId, SingleId, SpatialIdSet};
+use kasane_logic::{
+    AllowedIntervals, FlexId, Interval, RangeId, SingleId, SpatialIdSet, ZoomLevel,
+};
 
 use crate::{
     error::AppError,
@@ -132,6 +134,22 @@ pub fn resolve_zoom(
     }
 }
 
+/// `RawRangeId` の省略された空間軸を、そのズームレベルにおける軸全体へ展開する。
+fn range_axes(range_id: &crate::models::spatial_id::RawRangeId) -> Result<RangeAxes, AppError> {
+    let zoom = ZoomLevel::new(range_id.z)?;
+    Ok(RangeAxes {
+        f: range_id.f.unwrap_or([zoom.f_min(), zoom.f_max()]),
+        x: range_id.x.unwrap_or([0, zoom.xy_max()]),
+        y: range_id.y.unwrap_or([0, zoom.xy_max()]),
+    })
+}
+
+struct RangeAxes {
+    f: [i32; 2],
+    x: [u32; 2],
+    y: [u32; 2],
+}
+
 pub fn to_spatial_id_set(ids: &[SpatialId]) -> Result<SpatialIdSet, AppError> {
     let mut result = SpatialIdSet::new();
 
@@ -142,7 +160,8 @@ pub fn to_spatial_id_set(ids: &[SpatialId]) -> Result<SpatialIdSet, AppError> {
                 result.insert(apply_interval_time(id, s.i, s.t)?);
             }
             SpatialId::RangeId(r) => {
-                let id = RangeId::new(r.z, r.f, r.x, r.y)?;
+                let axes = range_axes(r)?;
+                let id = RangeId::new(r.z, axes.f, axes.x, axes.y)?;
                 result.insert(apply_interval_time(id, r.i, r.t)?);
             }
             SpatialId::FlexId(f) => {
@@ -193,7 +212,8 @@ pub fn process_spatial_ids(
                     continue;
                 };
 
-                let id = RangeId::new(range_id.z, range_id.f, range_id.x, range_id.y)?;
+                let axes = range_axes(range_id)?;
+                let id = RangeId::new(range_id.z, axes.f, axes.x, axes.y)?;
                 let id = apply_interval_time(id, range_id.i, range_id.t)?;
 
                 if zoom == range_id.z {
