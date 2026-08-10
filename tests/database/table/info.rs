@@ -14,7 +14,7 @@ async fn test_table_info_success() {
     test_app.create_database("test_db").await;
 
     test_app
-        .create_table("test_db", "info_target_table", "Float", 15)
+        .create_table("test_db", "info_target_table", "Int", 15)
         .await;
 
     let req = Request::builder()
@@ -31,7 +31,7 @@ async fn test_table_info_success() {
     let body_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
     assert_eq!(body_json["name"], "info_target_table");
-    assert_eq!(body_json["data_type"], "Float");
+    assert_eq!(body_json["data_type"], "Int");
     assert_eq!(body_json["max_zoom_level"], 15);
 }
 

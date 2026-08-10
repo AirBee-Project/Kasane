@@ -112,40 +112,6 @@ async fn test_table_data_insert_int_range_constraint() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
-/// Float型のデータ挿入および取得が正常に行えるかを検証する。
-#[tokio::test]
-async fn test_table_data_insert_float() {
-    let test_app = TestApp::new();
-    test_app.create_database("test_db").await;
-    test_app
-        .create_table("test_db", "test_table", "Float", 25)
-        .await;
-
-    let single_id_query =
-        serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
-
-    put_data(
-        &test_app,
-        "test_table",
-        &serde_json::json!({ "value": 9.99, "spatial_ids": single_id_query }),
-    )
-    .await;
-
-    let result_json = search_data(&test_app, "test_table", &single_id_query).await;
-    assert_first_entry(
-        &result_json,
-        9.99f64,
-        RawSingleId {
-            z: 20,
-            f: 0,
-            x: 931386,
-            y: 412905,
-            i: None,
-            t: None,
-        },
-    );
-}
-
 /// singleIdで指定した空間IDに、テーブルの型と一致しない値を挿入した際にエラーが返るかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_single_id_error() {

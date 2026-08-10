@@ -118,7 +118,7 @@ pub async fn search_data(
 ///
 /// # Arguments
 /// - `result_json`   - `search_data` の返り値
-/// - `expected_data` - 期待するデータ値。`i64` や `f64` など `Into<serde_json::Value>` を実装した型を渡す
+/// - `expected_data` - 期待するデータ値。`i64` など `Into<serde_json::Value>` を実装した型を渡す
 /// - `expected_id`   - 期待する空間ID
 ///
 /// # Example
@@ -158,7 +158,7 @@ pub fn assert_first_entry(
 /// `search_data` で得たレスポンス JSON を `HashMap<RawSingleId, T>` に変換する。
 ///
 /// `T` には `serde::de::DeserializeOwned` を実装した任意の型を指定できる。
-/// `Int` レイヤーなら `i64`、`Float` レイヤーなら `f64`、`String` レイヤーなら `String` など。
+/// `Int` レイヤーなら `i64`、`String` レイヤーなら `String` など。
 ///
 /// # Arguments
 /// - `body_json` - `search_data` の返り値など、`ids` 配列を含む JSON
@@ -167,9 +167,6 @@ pub fn assert_first_entry(
 /// ```
 /// // Int レイヤー: 値を i64 として取得する
 /// let map: HashMap<RawSingleId, i64> = to_result_map(&result_json);
-///
-/// // Float レイヤー: 値を f64 として取得する
-/// let map: HashMap<RawSingleId, f64> = to_result_map(&result_json);
 ///
 /// // String レイヤー: 値を String として取得する
 /// let map: HashMap<RawSingleId, String> = to_result_map(&result_json);

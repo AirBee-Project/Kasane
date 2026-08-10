@@ -64,7 +64,7 @@ async fn test_create_table_conflict() {
 
     let create_body = serde_json::json!({
         "name": "existing_table",
-        "data_type": "Float",
+        "data_type": "Int",
         "max_zoom_level": 20
     });
 

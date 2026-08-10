@@ -6,7 +6,6 @@ use kasane_logic::FlexId;
 ///
 /// 値の格納形式（`interpret_value` 準拠）：
 /// - `Int`   : i64 ビッグエンディアン → 符号ビット反転（負が先）
-/// - `Float` : f64 BE IEEE754 → 負は全ビット反転、正は符号ビット立て
 /// - `Text`  : UTF-8（辞書順そのまま）
 /// - `Boolean`: 1 バイト 0/1（そのまま）
 pub fn order_preserving(data_type: TableDataType, value: &[u8]) -> Vec<u8> {
@@ -15,17 +14,6 @@ pub fn order_preserving(data_type: TableDataType, value: &[u8]) -> Vec<u8> {
         TableDataType::Int => {
             if let Some(b0) = key.first_mut() {
                 *b0 ^= 0x80;
-            }
-        }
-        TableDataType::Float => {
-            if let Some(&b0) = key.first() {
-                if b0 & 0x80 != 0 {
-                    for b in &mut key {
-                        *b ^= 0xFF;
-                    }
-                } else {
-                    key[0] ^= 0x80;
-                }
             }
         }
         TableDataType::Text

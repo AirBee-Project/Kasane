@@ -288,25 +288,6 @@ impl<'a> KasaneDbWrite<'a> {
                 }))
             }
             (
-                TableDataType::Float,
-                crate::models::database::table::UpdateTableConstraints::Float { min, max },
-            ) => {
-                let (mut current_min, mut current_max) = match current_constraints {
-                    Some(TableConstraints::Float { min, max }) => (*min, *max),
-                    _ => (None, None),
-                };
-                if let Some(v) = min {
-                    current_min = v;
-                }
-                if let Some(v) = max {
-                    current_max = v;
-                }
-                Ok(Some(TableConstraints::Float {
-                    min: current_min,
-                    max: current_max,
-                }))
-            }
-            (
                 TableDataType::Enum,
                 crate::models::database::table::UpdateTableConstraints::Enum {
                     choices,

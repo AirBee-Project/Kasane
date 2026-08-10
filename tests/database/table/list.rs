@@ -37,9 +37,7 @@ async fn test_table_list_two() {
 
     test_app.create_database("test_db").await;
     test_app.create_table("test_db", "table_a", "Int", 10).await;
-    test_app
-        .create_table("test_db", "table_b", "Float", 20)
-        .await;
+    test_app.create_table("test_db", "table_b", "Int", 20).await;
 
     let req = Request::builder()
         .method("GET")
@@ -70,9 +68,7 @@ async fn test_table_list_three() {
 
     test_app.create_database("test_db").await;
     test_app.create_table("test_db", "table_a", "Int", 10).await;
-    test_app
-        .create_table("test_db", "table_b", "Float", 20)
-        .await;
+    test_app.create_table("test_db", "table_b", "Int", 20).await;
     test_app
         .create_table("test_db", "table_c", "Text", 25)
         .await;
