@@ -6,110 +6,11 @@ use crate::db_init::TableIdAndFlexId;
 use crate::error::AppError;
 use crate::models::id::TableId;
 
-/// 1つのシャードが保持できる [`FlexId`] 数の上限。これを超えたシャードは動的に分割される。
-pub const MAX_FLEX_ID_PER_SHARD: usize = 1024;
-
-/// 兄弟シャードの合算件数がこの値以下になったら再びmergeして1つのシャードにする。
-pub const MERGE_FLEX_ID_THRESHOLD: usize = MAX_FLEX_ID_PER_SHARD / 2;
-
-const TAG_LEAF: u8 = 0;
-const TAG_POINTERS: u8 = 1;
-
-/// Leaf エントリのヘッダ長 = タグ(1) + 件数(u32 LE, 4)。
-/// 件数を埋めておくことで `table_count` がリーフを deserialize せず合算できる。
-const LEAF_HEADER_LEN: usize = 1 + 4;
-
-/// `tables_data` の値の論理表現。
-pub enum ShardEntry {
-    /// 実データ（`SpatialIdMap` の rkyv バイト列）。
-    Leaf(Vec<u8>),
-    /// 子シャードの領域へのポインタたち。
-    Pointers(Vec<FlexId>),
-}
-
-impl ShardEntry {
-    /// 生バイト列を解釈する。
-    pub fn decode(bytes: &[u8]) -> Result<Self, AppError> {
-        match bytes.first() {
-            Some(&TAG_LEAF) => {
-                if bytes.len() < LEAF_HEADER_LEN {
-                    return Err(AppError::InternalError("truncated leaf entry".to_string()));
-                }
-                Ok(ShardEntry::Leaf(bytes[LEAF_HEADER_LEN..].to_vec()))
-            }
-            Some(&TAG_POINTERS) => {
-                let body = &bytes[1..];
-                if !body.len().is_multiple_of(FlexId::ENCODED_LEN) {
-                    return Err(AppError::InternalError(
-                        "invalid pointer node length".to_string(),
-                    ));
-                }
-                let mut regions = Vec::with_capacity(body.len() / FlexId::ENCODED_LEN);
-                for chunk in body.as_chunks::<{ FlexId::ENCODED_LEN }>().0 {
-                    let mut b = [0u8; FlexId::ENCODED_LEN];
-                    b.copy_from_slice(chunk);
-                    regions
-                        .push(FlexId::decode(&b).map_err(|e| {
-                            AppError::InternalError(format!("flex_id decode: {e}"))
-                        })?);
-                }
-                Ok(ShardEntry::Pointers(regions))
-            }
-            _ => Err(AppError::InternalError("empty shard entry".to_string())),
-        }
-    }
-
-    /// リーフ（`SpatialIdMap` バイト列）を、保持 [`FlexId`] 件数ヘッダ付きでエンコードする。
-    pub fn encode_leaf(flex_id_count: u32, map_bytes: &[u8]) -> Vec<u8> {
-        let mut out = Vec::with_capacity(LEAF_HEADER_LEN + map_bytes.len());
-        out.push(TAG_LEAF);
-        out.extend_from_slice(&flex_id_count.to_le_bytes());
-        out.extend_from_slice(map_bytes);
-        out
-    }
-
-    /// エントリがリーフなら、ヘッダに埋めた保持件数を deserialize せず返す。
-    /// ポインタノードなら `None`。`table_count` の高速集計に使う。
-    pub fn leaf_count(entry: &[u8]) -> Result<Option<u32>, AppError> {
-        match entry.first() {
-            Some(&TAG_LEAF) => {
-                if entry.len() < LEAF_HEADER_LEN {
-                    return Err(AppError::InternalError("truncated leaf entry".to_string()));
-                }
-                let mut b = [0u8; 4];
-                b.copy_from_slice(&entry[1..LEAF_HEADER_LEN]);
-                Ok(Some(u32::from_le_bytes(b)))
-            }
-            Some(&TAG_POINTERS) => Ok(None),
-            _ => Err(AppError::InternalError("empty shard entry".to_string())),
-        }
-    }
-
-    /// 子シャード領域へのポインタノードをエンコードする。
-    pub fn encode_pointers(regions: &[FlexId]) -> Vec<u8> {
-        let mut out = Vec::with_capacity(1 + regions.len() * FlexId::ENCODED_LEN);
-        out.push(TAG_POINTERS);
-        for region in regions {
-            out.extend_from_slice(&region.encode());
-        }
-        out
-    }
-
-    /// ポインタノードなら子領域群を、リーフなら `None` を返す**軽量版**。
-    ///
-    /// ルーティングはタグだけ見れば十分なので、リーフ本体（`SpatialIdMap` バイト列）を
-    /// コピーする [`decode`](Self::decode) を避け、無駄なアロケーションをなくす。
-    pub fn child_pointers(bytes: &[u8]) -> Result<Option<Vec<FlexId>>, AppError> {
-        match bytes.first() {
-            Some(&TAG_LEAF) => Ok(None),
-            Some(&TAG_POINTERS) => match ShardEntry::decode(bytes)? {
-                ShardEntry::Pointers(children) => Ok(Some(children)),
-                ShardEntry::Leaf(_) => unreachable!("tag は POINTERS"),
-            },
-            _ => Err(AppError::InternalError("empty shard entry".to_string())),
-        }
-    }
-}
+// ノードのバイト表現はバックエンド非依存なので共有モジュールを使う。
+// ここに残るのは heed のトランザクションを必要とする探索・ロード処理だけ。
+pub use crate::repositories::encoding::shard_entry::{
+    MAX_FLEX_ID_PER_SHARD, MERGE_FLEX_ID_THRESHOLD, ShardEntry,
+};
 
 // --- ルーティング・ロード（read / write 共用の自由関数） ---
 
@@ -282,21 +183,6 @@ pub fn find_parent_pointer(
     }
 }
 
-/// エントリ生バイト列がリーフなら、その中身（`SpatialIdMap` バイト列）への借用を返す。
-/// ポインタノードなら `None`、不正なら `Err`。
-fn leaf_payload(entry: &[u8]) -> Result<Option<&[u8]>, AppError> {
-    match entry.first() {
-        Some(&TAG_LEAF) => {
-            if entry.len() < LEAF_HEADER_LEN {
-                return Err(AppError::InternalError("truncated leaf entry".to_string()));
-            }
-            Ok(Some(&entry[LEAF_HEADER_LEN..]))
-        }
-        Some(&TAG_POINTERS) => Ok(None),
-        _ => Err(AppError::InternalError("empty shard entry".to_string())),
-    }
-}
-
 /// リーフ領域 `region` を **ZeroCopy archived リーダ**として開く（`Arc`を再構築しない）。
 /// 未作成なら `Ok(None)`、ポインタノードに当たったら `Err`。読み取り専用。
 pub fn load_leaf_archived<'txn>(
@@ -306,7 +192,7 @@ pub fn load_leaf_archived<'txn>(
     region: &FlexId,
 ) -> Result<Option<ArchivedSpatialIdMap<'txn>>, AppError> {
     match tables_data.get(txn, &(table_id, *region))? {
-        Some(entry) => match leaf_payload(entry)? {
+        Some(entry) => match ShardEntry::leaf_payload(entry)? {
             // 自分自身の to_bytes が書いた正当なバイト列。
             // 形式バージョンだけは検証されるので、古い形式のデータは黙って誤読されず
             // ここでエラーになる。

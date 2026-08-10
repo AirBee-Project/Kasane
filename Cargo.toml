@@ -24,7 +24,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 argon2 = "0.5.3"
 jsonwebtoken = { version = "10.4.0", features = ["rust_crypto"] }
 rand_core = { version = "0.6.4", features = ["getrandom"] }
-heed = "0.22.1"
+heed = { version = "0.22.1", optional = true }
+tikv-client = { version = "0.3", optional = true }
 rayon = "1.12"
 rustc-hash = "2.1.2"
 
@@ -37,6 +38,17 @@ percent-encoding = { version = "2.3.2", optional = true }
 mimalloc = { version = "0.1", optional = true }
 
 [features]
+default = ["backend-lmdb"]
+
+# ストレージバックエンドは排他選択（1 バイナリ = 1 バックエンド）。
+# 両方有効／どちらも無効な場合は src/backend.rs の compile_error! で弾かれる。
+#
+# 下の `production` はテレメトリ等の直交した設定なので、バックエンドを含まない。
+# `--no-default-features` と併用する場合はバックエンドも明示すること
+# （例: --features "production,backend-lmdb"）。
+backend-lmdb = ["dep:heed"]
+backend-tikv = ["dep:tikv-client"]
+
 production = [
     "axum-tracing-opentelemetry",
     "opentelemetry",

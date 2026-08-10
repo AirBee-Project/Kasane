@@ -15,7 +15,7 @@ use crate::database::table::{
 /// singleIdで指定した空間IDのデータを挿入後に正常に削除できるかを検証する。
 #[tokio::test]
 async fn test_table_data_remove_single_id() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table_BOOLEAN", "Boolean", 25)
@@ -71,7 +71,7 @@ async fn test_table_data_remove_single_id() {
 #[tokio::test]
 /// 親ノードが存在する領域の一部を削除した際、その部分のみが正しく削除されるかを検証する。
 async fn test_table_data_remove_logical_bug() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
 
     let table_name = "bug3_table";
     test_app.create_database("test_db").await;
@@ -119,7 +119,7 @@ async fn test_table_data_remove_logical_bug() {
 #[tokio::test]
 /// 存在するデータの一部のみが削除クエリの範囲に含まれる場合、重なっている部分だけが削除されるかを検証する。
 async fn test_table_data_remove_partial_overlap() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
 
     let table_name = "partial_remove_table";
     test_app.create_database("test_db").await;

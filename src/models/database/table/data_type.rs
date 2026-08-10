@@ -78,6 +78,141 @@ impl From<TableDataType> for JsonValueType {
 }
 
 impl TableConstraints {
+    /// `Enum` の選択肢に未割り当ての ID を振る。
+    ///
+    /// 割り当て規則は**保存される値そのもの**（セルには ID が入る）なので、バックエンドごとに
+    /// 持たせるとストレージ間で値の意味がずれる。制約の定義と同じ場所に 1 つだけ置く。
+    pub fn with_enum_ids(
+        data_type: TableDataType,
+        constraints: Option<TableConstraints>,
+    ) -> Result<Option<TableConstraints>, String> {
+        let mut actual = constraints;
+        if data_type != TableDataType::Enum {
+            return Ok(actual);
+        }
+        match &mut actual {
+            Some(TableConstraints::Enum {
+                choices,
+                mapping,
+                next_id,
+            }) => {
+                for c in choices.iter() {
+                    if !mapping.contains_key(c) {
+                        if *next_id == u16::MAX {
+                            return Err("Enum choices reached maximum limit (65535)".to_string());
+                        }
+                        if *next_id == 0 {
+                            *next_id = 1;
+                        }
+                        mapping.insert(c.clone(), *next_id);
+                        *next_id += 1;
+                    }
+                }
+                Ok(actual)
+            }
+            _ => Err("Enum type requires 'choices' constraint".to_string()),
+        }
+    }
+
+    /// 部分更新を現在の制約へ畳み込む。
+    ///
+    /// 既存値を残したまま指定されたフィールドだけを差し替える。`Enum` は選択肢の
+    /// 増減を反映したうえで [`with_enum_ids`](Self::with_enum_ids) と同じ規則で ID を振る。
+    pub fn merged_with(
+        data_type: TableDataType,
+        current: Option<&TableConstraints>,
+        update: super::UpdateTableConstraints,
+    ) -> Result<Option<TableConstraints>, String> {
+        use super::UpdateTableConstraints as Update;
+
+        match (data_type, update) {
+            (
+                TableDataType::Text,
+                Update::Text {
+                    min_length,
+                    max_length,
+                },
+            ) => {
+                let (mut cur_min, mut cur_max) = match current {
+                    Some(TableConstraints::Text {
+                        min_length,
+                        max_length,
+                    }) => (*min_length, *max_length),
+                    _ => (None, None),
+                };
+                if let Some(v) = min_length {
+                    cur_min = v;
+                }
+                if let Some(v) = max_length {
+                    cur_max = v;
+                }
+                Ok(Some(TableConstraints::Text {
+                    min_length: cur_min,
+                    max_length: cur_max,
+                }))
+            }
+            (TableDataType::Int, Update::Int { min, max }) => {
+                let (mut cur_min, mut cur_max) = match current {
+                    Some(TableConstraints::Int { min, max }) => (*min, *max),
+                    _ => (None, None),
+                };
+                if let Some(v) = min {
+                    cur_min = v;
+                }
+                if let Some(v) = max {
+                    cur_max = v;
+                }
+                Ok(Some(TableConstraints::Int {
+                    min: cur_min,
+                    max: cur_max,
+                }))
+            }
+            (
+                TableDataType::Enum,
+                Update::Enum {
+                    choices,
+                    add_choices,
+                    remove_choices,
+                },
+            ) => {
+                let (mut cur_choices, mapping, next_id) = match current {
+                    Some(TableConstraints::Enum {
+                        choices,
+                        mapping,
+                        next_id,
+                    }) => (choices.clone(), mapping.clone(), *next_id),
+                    _ => (Vec::new(), std::collections::HashMap::new(), 1),
+                };
+                if let Some(new_choices) = choices {
+                    cur_choices = new_choices;
+                }
+                if let Some(adds) = add_choices {
+                    for add in adds {
+                        if !cur_choices.contains(&add) {
+                            cur_choices.push(add);
+                        }
+                    }
+                }
+                if let Some(removes) = remove_choices {
+                    cur_choices.retain(|c| !removes.contains(c));
+                }
+                // ID の割り当ては新規作成時と同じ規則を通す。
+                Self::with_enum_ids(
+                    TableDataType::Enum,
+                    Some(TableConstraints::Enum {
+                        choices: cur_choices,
+                        mapping,
+                        next_id,
+                    }),
+                )
+            }
+            (TableDataType::Presence, _) => {
+                Err("Presence type cannot have constraints".to_string())
+            }
+            (_, _) => Err("Constraint type does not match data type".to_string()),
+        }
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         match self {
             TableConstraints::Text {

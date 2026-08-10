@@ -39,7 +39,8 @@ pub async fn remove_table(
         &db_name,
         &table_name,
         UserRole::Manage,
-    )?;
+    )
+    .await?;
     table_remove_service::remove(&app_state, &db_name, &table_name).await?;
     Ok(StatusCode::NO_CONTENT)
 }

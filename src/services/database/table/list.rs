@@ -1,4 +1,4 @@
-use crate::repositories::MetaRead;
+use crate::repositories::{MetaRepository, ReadRepository, Storage};
 use crate::{
     AppState,
     error::AppError,
@@ -16,14 +16,14 @@ pub async fn list(
     db_name: &str,
     user: &User,
 ) -> Result<TableListResponse, AppError> {
-    let (db_id, tables) = app_state.db.read(|db| {
-        let db_id = db
-            .database_id(db_name)?
-            .ok_or_else(|| AppError::DatabaseNotFound {
-                name: db_name.to_string(),
-            })?;
-        Ok((db_id, db.table_list_by_id(db_id)?))
-    })?;
+    let owned = db_name.to_string();
+    let (db_id, tables) = app_state
+        .db
+        .read(async move |db| {
+            let db_id = db.require_database_id(&owned).await?;
+            Ok((db_id, db.table_list_by_id(db_id).await?))
+        })
+        .await?;
 
     let response_tables = tables
         .into_iter()

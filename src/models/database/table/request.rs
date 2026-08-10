@@ -23,7 +23,9 @@ fn default_validate_existing_data() -> bool {
     true
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+// 書き込みトランザクションのクロージャはやり直しで複数回呼ばれうるため、
+// リクエスト由来の値は複製できる必要がある。
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 #[serde(tag = "type")]
 pub enum UpdateTableConstraints {
     #[schema(example = json!({"type": "Text", "min_length": 1, "max_length": 100}))]

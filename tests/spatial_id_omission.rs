@@ -1,3 +1,6 @@
+//! LMDB バックエンド向けの結合テスト。TiKV バックエンドのビルドでは対象外。
+#![cfg(feature = "backend-lmdb")]
+
 use kasane::models::spatial_id::{RawFlexId, RawRangeId, SpatialId};
 use kasane::services::helpers::spatial_ids::to_spatial_id_set;
 

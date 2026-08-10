@@ -74,7 +74,7 @@ async fn search_flex(test_app: &TestApp, query: &serde_json::Value) -> serde_jso
 
 #[tokio::test]
 async fn i_without_t_is_rejected_for_single_id() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
     let body = serde_json::json!({
         "value": 1,
@@ -86,7 +86,7 @@ async fn i_without_t_is_rejected_for_single_id() {
 
 #[tokio::test]
 async fn t_without_i_is_rejected_for_single_id() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
     let body = serde_json::json!({
         "value": 1,
@@ -98,7 +98,7 @@ async fn t_without_i_is_rejected_for_single_id() {
 
 #[tokio::test]
 async fn i_without_t_is_rejected_for_range_id() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
     let body = serde_json::json!({
         "value": 1,
@@ -110,7 +110,7 @@ async fn i_without_t_is_rejected_for_range_id() {
 
 #[tokio::test]
 async fn t_without_i_is_rejected_for_range_id() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
     let body = serde_json::json!({
         "value": 1,
@@ -122,7 +122,7 @@ async fn t_without_i_is_rejected_for_range_id() {
 
 #[tokio::test]
 async fn t_zoomlevel_without_t_index_is_rejected_for_flex_id() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
     let body = serde_json::json!({
         "value": 1,
@@ -138,7 +138,7 @@ async fn t_zoomlevel_without_t_index_is_rejected_for_flex_id() {
 
 #[tokio::test]
 async fn t_index_without_t_zoomlevel_is_rejected_for_flex_id() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
     let body = serde_json::json!({
         "value": 1,
@@ -155,7 +155,7 @@ async fn t_index_without_t_zoomlevel_is_rejected_for_flex_id() {
 /// `i` は暦の単位（1/60/3600/86400/2^35）以外は拒否される。
 #[tokio::test]
 async fn non_calendar_intervals_are_rejected() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
     for i in [2u64, 30, 1800, 7200, 43200, 172800] {
         let body = serde_json::json!({
@@ -174,7 +174,7 @@ async fn non_calendar_intervals_are_rejected() {
 
 #[tokio::test]
 async fn zero_interval_is_rejected() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
     let body = serde_json::json!({
         "value": 1,
@@ -192,7 +192,7 @@ async fn zero_interval_is_rejected() {
 /// どれも同じ「`i`/`t` の指定ミス」なので、`code` は1つに揃っていなければならない。
 #[tokio::test]
 async fn every_invalid_time_specification_shares_one_error_code() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
 
     let single = |extra: serde_json::Value| {
@@ -259,7 +259,7 @@ async fn every_invalid_time_specification_shares_one_error_code() {
 /// 暦の単位はすべて受理される（境界値を1つずつ確認）。
 #[tokio::test]
 async fn every_calendar_interval_is_accepted() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
     for i in [1u64, 60, 3600, 86400, 34359738368] {
         let body = serde_json::json!({
@@ -277,7 +277,7 @@ async fn every_calendar_interval_is_accepted() {
 
 #[tokio::test]
 async fn flex_id_t_zoomlevel_out_of_range_is_rejected() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
     let body = serde_json::json!({
         "value": 1,
@@ -294,7 +294,7 @@ async fn flex_id_t_zoomlevel_out_of_range_is_rejected() {
 /// `tZoomlevel=1` はSegmentが2つ（インデックス0,1）しかないので、`tIndex=5` は範囲外。
 #[tokio::test]
 async fn flex_id_t_index_out_of_range_is_rejected() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
     let body = serde_json::json!({
         "value": 1,
@@ -317,7 +317,7 @@ async fn flex_id_t_index_out_of_range_is_rejected() {
 /// 含まれることになり、存在しないデータを存在するかのように返してしまう）。
 #[tokio::test]
 async fn non_adjacent_segments_do_not_coalesce() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
 
     for t in [0, 5] {
@@ -358,7 +358,7 @@ async fn non_adjacent_segments_do_not_coalesce() {
 /// 隣接していても値が異なるSegmentは結合されてはならない。
 #[tokio::test]
 async fn different_values_do_not_coalesce_even_if_adjacent() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
 
     for (t, value) in [(0, 1), (1, 2)] {
@@ -398,7 +398,7 @@ async fn different_values_do_not_coalesce_even_if_adjacent() {
 /// （`DAY` = 86400秒）へ丸め込まれ、単一のエントリとして戻る。
 #[tokio::test]
 async fn twenty_four_adjacent_hours_coalesce_into_a_day() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
 
     for t in 0..24 {
@@ -444,7 +444,7 @@ async fn twenty_four_adjacent_hours_coalesce_into_a_day() {
 /// ノードへ圧縮してしまうため、このテストの意図には使えない。）
 #[tokio::test]
 async fn flex_id_format_does_not_coalesce_across_segments() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
 
     for t in [0, 1] {
@@ -498,7 +498,7 @@ async fn flex_id_format_does_not_coalesce_across_segments() {
 /// 同じ時間Segmentへの上書きは、新しい値だけが残る（古い値が残留しない）。
 #[tokio::test]
 async fn overwrite_replaces_the_value_at_the_same_time_segment() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
 
     let query = serde_json::json!([{
@@ -534,7 +534,7 @@ async fn overwrite_replaces_the_value_at_the_same_time_segment() {
 /// 隣接する時間Segmentの片方を削除しても、もう片方には影響しない。
 #[tokio::test]
 async fn removing_one_segment_leaves_the_adjacent_segment_intact() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
 
     for t in [0, 1] {
@@ -590,7 +590,7 @@ async fn removing_one_segment_leaves_the_adjacent_segment_intact() {
 /// `i=1`（秒、2の冪）は分解が起きないため、常に厳密にラウンドトリップする。
 #[tokio::test]
 async fn second_granularity_round_trips_exactly() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
 
     let query = serde_json::json!([{
@@ -615,7 +615,7 @@ async fn second_granularity_round_trips_exactly() {
 /// 時間を指定しない場合は「全時間」を表し、出力にも `i`/`t` は現れない。
 #[tokio::test]
 async fn whole_time_has_no_i_or_t_in_output() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
 
     let query = serde_json::json!([{"type":"singleId","z":20,"f":0,"x":1,"y":1}]);
@@ -646,7 +646,7 @@ async fn whole_time_has_no_i_or_t_in_output() {
 /// `RangeId` として時間の範囲を直接指定して挿入した場合も正しくラウンドトリップする。
 #[tokio::test]
 async fn range_id_with_a_time_range_round_trips() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     setup(&test_app).await;
 
     let query = serde_json::json!([{

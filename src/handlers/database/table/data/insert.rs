@@ -43,7 +43,8 @@ pub async fn data_insert(
         &db_name,
         &table_name,
         UserRole::Write,
-    )?;
+    )
+    .await?;
 
     data_insert_service::insert(
         &app_state,

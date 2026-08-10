@@ -58,7 +58,8 @@ pub async fn table_update_handler(
         &db_name,
         &table_name,
         UserRole::Manage,
-    )?;
+    )
+    .await?;
 
     let result = table_update_service::table_update(
         state.clone(),

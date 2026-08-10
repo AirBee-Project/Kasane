@@ -2,9 +2,10 @@ use rustc_hash::FxHashMap;
 
 use kasane_logic::{FlexId, SpatialIdSet};
 
-use super::{shard, value_index};
+use super::shard;
 use crate::models::database::table::TableDataType;
 use crate::models::id::TableId;
+use crate::repositories::encoding::value_index;
 use crate::{error::AppError, repositories::KasaneDbRead};
 
 /// `data_get` の戻り値：`(値バイト, その値を持つ FlexId 群)` の一覧。
@@ -26,7 +27,7 @@ impl<'a> KasaneDbRead<'a> {
     /// **リーフ単位**で解決を並列化する。各リーフは互いに独立（同一セルは 1 つの葉にしか
     /// 属さない）なので、部分マップを作って最後に値でマージするだけで正しく合流できる。
     #[tracing::instrument(skip_all)]
-    pub fn data_get(
+    pub fn data_get_impl(
         &self,
         table_id: crate::models::id::TableId,
         ids: SpatialIdSet,
@@ -209,41 +210,46 @@ impl<'a> KasaneDbRead<'a> {
 }
 
 impl<'a> KasaneDbRead<'a> {
+    /// 値が `value` と等しいセルの [`FlexId`] を集める。
+    ///
+    /// ストレージのカーソルを呼び出し側へ渡さないよう、結果は確定した `Vec` で返す
+    /// （バックエンドによっては結果がネットワーク越しに届くため、遅延イテレータを
+    /// トランザクション境界の外へ持ち出せない）。
     #[tracing::instrument(skip_all)]
-    pub fn data_filter_eq(
-        &'a self,
+    pub fn data_filter_eq_impl(
+        &self,
         table_id: TableId,
         data_type: TableDataType,
         value: &[u8],
-    ) -> Result<impl Iterator<Item = Result<FlexId, AppError>> + 'a, AppError> {
+    ) -> Result<Vec<FlexId>, AppError> {
         let prefix =
             value_index::make_prefix(table_id, &value_index::order_preserving(data_type, value));
 
-        let iter = self
+        let mut out = Vec::new();
+        for item in self
             .db
             .value_index
-            .prefix_iter(&self.read_txn, prefix.as_slice())?;
-
-        Ok(iter.filter_map(move |item| match item {
-            Ok((key, _)) => {
-                // 可変長値で前方一致しただけの別キーを除外（残りがちょうど flexid 分の長さ）。
-                if key.len() != prefix.len() + FlexId::ENCODED_LEN {
-                    return None;
-                }
-                Some(value_index::flexid_from_key(key))
+            .prefix_iter(&self.read_txn, prefix.as_slice())?
+        {
+            let (key, _) = item?;
+            // 可変長値で前方一致しただけの別キーを除外（残りがちょうど flexid 分の長さ）。
+            if key.len() != prefix.len() + FlexId::ENCODED_LEN {
+                continue;
             }
-            Err(e) => Some(Err(AppError::InternalError(e.to_string()))),
-        }))
+            out.push(value_index::flexid_from_key(key)?);
+        }
+        Ok(out)
     }
 
+    /// 値が `lo`〜`hi`（両端含む）に入るセルの [`FlexId`] を集める。
     #[tracing::instrument(skip_all)]
-    pub fn data_filter_range(
-        &'a self,
+    pub fn data_filter_range_impl(
+        &self,
         table_id: TableId,
         data_type: TableDataType,
         lo: &[u8],
         hi: &[u8],
-    ) -> Result<impl Iterator<Item = Result<FlexId, AppError>> + 'a, AppError> {
+    ) -> Result<Vec<FlexId>, AppError> {
         let start =
             value_index::make_prefix(table_id, &value_index::order_preserving(data_type, lo));
         // hi 側は flexid 部を最大化して `(hi, *)` まで含める。
@@ -255,11 +261,12 @@ impl<'a> KasaneDbRead<'a> {
             std::ops::Bound::Included(start.as_slice()),
             std::ops::Bound::Included(end.as_slice()),
         );
-        let iter = self.db.value_index.range(&self.read_txn, &bounds)?;
 
-        Ok(iter.map(|item| match item {
-            Ok((key, _)) => value_index::flexid_from_key(key),
-            Err(e) => Err(AppError::InternalError(e.to_string())),
-        }))
+        let mut out = Vec::new();
+        for item in self.db.value_index.range(&self.read_txn, &bounds)? {
+            let (key, _) = item?;
+            out.push(value_index::flexid_from_key(key)?);
+        }
+        Ok(out)
     }
 }

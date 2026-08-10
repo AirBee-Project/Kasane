@@ -1,4 +1,4 @@
-use crate::repositories::MetaRead;
+use crate::repositories::{MetaRepository, Storage};
 use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -72,10 +72,12 @@ pub fn dummy_verify_password(password: &str) {
 
 /// 指定ユーザーの最新メタデータ（UUID・トークン世代）を読み込み、JWT を発行する。
 #[tracing::instrument(skip_all, fields(username = %username))]
-pub fn generate_jwt(app_state: &AppState, username: &str) -> Result<String, AppError> {
+pub async fn generate_jwt(app_state: &AppState, username: &str) -> Result<String, AppError> {
+    let owned = username.to_string();
     let meta = app_state
         .db
-        .read(|repo| repo.user_meta(username))?
+        .read(async move |repo| repo.user_meta(&owned).await)
+        .await?
         .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
     let expiration = SystemTime::now()

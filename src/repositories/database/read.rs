@@ -3,10 +3,16 @@ use crate::{
     repositories::KasaneDbRead,
 };
 
+/// LMDB 上での実装本体。
+///
+/// 抽象 API は [`ReadRepository`](crate::repositories::ReadRepository) 側にあり、
+/// ここのメソッドはそこから委譲される。同名にすると inherent 側が常に優先されて
+/// trait メソッドを呼べなくなるため、`_impl` を付けて区別している
+/// （TiKV 実装も同じ規約）。
 impl<'a> KasaneDbRead<'a> {
     /// Databaseの情報を取得する
     #[tracing::instrument(skip_all)]
-    pub fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
+    pub fn database_info_impl(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
         if name.is_empty() {
             return Ok(None);
         }
@@ -26,7 +32,7 @@ impl<'a> KasaneDbRead<'a> {
     /// 呼び出し側は権限の絞り込みに ID を使うため、同じメタデータを引き直さずに
     /// 済むよう ID を添えて返す。
     #[tracing::instrument(skip_all)]
-    pub fn database_list(&self) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
+    pub fn database_list_impl(&self) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
         let db = self.db.databases;
         let mut list = Vec::new();
         for res in db.iter(&self.read_txn)? {

@@ -12,7 +12,7 @@ use crate::database::table::data::common::{
 /// singleIdで指定した空間IDにデータを挿入し、同じ場所から正しく取得できるかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_single_id() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table", "Int", 25)
@@ -47,7 +47,7 @@ async fn test_table_data_insert_single_id() {
 /// Int型の範囲制約（min/max）が挿入時に検証されるかを確認する。
 #[tokio::test]
 async fn test_table_data_insert_int_range_constraint() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     // min/max 付きの Int テーブルを作る（create_table ヘルパは制約を取らないので生リクエスト）。
@@ -115,7 +115,7 @@ async fn test_table_data_insert_int_range_constraint() {
 /// singleIdで指定した空間IDに、テーブルの型と一致しない値を挿入した際にエラーが返るかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_single_id_error() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table", "Int", 25)
@@ -144,7 +144,7 @@ async fn test_table_data_insert_single_id_error() {
 /// 不正なsingleIdを入力した際にエラーが返るかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_single_id_logic_error() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table", "Text", 25)
@@ -173,7 +173,7 @@ async fn test_table_data_insert_single_id_logic_error() {
 /// 2つのsingleIdに対してそれぞれデータが正しく挿入できるかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_two_single_id() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table", "Int", 25)
@@ -232,7 +232,7 @@ async fn test_table_data_insert_two_single_id() {
 /// 同じsingleIdに対してデータを挿入した場合、値が正しく上書きされるかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_single_id_overwrite() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table", "Int", 25)
@@ -289,7 +289,7 @@ async fn test_table_data_insert_single_id_overwrite() {
 /// 同じrangeIdに対してデータを挿入した場合、値が正しく上書きされるかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_range_id_overwrite() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table_text", "Text", 25)
@@ -359,7 +359,7 @@ async fn test_table_data_insert_range_id_overwrite() {
 /// rangeIdで指定した範囲にデータを挿入し、一部・全体それぞれが正しく取得できるかを検証する。
 #[tokio::test]
 async fn test_table_data_insert_range_id() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table", "Int", 25)
@@ -421,7 +421,7 @@ async fn test_table_data_insert_range_id() {
 /// Insertを用いて一部の値の上書きを行った際、新しい値と元の値が正しい状態を保つかを検証する。
 #[tokio::test]
 async fn test_table_data_overload_insert() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table", "Text", 30)
@@ -473,7 +473,7 @@ async fn test_table_data_overload_insert() {
 #[tokio::test]
 /// 64個のノード（Zoom 20）を順次挿入した際、再帰的にマージされて1つのZoom 18ノードになるかを検証する。
 async fn test_table_data_recursive_merge() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
 
     let table_name = "merge_table";
     test_app.create_database("test_db").await;
@@ -518,7 +518,7 @@ async fn test_table_data_recursive_merge() {
 #[tokio::test]
 /// 異なるテーブル間で同じ座標にデータを挿入しても、互いに干渉しないかを検証する。
 async fn test_table_data_isolation() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
 
     let table1 = "table1";
     let table2 = "table2";
@@ -574,7 +574,7 @@ async fn test_table_data_isolation() {
 #[tokio::test]
 /// max_zoom_levelを超えるズームレベルでの挿入がエラーになるかを検証する。
 async fn test_table_data_max_zoom_enforcement() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
 
     let table_name = "low_zoom_table";
     test_app.create_database("test_db").await;
@@ -604,7 +604,7 @@ async fn test_table_data_max_zoom_enforcement() {
 #[tokio::test]
 /// 広範な親ノード内にピンポイントな子ノードを挿入した際、親が適切に分割され値の整合性が保たれるかを検証する。
 async fn test_table_data_deep_split() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
 
     let table_name = "split_table";
     test_app.create_database("test_db").await;
@@ -662,7 +662,7 @@ async fn test_table_data_deep_split() {
 #[tokio::test]
 /// Enum型のテーブルに対して、許可された値の挿入が成功することを検証する。
 async fn test_table_data_insert_enum_success() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     let create_body = serde_json::json!({
@@ -712,7 +712,7 @@ async fn test_table_data_insert_enum_success() {
 #[tokio::test]
 /// Enum型のテーブルに対して、許可されていない値の挿入が失敗することを検証する。
 async fn test_table_data_insert_enum_failure() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     let create_body = serde_json::json!({
@@ -756,7 +756,7 @@ async fn test_table_data_insert_enum_failure() {
 #[tokio::test]
 /// Presence型のテーブルに対して、null の挿入が成功することを検証する。
 async fn test_table_data_insert_presence_success() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     let create_body = serde_json::json!({
@@ -803,7 +803,7 @@ async fn test_table_data_insert_presence_success() {
 #[tokio::test]
 /// Presence型のテーブルに対して、null 以外の値の挿入が失敗することを検証する。
 async fn test_table_data_insert_presence_failure() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     let create_body = serde_json::json!({

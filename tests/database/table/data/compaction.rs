@@ -41,9 +41,7 @@ fn cells(x0: u32, x1: u32, y0: u32, y1: u32) -> HashSet<(u32, u32)> {
 /// 値 `v` を eq フィルタし、ヒットした全 FlexId を単体セル `(x,y)` 集合へ展開する。
 fn filter_cells(db: &kasane::db_init::AppDb, table_id: TableId, v: i32) -> HashSet<(u32, u32)> {
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), db);
-    r.data_filter_eq(table_id, TableDataType::Int, &enc(v))
-        .unwrap()
-        .collect::<Result<Vec<_>, _>>()
+    r.data_filter_eq_impl(table_id, TableDataType::Int, &enc(v))
         .unwrap()
         .into_iter()
         .flat_map(|f| f.single_ids().map(|s| (s.x(), s.y())))
@@ -60,7 +58,9 @@ fn read_rect(
     y1: u32,
 ) -> std::collections::HashMap<(u32, u32), i32> {
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), db);
-    let got = r.data_get(table_id, rect(x0, x1, y0, y1), None).unwrap();
+    let got = r
+        .data_get_impl(table_id, rect(x0, x1, y0, y1), None)
+        .unwrap();
     let mut out = std::collections::HashMap::new();
     for (value, flex_ids) in got {
         let v = i32::from_be_bytes(value.as_slice().try_into().unwrap());
@@ -83,7 +83,7 @@ fn compaction_roundtrip_and_index_cleanup() {
     // 16x16 = 256 セルを単一値 7 で挿入 → 内部で粗い FlexId へ compaction される。
     {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
-        w.data_insert(table_id, dt, rect(0, 15, 0, 15), &enc(7))
+        w.data_insert_impl(table_id, dt, rect(0, 15, 0, 15), &enc(7))
             .unwrap();
         w.commit().unwrap();
     }
@@ -91,7 +91,7 @@ fn compaction_roundtrip_and_index_cleanup() {
     // 実際に compaction が起きている（保持 FlexId 数 < 256）ことを確認。
     {
         let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
-        let cnt = r.table_count(table_id).unwrap();
+        let cnt = r.table_count_impl(table_id).unwrap();
         assert!(
             cnt < 256,
             "expected compaction to coarsen below 256 flex ids, got {cnt}"
@@ -110,7 +110,7 @@ fn compaction_roundtrip_and_index_cleanup() {
     // 左半分(x 0..7)を値 9 で上書き → compaction 境界を跨ぐ差分更新。
     {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
-        w.data_insert(table_id, dt, rect(0, 7, 0, 15), &enc(9))
+        w.data_insert_impl(table_id, dt, rect(0, 7, 0, 15), &enc(9))
             .unwrap();
         w.commit().unwrap();
     }
@@ -135,7 +135,8 @@ fn compaction_roundtrip_and_index_cleanup() {
     // 右半分(x 8..15, 値 7)を削除 → 値 7 のインデックスは完全に消える。
     {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
-        w.data_remove(table_id, dt, rect(8, 15, 0, 15)).unwrap();
+        w.data_remove_impl(table_id, dt, rect(8, 15, 0, 15))
+            .unwrap();
         w.commit().unwrap();
     }
     assert!(
@@ -151,11 +152,11 @@ fn compaction_roundtrip_and_index_cleanup() {
     // 残りも削除 → 完全に空。
     {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
-        w.data_remove(table_id, dt, rect(0, 7, 0, 15)).unwrap();
+        w.data_remove_impl(table_id, dt, rect(0, 7, 0, 15)).unwrap();
         w.commit().unwrap();
     }
     assert!(filter_cells(&db, table_id, 9).is_empty());
     assert_eq!(read_rect(&db, table_id, 0, 15, 0, 15).len(), 0);
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
-    assert_eq!(r.table_count(table_id).unwrap(), 0);
+    assert_eq!(r.table_count_impl(table_id).unwrap(), 0);
 }

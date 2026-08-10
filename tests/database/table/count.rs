@@ -27,7 +27,7 @@ async fn get_table_count(test_app: &TestApp, table_name: &str) -> u64 {
 #[tokio::test]
 /// データの挿入・更新・削除に伴い、テーブルの count が正しく増減するかを検証する。
 async fn test_table_count_dynamic() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "count_test_table", "Int", 25)

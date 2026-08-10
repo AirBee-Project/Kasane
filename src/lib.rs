@@ -1,6 +1,6 @@
 use crate::routes::create_router;
 
-pub mod db_init;
+pub mod backend;
 pub mod error;
 pub mod handlers;
 pub mod middleware;
@@ -11,9 +11,17 @@ pub mod routes;
 pub mod services;
 pub mod telemetry;
 
+/// LMDB バックエンドの初期化とキー表現。
+#[cfg(feature = "backend-lmdb")]
+pub mod db_init;
+
+/// リクエスト間で共有する状態。
+///
+/// 保持するのはビルド時に選択されたストレージ 1 つだけで、その中身は
+/// [`Storage`](crate::repositories::Storage) 越しにしか触れない。
 #[derive(Clone)]
 pub struct AppState {
-    pub db: db_init::AppDb,
+    pub db: backend::Db,
 }
 
 pub fn kasane(app_state: AppState) -> axum::Router {

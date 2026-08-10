@@ -1,4 +1,4 @@
-use crate::repositories::MetaRead;
+use crate::repositories::{MetaRepository, ReadRepository, Storage};
 use axum::{extract::Request, http::header, middleware::Next, response::Response};
 
 use crate::models::id::DatabaseId;
@@ -47,9 +47,11 @@ pub async fn require_auth(
     let token = &auth_header[7..];
     let claims = verify_jwt(token)?;
 
+    let sub = claims.sub.clone();
     let user = app_state
         .db
-        .read(|repo| repo.get_user(&claims.sub))?
+        .read(async move |repo| repo.get_user(&sub).await)
+        .await?
         .ok_or(AppError::Auth(AuthError::TokenRevoked))?;
 
     if claims.uid != user.id.to_string() || claims.ver != user.token_version {
@@ -86,27 +88,27 @@ pub fn check_self_or_admin(user: &User, username: &str) -> Result<(), AppError> 
 }
 
 /// データベース全体に対する操作の認可。テーブル単位のルールでは通らない。
-pub fn check_database(
+pub async fn check_database(
     app_state: &AppState,
     user: &User,
     db_name: &str,
     required: UserRole,
 ) -> Result<(), AppError> {
-    check(app_state, user, db_name, None, required, Scope::Database)
+    check(app_state, user, db_name, None, required, Scope::Database).await
 }
 
 /// データベースの存在確認・一覧のための認可。
 /// テーブル単位のルールしか持たないユーザーも、自分のテーブルへ辿り着けるように通す。
-pub fn check_database_visible(
+pub async fn check_database_visible(
     app_state: &AppState,
     user: &User,
     db_name: &str,
 ) -> Result<(), AppError> {
-    check(app_state, user, db_name, None, UserRole::Read, Scope::AnyIn)
+    check(app_state, user, db_name, None, UserRole::Read, Scope::AnyIn).await
 }
 
 /// 特定テーブルに対する操作の認可。
-pub fn check_table(
+pub async fn check_table(
     app_state: &AppState,
     user: &User,
     db_name: &str,
@@ -121,11 +123,12 @@ pub fn check_table(
         required,
         Scope::Database,
     )
+    .await
 }
 
 /// 複数テーブルに対する操作の認可。読み取りトランザクションを 1 つだけ開いて
 /// すべての名前を解決するので、参照テーブル数に比例してトランザクションが増えない。
-pub fn check_tables(
+pub async fn check_tables(
     app_state: &AppState,
     user: &User,
     tables: &[(&str, &str)],
@@ -135,14 +138,20 @@ pub fn check_tables(
         return Ok(());
     }
 
-    let scopes = app_state.db.read(|repo| {
-        tables
-            .iter()
-            .map(|(db_name, table_name)| {
-                resolve_scope(repo, db_name, Some(table_name), Scope::Database)
-            })
-            .collect::<Result<Vec<_>, _>>()
-    })?;
+    let owned: Vec<(String, String)> = tables
+        .iter()
+        .map(|(db, table)| (db.to_string(), table.to_string()))
+        .collect();
+    let scopes = app_state
+        .db
+        .read(async move |repo| {
+            let mut out = Vec::with_capacity(owned.len());
+            for (db_name, table_name) in &owned {
+                out.push(resolve_scope(repo, db_name, Some(table_name), Scope::Database).await?);
+            }
+            Ok(out)
+        })
+        .await?;
 
     for (&(db_name, table_name), scope) in tables.iter().zip(scopes) {
         let allowed = scope.is_some_and(|scope| user.can(scope, required));
@@ -172,17 +181,17 @@ fn denied(db_name: &str, table_name: Option<&str>, required: UserRole) -> AppErr
 ///
 /// データベース自体が解決できないときは `None`。呼び出し側は 404 ではなく 403 を返す
 /// （権限のない利用者に名前の存在有無を教えないため）。
-fn resolve_scope(
-    repo: &crate::repositories::KasaneDbRead<'_>,
+async fn resolve_scope<R: MetaRepository>(
+    repo: &R,
     db_name: &str,
     table_name: Option<&str>,
     db_scope: fn(DatabaseId) -> Scope,
 ) -> Result<Option<Scope>, AppError> {
-    let Some(db_id) = repo.database_id(db_name)? else {
+    let Some(db_id) = repo.database_id(db_name).await? else {
         return Ok(None);
     };
     let table_id = match table_name {
-        Some(name) => repo.table_id(db_id, name)?,
+        Some(name) => repo.table_id(db_id, name).await?,
         None => None,
     };
     Ok(Some(match table_id {
@@ -193,7 +202,7 @@ fn resolve_scope(
 
 /// 名前 → ID を解決してスコープを組み立て、実効ロールを判定する。
 /// `Global` ルールだけで足りる場合はカタログを引かずに決着させる。
-fn check(
+async fn check(
     app_state: &AppState,
     user: &User,
     db_name: &str,
@@ -205,9 +214,14 @@ fn check(
         return Ok(());
     }
 
+    let owned_db = db_name.to_string();
+    let owned_table = table_name.map(str::to_string);
     let scope = app_state
         .db
-        .read(|repo| resolve_scope(repo, db_name, table_name, db_scope))?;
+        .read(async move |repo| {
+            resolve_scope(repo, &owned_db, owned_table.as_deref(), db_scope).await
+        })
+        .await?;
 
     if scope.is_some_and(|scope| user.can(scope, required)) {
         Ok(())

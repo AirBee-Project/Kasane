@@ -10,7 +10,7 @@ use crate::database::table::common::TestApp;
 #[tokio::test]
 /// 初期状態で空のテーブル一覧が取得できることを検証する。
 async fn test_table_list_empty() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     let req = Request::builder()
@@ -33,7 +33,7 @@ async fn test_table_list_empty() {
 #[tokio::test]
 /// 2つのテーブルを追加し、一覧に両方が含まれていることを検証する。
 async fn test_table_list_two() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
 
     test_app.create_database("test_db").await;
     test_app.create_table("test_db", "table_a", "Int", 10).await;
@@ -64,7 +64,7 @@ async fn test_table_list_two() {
 #[tokio::test]
 /// 3つのテーブルを追加し、一覧にすべてが含まれていることを検証する。
 async fn test_table_list_three() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
 
     test_app.create_database("test_db").await;
     test_app.create_table("test_db", "table_a", "Int", 10).await;
@@ -99,7 +99,7 @@ async fn test_table_list_three() {
 #[tokio::test]
 /// db_nameが空文字列の場合に500エラー(MDB_BAD_VALSIZE等)にならず、404エラーになることを検証する。
 async fn test_table_list_empty_db_name() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
 
     let req = Request::builder()
         .method("GET")

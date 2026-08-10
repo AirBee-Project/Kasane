@@ -3,10 +3,16 @@ use crate::{
     error::AppError,
     models::database::DatabaseInfoResponse,
     models::users::{Scope, User, UserRole},
+    repositories::{ReadRepository, Storage, WriteRepository},
 };
 
 pub async fn info(app_state: &AppState, name: &str) -> Result<DatabaseInfoResponse, AppError> {
-    match app_state.db.read(|r| r.database_info(name))? {
+    let owned = name.to_string();
+    match app_state
+        .db
+        .read(async move |r| r.database_info(&owned).await)
+        .await?
+    {
         Some(info) => Ok(info),
         None => Err(AppError::DatabaseNotFound {
             name: name.to_string(),
@@ -23,13 +29,13 @@ pub async fn list(
     app_state: &AppState,
     user: &User,
 ) -> Result<Vec<DatabaseInfoResponse>, AppError> {
-    app_state.db.read(|r| {
-        Ok(r.database_list()?
-            .into_iter()
-            .filter(|(db_id, _)| user.can(Scope::AnyIn(*db_id), UserRole::Read))
-            .map(|(_, info)| info)
-            .collect())
-    })
+    // 絞り込みはトランザクションの外で行う。クロージャへ `user` を借用させずに済む。
+    let all = app_state.db.read(async |r| r.database_list().await).await?;
+    Ok(all
+        .into_iter()
+        .filter(|(db_id, _)| user.can(Scope::AnyIn(*db_id), UserRole::Read))
+        .map(|(_, info)| info)
+        .collect())
 }
 
 pub async fn create(
@@ -49,35 +55,23 @@ pub async fn create(
         });
     }
 
-    let app_state = app_state.clone();
     let name = name.to_string();
-
-    let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || {
-        span.in_scope(|| {
-            app_state
-                .db
-                .write(|db| db.database_create(&name, description))
-        })
-    })
-    .await
-    .map_err(|e| AppError::InternalError(e.to_string()))?
+    app_state
+        .db
+        .write(async move |w| w.database_create(&name, description).await)
+        .await
 }
 
 /// データベースを配下のテーブルごと削除する。
 ///
-/// 列挙と削除の分割は [`KasaneDbWrite::database_remove`](crate::repositories::KasaneDbWrite)
-/// 側で 1 つの書き込みトランザクションに閉じてある。
+/// 列挙と削除の分割は [`WriteRepository::database_remove`] 側で 1 つの書き込み
+/// トランザクションに閉じてある。
 pub async fn remove(app_state: &AppState, name: &str) -> Result<(), AppError> {
-    let app_state = app_state.clone();
     let name = name.to_string();
-
-    let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || {
-        span.in_scope(|| app_state.db.write(|db| db.database_remove(&name)))
-    })
-    .await
-    .map_err(|e| AppError::InternalError(e.to_string()))?
+    app_state
+        .db
+        .write(async move |w| w.database_remove(&name).await)
+        .await
 }
 
 pub async fn update(
@@ -100,19 +94,11 @@ pub async fn update(
         });
     }
 
-    let app_state = app_state.clone();
     let name = name.to_string();
-
-    let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || {
-        span.in_scope(|| {
-            app_state
-                .db
-                .write(|db| db.database_update(&name, new_name, description))
-        })
-    })
-    .await
-    .map_err(|e| AppError::InternalError(e.to_string()))?
+    app_state
+        .db
+        .write(async move |w| w.database_update(&name, new_name, description).await)
+        .await
 }
 
 /// データベースを複製する。
@@ -124,16 +110,12 @@ pub async fn copy(
     name: &str,
     copy_name: &str,
 ) -> Result<DatabaseInfoResponse, AppError> {
-    let app_state = app_state.clone();
     let name = name.to_string();
     let copy_name = copy_name.to_string();
-
-    let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || {
-        span.in_scope(|| app_state.db.write(|db| db.database_copy(&name, &copy_name)))
-    })
-    .await
-    .map_err(|e| AppError::InternalError(e.to_string()))?
+    app_state
+        .db
+        .write(async move |w| w.database_copy(&name, &copy_name).await)
+        .await
 }
 
 pub mod table;

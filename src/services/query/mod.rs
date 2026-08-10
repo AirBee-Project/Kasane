@@ -21,7 +21,7 @@ use crate::{
         },
         query::{ExecuteQueryRequest, FilterCondition, MappingEntry, QueryNode},
     },
-    repositories::database::table::data::query_source::TableSource,
+    repositories::{ReadRepository, Storage},
     services::helpers::{data_response, spatial_ids::to_spatial_id_set},
 };
 
@@ -31,7 +31,10 @@ use value::{Decoder, Value, ValueQuery};
 type ResolvedTables = HashMap<(String, String), Table>;
 
 /// AST が参照する全テーブルを解決する。
-fn resolve_tables(app_state: &AppState, node: &QueryNode) -> Result<ResolvedTables, AppError> {
+async fn resolve_tables(
+    app_state: &AppState,
+    node: &QueryNode,
+) -> Result<ResolvedTables, AppError> {
     let refs = node.sources();
     if refs.is_empty() {
         return Err(AppError::ConstraintViolation {
@@ -39,23 +42,30 @@ fn resolve_tables(app_state: &AppState, node: &QueryNode) -> Result<ResolvedTabl
         });
     }
 
-    let mut tables: ResolvedTables = HashMap::new();
-    app_state.db.read(|r| {
-        for (db_name, table_name) in &refs {
-            let key = (db_name.to_string(), table_name.to_string());
-            if tables.contains_key(&key) {
-                continue;
-            }
-            let table =
-                r.table_info(db_name, table_name)?
-                    .ok_or_else(|| AppError::TableNotFound {
+    let refs: Vec<(String, String)> = refs
+        .iter()
+        .map(|(db_name, table_name)| (db_name.to_string(), table_name.to_string()))
+        .collect();
+
+    app_state
+        .db
+        .read(async move |r| {
+            let mut tables: ResolvedTables = HashMap::new();
+            for key in &refs {
+                if tables.contains_key(key) {
+                    continue;
+                }
+                let (db_name, table_name) = key;
+                let table = r.table_info(db_name, table_name).await?.ok_or_else(|| {
+                    AppError::TableNotFound {
                         name: format!("{db_name}.{table_name}"),
-                    })?;
-            tables.insert(key, table);
-        }
-        Ok(())
-    })?;
-    Ok(tables)
+                    }
+                })?;
+                tables.insert(key.clone(), table);
+            }
+            Ok(tables)
+        })
+        .await
 }
 
 /// テーブルの格納値をクエリの値型 `V` へ復元するデコーダを組み立てる。
@@ -128,13 +138,7 @@ impl QueryNode {
             QueryNode::Source { database, table } => {
                 let meta = &tables[&(database.clone(), table.clone())];
                 let decode = build_decoder::<V>(meta)?;
-                Ok(TableSource::<V>::new(
-                    app_state.db.env.clone(),
-                    app_state.db.tables_data,
-                    meta.id,
-                    decode,
-                )
-                .query())
+                Ok(app_state.db.table_source::<V>(meta.id, decode).query())
             }
 
             QueryNode::ShiftX { input, z, index } => {
@@ -347,15 +351,18 @@ pub async fn execute(
     request: ExecuteQueryRequest,
     query_params: &GetDataQuery,
 ) -> Result<GetDataResponse, AppError> {
+    // テーブルの解決はトランザクション境界を跨ぐのでここで済ませ、
+    // そのあとの評価（同期のクエリ実行器）だけをブロッキングタスクへ渡す。
+    let tables = resolve_tables(app_state, &request.query).await?;
+
     let app_state = app_state.clone();
     let format = query_params.format;
     let limit = query_params.limit;
 
-    // LMDB 読み取りと演算はいずれも同期ブロッキング処理のため、async ワーカーを塞がない。
+    // クエリ演算は同期ブロッキング処理のため、async ワーカーを塞がない。
     let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || -> Result<GetDataResponse, AppError> {
         span.in_scope(|| {
-            let tables = resolve_tables(&app_state, &request.query)?;
             let value_type = request
                 .query
                 .resolve_value_type(&tables, request.value_type)?;

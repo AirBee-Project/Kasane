@@ -5,7 +5,7 @@ use kasane::models::spatial_id::RawSingleId;
 #[tokio::test]
 /// upsert (PATCH) により、既存データを保持しつつ重なる部分以外が正しく更新されるかを検証する。
 async fn test_table_data_upsert_basic() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
 
     let table_name = "upsert_table";
     test_app.create_database("test_db").await;

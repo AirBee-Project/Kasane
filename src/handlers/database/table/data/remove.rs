@@ -42,7 +42,8 @@ pub async fn data_remove(
         &db_name,
         &table_name,
         UserRole::Write,
-    )?;
+    )
+    .await?;
 
     data_remove_service::remove(
         &app_state,

@@ -35,7 +35,7 @@ fn ids(base: i64, count: i64) -> Vec<serde_json::Value> {
 /// ある値のみを残す。
 #[tokio::test]
 async fn filter_equals_keeps_only_that_value() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -70,7 +70,7 @@ async fn filter_equals_keeps_only_that_value() {
 /// ある範囲の値を残す（閉区間）。
 #[tokio::test]
 async fn filter_in_range_is_inclusive() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -105,7 +105,7 @@ async fn filter_in_range_is_inclusive() {
 /// ある範囲の値**以外**を残す。
 #[tokio::test]
 async fn filter_not_in_range_keeps_the_outside() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -140,7 +140,7 @@ async fn filter_not_in_range_keeps_the_outside() {
 /// Text テーブルでも値フィルタは使える（比較に必要なのは順序だけ）。
 #[tokio::test]
 async fn filter_works_on_text_values() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -175,7 +175,7 @@ async fn filter_works_on_text_values() {
 /// Boolean テーブルにもクエリを適用できる。
 #[tokio::test]
 async fn supports_boolean_tables() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -209,7 +209,7 @@ async fn supports_boolean_tables() {
 /// 64bit 相当の大きな整数値にもクエリを適用できる（`Int` = i64）。
 #[tokio::test]
 async fn supports_large_int_values() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -246,7 +246,7 @@ async fn supports_large_int_values() {
 /// 算術を要する演算子は非数値型では 400 になる。
 #[tokio::test]
 async fn rejects_arithmetic_operator_on_text() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(&app, "t_txt3", "Text", &[]).await;
 
@@ -269,7 +269,7 @@ async fn rejects_arithmetic_operator_on_text() {
 /// 数値専用の `MergePolicy` を非数値型に使うと 400 になる。
 #[tokio::test]
 async fn rejects_numeric_policy_on_text() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(&app, "t_txt4", "Text", &[]).await;
 
@@ -294,7 +294,7 @@ async fn rejects_numeric_policy_on_text() {
 /// 対象領域の求め方を誤ると一部のセルだけが返る退行が起きるため、複数セルで固定する。
 #[tokio::test]
 async fn source_only_returns_all_cells() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -334,7 +334,7 @@ async fn source_only_returns_all_cells() {
 /// `extrudeX` の座標がそのズームレベルの範囲外なら 400。
 #[tokio::test]
 async fn rejects_extrude_x_coordinate_out_of_range() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(&app, "t_ex_x", "Int", &[(760000, serde_json::json!(1))]).await;
 
@@ -358,7 +358,7 @@ async fn rejects_extrude_x_coordinate_out_of_range() {
 /// `extrudeF` の高度がそのズームレベルの範囲外なら 400。
 #[tokio::test]
 async fn rejects_extrude_f_coordinate_out_of_range() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(&app, "t_ex_f", "Int", &[(761000, serde_json::json!(1))]).await;
 
@@ -381,7 +381,7 @@ async fn rejects_extrude_f_coordinate_out_of_range() {
 /// 値フィルタの下限が上限を上回っていたら 400。
 #[tokio::test]
 async fn rejects_inverted_filter_range() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(&app, "t_inv", "Int", &[(762000, serde_json::json!(5))]).await;
 
@@ -404,7 +404,7 @@ async fn rejects_inverted_filter_range() {
 /// 範囲内のパラメータなら従来どおり 200 で通ること（上の3件の裏取り）。
 #[tokio::test]
 async fn accepts_in_range_operator_parameters() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(&app, "t_ok", "Int", &[(763000, serde_json::json!(7))]).await;
 
@@ -437,7 +437,7 @@ async fn accepts_in_range_operator_parameters() {
 /// 辞書長とグループ数が一致することで検出する。
 #[tokio::test]
 async fn zero_limit_leaves_no_orphan_dictionary_entries() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -482,7 +482,7 @@ async fn zero_limit_leaves_no_orphan_dictionary_entries() {
 /// `limit` を掛けたときも、辞書エントリ数とグループ数が一致すること。
 #[tokio::test]
 async fn limit_keeps_dictionary_and_groups_consistent() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -526,7 +526,7 @@ async fn limit_keeps_dictionary_and_groups_consistent() {
 /// 保持セル数を `limit` 件へ抑える短絡評価により、上位 `limit` 件が保証されるわけではないことの確認。
 #[tokio::test]
 async fn limit_truncates_the_results() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -561,7 +561,7 @@ async fn limit_truncates_the_results() {
 /// `limit` 無指定なら全件返ること（上の2件の裏取り）。
 #[tokio::test]
 async fn no_limit_returns_every_cell() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -623,7 +623,7 @@ async fn create_enum_table(app: &TestApp, table: &str, choices: &[&str]) {
 /// 同一性で判定するため弾かれる。
 #[tokio::test]
 async fn mixed_text_and_enum_sources_need_explicit_value_type() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(&app, "t_txt_m", "Text", &[(790000, serde_json::json!("a"))]).await;
     create_enum_table(&app, "t_enum_m", &["a", "b"]).await;
@@ -654,7 +654,7 @@ async fn mixed_text_and_enum_sources_need_explicit_value_type() {
 /// 変換表を廃止したあと `value_type` に残る唯一の実用。
 #[tokio::test]
 async fn explicit_value_type_unifies_text_and_enum_sources() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(&app, "t_txt_u", "Text", &[(791000, serde_json::json!("a"))]).await;
     create_enum_table(&app, "t_enum_u", &["a", "b"]).await;
@@ -688,7 +688,7 @@ async fn explicit_value_type_unifies_text_and_enum_sources() {
 /// 指定した `value_type` として読めない `data_type` のソースがあれば 400。
 #[tokio::test]
 async fn explicit_value_type_rejects_unreadable_source() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(&app, "t_int_x", "Int", &[(792000, serde_json::json!(1))]).await;
 
@@ -720,7 +720,7 @@ async fn explicit_value_type_rejects_unreadable_source() {
 /// z=21〜25 のセルを含む。それを z=25 の空間IDで取得できること。
 #[tokio::test]
 async fn accepts_targets_finer_than_source_max_zoom_level() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     app.create_table("test_db", "t_fine", "Int", 20).await;
     put_data(
@@ -760,7 +760,7 @@ async fn accepts_targets_finer_than_source_max_zoom_level() {
 /// 粗い側（`max_zoom_level` 未満）の要求は従来どおり通る。
 #[tokio::test]
 async fn accepts_targets_coarser_than_source_max_zoom_level() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     app.create_table("test_db", "t_coarse", "Int", 20).await;
     put_data(
@@ -790,7 +790,7 @@ async fn accepts_targets_coarser_than_source_max_zoom_level() {
 /// ズームレベルの絶対上限（35）は従来どおり検証される。
 #[tokio::test]
 async fn rejects_zoom_level_beyond_absolute_maximum() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     app.create_table("test_db", "t_zmax", "Int", 20).await;
 
@@ -810,7 +810,7 @@ async fn rejects_zoom_level_beyond_absolute_maximum() {
 /// Text を Int へ変換し、対応表に無い値は `default` になる。
 #[tokio::test]
 async fn map_values_converts_types_and_applies_fallback() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -855,7 +855,7 @@ async fn map_values_converts_types_and_applies_fallback() {
 /// Int を Text へ変換する。
 #[tokio::test]
 async fn map_values_converts_int_to_text() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -901,7 +901,7 @@ async fn map_values_converts_int_to_text() {
 /// Boolean を Int へ変換する。
 #[tokio::test]
 async fn map_values_converts_boolean_to_int() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -942,7 +942,7 @@ async fn map_values_converts_boolean_to_int() {
 /// mapValues が `output_type` を持つため、リクエストの `value_type` を省略しても正常に推論される。
 #[tokio::test]
 async fn map_values_infers_type_from_output_type() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -978,7 +978,7 @@ async fn map_values_infers_type_from_output_type() {
 /// merge の両辺が mapValues でも、リクエストの `value_type` が両方の出力型になる。
 #[tokio::test]
 async fn map_values_as_both_merge_operands() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -1025,7 +1025,7 @@ async fn map_values_as_both_merge_operands() {
 /// mapValues を直接入れ子にする場合、内側の出力型は外側の入力型として自動解決される。
 #[tokio::test]
 async fn map_values_nested_infers_input_type_automatically() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(&app, "t_map_nest", "Int", &[(805100, serde_json::json!(1))]).await;
 
@@ -1059,7 +1059,7 @@ async fn map_values_nested_infers_input_type_automatically() {
 /// `from` が重複した対応表は 400 で拒否される。
 #[tokio::test]
 async fn map_values_rejects_duplicate_mapping_keys() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(&app, "t_map_dup", "Int", &[(806000, serde_json::json!(1))]).await;
 
@@ -1096,7 +1096,7 @@ async fn map_values_rejects_duplicate_mapping_keys() {
 /// 空の対応表は、全ての値を `default` に潰す。
 #[tokio::test]
 async fn map_values_allows_empty_mapping() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -1131,7 +1131,7 @@ async fn map_values_allows_empty_mapping() {
 /// Enum ソースは選択肢の文字列として対応表に照合される。
 #[tokio::test]
 async fn map_values_supports_enum_source() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     create_enum_table(&app, "t_map_enum", &["A", "B"]).await;
     put_data(
@@ -1175,7 +1175,7 @@ async fn map_values_supports_enum_source() {
 /// 値の無いセルは `default` にならず、欠損のまま残る。
 #[tokio::test]
 async fn map_values_keeps_missing_cells() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
@@ -1219,7 +1219,7 @@ async fn map_values_keeps_missing_cells() {
 /// （`output_type` は宣言だけでなく、実際に使われる値型と一致することを検証される）。
 #[tokio::test]
 async fn map_values_rejects_output_type_mismatch() {
-    let app = TestApp::new();
+    let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,

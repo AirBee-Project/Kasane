@@ -5,7 +5,7 @@ use kasane::models::spatial_id::RawSingleId;
 #[tokio::test]
 /// 複数の空間IDを一度に指定してデータを検索・取得できることを検証する。
 async fn test_table_data_get_multiple() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
 
     let table_name = "get_table";
     test_app.create_database("test_db").await;
@@ -73,7 +73,7 @@ use tower::ServiceExt;
 #[tokio::test]
 /// RangeIdとFlexIdでのレスポンスフォーマットを検証する。
 async fn test_table_data_get_format_options() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
 
     let table_name = "get_table_formats";
     test_app.create_database("test_db").await;

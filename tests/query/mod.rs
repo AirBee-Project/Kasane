@@ -71,7 +71,7 @@ fn values(result: &serde_json::Value) -> Vec<i64> {
 /// 演算子を挟まない素通しクエリが、格納した値をそのまま返す。
 #[tokio::test]
 async fn query_source_only_returns_stored_values() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table", "Int", 25)
@@ -102,7 +102,7 @@ async fn query_source_only_returns_stored_values() {
 /// shiftX で値が隣のセルへ移動する（元の位置には現れない）。
 #[tokio::test]
 async fn query_shift_x_moves_values() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table", "Int", 25)
@@ -146,7 +146,7 @@ async fn query_shift_x_moves_values() {
 /// merge で2つのテーブル（別データベース）を1つのクエリで合成できる。
 #[tokio::test]
 async fn query_merge_across_two_databases() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table", "Int", 25)
@@ -204,7 +204,7 @@ async fn query_merge_across_two_databases() {
 /// 粗いテーブル(zoom20)はその領域を内包するセルの値として正しく寄与する。
 #[tokio::test]
 async fn query_uses_finest_table_resolution() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "fine_table", "Int", 25)
@@ -266,7 +266,7 @@ async fn query_uses_finest_table_resolution() {
 /// data_type が異なるテーブルを混在させると 400 で拒否される。
 #[tokio::test]
 async fn query_rejects_mixed_data_types() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "int_table", "Int", 25)
@@ -297,7 +297,7 @@ async fn query_rejects_mixed_data_types() {
 /// 存在しないテーブルを参照すると 404。
 #[tokio::test]
 async fn query_missing_table_returns_404() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     let (status, _) = post_query(

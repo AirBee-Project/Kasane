@@ -3,16 +3,16 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use kasane_logic::{FlexId, SpatialIdMap, SpatialIdSet};
 
 use super::shard::{self, MAX_FLEX_ID_PER_SHARD, MERGE_FLEX_ID_THRESHOLD, ShardEntry};
-use super::value_index;
 use crate::models::database::table::TableDataType;
 use crate::models::id::TableId;
+use crate::repositories::encoding::value_index;
 use crate::{error::AppError, repositories::KasaneDbWrite};
 
 impl<'a> KasaneDbWrite<'a> {
     /// 指定された空間IDセット（`ids`）すべてに対して `data` を書き込む。
     /// 既に値が存在するIDについては、新しい値で上書きする。
     #[tracing::instrument(skip_all)]
-    pub fn data_insert(
+    pub fn data_insert_impl(
         &mut self,
         table_id: TableId,
         data_type: TableDataType,
@@ -35,7 +35,7 @@ impl<'a> KasaneDbWrite<'a> {
     /// 指定された空間IDセット（`ids`）のうち、まだ値が存在しないIDに対してのみ `data` を書き込む。
     /// 既存の値は上書きされずにそのまま保持される。
     #[tracing::instrument(skip_all)]
-    pub fn data_upsert(
+    pub fn data_upsert_impl(
         &mut self,
         table_id: TableId,
         data_type: TableDataType,
@@ -66,7 +66,7 @@ impl<'a> KasaneDbWrite<'a> {
     /// 指定された空間IDセット（`ids`）に紐づく値をすべて削除する。
     /// 削除後にデータ量が少なくなった場合、リーフ（シャード）の結合（マージ）を試みる。
     #[tracing::instrument(skip_all)]
-    pub fn data_remove(
+    pub fn data_remove_impl(
         &mut self,
         table_id: TableId,
         data_type: TableDataType,
@@ -102,17 +102,9 @@ impl<'a> KasaneDbWrite<'a> {
         region: FlexId,
     ) -> Result<(), AppError> {
         let mut region = region;
-        loop {
-            let Some((parent_region, child_regions)) = shard::find_parent_pointer(
-                &self.db.tables_data,
-                &self.write_txn,
-                table_id,
-                &region,
-            )?
-            else {
-                break;
-            };
-
+        while let Some((parent_region, child_regions)) =
+            shard::find_parent_pointer(&self.db.tables_data, &self.write_txn, table_id, &region)?
+        {
             // パス圧縮により子は可変数（2 以上）。子を走査し、いずれかがポインタノードなら
             // このレベルは統合しない。全リーフ（＋空マーカ）で合算が閾値以下なら1リーフへ畳み込む。
             let mut combined = 0usize;

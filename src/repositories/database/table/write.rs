@@ -7,7 +7,11 @@ use crate::{
 impl<'a> KasaneDbWrite<'a> {
     /// Tableの情報を取得する
     #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
-    pub fn table_info(&self, db_name: &str, table_name: &str) -> Result<Option<Table>, AppError> {
+    pub fn table_info_impl(
+        &self,
+        db_name: &str,
+        table_name: &str,
+    ) -> Result<Option<Table>, AppError> {
         if db_name.is_empty() {
             return Ok(None);
         }
@@ -24,14 +28,7 @@ impl<'a> KasaneDbWrite<'a> {
 
         let db = self.db.tables;
         if let Some(m) = db.get(&self.write_txn, &(db_meta.id, table_name))? {
-            Ok(Some(Table {
-                id: m.id,
-                name: table_name.to_string(),
-                data_type: m.data_type,
-                max_zoom_level: m.max_zoom_level,
-                constraints: m.constraints,
-                description: m.description,
-            }))
+            Ok(Some(Table::from_meta(table_name, m)))
         } else {
             Ok(None)
         }
@@ -39,7 +36,7 @@ impl<'a> KasaneDbWrite<'a> {
 
     /// Tableを作成する
     #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
-    pub fn table_create(
+    pub fn table_create_impl(
         &mut self,
         db_name: &str,
         table_name: &str,
@@ -69,7 +66,7 @@ impl<'a> KasaneDbWrite<'a> {
             }
         };
 
-        if self.table_info(db_name, table_name)?.is_some() {
+        if self.table_info_impl(db_name, table_name)?.is_some() {
             return Err(AppError::TableAlreadyExists {
                 name: table_name.to_string(),
             });
@@ -85,37 +82,8 @@ impl<'a> KasaneDbWrite<'a> {
             id = crate::models::id::TableId(uuid::Uuid::now_v7());
         }
 
-        let mut actual_constraints = constraints.clone();
-        if data_type == TableDataType::Enum {
-            match &mut actual_constraints {
-                Some(TableConstraints::Enum {
-                    choices,
-                    mapping,
-                    next_id,
-                }) => {
-                    for c in choices.iter() {
-                        if !mapping.contains_key(c) {
-                            if *next_id == u16::MAX {
-                                return Err(AppError::ConstraintViolation {
-                                    reason: "Enum choices reached maximum limit (65535)"
-                                        .to_string(),
-                                });
-                            }
-                            if *next_id == 0 {
-                                *next_id = 1;
-                            }
-                            mapping.insert(c.clone(), *next_id);
-                            *next_id += 1;
-                        }
-                    }
-                }
-                _ => {
-                    return Err(AppError::ConstraintViolation {
-                        reason: "Enum type requires 'choices' constraint".to_string(),
-                    });
-                }
-            }
-        }
+        let actual_constraints = TableConstraints::with_enum_ids(data_type, constraints)
+            .map_err(|reason| AppError::ConstraintViolation { reason })?;
 
         if let Some(c) = &actual_constraints
             && let Err(msg) = c.validate()
@@ -149,7 +117,7 @@ impl<'a> KasaneDbWrite<'a> {
 
     /// Tableの名前や制約を変更する。
     #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
-    pub fn table_update(
+    pub fn table_update_impl(
         &mut self,
         db_name: &str,
         table_name: &str,
@@ -167,7 +135,7 @@ impl<'a> KasaneDbWrite<'a> {
         };
 
         let mut table = {
-            self.table_info(db_name, table_name)?
+            self.table_info_impl(db_name, table_name)?
                 .ok_or_else(|| AppError::TableNotFound {
                     name: table_name.to_string(),
                 })?
@@ -175,7 +143,7 @@ impl<'a> KasaneDbWrite<'a> {
 
         let changed_name = if let Some(nn) = new_name {
             if nn != table_name {
-                if self.table_info(db_name, nn)?.is_some() {
+                if self.table_info_impl(db_name, nn)?.is_some() {
                     return Err(AppError::TableAlreadyExists {
                         name: nn.to_string(),
                     });
@@ -192,7 +160,10 @@ impl<'a> KasaneDbWrite<'a> {
         if let Some(nc_opt) = new_constraints {
             let new_c = match nc_opt {
                 None => None,
-                Some(nc) => self.merge_constraints(&table.data_type, &table.constraints, nc)?,
+                Some(nc) => {
+                    TableConstraints::merged_with(table.data_type, table.constraints.as_ref(), nc)
+                        .map_err(|reason| AppError::ConstraintViolation { reason })?
+                }
             };
 
             if let Some(c) = &new_c
@@ -234,115 +205,6 @@ impl<'a> KasaneDbWrite<'a> {
         db.put(&mut self.write_txn, &(db_meta.id, &table.name), &meta)?;
 
         Ok(table)
-    }
-
-    fn merge_constraints(
-        &self,
-        data_type: &TableDataType,
-        current_constraints: &Option<TableConstraints>,
-        nc: crate::models::database::table::UpdateTableConstraints,
-    ) -> Result<Option<TableConstraints>, AppError> {
-        match (data_type, nc) {
-            (
-                TableDataType::Text,
-                crate::models::database::table::UpdateTableConstraints::Text {
-                    min_length,
-                    max_length,
-                },
-            ) => {
-                let (mut current_min, mut current_max) = match current_constraints {
-                    Some(TableConstraints::Text {
-                        min_length,
-                        max_length,
-                    }) => (*min_length, *max_length),
-                    _ => (None, None),
-                };
-                if let Some(v) = min_length {
-                    current_min = v;
-                }
-                if let Some(v) = max_length {
-                    current_max = v;
-                }
-                Ok(Some(TableConstraints::Text {
-                    min_length: current_min,
-                    max_length: current_max,
-                }))
-            }
-            (
-                TableDataType::Int,
-                crate::models::database::table::UpdateTableConstraints::Int { min, max },
-            ) => {
-                let (mut current_min, mut current_max) = match current_constraints {
-                    Some(TableConstraints::Int { min, max }) => (*min, *max),
-                    _ => (None, None),
-                };
-                if let Some(v) = min {
-                    current_min = v;
-                }
-                if let Some(v) = max {
-                    current_max = v;
-                }
-                Ok(Some(TableConstraints::Int {
-                    min: current_min,
-                    max: current_max,
-                }))
-            }
-            (
-                TableDataType::Enum,
-                crate::models::database::table::UpdateTableConstraints::Enum {
-                    choices,
-                    add_choices,
-                    remove_choices,
-                },
-            ) => {
-                let (mut current_choices, mut mapping, mut next_id) = match current_constraints {
-                    Some(TableConstraints::Enum {
-                        choices,
-                        mapping,
-                        next_id,
-                    }) => (choices.clone(), mapping.clone(), *next_id),
-                    _ => (Vec::new(), std::collections::HashMap::new(), 1),
-                };
-                if let Some(new_choices) = choices {
-                    current_choices = new_choices;
-                }
-                if let Some(adds) = add_choices {
-                    for add in adds {
-                        if !current_choices.contains(&add) {
-                            current_choices.push(add);
-                        }
-                    }
-                }
-                if let Some(removes) = remove_choices {
-                    current_choices.retain(|c| !removes.contains(c));
-                }
-                for c in &current_choices {
-                    if !mapping.contains_key(c) {
-                        if next_id == u16::MAX {
-                            return Err(AppError::ConstraintViolation {
-                                reason: "Enum choices reached maximum limit (65535)".to_string(),
-                            });
-                        }
-                        if next_id == 0 {
-                            next_id = 1;
-                        }
-                        mapping.insert(c.clone(), next_id);
-                        next_id += 1;
-                    }
-                }
-                Ok(Some(TableConstraints::Enum {
-                    choices: current_choices,
-                    mapping,
-                    next_id,
-                }))
-            }
-            (TableDataType::Presence, _) => Err(AppError::ConstraintViolation {
-                reason: "Presence type cannot have constraints".to_string(),
-            }),
-            (_, _) => Err(AppError::ConstraintViolation {
-                reason: "Constraint type does not match data type".to_string(),
-            }),
-        }
     }
 
     fn validate_table_existing_data(
@@ -389,8 +251,8 @@ impl<'a> KasaneDbWrite<'a> {
 
     /// Tableを削除する。
     #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
-    pub fn table_remove(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError> {
-        let table = match self.table_info(db_name, table_name)? {
+    pub fn table_remove_impl(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError> {
+        let table = match self.table_info_impl(db_name, table_name)? {
             Some(t) => t,
             None => {
                 return Err(AppError::TableNotFound {
@@ -453,7 +315,7 @@ impl<'a> KasaneDbWrite<'a> {
 
     /// Tableをコピーする。
     #[tracing::instrument(skip_all)]
-    pub fn table_copy(
+    pub fn table_copy_impl(
         &mut self,
         src_db_name: &str,
         src_table_name: &str,

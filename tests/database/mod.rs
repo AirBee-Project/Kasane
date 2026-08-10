@@ -13,12 +13,14 @@ pub struct DbTestApp {
 
 impl DbTestApp {
     #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let db = db_init::initialize_database(temp_dir.path().to_str().unwrap());
 
         let app_state = AppState { db };
-        let token = kasane::services::auth::generate_jwt(&app_state, "root").unwrap();
+        let token = kasane::services::auth::generate_jwt(&app_state, "root")
+            .await
+            .unwrap();
         let auth_header = axum::http::HeaderValue::from_str(&format!("Bearer {}", token)).unwrap();
 
         let app = kasane(app_state).layer(axum::middleware::from_fn(
@@ -41,7 +43,7 @@ impl DbTestApp {
 #[tokio::test]
 /// データベースの作成と一覧取得が正常に行えるかを検証する。
 async fn test_create_and_list_database() {
-    let test_app = DbTestApp::new();
+    let test_app = DbTestApp::new().await;
 
     let req = Request::builder()
         .method("GET")
@@ -75,7 +77,7 @@ async fn test_create_and_list_database() {
 #[tokio::test]
 /// データベースおよび配下のテーブルが正しく削除されるかを検証する。
 async fn test_remove_database() {
-    let test_app = DbTestApp::new();
+    let test_app = DbTestApp::new().await;
 
     let req = Request::builder()
         .method("POST")
@@ -115,7 +117,7 @@ async fn test_remove_database() {
 #[tokio::test]
 /// データベースの名前変更が正常に行えるかを検証する。
 async fn test_database_rename_success() {
-    let test_app = DbTestApp::new();
+    let test_app = DbTestApp::new().await;
 
     // 1. データベースを作成する
     let req = Request::builder()
@@ -159,7 +161,7 @@ async fn test_database_rename_success() {
 #[tokio::test]
 /// データベースのコピーが正常に行えるかを検証する。
 async fn test_database_copy_success() {
-    let test_app = DbTestApp::new();
+    let test_app = DbTestApp::new().await;
 
     // 1. コピー元データベースを作成する
     let req = Request::builder()
@@ -196,7 +198,7 @@ pub mod table;
 #[tokio::test]
 /// データベースのdescription付与と更新が正常に行えるかを検証する。
 async fn test_database_description() {
-    let test_app = DbTestApp::new();
+    let test_app = DbTestApp::new().await;
 
     // 1. description付きでデータベースを作成
     let req = Request::builder()
@@ -302,7 +304,7 @@ async fn test_database_description() {
 #[tokio::test]
 /// データベースのdescriptionが4096文字を超える場合にエラーになるかを検証する。
 async fn test_database_description_too_long() {
-    let test_app = DbTestApp::new();
+    let test_app = DbTestApp::new().await;
 
     // 制限文字数+1文字のdescriptionを作成
     let long_desc = "a".repeat(kasane::models::database::MAX_DESCRIPTION_LENGTH + 1);

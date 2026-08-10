@@ -46,7 +46,8 @@ pub async fn data_get(
         &db_name,
         &table_name,
         crate::models::users::UserRole::Read,
-    )?;
+    )
+    .await?;
 
     let result = data_get_service::get(
         &app_state,

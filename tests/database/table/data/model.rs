@@ -75,7 +75,7 @@ fn read_all(db: &kasane::db_init::AppDb, table_id: TableId) -> HashMap<(u32, u32
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), db);
     let mut query = SpatialIdSet::new();
     query.insert(RangeId::new(Z, [F, F], [0, W - 1], [0, H - 1]).unwrap());
-    let got = r.data_get(table_id, query, None).unwrap();
+    let got = r.data_get_impl(table_id, query, None).unwrap();
 
     let mut actual = HashMap::new();
     for (value, flex_ids) in got {
@@ -118,7 +118,7 @@ fn verify(
     // 2) table_count（ヘッダ集計）== 正解の値件数。一意値なので compaction されず一致する。
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), db);
     assert_eq!(
-        r.table_count(table_id).unwrap(),
+        r.table_count_impl(table_id).unwrap(),
         oracle.len() as u64,
         "table_count diverged from the model"
     );
@@ -131,9 +131,7 @@ fn verify(
             let &(x, y) = &keys[rng.below(keys.len() as u32) as usize];
             let v = oracle[&(x, y)];
             let hits: HashSet<(u32, u32)> = r
-                .data_filter_eq(table_id, dt, &enc(v))
-                .unwrap()
-                .collect::<Result<Vec<_>, _>>()
+                .data_filter_eq_impl(table_id, dt, &enc(v))
                 .unwrap()
                 .into_iter()
                 .flat_map(|f| f.single_ids().map(|s| (s.x(), s.y())))
@@ -168,7 +166,7 @@ fn randomized_model_matches_oracle() {
                 set.insert(SingleId::new(Z, F, x, y).unwrap());
                 let v = next_val;
                 next_val += 1;
-                w.data_insert(table_id, dt, set, &enc(v)).unwrap();
+                w.data_insert_impl(table_id, dt, set, &enc(v)).unwrap();
                 oracle.insert((x, y), v);
             }
         }
@@ -197,10 +195,10 @@ fn randomized_model_matches_oracle() {
                 if rng.below(100) < insert_pct {
                     let v = next_val;
                     next_val += 1;
-                    w.data_insert(table_id, dt, set, &enc(v)).unwrap();
+                    w.data_insert_impl(table_id, dt, set, &enc(v)).unwrap();
                     oracle.insert((x, y), v);
                 } else {
-                    w.data_remove(table_id, dt, set).unwrap();
+                    w.data_remove_impl(table_id, dt, set).unwrap();
                     oracle.remove(&(x, y));
                 }
             }
@@ -215,7 +213,7 @@ fn randomized_model_matches_oracle() {
         for &(x, y) in oracle.keys() {
             let mut set = SpatialIdSet::new();
             set.insert(SingleId::new(Z, F, x, y).unwrap());
-            w.data_remove(table_id, dt, set).unwrap();
+            w.data_remove_impl(table_id, dt, set).unwrap();
         }
         w.commit().unwrap();
     }
@@ -224,7 +222,7 @@ fn randomized_model_matches_oracle() {
     verify(&db, table_id, dt, &oracle, &mut rng);
     assert_eq!(read_all(&db, table_id).len(), 0, "table must be empty");
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
-    assert_eq!(r.table_count(table_id).unwrap(), 0);
+    assert_eq!(r.table_count_impl(table_id).unwrap(), 0);
 
     // 全域のシャードキーが消えている（孤児キーが残っていない）。
     let (keys, _) = shard_stats(&db, table_id);

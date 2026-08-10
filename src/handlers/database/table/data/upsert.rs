@@ -45,7 +45,8 @@ pub async fn data_upsert(
         &db_name,
         &table_name,
         UserRole::Write,
-    )?;
+    )
+    .await?;
 
     data_upsert_service::upsert(
         &app_state,

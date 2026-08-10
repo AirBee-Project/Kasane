@@ -6,7 +6,11 @@ use heed::BytesDecode;
 impl<'a> KasaneDbRead<'a> {
     /// Tableの情報を取得する
     #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
-    pub fn table_info(&self, db_name: &str, table_name: &str) -> Result<Option<Table>, AppError> {
+    pub fn table_info_impl(
+        &self,
+        db_name: &str,
+        table_name: &str,
+    ) -> Result<Option<Table>, AppError> {
         if db_name.is_empty() {
             return Ok(None);
         }
@@ -23,14 +27,7 @@ impl<'a> KasaneDbRead<'a> {
 
         let db_tables = self.db.tables;
         if let Some(m) = db_tables.get(&self.read_txn, &(db_meta.id, table_name))? {
-            Ok(Some(Table {
-                id: m.id,
-                name: table_name.to_string(),
-                data_type: m.data_type,
-                max_zoom_level: m.max_zoom_level,
-                constraints: m.constraints,
-                description: m.description,
-            }))
+            Ok(Some(Table::from_meta(table_name, m)))
         } else {
             Ok(None)
         }
@@ -38,19 +35,19 @@ impl<'a> KasaneDbRead<'a> {
 
     /// Tableの一覧を取得する
     #[tracing::instrument(skip_all, fields(db_name = %db_name))]
-    pub fn table_list(&self, db_name: &str) -> Result<Vec<Table>, AppError> {
+    pub fn table_list_impl(&self, db_name: &str) -> Result<Vec<Table>, AppError> {
         let db_id = self
             .database_id(db_name)?
             .ok_or_else(|| AppError::DatabaseNotFound {
                 name: db_name.to_string(),
             })?;
-        self.table_list_by_id(db_id)
+        self.table_list_by_id_impl(db_id)
     }
 
     /// Tableの一覧を [`DatabaseId`](crate::models::id::DatabaseId) から取得する。
     /// 既に ID を解決済みの呼び出し側が、名前からの引き直しを避けるために使う。
     #[tracing::instrument(skip_all)]
-    pub fn table_list_by_id(
+    pub fn table_list_by_id_impl(
         &self,
         db_id: crate::models::id::DatabaseId,
     ) -> Result<Vec<Table>, AppError> {
@@ -79,7 +76,7 @@ impl<'a> KasaneDbRead<'a> {
 
     /// テーブルが保持する [`FlexId`](kasane_logic::FlexId) の総数を返す。
     #[tracing::instrument(skip_all)]
-    pub fn table_count(&self, table_id: crate::models::id::TableId) -> Result<u64, AppError> {
+    pub fn table_count_impl(&self, table_id: crate::models::id::TableId) -> Result<u64, AppError> {
         use crate::repositories::database::table::data::shard::ShardEntry;
 
         let mut total = 0u64;

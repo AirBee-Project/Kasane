@@ -1,0 +1,71 @@
+# 開発・テスト用の単一ノード TiKV クラスタ。
+#
+# `backend-tikv` feature でビルドした Kasane と、TiKV バックエンドの結合テストが
+# 接続先として使う。本番構成ではない（レプリカ 1、PD 1 台）。
+#
+#   起動: docker compose -f deployment/tikv/docker-compose.yml up -d
+#   停止: docker compose -f deployment/tikv/docker-compose.yml down -v
+#
+# ■ ネットワーク構成について
+#
+# PD はクライアントに対して「TiKV ストアの所在」をアドバタイズされたアドレスで教える。
+# そのためホスト側のクライアントとコンテナ間通信の両方から到達できるアドレスを
+# 選ぶ必要がある。ここでは tikv を PD と同じネットワーク名前空間に相乗りさせ
+# (`network_mode: "service:pd"`)、両者とも 127.0.0.1 でアドバタイズすることで、
+# ホスト（公開ポート経由）からもコンテナ内からも同じアドレスが有効になるようにしている。
+# この構成のため、TiKV 側のポート公開は pd サービス側にまとめて記述している。
+
+services:
+  pd:
+    image: pingcap/pd:v7.5.1
+    container_name: kasane-pd
+    restart: unless-stopped
+    ports:
+      - "2379:2379" # PD クライアント API
+      - "20160:20160" # TiKV（名前空間を共有しているためここで公開する）
+      - "20180:20180" # TiKV ステータス
+    command:
+      - --name=pd
+      - --data-dir=/data/pd
+      - --client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://127.0.0.1:2379
+      - --peer-urls=http://0.0.0.0:2380
+      - --advertise-peer-urls=http://127.0.0.1:2380
+      - --initial-cluster=pd=http://127.0.0.1:2380
+    volumes:
+      - pd-data:/data/pd
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/pd-ctl",
+          "-u",
+          "http://127.0.0.1:2379",
+          "health",
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  tikv:
+    image: pingcap/tikv:v7.5.1
+    container_name: kasane-tikv
+    restart: unless-stopped
+    # PD と同じネットワーク名前空間を共有する（上のコメント参照）。
+    network_mode: "service:pd"
+    depends_on:
+      pd:
+        condition: service_healthy
+    command:
+      - --addr=0.0.0.0:20160
+      - --advertise-addr=127.0.0.1:20160
+      - --status-addr=0.0.0.0:20180
+      - --advertise-status-addr=127.0.0.1:20180
+      - --data-dir=/data/tikv
+      - --pd-endpoints=127.0.0.1:2379
+    volumes:
+      - tikv-data:/data/tikv
+
+volumes:
+  pd-data:
+  tikv-data:

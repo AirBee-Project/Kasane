@@ -143,7 +143,11 @@ pub enum AppError {
     InvalidStoredValue {
         reason: String,
     },
-    StorageError(heed::Error),
+    /// ストレージバックエンド由来の失敗。
+    ///
+    /// バックエンド（LMDB / TiKV）を feature で差し替えられるよう、具体的なエラー型は
+    /// ここに持ち込まずメッセージへ落とす。変換は各バックエンド実装側の `From` が担う。
+    StorageError(String),
     InvalidName {
         reason: String,
     },
@@ -277,12 +281,6 @@ impl IntoResponse for AppError {
 impl From<AuthError> for AppError {
     fn from(error: AuthError) -> Self {
         AppError::Auth(error)
-    }
-}
-
-impl From<heed::Error> for AppError {
-    fn from(error: heed::Error) -> Self {
-        AppError::StorageError(error)
     }
 }
 

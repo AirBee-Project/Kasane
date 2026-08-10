@@ -1,4 +1,9 @@
-use crate::{AppState, error::AppError, models::database::table::TableSummary};
+use crate::{
+    AppState,
+    error::AppError,
+    models::database::table::TableSummary,
+    repositories::{Storage, WriteRepository},
+};
 
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn table_update(
@@ -21,16 +26,24 @@ pub async fn table_update(
         });
     }
 
-    let table = state.db.write(|txn| {
-        txn.table_update(
-            db_name,
-            table_name,
-            new_name,
-            new_constraints,
-            description,
-            validate_existing_data,
-        )
-    })?;
+    let db_name = db_name.to_string();
+    let table_name = table_name.to_string();
+    let new_name = new_name.map(str::to_string);
+
+    let table = state
+        .db
+        .write(async move |txn| {
+            txn.table_update(
+                &db_name,
+                &table_name,
+                new_name.as_deref(),
+                new_constraints,
+                description,
+                validate_existing_data,
+            )
+            .await
+        })
+        .await?;
 
     Ok(TableSummary {
         name: table.name,

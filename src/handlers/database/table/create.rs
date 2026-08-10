@@ -44,7 +44,8 @@ pub async fn table_create(
     // 新しいテーブルの作成はデータベース全体への変更なので、データベースレベルの
     // Manage を要求する。テーブルスコープのルールは「既にあるテーブルの管理」しか許さない
     // （まだ存在しないテーブル名へのルールで作成させると、スコープの封じ込めが破れる）。
-    crate::middleware::auth::check_database(&app_state, &auth_user, &db_name, UserRole::Manage)?;
+    crate::middleware::auth::check_database(&app_state, &auth_user, &db_name, UserRole::Manage)
+        .await?;
 
     let table_name = request.name.clone();
     table_create_service::create(&app_state, &db_name, &table_name, request).await?;

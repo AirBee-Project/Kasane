@@ -55,7 +55,7 @@ pub async fn execute_query(
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();
-    crate::middleware::auth::check_tables(&app_state, &auth_user, &sources, UserRole::Read)?;
+    crate::middleware::auth::check_tables(&app_state, &auth_user, &sources, UserRole::Read).await?;
 
     let result = query_service::execute(&app_state, payload, &query_params).await?;
     Ok(Json(result))

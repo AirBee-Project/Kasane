@@ -2,6 +2,7 @@ use crate::{
     AppState,
     error::AppError,
     models::database::table::{CreateTableRequest, Table},
+    repositories::{Storage, WriteRepository},
 };
 
 pub async fn create(
@@ -25,25 +26,21 @@ pub async fn create(
     // max_zoom_levelの検証
     kasane_logic::ZoomLevel::new(req.max_zoom_level)?;
 
-    let app_state = app_state.clone();
     let db_name = db_name.to_string();
     let table_name = table_name.to_string();
 
-    let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || {
-        span.in_scope(|| {
-            app_state.db.write(|db| {
-                db.table_create(
-                    &db_name,
-                    &table_name,
-                    req.data_type,
-                    req.max_zoom_level,
-                    req.constraints,
-                    req.description,
-                )
-            })
+    app_state
+        .db
+        .write(async move |db| {
+            db.table_create(
+                &db_name,
+                &table_name,
+                req.data_type,
+                req.max_zoom_level,
+                req.constraints,
+                req.description,
+            )
+            .await
         })
-    })
-    .await
-    .map_err(|e| AppError::InternalError(e.to_string()))?
+        .await
 }

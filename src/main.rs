@@ -1,7 +1,10 @@
 use std::net::SocketAddr;
 
 use clap::Parser;
-use kasane::{AppState, db_init, kasane};
+use kasane::{AppState, kasane};
+
+#[cfg(feature = "backend-lmdb")]
+use kasane::db_init;
 
 #[cfg(feature = "production")]
 #[global_allocator]
@@ -63,16 +66,36 @@ async fn main() {
     kasane::telemetry::init_telemetry();
 
     let args = Args::parse();
-    let db = db_init::initialize_database(&args.database_path);
+
+    // バックエンドはビルド時に 1 つへ確定している（kasane::backend を参照）。
+    #[cfg(feature = "backend-lmdb")]
+    let (db, target) = (
+        db_init::initialize_database(&args.database_path),
+        args.database_path.clone(),
+    );
+
+    #[cfg(feature = "backend-tikv")]
+    let (db, target) = {
+        use kasane::repositories::tikv::{TikvConfig, TikvDb};
+        let config = TikvConfig::from_env();
+        let target = config.pd_endpoints.join(",");
+        (
+            TikvDb::connect(config)
+                .await
+                .expect("failed to connect to TiKV"),
+            target,
+        )
+    };
 
     let app = kasane(AppState { db });
 
     let address = SocketAddr::from(([0, 0, 0, 0], args.port));
     let listener = tokio::net::TcpListener::bind(address).await.unwrap();
     tracing::info!(
-        "Kasane is running on http://{} (database: {})",
+        "Kasane is running on http://{} (backend: {}, target: {})",
         listener.local_addr().unwrap(),
-        args.database_path,
+        kasane::backend::NAME,
+        target,
     );
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())

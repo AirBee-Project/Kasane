@@ -12,7 +12,7 @@ use crate::database::table::data::common::put_data;
 
 #[tokio::test]
 async fn read_back_coalesces_a_non_power_of_two_calendar_interval() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table", "Int", 25)
@@ -65,7 +65,7 @@ async fn read_back_coalesces_a_non_power_of_two_calendar_interval() {
 /// `i=3600, t=[0,1]` の1エントリへ結合される。
 #[tokio::test]
 async fn read_back_coalesces_adjacent_segments_into_a_range() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table", "Int", 25)

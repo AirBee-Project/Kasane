@@ -37,7 +37,7 @@ pub async fn list_users(
     Extension(auth_user): Extension<AuthUser>,
 ) -> Result<Json<Vec<UserInfoResponse>>, AppError> {
     check_global_admin(&auth_user)?;
-    let users = users_service::list_users(&app_state)?;
+    let users = users_service::list_users(&app_state).await?;
     Ok(Json(users))
 }
 
@@ -125,7 +125,7 @@ pub async fn get_user(
     Path(username): Path<String>,
 ) -> Result<Json<UserInfoResponse>, AppError> {
     check_self_or_admin(&auth_user, &username)?;
-    let user = users_service::get_user(&app_state, &username)?;
+    let user = users_service::get_user(&app_state, &username).await?;
     Ok(Json(user))
 }
 
@@ -189,7 +189,7 @@ pub async fn get_privileges(
     Path(username): Path<String>,
 ) -> Result<Json<PrivilegesResponse>, AppError> {
     check_self_or_admin(&auth_user, &username)?;
-    let privileges = users_service::get_privileges(&app_state, &username)?;
+    let privileges = users_service::get_privileges(&app_state, &username).await?;
     Ok(Json(PrivilegesResponse { privileges }))
 }
 

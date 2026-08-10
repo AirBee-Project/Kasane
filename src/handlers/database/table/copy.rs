@@ -54,17 +54,14 @@ pub async fn table_copy(
         &db_name,
         &table_name,
         UserRole::Read,
-    )?;
+    )
+    .await?;
 
     // 2. コピー先データベースへの Manage 権限。
     //    作られるのは request.copy_table_name という新しいテーブルなので、
     //    コピー元テーブルに対するテーブルスコープの権限では通してはならない。
-    crate::middleware::auth::check_database(
-        &app_state,
-        &auth_user,
-        dest_db_name,
-        UserRole::Manage,
-    )?;
+    crate::middleware::auth::check_database(&app_state, &auth_user, dest_db_name, UserRole::Manage)
+        .await?;
 
     let res = table_copy_service::copy(
         &app_state,

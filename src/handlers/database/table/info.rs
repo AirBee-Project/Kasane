@@ -41,7 +41,8 @@ pub async fn table_info(
         &db_name,
         &table_name,
         crate::models::users::UserRole::Read,
-    )?;
+    )
+    .await?;
 
     let res = table_info_service::info(&app_state, &db_name, &table_name).await?;
     Ok(Json(res))

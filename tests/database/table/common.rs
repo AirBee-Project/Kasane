@@ -12,12 +12,14 @@ pub struct TestApp {
 }
 
 impl TestApp {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let db = kasane::db_init::initialize_database(temp_dir.path().to_str().unwrap());
 
         let app_state = kasane::AppState { db };
-        let token = kasane::services::auth::generate_jwt(&app_state, "root").unwrap();
+        let token = kasane::services::auth::generate_jwt(&app_state, "root")
+            .await
+            .unwrap();
         let auth_header = axum::http::HeaderValue::from_str(&format!("Bearer {}", token)).unwrap();
 
         let app = kasane::kasane(app_state).layer(axum::middleware::from_fn(
@@ -79,11 +81,5 @@ impl TestApp {
 
         let response = self.app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
-    }
-}
-
-impl Default for TestApp {
-    fn default() -> Self {
-        Self::new()
     }
 }

@@ -1,24 +1,27 @@
 use crate::{
     error::AppError,
     models::users::{User, UserMetadata},
-    repositories::{KasaneDbRead, meta::MetaRead},
+    repositories::{KasaneDbRead, MetaRepository},
 };
 
 impl<'a> KasaneDbRead<'a> {
     #[tracing::instrument(skip_all, fields(username = %username))]
-    pub fn get_user(&self, username: &str) -> Result<Option<User>, AppError> {
-        Ok(self
-            .user_meta(username)?
+    pub async fn get_user_impl(&self, username: &str) -> Result<Option<User>, AppError> {
+        Ok(MetaRepository::user_meta(self, username)
+            .await?
             .map(|meta| User::from_meta(username, meta)))
     }
 
     #[tracing::instrument(skip_all, fields(username = %username))]
-    pub fn require_user(&self, username: &str) -> Result<User, AppError> {
-        Ok(User::from_meta(username, self.require_user_meta(username)?))
+    pub async fn require_user_impl(&self, username: &str) -> Result<User, AppError> {
+        Ok(User::from_meta(
+            username,
+            self.require_user_meta(username).await?,
+        ))
     }
 
     #[tracing::instrument(skip_all)]
-    pub fn get_all_users(&self) -> Result<Vec<User>, AppError> {
+    pub fn get_all_users_impl(&self) -> Result<Vec<User>, AppError> {
         let mut users = Vec::new();
         for item in self.db.users.iter(&self.read_txn)? {
             let (username, val) = item?;

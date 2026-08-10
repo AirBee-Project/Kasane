@@ -9,7 +9,7 @@ use crate::database::table::common::TestApp;
 #[tokio::test]
 /// テーブルが正常に削除され、再取得できないことを検証する。
 async fn test_delete_table_success() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     test_app
@@ -38,7 +38,7 @@ async fn test_delete_table_success() {
 #[tokio::test]
 /// 存在しないテーブルの削除リクエストが404エラーとなることを検証する。
 async fn test_delete_table_not_found() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
 
     test_app.create_database("test_db").await;
     test_app
@@ -59,7 +59,7 @@ async fn test_delete_table_not_found() {
 #[tokio::test]
 /// データが存在するテーブルを削除した後、同名で再作成できること（キャッシュクリア）を検証する。
 async fn test_delete_table_cache_bug() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
 
     let table_name = "bug1_table";
 

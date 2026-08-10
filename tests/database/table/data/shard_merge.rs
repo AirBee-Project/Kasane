@@ -47,7 +47,7 @@ fn siblings_merge_after_mass_remove() {
         for i in 0..n {
             ids.insert(SingleId::new(20, 0, i * 4, 0).unwrap());
         }
-        w.data_insert(table_id, dt, ids, b"v").unwrap();
+        w.data_insert_impl(table_id, dt, ids, b"v").unwrap();
         w.commit().unwrap();
     }
     let (key_count, has_pointer) = shard_stats(&db, table_id);
@@ -65,7 +65,7 @@ fn siblings_merge_after_mass_remove() {
         for i in 0..keep_from {
             ids.insert(SingleId::new(20, 0, i * 4, 0).unwrap());
         }
-        w.data_remove(table_id, dt, ids).unwrap();
+        w.data_remove_impl(table_id, dt, ids).unwrap();
         w.commit().unwrap();
     }
 
@@ -80,11 +80,11 @@ fn siblings_merge_after_mass_remove() {
     // 4. table_count が残数と一致、かつ残りの全セルが読めること。
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
     let remaining = (n - keep_from) as u64;
-    assert_eq!(r.table_count(table_id).unwrap(), remaining);
+    assert_eq!(r.table_count_impl(table_id).unwrap(), remaining);
 
     let mut query = SpatialIdSet::new();
     query.insert(RangeId::new(20, [0, 0], [keep_from * 4, (n - 1) * 4], [0, 0]).unwrap());
-    let got = r.data_get(table_id, query, None).unwrap();
+    let got = r.data_get_impl(table_id, query, None).unwrap();
     let mut xs: HashSet<u32> = HashSet::new();
     for (value, flex_ids) in got {
         assert_eq!(value, b"v".to_vec());

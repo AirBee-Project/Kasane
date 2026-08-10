@@ -9,7 +9,7 @@ use crate::{
 impl<'a> KasaneDbWrite<'a> {
     /// Databaseの情報を取得する
     #[tracing::instrument(skip_all)]
-    pub fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
+    pub fn database_info_impl(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
         let db = self.db.databases;
         if let Some(meta) = db.get(&self.write_txn, name)? {
             Ok(Some(DatabaseInfoResponse {
@@ -23,12 +23,12 @@ impl<'a> KasaneDbWrite<'a> {
 
     /// Databaseを作成する
     #[tracing::instrument(skip_all)]
-    pub fn database_create(
+    pub fn database_create_impl(
         &mut self,
         name: &str,
         description: Option<String>,
     ) -> Result<DatabaseInfoResponse, AppError> {
-        if self.database_info(name)?.is_some() {
+        if self.database_info_impl(name)?.is_some() {
             return Err(AppError::DatabaseAlreadyExists {
                 name: name.to_string(),
             });
@@ -54,7 +54,7 @@ impl<'a> KasaneDbWrite<'a> {
 
     /// Databaseを削除する
     #[tracing::instrument(skip_all)]
-    pub fn database_remove(&mut self, name: &str) -> Result<(), AppError> {
+    pub fn database_remove_impl(&mut self, name: &str) -> Result<(), AppError> {
         if name.is_empty() {
             return Err(AppError::DatabaseNotFound {
                 name: name.to_string(),
@@ -70,7 +70,7 @@ impl<'a> KasaneDbWrite<'a> {
         // 列挙だけを別の読み取りトランザクションで済ませると、その隙間に作られた
         // テーブルが削除対象から漏れ、親を失って到達不能なまま残ってしまう。
         for table_name in self.table_names(meta.id)? {
-            self.table_remove(name, &table_name)?;
+            self.table_remove_impl(name, &table_name)?;
         }
 
         // ユーザーが持つ権限はデータベース ID で保存されており、削除したデータベースの
@@ -87,7 +87,7 @@ impl<'a> KasaneDbWrite<'a> {
 
     /// Databaseの名前や説明を変更する
     #[tracing::instrument(skip_all)]
-    pub fn database_update(
+    pub fn database_update_impl(
         &mut self,
         name: &str,
         new_name: Option<String>,
@@ -141,7 +141,7 @@ impl<'a> KasaneDbWrite<'a> {
 
     /// Databaseをコピーする。
     #[tracing::instrument(skip_all)]
-    pub fn database_copy(
+    pub fn database_copy_impl(
         &mut self,
         src_db_name: &str,
         copy_name: &str,
@@ -159,7 +159,7 @@ impl<'a> KasaneDbWrite<'a> {
         };
 
         // 2. コピー先データベースがすでに存在するかチェック
-        if self.database_info(copy_name)?.is_some() {
+        if self.database_info_impl(copy_name)?.is_some() {
             return Err(AppError::DatabaseAlreadyExists {
                 name: copy_name.to_string(),
             });
@@ -184,7 +184,7 @@ impl<'a> KasaneDbWrite<'a> {
 
         // 5. 各テーブルをコピー
         for table_name in table_names {
-            self.table_copy(src_db_name, &table_name, copy_name, &table_name)?;
+            self.table_copy_impl(src_db_name, &table_name, copy_name, &table_name)?;
         }
 
         Ok(DatabaseInfoResponse {

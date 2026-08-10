@@ -9,7 +9,7 @@ use crate::database::table::common::TestApp;
 #[tokio::test]
 /// テーブルのコピーが同一データベース内で正常に行えるかを検証する。
 async fn test_table_copy_success_same_db() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     // テーブルを作成

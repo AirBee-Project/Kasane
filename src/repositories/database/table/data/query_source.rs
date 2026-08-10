@@ -12,14 +12,7 @@ use super::shard;
 use crate::db_init::TableIdAndFlexId;
 use crate::models::id::TableId;
 
-/// 格納バイト列を、クエリで扱う値型へ復元する関数。
-///
-/// テーブルの `data_type` に応じてサービス層が渡す（例: Int なら 8 バイト BE → `i64`）。
-/// `Enum` の ID→文字列の逆引き表など、テーブルごとの前計算を閉じ込めるため
-/// 関数ポインタではなくクロージャを取る。
-///
-/// `None` を返したセルは**結果から除外される**（型に合わない格納値）。
-pub type DecodeFn<V> = std::sync::Arc<dyn Fn(&[u8]) -> Option<V> + Send + Sync>;
+pub use crate::repositories::storage::DecodeFn;
 
 /// 1テーブルを 1 つのクエリ入力源として見せるアダプタ。
 ///
@@ -47,6 +40,16 @@ impl<V> TableSource<V> {
             table_id,
             decode,
         }
+    }
+}
+
+impl crate::db_init::AppDb {
+    /// テーブル 1 つをクエリの入力源として見せるアダプタを作る。
+    ///
+    /// ストレージのハンドル（`Env` / `Database`）をサービス層へ露出させないための入口。
+    /// サービス層は「どのテーブルを、どう復元して読むか」だけを指定する。
+    pub fn table_source<V>(&self, table_id: TableId, decode: DecodeFn<V>) -> TableSource<V> {
+        TableSource::new(self.env.clone(), self.tables_data, table_id, decode)
     }
 }
 
