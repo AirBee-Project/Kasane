@@ -80,18 +80,13 @@ pub enum MathOperator {
     Divide,
 }
 
-#[derive(Debug, Deserialize, ToSchema, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Deserialize, ToSchema, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum FalloffPattern {
+    #[default]
     Linear,
     QuadraticIn,
     QuadraticOut,
-}
-
-impl Default for FalloffPattern {
-    fn default() -> Self {
-        FalloffPattern::Linear
-    }
 }
 
 impl From<FalloffPattern>
