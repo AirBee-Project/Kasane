@@ -62,6 +62,14 @@ pub struct MappingEntry {
     pub to: serde_json::Value,
 }
 
+/// 計算用のオペランド（整数と小数の両方を受け付ける）
+#[derive(Debug, Deserialize, ToSchema, Clone, Copy, PartialEq)]
+#[serde(untagged)]
+pub enum MathOperand {
+    Int(i64),
+    Float(f64),
+}
+
 /// 四則演算の演算子
 #[derive(Debug, Deserialize, ToSchema, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -235,8 +243,8 @@ pub enum QueryNode {
         input: Box<QueryNode>,
         #[schema(example = "multiply")]
         operator: MathOperator,
-        #[schema(example = 1.5)]
-        operand: f64,
+        #[schema(value_type = f64, example = 1.5)]
+        operand: MathOperand,
     },
 }
 
