@@ -8,6 +8,8 @@ on:
       - "src/**"
       - "tests/**"
       - "deployment/**"
+      - "docker-compose.yml"
+      - "Dockerfile"
       - "Cargo.toml"
       - "Cargo.lock"
       - "build.rs"
@@ -125,7 +127,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker compose -f deployment/tikv/docker-compose.yml up -d --wait
+          docker compose up -d --wait
 
       - name: Wait for the cluster to accept writes
         shell: bash
@@ -133,7 +135,7 @@ jobs:
           set -euo pipefail
           # compose の healthcheck は PD だけを見る。TiKV ストアが PD へ登録され、
           # リージョンが用意できるまでは書き込みが通らないので、そこまで待つ。
-          for _ in $(seq 1 60); do
+          for _ in $(seq 1 90); do
             if docker exec kasane-pd /pd-ctl -u http://127.0.0.1:2379 store \
                  | grep -q '"state_name": "Up"'; then
               echo "TiKV store is up"
@@ -141,8 +143,18 @@ jobs:
             fi
             sleep 2
           done
-          echo "TiKV store did not come up in time" >&2
-          docker compose -f deployment/tikv/docker-compose.yml logs >&2
+
+          # 失敗したら「なぜ Up にならなかったか」が分かる材料をすべて出す。
+          # ここが空振りすると、次の調査でまた同じ待ち時間を使うことになる。
+          echo "::error::TiKV store did not come up in time" >&2
+          {
+            echo "--- containers ---";      docker compose ps -a
+            echo "--- disk ---";            df -h
+            echo "--- pd: stores ---";      docker exec kasane-pd /pd-ctl -u http://127.0.0.1:2379 store || true
+            echo "--- pd: cluster ---";     docker exec kasane-pd /pd-ctl -u http://127.0.0.1:2379 cluster || true
+            echo "--- tikv log (tail) ---"; docker logs --tail 200 kasane-tikv
+            echo "--- pd log (tail) ---";   docker logs --tail 100 kasane-pd
+          } >&2
           exit 1
 
       - name: Test
@@ -163,9 +175,9 @@ jobs:
       - name: Dump cluster logs on failure
         if: failure()
         shell: bash
-        run: docker compose -f deployment/tikv/docker-compose.yml logs
+        run: docker compose logs
 
       - name: Stop TiKV
         if: always()
         shell: bash
-        run: docker compose -f deployment/tikv/docker-compose.yml down -v
+        run: docker compose down -v

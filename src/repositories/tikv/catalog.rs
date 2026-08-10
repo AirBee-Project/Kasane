@@ -150,6 +150,7 @@ pub(super) async fn table_list_by_id<R: Reader>(
 }
 
 impl<R: Reader> TikvRead<'_, R> {
+    #[tracing::instrument(skip_all)]
     pub(super) async fn database_list_impl(
         &self,
     ) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
@@ -170,6 +171,7 @@ impl<R: Reader> TikvRead<'_, R> {
             .collect()
     }
 
+    #[tracing::instrument(skip_all, fields(db_name = %db_name))]
     pub(super) async fn table_list_impl(&self, db_name: &str) -> Result<Vec<Table>, AppError> {
         let db_id =
             database_id(&self.txn, db_name)
@@ -180,12 +182,14 @@ impl<R: Reader> TikvRead<'_, R> {
         table_list_by_id(&self.txn, db_id).await
     }
 
+    #[tracing::instrument(skip_all)]
     pub(super) async fn table_count_impl(&self, table_id: TableId) -> Result<u64, AppError> {
         kv::table_flex_id_count(&self.txn, table_id).await
     }
 }
 
 impl TikvWrite<'_> {
+    #[tracing::instrument(skip_all, fields(db_name = %name))]
     pub(super) async fn database_create_impl(
         &mut self,
         name: &str,
@@ -219,6 +223,7 @@ impl TikvWrite<'_> {
     }
 
     /// データベースを配下のテーブルごと削除する。
+    #[tracing::instrument(skip_all, fields(db_name = %name))]
     pub(super) async fn database_remove_impl(&mut self, name: &str) -> Result<(), AppError> {
         if name.is_empty() {
             return Err(AppError::DatabaseNotFound {
@@ -249,6 +254,7 @@ impl TikvWrite<'_> {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(db_name = %name))]
     pub(super) async fn database_update_impl(
         &mut self,
         name: &str,
@@ -301,6 +307,7 @@ impl TikvWrite<'_> {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(src_db_name = %src_db_name, copy_name = %copy_name))]
     pub(super) async fn database_copy_impl(
         &mut self,
         src_db_name: &str,
@@ -357,6 +364,7 @@ impl TikvWrite<'_> {
         })
     }
 
+    #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
     #[allow(clippy::too_many_arguments)]
     pub(super) async fn table_create_impl(
         &mut self,
@@ -436,6 +444,7 @@ impl TikvWrite<'_> {
         })
     }
 
+    #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
     #[allow(clippy::too_many_arguments)]
     pub(super) async fn table_update_impl(
         &mut self,
@@ -529,6 +538,7 @@ impl TikvWrite<'_> {
         Ok(table)
     }
 
+    #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
     pub(super) async fn table_remove_impl(
         &mut self,
         db_name: &str,
@@ -553,6 +563,7 @@ impl TikvWrite<'_> {
         self.retire_table(db_meta.id, table_name, table.id).await
     }
 
+    #[tracing::instrument(skip_all, fields(src_db_name = %src_db_name, src_table_name = %src_table_name, copy_db_name = %copy_db_name, copy_table_name = %copy_table_name))]
     pub(super) async fn table_copy_impl(
         &mut self,
         src_db_name: &str,

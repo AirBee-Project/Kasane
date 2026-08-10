@@ -1,0 +1,91 @@
+# 開発・テスト用の周辺サービス一式。**本番構成ではない**（レプリカ 1・PD 1 台・永続化なしの Jaeger）。
+#
+#   起動: docker compose up -d --wait
+#   停止: docker compose down -v
+#
+# 立ち上げたあとは `.env.example` をそのまま `.env` にコピーすれば繋がる。
+# 既定値も同じ宛先を指しているので、`.env` が無くても繋がる。
+#
+#   TiKV (PD)  127.0.0.1:2379   -> KASANE_TIKV_PD_ENDPOINTS
+#   Jaeger UI  http://127.0.0.1:16686
+#   OTLP/HTTP  127.0.0.1:4318   -> OTEL_EXPORTER_OTLP_ENDPOINT
+#
+# ■ TiKV のネットワーク構成について
+#
+# PD はクライアントへ「TiKV ストアの所在」をアドバタイズされたアドレスで教える。
+# そのためホスト側のクライアントとコンテナ間通信の両方から到達できるアドレスを
+# 選ぶ必要がある。ここでは tikv を PD と同じネットワーク名前空間へ相乗りさせ
+# (`network_mode: "service:pd"`)、両者とも 127.0.0.1 でアドバタイズすることで、
+# ホスト（公開ポート経由）からもコンテナ内からも同じアドレスが有効になるようにしている。
+# この構成のため、TiKV 側のポート公開は pd サービスにまとめて記述している。
+#
+# ■ `--wait` が待つのは PD まで
+#
+# healthcheck が見るのは PD の生存だけで、TiKV ストアが PD へ登録され書き込みを
+# 受け付けるまでには数秒の余裕がいる。CI はそこまで明示的に待っている
+# （`.github/workflows/main-merge-tests.yml`）。
+
+services:
+  pd:
+    image: pingcap/pd:v7.5.1
+    container_name: kasane-pd
+    restart: unless-stopped
+    ports:
+      - "2379:2379" # PD クライアント API
+      - "20160:20160" # TiKV（名前空間を共有しているためここで公開する）
+      - "20180:20180" # TiKV ステータス
+    command:
+      - --name=pd
+      - --data-dir=/data/pd
+      - --client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://127.0.0.1:2379
+      - --peer-urls=http://0.0.0.0:2380
+      - --advertise-peer-urls=http://127.0.0.1:2380
+      - --initial-cluster=pd=http://127.0.0.1:2380
+    volumes:
+      - pd-data:/data/pd
+    healthcheck:
+      test: ["CMD", "/pd-ctl", "-u", "http://127.0.0.1:2379", "health"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  tikv:
+    image: pingcap/tikv:v7.5.1
+    container_name: kasane-tikv
+    restart: unless-stopped
+    # PD と同じネットワーク名前空間を共有する（上のコメント参照）。
+    network_mode: "service:pd"
+    depends_on:
+      pd:
+        condition: service_healthy
+    command:
+      - --addr=0.0.0.0:20160
+      - --advertise-addr=127.0.0.1:20160
+      - --status-addr=0.0.0.0:20180
+      - --advertise-status-addr=127.0.0.1:20180
+      - --data-dir=/data/tikv
+      - --pd-endpoints=127.0.0.1:2379
+      # スレッド数とメモリをコア数から決めさせない（deployment/tikv.toml を参照）。
+      - --config=/etc/tikv/tikv.toml
+    volumes:
+      - tikv-data:/data/tikv
+      - ./deployment/tikv.toml:/etc/tikv/tikv.toml:ro
+
+  # OpenTelemetry のトレース受け口と閲覧 UI。
+  # `production` feature でビルドしたときだけアプリがトレースを送る。
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    container_name: kasane-jaeger
+    restart: unless-stopped
+    environment:
+      # OTLP の受信を有効にする（1.35 以降は既定で有効だが、意図を明示しておく）。
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "4317:4317" # OTLP/gRPC
+      - "4318:4318" # OTLP/HTTP（アプリはこちらを使う）
+
+volumes:
+  pd-data:
+  tikv-data:

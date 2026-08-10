@@ -42,12 +42,14 @@ async fn put_user_meta(
 }
 
 impl<R: Reader> TikvRead<'_, R> {
+    #[tracing::instrument(skip_all, fields(username = %username))]
     pub(super) async fn get_user_impl(&self, username: &str) -> Result<Option<User>, AppError> {
         Ok(user_meta(&self.txn, username)
             .await?
             .map(|meta| User::from_meta(username, meta)))
     }
 
+    #[tracing::instrument(skip_all, fields(username = %username))]
     pub(super) async fn require_user_impl(&self, username: &str) -> Result<User, AppError> {
         Ok(User::from_meta(
             username,
@@ -55,6 +57,7 @@ impl<R: Reader> TikvRead<'_, R> {
         ))
     }
 
+    #[tracing::instrument(skip_all)]
     pub(super) async fn get_all_users_impl(&self) -> Result<Vec<User>, AppError> {
         let entries = kv::scan_prefix(&self.txn, &keys::Ns::Users.prefix()).await?;
         entries
@@ -70,6 +73,7 @@ impl<R: Reader> TikvRead<'_, R> {
 }
 
 impl TikvWrite<'_> {
+    #[tracing::instrument(skip_all, fields(username = %username))]
     pub(super) async fn create_user_impl(
         &mut self,
         username: &str,
@@ -92,6 +96,7 @@ impl TikvWrite<'_> {
         put_user_meta(&self.txn, username, &meta).await
     }
 
+    #[tracing::instrument(skip_all, fields(username = %username))]
     pub(super) async fn set_password_impl(
         &mut self,
         username: &str,
@@ -106,6 +111,7 @@ impl TikvWrite<'_> {
         put_user_meta(&self.txn, username, &meta).await
     }
 
+    #[tracing::instrument(skip_all, fields(username = %username))]
     pub(super) async fn grant_privilege_impl(
         &mut self,
         username: &str,
@@ -128,6 +134,7 @@ impl TikvWrite<'_> {
         put_user_meta(&self.txn, username, &meta).await
     }
 
+    #[tracing::instrument(skip_all, fields(username = %username))]
     pub(super) async fn revoke_privilege_impl(
         &mut self,
         username: &str,
@@ -150,6 +157,7 @@ impl TikvWrite<'_> {
         put_user_meta(&self.txn, username, &meta).await
     }
 
+    #[tracing::instrument(skip_all, fields(username = %username))]
     pub(super) async fn delete_user_impl(&mut self, username: &str) -> Result<(), AppError> {
         self.require_lock(LockScope::User, username.as_bytes())?;
 

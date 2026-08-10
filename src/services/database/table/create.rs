@@ -5,6 +5,7 @@ use crate::{
     repositories::{Storage, WriteRepository},
 };
 
+#[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn create(
     app_state: &AppState,
     db_name: &str,

@@ -9,6 +9,7 @@ use crate::{
 };
 use uuid::Uuid;
 
+#[tracing::instrument(skip_all)]
 pub async fn list_users(app_state: &AppState) -> Result<Vec<UserInfoResponse>, AppError> {
     app_state
         .db
@@ -25,6 +26,7 @@ pub async fn list_users(app_state: &AppState) -> Result<Vec<UserInfoResponse>, A
         .await
 }
 
+#[tracing::instrument(skip_all, fields(username = %username))]
 pub async fn get_user(app_state: &AppState, username: &str) -> Result<UserInfoResponse, AppError> {
     let username = username.to_string();
     app_state
@@ -39,6 +41,7 @@ pub async fn get_user(app_state: &AppState, username: &str) -> Result<UserInfoRe
         .await
 }
 
+#[tracing::instrument(skip_all, fields(username = %username))]
 pub async fn get_privileges(
     app_state: &AppState,
     username: &str,
@@ -72,6 +75,7 @@ fn require_not_root(username: &str) -> Result<String, AppError> {
     Ok(username.to_string())
 }
 
+#[tracing::instrument(skip_all, fields(username = %req.username))]
 pub async fn create_user(app_state: &AppState, req: CreateUserRequest) -> Result<(), AppError> {
     crate::services::helpers::name_valid::name_valid(&req.username)?;
 
@@ -87,6 +91,7 @@ pub async fn create_user(app_state: &AppState, req: CreateUserRequest) -> Result
         .await
 }
 
+#[tracing::instrument(skip_all, fields(username = %username))]
 pub async fn delete_user(app_state: &AppState, username: &str) -> Result<(), AppError> {
     let username = require_not_root(username)?;
     app_state
@@ -95,6 +100,7 @@ pub async fn delete_user(app_state: &AppState, username: &str) -> Result<(), App
         .await
 }
 
+#[tracing::instrument(skip_all, fields(username = %username))]
 pub async fn update_password(
     app_state: &AppState,
     username: &str,
@@ -110,6 +116,7 @@ pub async fn update_password(
 }
 
 /// 1 つの対象に対する権限を設定する（無ければ追加、あれば置き換え）。
+#[tracing::instrument(skip_all, fields(username = %username))]
 pub async fn grant_privilege(
     app_state: &AppState,
     username: &str,
@@ -123,6 +130,7 @@ pub async fn grant_privilege(
 }
 
 /// 1 つの対象に対する権限を剥奪する。
+#[tracing::instrument(skip_all, fields(username = %username))]
 pub async fn revoke_privilege(
     app_state: &AppState,
     username: &str,

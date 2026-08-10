@@ -376,10 +376,12 @@ impl Storage for TikvDb {
     /// [`tikv_client::Snapshot`] を開く（`query_source.rs`）。
     type QuerySnapshot = tikv_client::Timestamp;
 
+    #[tracing::instrument(skip_all)]
     async fn query_snapshot(&self) -> Result<Self::QuerySnapshot, AppError> {
         self.client.current_timestamp().await.map_err(to_app_error)
     }
 
+    #[tracing::instrument(skip_all)]
     async fn read<T, F>(&self, f: F) -> Result<T, AppError>
     where
         F: for<'a, 'b> AsyncFnOnce(&'a Self::Read<'b>) -> Result<T, AppError> + Send + 'static,
@@ -394,6 +396,7 @@ impl Storage for TikvDb {
         out
     }
 
+    #[tracing::instrument(skip_all)]
     async fn write<T, F>(&self, f: F) -> Result<T, AppError>
     where
         F: for<'a, 'b> AsyncFnOnce(&'a mut Self::Write<'b>) -> Result<T, AppError>

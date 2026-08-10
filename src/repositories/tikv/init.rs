@@ -74,6 +74,7 @@ impl TikvSecurity {
 
 impl TikvDb {
     /// クラスタへ接続し、既定ユーザーを用意して返す。
+    #[tracing::instrument(skip_all, fields(pd_endpoints = ?config.pd_endpoints))]
     pub async fn connect(config: TikvConfig) -> Result<Self, AppError> {
         let mut client_config = Config::default();
         match &config.security {

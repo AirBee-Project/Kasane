@@ -6,6 +6,7 @@ use crate::{
     repositories::{ReadRepository, Storage, WriteRepository},
 };
 
+#[tracing::instrument(skip_all, fields(db_name = %name))]
 pub async fn info(app_state: &AppState, name: &str) -> Result<DatabaseInfoResponse, AppError> {
     let owned = name.to_string();
     match app_state
@@ -25,6 +26,7 @@ pub async fn info(app_state: &AppState, name: &str) -> Result<DatabaseInfoRespon
 /// 配下のどれかに Read 以上で到達できるデータベースだけを返す。テーブル単位の権限しか
 /// 持たないユーザーにも、そのテーブルを含むデータベースは見える（見えないと自分の
 /// テーブルへ辿り着く手段が無くなるため）。
+#[tracing::instrument(skip_all)]
 pub async fn list(
     app_state: &AppState,
     user: &User,
@@ -38,6 +40,7 @@ pub async fn list(
         .collect())
 }
 
+#[tracing::instrument(skip_all, fields(db_name = %name))]
 pub async fn create(
     app_state: &AppState,
     name: &str,
@@ -66,6 +69,7 @@ pub async fn create(
 ///
 /// 列挙と削除の分割は [`WriteRepository::database_remove`] 側で 1 つの書き込み
 /// トランザクションに閉じてある。
+#[tracing::instrument(skip_all, fields(db_name = %name))]
 pub async fn remove(app_state: &AppState, name: &str) -> Result<(), AppError> {
     let name = name.to_string();
     app_state
@@ -74,6 +78,7 @@ pub async fn remove(app_state: &AppState, name: &str) -> Result<(), AppError> {
         .await
 }
 
+#[tracing::instrument(skip_all, fields(db_name = %name))]
 pub async fn update(
     app_state: &AppState,
     name: &str,
@@ -105,6 +110,7 @@ pub async fn update(
 ///
 /// この操作は `global` スコープの Manage 以上を要求する。そのロールは複製先を含む
 /// すべてのデータベースに届くので、呼び出し元へ個別に権限を付け直す必要はない。
+#[tracing::instrument(skip_all, fields(db_name = %name, copy_name = %copy_name))]
 pub async fn copy(
     app_state: &AppState,
     name: &str,

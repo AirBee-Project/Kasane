@@ -5,6 +5,7 @@ use crate::{
     repositories::{Storage, WriteRepository},
 };
 
+#[tracing::instrument(skip_all, fields(src_db_name = %src_db_name, src_table_name = %src_table_name, copy_db_name = %copy_db_name, copy_table_name = %copy_table_name))]
 pub async fn copy(
     app_state: &AppState,
     src_db_name: &str,

@@ -92,6 +92,7 @@ impl TikvDb {
     /// 回収待ちのテーブルを 1 周ぶん掃除する。消したキーの総数を返す。
     ///
     /// テストから決定的に呼べるよう、定期実行とは別の関数にしてある。
+    #[tracing::instrument(skip_all)]
     pub async fn sweep_retired_tables(&self) -> Result<usize, AppError> {
         let retired = self.read(async |r| r.retired_tables().await).await?;
         let mut total = 0usize;

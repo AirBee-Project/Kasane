@@ -26,6 +26,7 @@ impl std::ops::Deref for AuthUser {
     }
 }
 
+#[tracing::instrument(skip_all)]
 pub async fn require_auth(
     axum::extract::State(app_state): axum::extract::State<AppState>,
     mut req: Request,
@@ -65,6 +66,7 @@ pub async fn require_auth(
 
 /// `Global` スコープで `required` 以上のロールを要求する。
 /// データベースの作成・削除のように、特定のデータベースに紐づかない操作で使う。
+#[tracing::instrument(skip_all)]
 pub fn check_global_role(user: &User, required: UserRole) -> Result<(), AppError> {
     if user.has_global_role(required) {
         Ok(())
@@ -74,11 +76,13 @@ pub fn check_global_role(user: &User, required: UserRole) -> Result<(), AppError
 }
 
 /// サーバー管理者（`global` スコープの `admin`）を要求する。
+#[tracing::instrument(skip_all)]
 pub fn check_global_admin(user: &User) -> Result<(), AppError> {
     check_global_role(user, UserRole::Admin)
 }
 
 /// 本人、またはサーバー管理者であることを要求する。
+#[tracing::instrument(skip_all, fields(target_username = %username))]
 pub fn check_self_or_admin(user: &User, username: &str) -> Result<(), AppError> {
     if user.is_global_admin() || user.username == username {
         Ok(())
@@ -88,6 +92,7 @@ pub fn check_self_or_admin(user: &User, username: &str) -> Result<(), AppError> 
 }
 
 /// データベース全体に対する操作の認可。テーブル単位のルールでは通らない。
+#[tracing::instrument(skip_all, fields(db_name = %db_name))]
 pub async fn check_database(
     app_state: &AppState,
     user: &User,
@@ -99,6 +104,7 @@ pub async fn check_database(
 
 /// データベースの存在確認・一覧のための認可。
 /// テーブル単位のルールしか持たないユーザーも、自分のテーブルへ辿り着けるように通す。
+#[tracing::instrument(skip_all, fields(db_name = %db_name))]
 pub async fn check_database_visible(
     app_state: &AppState,
     user: &User,
@@ -108,6 +114,7 @@ pub async fn check_database_visible(
 }
 
 /// 特定テーブルに対する操作の認可。
+#[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn check_table(
     app_state: &AppState,
     user: &User,
@@ -128,6 +135,7 @@ pub async fn check_table(
 
 /// 複数テーブルに対する操作の認可。読み取りトランザクションを 1 つだけ開いて
 /// すべての名前を解決するので、参照テーブル数に比例してトランザクションが増えない。
+#[tracing::instrument(skip_all)]
 pub async fn check_tables(
     app_state: &AppState,
     user: &User,

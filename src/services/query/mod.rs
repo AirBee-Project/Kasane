@@ -378,6 +378,7 @@ fn build_map_values<U: Value, V: Value>(
 }
 
 /// クエリを実行し、対象空間IDの値を返す。
+#[tracing::instrument(skip_all)]
 pub async fn execute(
     app_state: &AppState,
     request: ExecuteQueryRequest,
@@ -435,19 +436,24 @@ fn run<V: Value>(
         return data_response::build(empty, format, limit, |v| Ok(v.to_json()));
     }
 
-    let ast = request.query.translate::<V>(app_state, tables, snapshot)?;
+    // --- フェーズ 1: DSL → kasane-logic AST の翻訳 ---
+    let ast = tracing::info_span!("query.translate", source_tables = tables.len())
+        .in_scope(|| request.query.translate::<V>(app_state, tables, snapshot))?;
+
     tracing::debug!(
         "Executing query over {} source table(s), {} target region(s)",
         tables.len(),
         bounds.len()
     );
 
+    // --- フェーズ 2: クエリ最適化 ---
+    let optimized = tracing::info_span!("query.optimize").in_scope(|| ast.optimize());
+
+    // --- フェーズ 3: 評価実行（最も重い処理）---
     // 対象領域をまとめて1回だけ評価し、結果を要求空間IDで絞る。
     // 空間ID1件ずつ `get()` を回すとクエリが件数分再実行されてしまう。
-    let optimized = ast.optimize();
-    let cells = optimized
-        .run_within(bounds)
-        .map_err(AppError::LogicError)?
+    let cells = tracing::info_span!("query.run_within", target_regions = bounds.len())
+        .in_scope(|| optimized.run_within(bounds).map_err(AppError::LogicError))?
         .into_iter()
         .filter(|(flex_id, _)| targets.get(flex_id).next().is_some());
 

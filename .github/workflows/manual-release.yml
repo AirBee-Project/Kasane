@@ -17,12 +17,31 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+# ストレージバックエンドはビルドごとに 1 つしか選べない（src/backend.rs の compile_error!）
+# ため、イメージもバックエンドごとに 1 枚焼く。タグは次のとおり。
+#
+#   ghcr.io/<repo>:<version>-lmdb / :lmdb / :latest   （既定のバックエンド）
+#   ghcr.io/<repo>:<version>-tikv / :tikv
+#
+# それぞれ linux/amd64 と linux/arm64 のマルチアーキ。
+#
+# ■ ジョブの分け方
+#
+#   version ──> build (backend × platform = 4 本) ──> merge (backend ごと) ──> release
+#
+# バージョンの採番とタグ付けは 1 回だけ行いたいので `version` へ切り出す。
+# ビルドは**アーキごとにネイティブなランナー**で回す（QEMU エミュレーションだと
+# Rust のリリースビルド、特に grpcio の C++ ビルドが桁違いに遅くなる）。
+# ネイティブに焼くとアーキごとに別のイメージになるので、`merge` で 1 つの
+# マニフェストリストへ束ねてからタグを付ける。
 jobs:
-  release:
+  version:
+    name: Bump version and tag
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -30,7 +49,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: main
           fetch-depth: 0
-          
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -55,14 +74,52 @@ jobs:
           git config --local user.name "github-actions[bot]"
           # Unstaged changes exist here because we already bumped Cargo.toml.
           # We don't need to pull because actions/checkout fetches the latest main with full history.
-          
+
           git add Cargo.toml Cargo.lock
           git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
-          
+
           # Push from the current detached HEAD to the remote main branch
           git push origin HEAD:main
           git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
+
+  build:
+    name: Build (${{ matrix.backend }}/${{ matrix.platform }})
+    needs: version
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      # `permissions:` を書くと、挙げなかったスコープは `none` になる。
+      # `contents: read` が無いと actions/checkout がタグを取得できない。
+      contents: read
+      packages: write
+    strategy:
+      # 片方が落ちても、もう片方の結果は見たい。
+      fail-fast: false
+      matrix:
+        backend: [lmdb, tikv]
+        platform: [amd64, arm64]
+        include:
+          - platform: amd64
+            runner: ubuntu-latest
+          - platform: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # `version` ジョブが打ったタグを焼く。`main` を指すと、その間に別のコミットが
+          # 入った場合にバージョンと中身がずれる。
+          ref: v${{ needs.version.outputs.version }}
+
+      - name: Resolve image name
+        # GHCR はイメージ名に大文字を受け付けない。`github.repository` は
+        # 組織名・リポジトリ名の大文字をそのまま含むので、ここで小文字へ落とす。
+        # （タグ付けは metadata-action が自動で小文字化するが、下の
+        # push-by-digest は生の名前をそのまま使うため、ここで揃えておく必要がある。）
+        run: echo "REGISTRY_IMAGE=${REGISTRY}/${IMAGE_NAME,,}" >> "$GITHUB_ENV"
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -74,39 +131,132 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Extract labels for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest
-            type=raw,value=${{ steps.version.outputs.version }}
-            type=sha,format=short
+          images: ${{ env.REGISTRY_IMAGE }}
 
-      - name: Build and push Docker image
+      - name: Build and push by digest
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          platforms: linux/${{ matrix.platform }}
+          build-args: |
+            BACKEND=backend-${{ matrix.backend }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # タグは付けずダイジェストだけを push する。タグ付けは全アーキが
+          # 揃ってから `merge` がまとめて行う。
+          outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          # バックエンドとアーキでビルド内容が違うので、キャッシュも分ける。
+          # 共有すると互いを追い出し合ってキャッシュが効かなくなる。
+          cache-from: type=gha,scope=${{ matrix.backend }}-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.backend }}-${{ matrix.platform }}
 
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          # upload-artifact@v4 は名前の重複を許さないので、組み合わせごとに分ける。
+          name: digests-${{ matrix.backend }}-${{ matrix.platform }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Merge manifest (${{ matrix.backend }})
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [lmdb, tikv]
+    steps:
+      - name: Resolve image name
+        run: echo "REGISTRY_IMAGE=${REGISTRY}/${IMAGE_NAME,,}" >> "$GITHUB_ENV"
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.backend }}-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+          # 既定の latest 付与を止め、下で LMDB のときだけ明示的に付ける。
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ needs.version.outputs.version }}-${{ matrix.backend }}
+            type=raw,value=${{ matrix.backend }}
+            type=raw,value=latest,enable=${{ matrix.backend == 'lmdb' }}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect \
+            ${{ env.REGISTRY_IMAGE }}:${{ needs.version.outputs.version }}-${{ matrix.backend }}
+
+  release:
+    name: Create GitHub Release
+    needs: [version, merge]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
+          tag_name: v${{ needs.version.outputs.version }}
           generate_release_notes: true
           body: |
-            ### Docker Image
-            `ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}`
-            
-            You can pull the image using:
-            ```bash
-            docker pull ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
-            ```
-            
-            ---
+            ### Docker Images
 
+            ストレージバックエンドはビルド時に決まるため、イメージを分けて公開しています。
+            どちらも `linux/amd64` と `linux/arm64` のマルチアーキです。
+
+            | バックエンド | イメージ |
+            | --- | --- |
+            | LMDB（単一プロセス・組み込み。`latest` はこちら） | `ghcr.io/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}-lmdb` |
+            | TiKV（分散。複数インスタンスで共有可） | `ghcr.io/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}-tikv` |
+
+            ```bash
+            # LMDB
+            docker pull ghcr.io/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}-lmdb
+
+            # TiKV（接続先は KASANE_TIKV_PD_ENDPOINTS で指定）
+            docker pull ghcr.io/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}-tikv
+            ```
+
+            ---

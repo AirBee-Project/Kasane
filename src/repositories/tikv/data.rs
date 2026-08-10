@@ -263,6 +263,7 @@ async fn find_parent_pointer<R: Reader>(
 // --- 読み取り ---
 
 impl<R: Reader> TikvRead<'_, R> {
+    #[tracing::instrument(skip_all, fields(table_id = %table_id))]
     pub(super) async fn data_get_impl(
         &self,
         table_id: TableId,
@@ -314,6 +315,7 @@ impl<R: Reader> TikvRead<'_, R> {
         Ok(by_value.into_iter().collect())
     }
 
+    #[tracing::instrument(skip_all, fields(table_id = %table_id))]
     pub(super) async fn data_filter_eq_impl(
         &self,
         table_id: TableId,
@@ -342,6 +344,7 @@ impl<R: Reader> TikvRead<'_, R> {
     /// `vkey` が `hi` の真の接頭辞になっている行は、続く flexid のバイト次第で
     /// `hi ‖ 0xFF…` を超えた位置に並びうる（例: `hi = "bz"` に対する値 `"b"`）。
     /// そこで型の幅で読む範囲を決め、取り出した `vkey` で最終的に絞る。
+    #[tracing::instrument(skip_all, fields(table_id = %table_id))]
     pub(super) async fn data_filter_range_impl(
         &self,
         table_id: TableId,
@@ -379,6 +382,7 @@ impl<R: Reader> TikvRead<'_, R> {
     }
 
     /// クエリ実行器の入力として、指定範囲のセルを読み出す。
+    #[tracing::instrument(skip_all, fields(table_id = %table_id))]
     pub(super) async fn read_cells_in_range(
         &self,
         table_id: TableId,
@@ -463,6 +467,7 @@ impl TikvWrite<'_> {
         Ok(routed)
     }
 
+    #[tracing::instrument(skip_all, fields(table_id = %table_id))]
     pub(super) async fn data_insert_impl(
         &mut self,
         table_id: TableId,
@@ -484,6 +489,7 @@ impl TikvWrite<'_> {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(table_id = %table_id))]
     pub(super) async fn data_upsert_impl(
         &mut self,
         table_id: TableId,
@@ -512,6 +518,7 @@ impl TikvWrite<'_> {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(table_id = %table_id))]
     pub(super) async fn data_remove_impl(
         &mut self,
         table_id: TableId,
@@ -811,6 +818,7 @@ impl TikvWrite<'_> {
     /// 排他を取らないので、これは**ある一点での検証**であり、検証中に走った書き込みは
     /// 対象に入らない。新しい制約はコミット後の書き込みには適用されるので、
     /// すり抜けうるのは「古い制約を読んだうえで検証後にコミットされた書き込み」だけ。
+    #[tracing::instrument(skip_all, fields(table_id = %table_id))]
     pub(super) async fn validate_existing_data(
         &self,
         table_id: TableId,
