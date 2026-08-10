@@ -1723,7 +1723,7 @@ dependencies = [
 [[package]]
 name = "kasane-logic"
 version = "0.1.4"
-source = "git+https://github.com/AirBee-Project/Kasane-Logic.git#4c06fd7a0d1aa47bfc060336f9b45eb1ea9a07c5"
+source = "git+https://github.com/AirBee-Project/Kasane-Logic.git#3c8b83f72c4ba531caeda13922c5b712bf9ca132"
 dependencies = [
  "hashbrown 0.17.1",
  "libm",
@@ -2966,7 +2966,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4279,6 +4279,15 @@ name = "windows-sys"
 version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "282be5f36a8ce781fad8c8ae18fa3f9beff57ec1b52cb3de0789201425d9a33d"
+dependencies = [
+ "windows-targets",
+]
+
+[[package]]
+name = "windows-sys"
+version = "0.59.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
 dependencies = [
  "windows-targets",
 ]
