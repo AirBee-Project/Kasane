@@ -109,3 +109,66 @@ fn value_filter_reflects_overwrite_and_remove() {
         assert!(eq_8.is_empty(), "removed value must be gone from the index");
     }
 }
+
+/// **可変長（Text）の範囲検索が、境界を絞っても取りこぼさないこと。**
+///
+/// キーは `table_id ‖ 値 ‖ flexid` と値を可変長のまま連結するので、該当キーは
+/// バイト順で連続しない。`vkey` が上限の真の接頭辞になっている行は、続く flexid の
+/// バイト次第で `hi ‖ 0xFF…` を超えた位置へ飛ぶ。走査範囲を詰めすぎると、
+/// そういう行だけが黙って消える。
+///
+/// 「上限の接頭辞になる値」と「上限を 1 文字超える値」を両方入れて、
+/// 前者が残り後者が落ちることを確かめる。
+#[test]
+fn text_range_filter_keeps_values_that_prefix_the_upper_bound() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let db = initialize_database(tmp.path().to_str().unwrap());
+    let table_id = TableId(uuid::Uuid::now_v7());
+    let dt = TableDataType::Text;
+
+    // 値と、それを置くセルの x 座標。
+    let rows: [(&str, u32); 7] = [
+        ("a", 1),     // 範囲外（下限未満）
+        ("b", 2),     // 該当。"bz" の真の接頭辞 ＝ 取りこぼしやすい行
+        ("bm", 3),    // 該当
+        ("bz", 4),    // 該当（上限そのもの）
+        ("bza", 5),   // 範囲外（上限を超える）
+        ("c", 6),     // 範囲外
+        ("tokyo", 7), // 範囲外
+    ];
+
+    {
+        let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
+        for (value, x) in rows {
+            let mut set = SpatialIdSet::new();
+            set.insert(SingleId::new(20, 0, x, 0).unwrap());
+            w.data_insert_impl(table_id, dt, set, value.as_bytes())
+                .unwrap();
+        }
+        w.commit().unwrap();
+    }
+
+    let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
+
+    // "b" 〜 "bz"（両端含む）。
+    let got = r.data_filter_range_impl(table_id, dt, b"b", b"bz").unwrap();
+    assert_eq!(
+        xs(&got),
+        HashSet::from([2u32, 3, 4]),
+        "上限の接頭辞になる値を取りこぼしたか、範囲外を拾っている"
+    );
+
+    // 共通接頭辞がない範囲でも同じこと。
+    let got = r.data_filter_range_impl(table_id, dt, b"a", b"c").unwrap();
+    assert_eq!(xs(&got), HashSet::from([1u32, 2, 3, 4, 5, 6]));
+
+    // 単一値の範囲は等価フィルタと一致する。
+    let got = r
+        .data_filter_range_impl(table_id, dt, b"bm", b"bm")
+        .unwrap();
+    assert_eq!(xs(&got), HashSet::from([3u32]));
+
+    // 下限が上限より大きい（空範囲）。
+    let got = r.data_filter_range_impl(table_id, dt, b"z", b"a").unwrap();
+    assert!(xs(&got).is_empty(), "空範囲が何かを返している");
+}

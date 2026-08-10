@@ -13,7 +13,8 @@
 #![cfg(feature = "backend-tikv")]
 
 use kasane::error::AppError;
-use kasane::models::database::table::TableDataType;
+use kasane::models::database::table::{Table, TableDataType};
+use kasane::models::id::TableId;
 use kasane::repositories::tikv::{TikvConfig, TikvDb};
 use kasane::repositories::{ReadRepository, Storage, WriteRepository};
 use kasane_logic::{SingleId, SpatialIdSet};
@@ -35,6 +36,102 @@ async fn drop_db(db: &TikvDb, name: &str) {
     let _ = db
         .write(async move |w| w.database_remove(&name).await)
         .await;
+}
+
+/// データベースと、その中の `Int` テーブル 1 つを作る。
+async fn make_table(db: &TikvDb, db_name: &str) -> Table {
+    let db_name = db_name.to_string();
+    db.write(async move |w| {
+        w.database_create(&db_name, None).await?;
+        w.table_create(&db_name, "t", TableDataType::Int, 25, None, None)
+            .await
+    })
+    .await
+    .unwrap()
+}
+
+/// `xs` の各値を `(20, f, x, y)` のセルとして書き込む。
+///
+/// 1 トランザクションが大きくなりすぎないようチャンクに分ける。値は `x` そのもの。
+async fn insert_cells(
+    db: &TikvDb,
+    table_id: TableId,
+    xs: impl IntoIterator<Item = u32>,
+    f: i32,
+    y: u32,
+) {
+    const CHUNK: usize = 500;
+    let xs: Vec<u32> = xs.into_iter().collect();
+    for chunk in xs.chunks(CHUNK) {
+        let chunk = chunk.to_vec();
+        db.write(async move |w| {
+            for &x in &chunk {
+                let mut ids = SpatialIdSet::new();
+                ids.insert(SingleId::new(20, f, x, y).unwrap());
+                w.data_insert(table_id, TableDataType::Int, ids, &(x as i64).to_be_bytes())
+                    .await?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    }
+}
+
+/// 2 つのインスタンスから並行に 1 セルずつ書き込み、両方の完了を待つ。
+///
+/// `x` は `(writer 番号, i)` から決める。同じリーフを狙うか離すかを呼び出し側が選べる。
+async fn insert_from_both(
+    writers: [&TikvDb; 2],
+    table_id: TableId,
+    per_writer: u32,
+    y: u32,
+    x_of: fn(usize, u32) -> u32,
+) {
+    let mut handles = Vec::new();
+    for (which, db) in writers.into_iter().enumerate() {
+        let db = db.clone();
+        handles.push(tokio::spawn(async move {
+            for i in 0..per_writer {
+                let x = x_of(which, i);
+                let db = db.clone();
+                let mut ids = SpatialIdSet::new();
+                ids.insert(SingleId::new(20, 0, x, y).unwrap());
+                db.write(async move |w| {
+                    w.data_insert(
+                        table_id,
+                        TableDataType::Int,
+                        ids.clone(),
+                        &(x as i64).to_be_bytes(),
+                    )
+                    .await
+                })
+                .await
+                .unwrap();
+            }
+        }));
+    }
+    for h in handles {
+        h.await.unwrap();
+    }
+}
+
+/// 指定したセル群のうち、実際に読み戻せた件数。
+async fn count_readable(db: &TikvDb, table_id: TableId, ids: SpatialIdSet) -> usize {
+    let groups = db
+        .read(async move |r| r.data_get(table_id, ids.clone(), None).await)
+        .await
+        .unwrap();
+    groups.iter().map(|(_, ids)| ids.len()).sum()
+}
+
+/// `(20, f, x, y)` のセル集合。
+fn cells(xs: impl IntoIterator<Item = u32>, f: i32, y: u32) -> SpatialIdSet {
+    let mut set = SpatialIdSet::new();
+    for x in xs {
+        set.insert(SingleId::new(20, f, x, y).unwrap());
+    }
+    set
 }
 
 #[tokio::test]
@@ -113,16 +210,7 @@ async fn table_and_data_roundtrip() {
     let db = connect().await;
     let name = unique_db("data");
 
-    let table = {
-        let name = name.clone();
-        db.write(async move |w| {
-            w.database_create(&name, None).await?;
-            w.table_create(&name, "t", TableDataType::Int, 25, None, None)
-                .await
-        })
-        .await
-        .unwrap()
-    };
+    let table = make_table(&db, &name).await;
 
     // 値を書いて、読み戻せること。
     let mut ids = SpatialIdSet::new();
@@ -197,33 +285,11 @@ async fn shard_split_preserves_all_cells() {
     let db = connect().await;
     let name = unique_db("split");
 
-    let table = {
-        let name = name.clone();
-        db.write(async move |w| {
-            w.database_create(&name, None).await?;
-            w.table_create(&name, "t", TableDataType::Int, 25, None, None)
-                .await
-        })
-        .await
-        .unwrap()
-    };
+    let table = make_table(&db, &name).await;
 
     // MAX_FLEX_ID_PER_SHARD (1024) を超える数のセルを、それぞれ別の値で入れる。
     const N: u32 = 1500;
-    for chunk_start in (0..N).step_by(500) {
-        let chunk: Vec<u32> = (chunk_start..(chunk_start + 500).min(N)).collect();
-        db.write(async move |w| {
-            for &i in &chunk {
-                let mut ids = SpatialIdSet::new();
-                ids.insert(SingleId::new(20, 0, i, 0).unwrap());
-                w.data_insert(table.id, TableDataType::Int, ids, &(i as i64).to_be_bytes())
-                    .await?;
-            }
-            Ok(())
-        })
-        .await
-        .unwrap();
-    }
+    insert_cells(&db, table.id, 0..N, 0, 0).await;
 
     let count = db
         .read(async move |r| r.table_count(table.id).await)
@@ -244,6 +310,215 @@ async fn shard_split_preserves_all_cells() {
     drop_db(&db, &name).await;
 }
 
+/// **可変長（Text）の範囲検索が、境界を絞っても取りこぼさないこと。**
+///
+/// キーは `0x07 ‖ table_id ‖ 値 ‖ flexid` と値を可変長のまま連結するので、該当キーは
+/// バイト順で連続しない。`vkey` が上限の真の接頭辞になっている行は、続く flexid の
+/// バイト次第で `hi ‖ 0xFF…` を超えた位置へ飛ぶ。走査範囲を詰めすぎると、
+/// そういう行だけが黙って消える。
+///
+/// LMDB 側にも同等のテストがあるが、こちらは終端付き範囲スキャンという
+/// 別の下位機構を通るので、別に確かめる。
+#[tokio::test]
+async fn text_range_filter_keeps_values_that_prefix_the_upper_bound() {
+    let db = connect().await;
+    let name = unique_db("text_range");
+
+    let table = {
+        let name = name.clone();
+        db.write(async move |w| {
+            w.database_create(&name, None).await?;
+            w.table_create(&name, "t", TableDataType::Text, 25, None, None)
+                .await
+        })
+        .await
+        .unwrap()
+    };
+
+    // 値と、それを置くセルの x 座標。
+    let rows: [(&str, u32); 6] = [
+        ("a", 1),   // 範囲外（下限未満）
+        ("b", 2),   // 該当。"bz" の真の接頭辞 ＝ 取りこぼしやすい行
+        ("bm", 3),  // 該当
+        ("bz", 4),  // 該当（上限そのもの）
+        ("bza", 5), // 範囲外（上限を超える）
+        ("c", 6),   // 範囲外
+    ];
+    for (value, x) in rows {
+        let value = value.as_bytes().to_vec();
+        let mut ids = SpatialIdSet::new();
+        ids.insert(SingleId::new(20, 0, x, 0).unwrap());
+        db.write(async move |w| {
+            w.data_insert(table.id, TableDataType::Text, ids.clone(), &value)
+                .await
+        })
+        .await
+        .unwrap();
+    }
+
+    /// 引けた FlexId 群を x 座標の集合へ。
+    async fn xs_of(db: &TikvDb, table_id: TableId, lo: &str, hi: &str) -> Vec<u32> {
+        let (lo, hi) = (lo.as_bytes().to_vec(), hi.as_bytes().to_vec());
+        let hits = db
+            .read(async move |r| {
+                r.data_filter_range(table_id, TableDataType::Text, &lo, &hi)
+                    .await
+            })
+            .await
+            .unwrap();
+        let mut xs: Vec<u32> = hits
+            .iter()
+            .flat_map(|f| (*f).single_ids().map(|s| s.x()))
+            .collect();
+        xs.sort_unstable();
+        xs
+    }
+
+    assert_eq!(
+        xs_of(&db, table.id, "b", "bz").await,
+        vec![2, 3, 4],
+        "上限の接頭辞になる値を取りこぼしたか、範囲外を拾っている"
+    );
+    assert_eq!(xs_of(&db, table.id, "a", "c").await, vec![1, 2, 3, 4, 5, 6]);
+    assert_eq!(xs_of(&db, table.id, "bm", "bm").await, vec![3]);
+    assert!(
+        xs_of(&db, table.id, "z", "a").await.is_empty(),
+        "空範囲が何かを返している"
+    );
+
+    drop_db(&db, &name).await;
+}
+
+/// **同一リーフを複数インスタンスから同時に書いても、更新が失われないこと。**
+///
+/// 近接した空間 ID は同じシャード（1 キー）に入るので、これは「同じキーへの
+/// read-modify-write を並行で走らせる」テストになる。リーフ単位ロックが効いていなければ、
+/// 後勝ちで互いの挿入を上書きし合って件数が合わなくなる。
+///
+/// `separate_instances_stay_consistent` はセルが散らばるのでリーフが分かれうるが、
+/// こちらは意図的に 1 リーフへ集中させている。
+#[tokio::test]
+async fn concurrent_writers_on_the_same_leaf_do_not_lose_updates() {
+    let a = connect().await;
+    let b = connect().await;
+    let name = unique_db("same_leaf");
+
+    let table = make_table(&a, &name).await;
+
+    // 隣接する 1 本の線上に並べる。分割閾値（1024）より十分小さいので 1 リーフに収まる。
+    const PER_WRITER: u32 = 40;
+    insert_from_both([&a, &b], table.id, PER_WRITER, 0, |which, i| {
+        i * 2 + which as u32
+    })
+    .await;
+
+    let count = b
+        .read(async move |r| r.table_count(table.id).await)
+        .await
+        .unwrap();
+    assert_eq!(
+        count,
+        (PER_WRITER * 2) as u64,
+        "同一リーフへの並行書き込みで更新が失われた"
+    );
+
+    // 実際に全セルが引けること（件数だけ合っていても意味がない）。
+    let mut all = SpatialIdSet::new();
+    for x in 0..PER_WRITER * 2 {
+        all.insert(SingleId::new(20, 0, x, 0).unwrap());
+    }
+    let groups = a
+        .read(async move |r| r.data_get(table.id, all.clone(), None).await)
+        .await
+        .unwrap();
+    let actual: usize = groups.iter().map(|(_, ids)| ids.len()).sum();
+    assert_eq!(actual, (PER_WRITER * 2) as usize, "読み戻せないセルがある");
+
+    drop_db(&a, &name).await;
+}
+
+/// **別のリーフへの書き込みが互いをブロックしないこと。**
+///
+/// テーブル全体ロックが残っていると、離れた領域への書き込みでも直列化される。
+/// 空間的に大きく離した 2 つの書き込み列を同時に流し、両方が完了することを見る。
+/// （時間で判定すると環境差で不安定になるので、ここでは「デッドロックや
+/// リトライ枯渇を起こさずに完了すること」を確かめる。）
+#[tokio::test]
+async fn writes_to_distant_regions_make_progress_together() {
+    let a = connect().await;
+    let b = connect().await;
+    let name = unique_db("distant");
+
+    let table = make_table(&a, &name).await;
+
+    // 先に木を育てて、離れた領域が別リーフになるようにする。
+    insert_cells(&a, table.id, (0..2000u32).map(|i| i * 400), 0, 0).await;
+
+    const PER_WRITER: u32 = 30;
+    // 2 つの書き込み列を大きく離す。
+    const BASES: [u32; 2] = [1_000_000, 500];
+    insert_from_both([&a, &b], table.id, PER_WRITER, 1, |which, i| {
+        BASES[which] + i
+    })
+    .await;
+
+    for base in BASES {
+        let got = count_readable(&a, table.id, cells(base..base + PER_WRITER, 0, 1)).await;
+        assert_eq!(
+            got, PER_WRITER as usize,
+            "base={base} の書き込みが欠けている"
+        );
+    }
+
+    drop_db(&a, &name).await;
+}
+
+/// **テーブル削除は論理削除で、実体は GC が回収すること。**
+#[tokio::test]
+async fn removing_a_table_retires_it_and_gc_reclaims_the_data() {
+    let db = connect().await;
+    let name = unique_db("retire");
+
+    let table = make_table(&db, &name).await;
+
+    insert_cells(&db, table.id, 0..1500u32, 0, 3).await;
+    assert_eq!(
+        db.read(async move |r| r.table_count(table.id).await)
+            .await
+            .unwrap(),
+        1500
+    );
+
+    // 削除はカタログからの除去だけで完了する。
+    {
+        let name = name.clone();
+        db.write(async move |w| w.table_remove(&name, "t").await)
+            .await
+            .unwrap();
+    }
+    let listed = {
+        let name = name.clone();
+        db.read(async move |r| r.table_list(&name).await)
+            .await
+            .unwrap()
+    };
+    assert!(listed.is_empty(), "削除したテーブルが一覧に残っている");
+
+    // 回収を回すと実体が消える。何度回しても壊れない（冪等）。
+    db.sweep_retired_tables().await.unwrap();
+    db.sweep_retired_tables().await.unwrap();
+
+    assert_eq!(
+        db.read(async move |r| r.table_count(table.id).await)
+            .await
+            .unwrap(),
+        0,
+        "回収後もシャードが残っている"
+    );
+
+    drop_db(&db, &name).await;
+}
+
 /// **件数索引が、シャード本体から数えた実数と一致し続けること。**
 ///
 /// `table_count` は件数だけを切り出した索引（`0x08`）を読む。本体から数えないので速い
@@ -254,33 +529,11 @@ async fn the_count_index_tracks_the_shard_entries() {
     let db = connect().await;
     let name = unique_db("count_index");
 
-    let table = {
-        let name = name.clone();
-        db.write(async move |w| {
-            w.database_create(&name, None).await?;
-            w.table_create(&name, "t", TableDataType::Int, 25, None, None)
-                .await
-        })
-        .await
-        .unwrap()
-    };
+    let table = make_table(&db, &name).await;
 
     // 分割が起きる規模まで入れる。
     const N: u32 = 1500;
-    for chunk_start in (0..N).step_by(500) {
-        let chunk: Vec<u32> = (chunk_start..(chunk_start + 500).min(N)).collect();
-        db.write(async move |w| {
-            for &i in &chunk {
-                let mut ids = SpatialIdSet::new();
-                ids.insert(SingleId::new(20, 0, i, 0).unwrap());
-                w.data_insert(table.id, TableDataType::Int, ids, &(i as i64).to_be_bytes())
-                    .await?;
-            }
-            Ok(())
-        })
-        .await
-        .unwrap();
-    }
+    insert_cells(&db, table.id, 0..N, 0, 0).await;
     assert_eq!(
         db.read(async move |r| r.table_count(table.id).await)
             .await
@@ -315,15 +568,7 @@ async fn the_count_index_tracks_the_shard_entries() {
     );
 
     // 実際に読めるセル数とも一致すること（索引だけが正しくても意味がない）。
-    let mut all = SpatialIdSet::new();
-    for i in 0..N {
-        all.insert(SingleId::new(20, 0, i, 0).unwrap());
-    }
-    let groups = db
-        .read(async move |r| r.data_get(table.id, all.clone(), None).await)
-        .await
-        .unwrap();
-    let actual: usize = groups.iter().map(|(_, ids)| ids.len()).sum();
+    let actual = count_readable(&db, table.id, cells(0..N, 0, 0)).await;
     assert_eq!(
         actual as u64, after_removal,
         "件数索引と実際に読めるセル数が食い違っている"
@@ -353,16 +598,7 @@ async fn concurrent_writes_do_not_lose_updates() {
     let db = connect().await;
     let name = unique_db("concurrent");
 
-    let table = {
-        let name = name.clone();
-        db.write(async move |w| {
-            w.database_create(&name, None).await?;
-            w.table_create(&name, "t", TableDataType::Int, 25, None, None)
-                .await
-        })
-        .await
-        .unwrap()
-    };
+    let table = make_table(&db, &name).await;
 
     // 同一テーブルへ別セルを並行に書き込む。テーブルスコープのロックを奪い合う。
     const WRITERS: u32 = 8;
@@ -414,16 +650,7 @@ async fn separate_instances_stay_consistent() {
     let b = connect().await;
     let name = unique_db("multi_instance");
 
-    let table = {
-        let name = name.clone();
-        a.write(async move |w| {
-            w.database_create(&name, None).await?;
-            w.table_create(&name, "t", TableDataType::Int, 25, None, None)
-                .await
-        })
-        .await
-        .unwrap()
-    };
+    let table = make_table(&a, &name).await;
 
     // 同じテーブルへ、両インスタンスから交互のセルを同時に書く。
     const PER_INSTANCE: u32 = 12;
@@ -607,16 +834,7 @@ async fn a_failed_closure_leaves_nothing_behind() {
     let db = connect().await;
     let name = unique_db("discarded");
 
-    let table = {
-        let name = name.clone();
-        db.write(async move |w| {
-            w.database_create(&name, None).await?;
-            w.table_create(&name, "t", TableDataType::Int, 25, None, None)
-                .await
-        })
-        .await
-        .unwrap()
-    };
+    let table = make_table(&db, &name).await;
 
     let mut ids = SpatialIdSet::new();
     ids.insert(SingleId::new(20, 0, 7, 7).unwrap());

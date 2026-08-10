@@ -17,9 +17,10 @@
 
 use kasane_logic::{FlexId, RangeId, SpatialIdMap, SpatialIdSet};
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::collections::BTreeSet;
 use tokio::sync::Mutex;
 
-use super::keys::{self, LockScope};
+use super::keys;
 use crate::error::AppError;
 use crate::models::database::table::TableDataType;
 use crate::models::id::TableId;
@@ -271,9 +272,11 @@ impl<R: Reader> TikvRead<'_, R> {
         let mut by_value: FxHashMap<Vec<u8>, Vec<FlexId>> = FxHashMap::default();
         let mut held = 0usize;
 
-        // 大量の flex_id を一度に全件ルーティングしないよう、チャンクに区切って
-        // limit へ達した時点で打ち切る。
-        const ROUTING_BATCH_SIZE: usize = 65536;
+        // 全件をまとめてルーティングせず、チャンクに区切って `limit` へ達した時点で
+        // 打ち切る。ここで区切るのは**打ち切りの粒度**と手元に持つ `FlexId` の量で、
+        // 1 リクエストのキー数ではない（そちらは `kv::BATCH_KEYS` が別途縛る。
+        // 木の同じ深さで引くキー数は相異なる領域の数であって、`flex_id` の数ではない）。
+        const ROUTING_BATCH_SIZE: usize = 8192;
         let mut iter = ids.flex_ids();
 
         'outer: loop {
@@ -357,8 +360,10 @@ impl<R: Reader> TikvRead<'_, R> {
             end.extend_from_slice(&[0xFF; FlexId::ENCODED_LEN]);
             kv::scan_inclusive_keys(&self.txn, start, end).await?
         } else {
-            // 可変長。取りこぼさない範囲はテーブルの値インデックス全体しかない。
-            kv::scan_prefix_keys(&self.txn, &keys::value_index_of(table_id)).await?
+            // 可変長では該当キーがバイト順で連続しないため、過不足なしにはできない。
+            // 「必ず覆う最小の範囲」まで絞り、あとは下の厳密フィルタに任せる。
+            let (start, end) = keys::value_index_scan_bounds(table_id, &lo_vkey, &hi_vkey);
+            kv::scan_keys_range(&self.txn, start, end).await?
         };
 
         let mut out = Vec::new();
@@ -392,8 +397,72 @@ impl<R: Reader> TikvRead<'_, R> {
 }
 
 // --- 書き込み ---
+//
+// # ロックの取り方
+//
+// データ書き込みはテーブル全体を排他しない。触るのは「対象の空間 ID が属するリーフ」
+// だけで、そのキーを [`kv::lock_shards`]（`batch_get_for_update`）でロックし、
+// **ロック時点の最新の内容**を同時に受け取る。別のリーフへの書き込みは、別インスタンス
+// からのものであっても並列に流れる。
+//
+// これが安全なのは、この木が次の不変条件を満たすからである。
+//
+// > **リーフ R の内容または到達可能性を変える操作は、必ず R 自身を書くか消す。**
+//
+// - 分割できるのはリーフだけなので、R が分割されるなら R が書き換わる
+// - 統合（`try_merge_up`）は親へ畳むときに**子キーを削除**する ＝ R を消す
+// - 祖先方向の統合は「子のいずれかがポインタノードなら行わない」ので、R より上を
+//   畳むには先に R の親を畳む必要があり、それは R を消すことを意味する
+//
+// よって R をロックすれば R は誰にも変えられない。木の降下（祖先のポインタノード読み）
+// はロックなしのスナップショット読みでよく、古い形で誤ったリーフを選んだ場合は
+// ロック後の検証で検出できる。
+//
+// # 検証に失敗したらどうするか
+//
+// 同一トランザクション内で降下し直しても、`get` は常に `start_ts` を読むので**同じ
+// 古い答えが返る**。そこで [`TikvWrite::mark_stale`] でこの試行を捨て、`Storage::write`
+// に新しいスナップショットでやり直させる。新しい `start_ts` は他者のコミットより後に
+// なるので、必ず前進する。
 
 impl TikvWrite<'_> {
+    /// 対象の `flex_id` 群が属するリーフをロックし、最新の内容とともに返す。
+    ///
+    /// 降下はロックなしで行い、その結果をロック後に検証する。食い違っていたら
+    /// この試行ごと捨てて、新しいスナップショットでやり直す（モジュール上部を参照）。
+    async fn lock_target_leaves(
+        &mut self,
+        table_id: TableId,
+        flex_ids: &[FlexId],
+    ) -> Result<Vec<RoutedLeaf>, AppError> {
+        let mut routed = route_leaves_batched(&self.txn, table_id, flex_ids).await?;
+        let regions: BTreeSet<FlexId> = routed.iter().map(|leaf| leaf.region).collect();
+        let mut locked = kv::lock_shards(&self.txn, table_id, regions).await?;
+
+        for leaf in &mut routed {
+            let entry = locked.remove(&leaf.region).ok_or_else(|| {
+                AppError::InternalError("locked shard map is missing a routed region".to_string())
+            })?;
+
+            match (&leaf.node, &entry) {
+                // ポインタノードになっていた ＝ 降下中に分割された。
+                (_, Some(value)) if ShardEntry::child_pointers(value.entry())?.is_some() => {
+                    return Err(self.mark_stale().into());
+                }
+                // 降下時はリーフだったのに消えている ＝ 親へ畳まれた可能性がある。
+                // 単に空になって消えただけのこともあるが、区別するよりやり直した方が
+                // 確実で、やり直しは 1 周で収束する。
+                (Some(_), None) => return Err(self.mark_stale().into()),
+                _ => {}
+            }
+
+            // 降下時に読んだ本体は捨て、ロック時点の内容へ差し替える。
+            // 両方を抱えたままにすると、対象リーフのバイト列を二重に持つことになる。
+            leaf.node = entry;
+        }
+        Ok(routed)
+    }
+
     pub(super) async fn data_insert_impl(
         &mut self,
         table_id: TableId,
@@ -401,10 +470,8 @@ impl TikvWrite<'_> {
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
-        self.require_lock(LockScope::Table, &table_id.into_bytes())?;
-
         let flex_ids: Vec<FlexId> = ids.flex_ids().collect();
-        for leaf in route_leaves_batched(&self.txn, table_id, &flex_ids).await? {
+        for leaf in self.lock_target_leaves(table_id, &flex_ids).await? {
             let map = leaf.leaf_map()?;
             let targets = leaf.queries;
             self.apply_leaf(table_id, data_type, leaf.region, map, &targets, |m| {
@@ -424,11 +491,9 @@ impl TikvWrite<'_> {
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
-        self.require_lock(LockScope::Table, &table_id.into_bytes())?;
-
         let flex_ids: Vec<FlexId> = ids.flex_ids().collect();
         let data_vec = data.to_vec();
-        for leaf in route_leaves_batched(&self.txn, table_id, &flex_ids).await? {
+        for leaf in self.lock_target_leaves(table_id, &flex_ids).await? {
             let map = leaf.leaf_map()?;
             let targets = leaf.queries;
             self.apply_leaf(table_id, data_type, leaf.region, map, &targets, |m| {
@@ -453,11 +518,9 @@ impl TikvWrite<'_> {
         data_type: TableDataType,
         ids: SpatialIdSet,
     ) -> Result<(), AppError> {
-        self.require_lock(LockScope::Table, &table_id.into_bytes())?;
-
         let flex_ids: Vec<FlexId> = ids.flex_ids().collect();
         let mut affected: Vec<FlexId> = Vec::new();
-        for leaf in route_leaves_batched(&self.txn, table_id, &flex_ids).await? {
+        for leaf in self.lock_target_leaves(table_id, &flex_ids).await? {
             let map = leaf.leaf_map()?;
             let targets = leaf.queries;
             let region = leaf.region;
@@ -520,16 +583,17 @@ impl TikvWrite<'_> {
         old_keys: FxHashSet<Vec<u8>>,
         new_keys: FxHashSet<Vec<u8>>,
     ) -> Result<(), AppError> {
-        // 昇順に適用する（キーが連続していた方がリージョン跨ぎのアクセスが減る）。
-        // まとめて渡すのは、1 件ずつだとキーの数だけミューテックスを取り直すため。
-        let mut to_delete: Vec<Vec<u8>> = old_keys.difference(&new_keys).cloned().collect();
-        to_delete.sort_unstable();
-        kv::delete_many(&self.txn, to_delete).await?;
-
-        let mut to_put: Vec<Vec<u8>> = new_keys.difference(&old_keys).cloned().collect();
-        to_put.sort_unstable();
-        kv::put_many(&self.txn, to_put.into_iter().map(|key| (key, Vec::new()))).await?;
-        Ok(())
+        // 削除と書き込みをまとめて 1 回のリクエストにする。`write_batch` が
+        // キー順に並べ替えるので、キーが連続してリージョン跨ぎのアクセスが減り、
+        // 順序が固定されることでデッドロックも避けられる。
+        kv::write_batch(
+            &self.txn,
+            old_keys.difference(&new_keys).cloned(),
+            new_keys
+                .difference(&old_keys)
+                .map(|key| (key.clone(), Vec::new())),
+        )
+        .await
     }
 
     /// 変更後のリーフを保存する。過大なら分割し、空なら削除する。
@@ -549,6 +613,10 @@ impl TikvWrite<'_> {
         }
 
         // 分割が必要 → パス圧縮した被覆子領域を構築し、親をポインタノードにする。
+        //
+        // 子領域へ他者が到達する経路は今は存在しない（到達するには親がポインタノードで
+        // ある必要があり、それを作るのがこの処理自身）。したがって子のロックを別途
+        // 取る必要はなく、書き込み時の暗黙ロックで足りる。
         let mut children = Vec::new();
         let ((lo_r, lo), (hi_r, hi)) = map
             .split_shard()
@@ -634,6 +702,10 @@ impl TikvWrite<'_> {
     }
 
     /// 削除でデータ量が減ったリーフを親へ統合し、可能な限り木を圧縮する。
+    ///
+    /// 統合は親と**その全子**を書き換えるので、判断の前にその集合をまとめてロックする。
+    /// 空の子領域もロックの対象に含める（キーが無くてもロックは取れる）。そうしないと、
+    /// 統合で消える予定の空領域へ他者が書き込めてしまう。
     async fn try_merge_up(
         &mut self,
         table_id: TableId,
@@ -642,20 +714,34 @@ impl TikvWrite<'_> {
     ) -> Result<(), AppError> {
         let mut region = region;
         loop {
-            let Some((parent_region, child_regions)) =
+            let Some((parent_region, descended_children)) =
                 find_parent_pointer(&self.txn, table_id, &region).await?
             else {
                 break;
             };
 
+            // 親と全子をロックし、ロック時点の内容を得る。
+            let mut targets: BTreeSet<FlexId> = descended_children.iter().copied().collect();
+            targets.insert(parent_region);
+            let locked = kv::lock_shards(&self.txn, table_id, targets).await?;
+
+            // 親が今もポインタノードで、子集合が降下時と同じであることを確かめる。
+            // 違っていれば降下が古かったので、新しいスナップショットでやり直す。
+            let child_regions = match locked.get(&parent_region) {
+                Some(Some(value)) => match ShardEntry::child_pointers(value.entry())? {
+                    Some(children) if children == descended_children => children,
+                    _ => return Err(self.mark_stale().into()),
+                },
+                _ => return Err(self.mark_stale().into()),
+            };
+
             // 子を走査し、いずれかがポインタノードならこのレベルは統合しない。
             // 全リーフで合算が閾値以下なら 1 リーフへ畳み込む。
-            let nodes = load_nodes(&self.txn, table_id, &child_regions).await?;
             let mut combined = 0usize;
             let mut mergeable = true;
             for cr in &child_regions {
                 // 空領域のキーはそもそも存在しないのでスキップ。
-                let Some(value) = nodes.get(cr) else {
+                let Some(Some(value)) = locked.get(cr) else {
                     continue;
                 };
                 match ShardEntry::leaf_count(value.entry())? {
@@ -677,10 +763,11 @@ impl TikvWrite<'_> {
             }
 
             // マージ可能が確定してから、子マップを復元する。
-            // バイト列は上の一括取得で手元にあるので引き直さない。
+            // バイト列はロック時に手元へ来ているので引き直さない。
             let mut child_maps: Vec<SpatialIdMap<Vec<u8>>> = Vec::new();
             for cr in &child_regions {
-                let map = decode_leaf(cr, nodes.get(cr).map(ShardValue::entry))?;
+                let entry = locked.get(cr).and_then(|v| v.as_ref());
+                let map = decode_leaf(cr, entry.map(ShardValue::entry))?;
                 if !map.is_empty() {
                     child_maps.push(map);
                 }
@@ -719,6 +806,11 @@ impl TikvWrite<'_> {
     }
 
     /// 制約変更時に、既存の格納値が新しい制約を満たすか検証する。
+    ///
+    /// テーブル全体をスナップショットで走査する。データ書き込みはテーブル単位の
+    /// 排他を取らないので、これは**ある一点での検証**であり、検証中に走った書き込みは
+    /// 対象に入らない。新しい制約はコミット後の書き込みには適用されるので、
+    /// すり抜けうるのは「古い制約を読んだうえで検証後にコミットされた書き込み」だけ。
     pub(super) async fn validate_existing_data(
         &self,
         table_id: TableId,

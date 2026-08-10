@@ -71,5 +71,9 @@ pub async fn open(target: &str) -> Result<Db, AppError> {
     use crate::repositories::tikv::{TikvConfig, TikvDb};
 
     // 接続設定の解釈（既定値・TLS・区切り方）は init.rs に一本化してある。
-    TikvDb::connect(TikvConfig::from_endpoints(target)).await
+    let db = TikvDb::connect(TikvConfig::from_endpoints(target)).await?;
+    // 論理削除されたテーブルの実体を回収し続ける常駐処理。プロセスの寿命を持つので、
+    // 接続を開くたびではなくここで 1 度だけ起こす（`repositories::tikv::gc` を参照）。
+    db.spawn_sweeper();
+    Ok(db)
 }

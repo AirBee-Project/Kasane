@@ -293,13 +293,17 @@ impl<'a> KasaneDbRead<'a> {
                 keep(key, &mut out)?;
             }
         } else {
-            // 可変長。取りこぼさない範囲はテーブルの値インデックス全体しかない。
-            let prefix = table_id.0.into_bytes();
-            for item in self
-                .db
-                .value_index
-                .prefix_iter(&self.read_txn, prefix.as_slice())?
-            {
+            // 可変長では該当キーがバイト順で連続しないため、過不足なしにはできない。
+            // 「必ず覆う最小の範囲」まで絞り、あとは `keep` の厳密判定に任せる。
+            let (start, end) = value_index::range_scan_bounds(table_id, &lo_vkey, &hi_vkey);
+            let bounds = (
+                std::ops::Bound::Included(start.as_slice()),
+                match &end {
+                    Some(end) => std::ops::Bound::Excluded(end.as_slice()),
+                    None => std::ops::Bound::Unbounded,
+                },
+            );
+            for item in self.db.value_index.range(&self.read_txn, &bounds)? {
                 let (key, _) = item?;
                 keep(key, &mut out)?;
             }

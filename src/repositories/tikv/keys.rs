@@ -42,6 +42,8 @@ pub enum Ns {
     ValueIndex = 0x07,
     /// シャードが保持する `FlexId` 件数だけを切り出した索引（`kv.rs` の保存の節を参照）。
     ShardCount = 0x08,
+    /// 論理削除されたテーブルの回収待ち行列（`gc.rs` を参照）。
+    Garbage = 0x09,
     /// ロック取得専用。実データは書かない（[`super::super`] のロック階層を参照）。
     Lock = 0x7F,
 }
@@ -202,8 +204,46 @@ pub fn value_index_of(table_id: TableId) -> Vec<u8> {
     with_ns(Ns::ValueIndex, &table_id.into_bytes())
 }
 
+/// `0x09 ‖ table_id`
+///
+/// 論理削除されたテーブルの回収待ち行列。テーブル削除はカタログ項目を消して
+/// ここへ積むだけで完了し、シャード実体の削除は [`gc`](super::gc) が後から行う。
+/// こうすることで、削除がテーブル全体の排他を必要とせず、1 トランザクションの
+/// サイズ上限にも縛られない。
+pub fn garbage(table_id: TableId) -> Vec<u8> {
+    with_ns(Ns::Garbage, &table_id.into_bytes())
+}
+
+/// [`garbage`] のキーから [`TableId`] を復元する。
+pub fn table_id_from_garbage_key(key: &[u8]) -> Result<TableId, AppError> {
+    let end = 1 + UUID_LEN;
+    if key.len() < end {
+        return Err(AppError::InternalError(
+            "garbage key is too short to carry a table id".to_string(),
+        ));
+    }
+    let bytes: [u8; UUID_LEN] = key[1..end].try_into().expect("長さは確認済み");
+    Ok(TableId(uuid::Uuid::from_bytes(bytes)))
+}
+
+/// あるテーブルのデータ実体を覆うプレフィックス群（カタログ項目は含まない）。
+///
+/// 回収も複製も「この 3 つを対象にする」で足りるよう、1 箇所にまとめてある。
+pub fn table_data_prefixes(table_id: TableId) -> [Vec<u8>; 3] {
+    [
+        shards_of(table_id),
+        shard_counts_of(table_id),
+        value_index_of(table_id),
+    ]
+}
+
 /// ロック階層のスコープ。粒度ごとに別のキーを取ることで、無関係な書き込み同士が
 /// ロックを奪い合わないようにする。
+///
+/// ここに残るのは**範囲スキャンから変更を導く操作**、つまりキー単位のロックでは
+/// ファントムを防げないものだけ。シャードの読み書きはキー単位で完結するので、
+/// 明示ロックではなく `batch_get_for_update`（ロックと最新値の取得を同時に行う）
+/// を使う（`super::mod` の「データ経路」の節）。
 ///
 /// **判別値の並び順に意味がある。** ロックキーは `0x7F ‖ scope ‖ id` で、取得は
 /// 常にキーのバイト昇順で行われるため（`super::mod` のデッドロックの節）、この
@@ -212,9 +252,10 @@ pub fn value_index_of(table_id: TableId) -> Vec<u8> {
 #[repr(u8)]
 pub enum LockScope {
     /// データベースのテーブル集合を触る操作（テーブルの作成・削除・複製、DB 削除）。
+    ///
+    /// テーブル一覧は範囲スキャンで得るので、その集合を変える操作と読む操作が
+    /// 同じデータベース名のロックを取ることでファントムを防ぐ。
     Database = 0x01,
-    /// テーブルのシャード集合を触る操作（データ書き込み、テーブル削除・複製）。
-    Table = 0x02,
     /// 1 ユーザーの権限・資格情報。範囲スキャンを伴わないので独立した単位でよい。
     User = 0x03,
 }
@@ -236,18 +277,32 @@ pub fn lock(scope: LockScope, id: &[u8]) -> Vec<u8> {
 
 /// 与えたプレフィックスで始まる全キーを覆う範囲の終端（排他）。
 ///
-/// 末尾のバイトを繰り上げて「次のプレフィックス」を作る。全バイトが 0xFF の場合は
-/// 上限が存在しないので `None`（そのときは名前空間の終端まで読めばよい）。
+/// バイト辞書順の操作そのものは両バックエンドで同じなので、実体は
+/// [`encoding::prefix_end`](crate::repositories::encoding::prefix_end) にある。
 pub fn prefix_end(prefix: &[u8]) -> Option<Vec<u8>> {
-    let mut end = prefix.to_vec();
-    while let Some(last) = end.last_mut() {
-        if *last < 0xFF {
-            *last += 1;
-            return Some(end);
-        }
-        end.pop();
-    }
-    None
+    crate::repositories::encoding::prefix_end(prefix)
+}
+
+/// 値インデックスの範囲検索で走査すべきキー範囲（名前空間タグ付き）。
+///
+/// 境界の求め方と、なぜ厳密にならないのかは
+/// [`value_index::range_scan_bounds`](crate::repositories::encoding::value_index::range_scan_bounds)
+/// を参照。ここはそこへ名前空間タグを被せるだけ。
+pub fn value_index_scan_bounds(
+    table_id: TableId,
+    lo_vkey: &[u8],
+    hi_vkey: &[u8],
+) -> (Vec<u8>, Option<Vec<u8>>) {
+    let (start, end) =
+        crate::repositories::encoding::value_index::range_scan_bounds(table_id, lo_vkey, hi_vkey);
+    (
+        with_ns(Ns::ValueIndex, &start),
+        // 上限が無い（値側が全部 0xFF）なら、名前空間の終端で止める。
+        Some(match end {
+            Some(end) => with_ns(Ns::ValueIndex, &end),
+            None => prefix_end(&Ns::ValueIndex.prefix()).expect("0x07 は 0xFF ではない"),
+        }),
+    )
 }
 
 #[cfg(test)]
@@ -364,8 +419,7 @@ mod tests {
     #[test]
     fn lock_scopes_are_ordered_from_coarse_to_fine() {
         // この並びが崩れると、BTreeSet 経由の取得順がロック階層と食い違う。
-        assert!(LockScope::Database < LockScope::Table);
-        assert!(LockScope::Table < LockScope::User);
+        assert!(LockScope::Database < LockScope::User);
     }
 
     #[test]

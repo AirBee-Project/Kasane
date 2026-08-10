@@ -6,6 +6,7 @@
 //! |---|---|
 //! | `mod.rs` | ストレージ本体と、トランザクション境界（[`Storage`] 実装） |
 //! | `init.rs` | このバックエンド固有の初期化設定 |
+//! | `gc.rs` | 論理削除されたテーブルの実体を回収する（このバックエンド固有） |
 //! | `keys.rs` | キーのバイト表現 |
 //! | `kv.rs` | このバックエンド固有の低レベルアクセス（LMDB 側は `shard.rs`） |
 //! | `catalog.rs` | データベース・テーブルのカタログ操作 |
@@ -14,15 +15,31 @@
 //! | `query_source.rs` | クエリ実行器への入力源 |
 //! | `repository.rs` | 抽象 trait への適合 |
 //!
-//! # トランザクションの組み立て方
+//! # 読み書きの噛み合わせ方
 //!
 //! TiKV の悲観ロックは取得時に取り直した `for_update_ts` で取られるのに対し、
 //! `txn.get()` はトランザクション開始時の `start_ts` スナップショットを読む。
-//! そのため「1 つのトランザクション内でロックしてから読む」と、ロック取得前に
-//! コミットされた他者の変更を見落として lost update になる
+//! そのため「1 つのトランザクション内でロックしてから `get` する」と、ロック取得前に
+//! コミットされた他者の変更を見落として lost update になる。
 //!
-//! そこで LMDB の `env.write_txn()` と同じ順序――**ライタミューテックス取得 →
-//! スナップショット確定**――を 2 つのトランザクションに分けて再現する。
+//! この食い違いへの対処は 2 通りあり、対象によって使い分けている。
+//!
+//! ## データ経路：`batch_get_for_update`
+//!
+//! シャードの読み書きはキー単位で完結するので、**ロックと最新値の取得を 1 リクエストで
+//! 行う** `batch_get_for_update` を使う（[`kv::lock_shards`]）。返る値は
+//! `for_update_ts` 時点のものなので、そもそも食い違いが発生しない。
+//!
+//! テーブル全体を排他しないため、**別のリーフへの書き込みは並列に流れる**。
+//! 複数の Kasane インスタンスが同じクラスタへ書き込む構成でも同じ。
+//! なぜリーフ単位のロックで足りるのかは `data.rs` の書き込みの節を参照。
+//!
+//! ## カタログ経路：ロック専用トランザクション
+//!
+//! データベース配下のテーブル一覧のように、**範囲スキャンから変更を導く**操作は
+//! キー単位のロックではファントムを防げない。そこで LMDB の `env.write_txn()` と
+//! 同じ順序――**ライタミューテックス取得 → スナップショット確定**――を
+//! 2 つのトランザクションに分けて再現する。
 //!
 //! 1. ロック専用トランザクションで必要なロックキーを取得する
 //! 2. **その後に**作業トランザクションを開始する（start_ts が前任者のコミットより後になる）
@@ -30,6 +47,8 @@
 //! 4. ロック専用トランザクションを rollback して解放する
 //!
 //! ロック側は常に rollback で終わるので、ロックキーには MVCC のバージョンが作られない。
+//!
+//! こちらを使うのはカタログとユーザーの操作だけで、いずれも頻度が低い。
 //!
 //! # 必要なロックをどう知るか
 //!
@@ -43,20 +62,22 @@
 //!
 //! `Storage::write` のシグネチャは変わらず、サービス層はロックの存在を知らないままでいられる。
 //!
-//! やり直しの 1 周目は**ネットワークに触れない**。ロック集合が空の周回では
-//! ロック用トランザクションを開かず（空の `lock_keys` は何もしないのに、開くだけで
-//! PD からタイムスタンプを取ることになる）、作業トランザクションも実際にデータへ
-//! 触れるまで開かない（[`kv::LazyTxn`]）。結果として、`data_insert` のように
-//! 最初の宣言でロックが判明する操作は、トランザクション 2 本
-//! （ロック用と作業用）で完結する。
+//! ロック集合が空の周回ではロック用トランザクションを開かない（空の `lock_keys` は
+//! 何もしないのに、開くだけで PD からタイムスタンプを取ることになる）。作業
+//! トランザクションも実際にデータへ触れるまで開かない（[`kv::LazyTxn`]）。
+//! そのため**ロックを 1 つも宣言しないデータ経路はトランザクション 1 本**で完結し、
+//! カタログ経路もロック用と作業用の 2 本で済む。
 //!
 //! # デッドロックしない理由
 //!
-//! 保持中／不足中のロックはどちらも [`BTreeSet<Vec<u8>>`] で持つので、取得は常に
-//! **ロックキーのバイト昇順**になる。キーは `0x7F ‖ scope ‖ id`（`keys.rs`）で、
-//! [`LockScope`] の判別値が Database < Table < User と並ぶよう振られているため、
-//! この昇順がそのまま「データベース単位 → テーブル単位 → ユーザー単位」の階層順になる。
-//! 全操作が同じ全順序でロックを取るので、待ちグラフに循環ができない。
+//! 明示ロック（カタログ経路）は、保持中／不足中のどちらも [`BTreeSet<Vec<u8>>`] で
+//! 持つので、取得は常に**ロックキーのバイト昇順**になる。キーは `0x7F ‖ scope ‖ id`
+//! （`keys.rs`）で、[`LockScope`] の判別値が粗い粒度から順に振られているため、
+//! この昇順がそのままロック階層の順序になる。全操作が同じ全順序で取るので、
+//! 待ちグラフに循環ができない。
+//!
+//! データ経路の [`kv::lock_shards`] も、キーを `BTreeMap` に集めてから昇順で要求する
+//! （1 リクエストに載りきらない場合の分割でも順序は保たれる）。
 //!
 //! 順序は集合の型が決めるので、呼び出し側が並べ替える必要はない。ただし
 //! [`tikv_client::Transaction::lock_keys`] はリージョンごとにリクエストを束ねるため、
@@ -65,6 +86,7 @@
 
 mod catalog;
 mod data;
+mod gc;
 mod init;
 mod keys;
 mod kv;
@@ -79,6 +101,7 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use rand_core::RngCore;
 use tikv_client::{Transaction, TransactionClient};
 
 use crate::error::AppError;
@@ -97,11 +120,46 @@ const RETRY_BACKOFF_BASE: std::time::Duration = std::time::Duration::from_millis
 /// 待ち時間の上限。
 const RETRY_BACKOFF_MAX: std::time::Duration = std::time::Duration::from_millis(200);
 
+/// 待ち時間へ加える揺らぎの割合（±20%）。
+///
+/// 倍々に伸びるだけの待ち時間だと、同じ相手とぶつかった複数のインスタンスが
+/// **揃った間隔でやり直し続ける**。TiKV の悲観ロックは待たずに即エラーを返す設定
+/// （tikv-client が `wait_timeout = 0` を固定）なので、競合の解消はこちらの
+/// やり直しに委ねられており、足並みが揃うと competing herd がそのまま持続する。
+/// 揺らぎを入れて、ぶつかった側が別々のタイミングへばらけるようにする。
+const RETRY_BACKOFF_JITTER_PERCENT: u64 = 20;
+
+/// 競合でやり直す前に待つ。
+///
+/// 4 か所から呼ばれるので、待ち方と回数の数え方が散らばらないよう 1 つにまとめてある
+/// （散らすと、片方だけ `last_error` を残し忘れるといった食い違いが起きる）。
+async fn back_off(conflicts: &mut u32, reason: AppError, last_error: &mut Option<AppError>) {
+    *last_error = Some(reason);
+    tokio::time::sleep(retry_backoff(*conflicts)).await;
+    *conflicts += 1;
+}
+
 /// `attempt` 回目の競合に対する待ち時間。
 fn retry_backoff(attempt: u32) -> std::time::Duration {
-    RETRY_BACKOFF_BASE
+    let base = RETRY_BACKOFF_BASE
         .saturating_mul(1u32 << attempt.min(8))
-        .min(RETRY_BACKOFF_MAX)
+        .min(RETRY_BACKOFF_MAX);
+    apply_jitter(base)
+}
+
+/// 待ち時間に ±[`RETRY_BACKOFF_JITTER_PERCENT`]% の揺らぎを与える。
+fn apply_jitter(base: std::time::Duration) -> std::time::Duration {
+    let millis = base.as_millis() as u64;
+    let span = millis * RETRY_BACKOFF_JITTER_PERCENT / 100;
+    if span == 0 {
+        // 揺らぎが 1ms 未満になる短さでは、丸めると意味を持たない。
+        return base;
+    }
+    let mut bytes = [0u8; 8];
+    rand_core::OsRng.fill_bytes(&mut bytes);
+    // [millis - span, millis + span] の一様分布。
+    let offset = u64::from_le_bytes(bytes) % (span * 2 + 1);
+    std::time::Duration::from_millis(millis - span + offset)
 }
 
 fn to_app_error(err: tikv_client::Error) -> AppError {
@@ -248,6 +306,8 @@ pub struct TikvWrite<'a> {
     /// 操作が宣言したが、まだ保持していないロック。
     /// 空でなければ、この試行は巻き戻してやり直す。
     missing: BTreeSet<Vec<u8>>,
+    /// 読んだ内容が古かったので、この試行を捨てて新しいスナップショットでやり直す。
+    stale: bool,
 }
 
 impl TikvWrite<'_> {
@@ -289,8 +349,23 @@ impl TikvWrite<'_> {
         Ok(())
     }
 
-    fn needs_more_locks(&self) -> bool {
-        !self.missing.is_empty()
+    /// 読んだ木の形が古かったことを記録し、この試行を捨てさせる。
+    ///
+    /// 同じトランザクションの中で読み直しても意味がない。`get` は常に `start_ts` の
+    /// スナップショットを読むので、何度試しても同じ古い答えが返るためである。
+    /// 新しいトランザクションを開けば `start_ts` が他者のコミットより後になり、
+    /// 必ず前進する。
+    pub(crate) fn mark_stale(&mut self) -> NeedsRestart {
+        self.stale = true;
+        NeedsRestart
+    }
+
+    /// この試行を捨ててやり直す必要があるか。
+    ///
+    /// 理由は 2 つある。宣言されたロックが足りない（`missing`）か、読んだ内容が
+    /// 古かった（`stale`）か。どちらも「コミットしてはいけない」点では同じ。
+    fn needs_restart(&self) -> bool {
+        !self.missing.is_empty() || self.stale
     }
 }
 
@@ -343,9 +418,7 @@ impl Storage for TikvDb {
                 match LockGuard::acquire(&self.client, &locks).await {
                     Ok(guard) => Some(guard),
                     Err(e) if is_retryable(&e) => {
-                        last_error = Some(to_app_error(e));
-                        tokio::time::sleep(retry_backoff(conflicts)).await;
-                        conflicts += 1;
+                        back_off(&mut conflicts, to_app_error(e), &mut last_error).await;
                         continue;
                     }
                     Err(e) => return Err(to_app_error(e)),
@@ -361,23 +434,39 @@ impl Storage for TikvDb {
                 _db: PhantomData,
                 held: locks.clone(),
                 missing: BTreeSet::new(),
+                stale: false,
             };
 
             // やり直しに備えて複製を渡す。`f` 自体は次の試行のために残す。
             let result = f.clone()(&mut w).await;
-            // ロック充足の確認は**結果より先**に行う。こうしておけば、クロージャが
+            // やり直しの要否は**結果より先**に確認する。こうしておけば、クロージャが
             // `NeedsRestart` 由来のエラーを握り潰して `Ok` を返しても、その試行は
-            // 確実に捨てられる（＝宣言し忘れた範囲へ書いたまま commit されない）。
-            let need_more = w.needs_more_locks();
+            // 確実に捨てられる（＝宣言し忘れた範囲や古い読みのまま commit されない）。
+            let restart = w.needs_restart();
             let newly_required = std::mem::take(&mut w.missing);
+            let was_stale = w.stale;
+            let lazy = w.txn.into_inner();
+            // ロックの取得はクロージャの内側で起きるので、競合はアプリケーションエラーの
+            // 形で返ってくる。やり直せる失敗かどうかは作業トランザクションが覚えている。
+            let conflicted = lazy.conflicted();
             // 一度もデータへ触れていなければトランザクションは開いていない。
-            let txn = w.txn.into_inner().into_opened();
+            let txn = lazy.into_opened();
 
-            // 3. ロックが足りなければ、この試行は捨ててロックを揃えてやり直す。
-            if need_more {
+            // 3. やり直しが要るなら、この試行は捨てる。
+            if restart {
                 rollback(txn).await;
                 release(guard).await;
                 locks.extend(newly_required);
+                // 古い読みが原因なら、他者のコミットが見えるようになるまで少し待つ。
+                // ロック不足が原因の場合は待つ理由がない（競合ではなく、必要な範囲が
+                // 判っただけなので、次の周回は必ず前進する）。
+                if was_stale {
+                    let reason = AppError::Conflict(
+                        "read a stale view of the shard tree; retrying with a newer snapshot"
+                            .to_string(),
+                    );
+                    back_off(&mut conflicts, reason, &mut last_error).await;
+                }
                 continue;
             }
 
@@ -391,6 +480,12 @@ impl Storage for TikvDb {
                     // クロージャが失敗したらコミットしない。ロックは必ず解放する。
                     rollback(txn).await;
                     release(guard).await;
+                    if conflicted {
+                        // 競合で弾かれただけなので、新しいトランザクションでやり直す。
+                        // 呼び出し側から見て「書き込みは待たされても失敗しない」を保つ。
+                        back_off(&mut conflicts, app_err, &mut last_error).await;
+                        continue;
+                    }
                     return Err(app_err);
                 }
             };
@@ -400,9 +495,7 @@ impl Storage for TikvDb {
             match outcome {
                 Ok(value) => return Ok(value),
                 Err(e) if is_retryable(&e) => {
-                    last_error = Some(to_app_error(e));
-                    tokio::time::sleep(retry_backoff(conflicts)).await;
-                    conflicts += 1;
+                    back_off(&mut conflicts, to_app_error(e), &mut last_error).await;
                     continue;
                 }
                 Err(e) => return Err(to_app_error(e)),
@@ -431,17 +524,49 @@ mod tests {
     #[test]
     fn lock_scopes_sort_into_the_hierarchy_order() {
         let db = keys::lock(LockScope::Database, b"z-database");
-        let table = keys::lock(LockScope::Table, b"a-table");
         let user = keys::lock(LockScope::User, b"a-user");
 
         // id の中身に関わらず、スコープの順序が先に効く。
-        assert!(db < table);
-        assert!(table < user);
+        assert!(db < user);
 
-        let ordered: Vec<_> = BTreeSet::from([user.clone(), table.clone(), db.clone()])
+        let ordered: Vec<_> = BTreeSet::from([user.clone(), db.clone()])
             .into_iter()
             .collect();
-        assert_eq!(ordered, vec![db, table, user]);
+        assert_eq!(ordered, vec![db, user]);
+    }
+
+    /// バックオフが上限を超えず、かつ毎回同じ値にならないこと。
+    ///
+    /// 揃った間隔でやり直すと、ぶつかった相手と足並みが揃ったままになる。
+    #[test]
+    fn retry_backoff_grows_within_bounds_and_varies() {
+        // 上限を超えない（揺らぎの上振れを含めて）。
+        let ceiling =
+            RETRY_BACKOFF_MAX + RETRY_BACKOFF_MAX * RETRY_BACKOFF_JITTER_PERCENT as u32 / 100;
+        for attempt in 0..32 {
+            assert!(
+                retry_backoff(attempt) <= ceiling,
+                "attempt={attempt} で上限を超えた"
+            );
+        }
+
+        // 十分に伸びた段階では、毎回同じ値にならない。
+        let samples: std::collections::BTreeSet<_> = (0..32).map(|_| retry_backoff(8)).collect();
+        assert!(
+            samples.len() > 1,
+            "揺らぎが効いておらず、待ち時間が毎回同じになっている"
+        );
+
+        // 揺らぎは ±20% の範囲に収まる。
+        let base = RETRY_BACKOFF_MAX.as_millis() as u64;
+        let span = base * RETRY_BACKOFF_JITTER_PERCENT / 100;
+        for sample in samples {
+            let millis = sample.as_millis() as u64;
+            assert!(
+                millis >= base - span && millis <= base + span,
+                "揺らぎが想定範囲を外れている: {millis}ms"
+            );
+        }
     }
 
     #[test]

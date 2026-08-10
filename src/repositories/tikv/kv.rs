@@ -10,9 +10,11 @@
 //! そちらは [`tikv_client::Snapshot`] を使う。両者は読み取り系のシグネチャが同一なので、
 //! ここで 1 つの trait にまとめ、下の自由関数を両方で使い回す。
 
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use kasane_logic::FlexId;
+use tikv_client::proto::kvrpcpb::{Assertion, Mutation, Op};
 use tikv_client::{BoundRange, Snapshot, Transaction, TransactionClient};
 use tokio::sync::Mutex;
 
@@ -25,6 +27,19 @@ use super::to_app_error;
 
 /// 1 回のスキャンで取り出す件数。TiKV は 1 リクエストの上限があるため分割して読む。
 const SCAN_BATCH: u32 = 512;
+
+/// 1 リクエストへ載せるキー数の上限。
+///
+/// `batch_get` / `batch_get_for_update` / `batch_mutate` は渡されたキーを
+/// TiKV のリージョンごとに束ねる。同じテーブルのシャードキーは連続しているため、
+/// 大量のキーがひとつのリージョンに集まりやすく、そのまま渡すと gRPC の
+/// メッセージサイズ上限に触れたり、応答をまとめて保持する分だけメモリが跳ねる。
+///
+/// 呼び出し側で数を見積もるのは難しい（木の形と対象領域の広さで変わり、
+/// `route_leaves_for_range` のように上限を持たない経路もある）ので、
+/// **ここで一律に区切る**。分割してもキーの昇順は保たれるので、
+/// ロック取得順に依存するデッドロック回避の前提は崩れない。
+const BATCH_KEYS: usize = 1024;
 
 // --- 読み取りの抽象 ---
 
@@ -121,11 +136,60 @@ impl_reader!(Snapshot);
 pub struct LazyTxn {
     client: Arc<TransactionClient>,
     txn: Option<Transaction>,
+    /// このトランザクションで書いた値（`None` は削除）。
+    ///
+    /// [`lock_and_read`](Self::lock_and_read) が使う。詳細はそちらの注記を参照。
+    /// 保持するのは**キーごとに最新の 1 つ**なので、書き込み回数ではなく
+    /// 触ったキー数に比例する。
+    written: HashMap<Vec<u8>, Option<Vec<u8>>>,
+    /// 競合由来の失敗を受け取ったか。
+    ///
+    /// ロックの取得はこのトランザクションの**内側**で起きるので、競合は
+    /// `Storage::write` から見ると「クロージャが返したアプリケーションエラー」に
+    /// 見えてしまう。それではやり直しの判断ができないため、ここに記録して
+    /// `Storage::write` が拾えるようにする。
+    conflicted: bool,
 }
 
 impl LazyTxn {
     pub(super) fn new(client: Arc<TransactionClient>) -> Self {
-        Self { client, txn: None }
+        Self {
+            client,
+            txn: None,
+            written: HashMap::new(),
+            conflicted: false,
+        }
+    }
+
+    /// tikv のエラーを記録しつつそのまま返す。
+    ///
+    /// 競合由来なら印を付けておき、`Storage::write` に新しいトランザクションで
+    /// やり直させる。**このトランザクションが出すエラーは必ずここを通る**
+    /// （下のメソッドがすべて自分で通す）ので、呼び出し側が記録し忘れる余地がない。
+    fn note(&mut self, err: tikv_client::Error) -> tikv_client::Error {
+        if super::is_retryable(&err) {
+            self.conflicted = true;
+        }
+        err
+    }
+
+    /// このトランザクションで書いたキーを記録する。
+    ///
+    /// 記録するのはシャード本体だけでよい。この台帳を読むのは
+    /// [`lock_and_read`](Self::lock_and_read) だけで、そこへ渡るのは
+    /// [`lock_shards`] が組み立てたシャードキーに限られるため。値インデックスや
+    /// カタログまで抱えると、テーブル複製や回収のたびにテーブル 1 個分の
+    /// バイト列を二重に持つことになる。
+    fn record(&mut self, key: &[u8], value: Option<&[u8]>) {
+        if key.first() != Some(&(keys::Ns::TablesData as u8)) {
+            return;
+        }
+        self.written.insert(key.to_vec(), value.map(<[u8]>::to_vec));
+    }
+
+    /// 競合でやり直せる失敗を受け取ったか。
+    pub(super) fn conflicted(&self) -> bool {
+        self.conflicted
     }
 
     async fn open(&mut self) -> Result<&mut Transaction, tikv_client::Error> {
@@ -141,11 +205,80 @@ impl LazyTxn {
     }
 
     async fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), tikv_client::Error> {
-        self.open().await?.put(key, value).await
+        self.record(&key, Some(&value));
+        let result = self.open().await?.put(key, value).await;
+        result.map_err(|e| self.note(e))
     }
 
     async fn delete(&mut self, key: Vec<u8>) -> Result<(), tikv_client::Error> {
-        self.open().await?.delete(key).await
+        self.record(&key, None);
+        let result = self.open().await?.delete(key).await;
+        result.map_err(|e| self.note(e))
+    }
+
+    async fn mutate(&mut self, mut mutations: Vec<Mutation>) -> Result<(), tikv_client::Error> {
+        for m in &mutations {
+            let value = (m.op != Op::Del as i32).then_some(m.value.as_slice());
+            self.record(&m.key, value);
+        }
+        // 1 リクエストへ載せすぎないよう区切る（`BATCH_KEYS` の注記を参照）。
+        // 手持ちの `Vec` を切り出して渡すので、1 塊で収まる通常の場合は複製が起きない。
+        while !mutations.is_empty() {
+            let rest = mutations.split_off(mutations.len().min(BATCH_KEYS));
+            let result = self.open().await?.batch_mutate(mutations).await;
+            result.map_err(|e| self.note(e))?;
+            mutations = rest;
+        }
+        Ok(())
+    }
+
+    /// キーをロックし、**そのロック時点の**値を返す。
+    ///
+    /// 通常の `get` はトランザクション開始時（`start_ts`）のスナップショットを読むため、
+    /// 「ロックしてから読む」と、ロック取得までの間に他者がコミットした変更を見落とす。
+    /// `batch_get_for_update` はロックと値の取得を 1 リクエストで行い、値は取り直した
+    /// `for_update_ts` 時点のものになるので、read-modify-write が安全に組める。
+    ///
+    /// 存在しないキーも**ロックされる**（結果には現れない）。空の領域を他者が
+    /// 埋めたり親へ畳んだりするのを防ぐのに、この性質を使っている。
+    ///
+    /// # 自分自身の書き込みを見せる
+    ///
+    /// `batch_get_for_update` はトランザクションのローカルバッファを**見ない**
+    /// （`get` は見るが、こちらはロック応答の値をそのまま返す）。そのため、同じ
+    /// トランザクションで既に書いたキーを引き直すと、コミット前の自分の変更が
+    /// 消えて見える。1 回の書き込みクロージャで同じリーフを 2 度触る操作
+    /// （まとめて `data_insert` する等）が自分の書き込みを失うので、
+    /// ここで手元の記録を優先させる。
+    async fn lock_and_read(
+        &mut self,
+        mut keys: Vec<Vec<u8>>,
+    ) -> Result<HashMap<Vec<u8>, Vec<u8>>, tikv_client::Error> {
+        // キーは昇順で渡ってくる。分割しても順序は保たれるので、ロック取得順に
+        // 依存するデッドロック回避の前提は崩れない。
+        let mut locked: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+        let all_keys = keys.clone();
+        while !keys.is_empty() {
+            let rest = keys.split_off(keys.len().min(BATCH_KEYS));
+            let result = self.open().await?.batch_get_for_update(keys).await;
+            let pairs = result.map_err(|e| self.note(e))?;
+            locked.extend(pairs.into_iter().map(|kv| (Vec::from(kv.0), kv.1)));
+            keys = rest;
+        }
+
+        // 自分が書いていないキーはロック応答のまま、書いたキーは手元の値で置き換える。
+        for key in all_keys {
+            match self.written.get(&key) {
+                Some(Some(value)) => {
+                    locked.insert(key, value.clone());
+                }
+                Some(None) => {
+                    locked.remove(&key);
+                }
+                None => {}
+            }
+        }
+        Ok(locked)
     }
 }
 
@@ -202,34 +335,81 @@ pub(super) async fn delete(txn: &Mutex<LazyTxn>, key: Vec<u8>) -> Result<(), App
     txn.delete(key).await.map_err(to_app_error)
 }
 
-/// 複数のキーをまとめて書く。
+/// 複数キーへの変更をまとめて適用する。
 ///
-/// 減らせるのはミューテックスの取り直しだけで、**ネットワーク往復は減らない**。
-/// 悲観トランザクションの `put` は内部で対象キーの悲観ロックを取るため、
-/// 1 キーにつき TSO 取得 1 回と PessimisticLock RPC 1 回がかかる。
-/// これをまとめるには `Transaction::batch_mutate`（全キーのロックを 1 回の
-/// リクエストへ束ねる）へ寄せる必要があり、それは別途の課題。
+/// 悲観トランザクションの `put` / `delete` は**キーごとに**悲観ロックを取るため、
+/// 1 件につき TSO 取得 1 回と PessimisticLock RPC 1 回がかかる。`batch_mutate` は
+/// 全キーのロックを 1 リクエストへ束ねる（リージョンごとに分割される）ので、
+/// 差分が大きいほど往復数の差が効く。
+pub(super) async fn mutate_many(
+    txn: &Mutex<LazyTxn>,
+    mutations: Vec<Mutation>,
+) -> Result<(), AppError> {
+    if mutations.is_empty() {
+        return Ok(());
+    }
+    let mut txn = txn.lock().await;
+    txn.mutate(mutations).await.map_err(to_app_error)
+}
+
+/// `key -> value` の書き込みを表す [`Mutation`]。
+pub(super) fn put_mutation(key: Vec<u8>, value: Vec<u8>) -> Mutation {
+    Mutation {
+        op: Op::Put as i32,
+        key,
+        value,
+        assertion: Assertion::None as i32,
+    }
+}
+
+/// `key` の削除を表す [`Mutation`]。
+pub(super) fn delete_mutation(key: Vec<u8>) -> Mutation {
+    Mutation {
+        op: Op::Del as i32,
+        key,
+        value: Vec::new(),
+        assertion: Assertion::None as i32,
+    }
+}
+
+/// 削除と書き込みをまとめて 1 回の変更として適用する。
+///
+/// キー順に並べてから渡すので、ロック取得順に依存するデッドロック回避の前提を保てる
+/// （削除と書き込みを別々に流すと、その間で順序が崩れる）。
+pub(super) async fn write_batch(
+    txn: &Mutex<LazyTxn>,
+    deletes: impl IntoIterator<Item = Vec<u8>>,
+    puts: impl IntoIterator<Item = (Vec<u8>, Vec<u8>)>,
+) -> Result<(), AppError> {
+    let mut mutations: Vec<Mutation> = deletes
+        .into_iter()
+        .map(delete_mutation)
+        .chain(
+            puts.into_iter()
+                .map(|(key, value)| put_mutation(key, value)),
+        )
+        .collect();
+    mutations.sort_unstable_by(|a, b| a.key.cmp(&b.key));
+    mutate_many(txn, mutations).await
+}
+
 pub(super) async fn put_many(
     txn: &Mutex<LazyTxn>,
     entries: impl IntoIterator<Item = (Vec<u8>, Vec<u8>)>,
 ) -> Result<(), AppError> {
-    let mut txn = txn.lock().await;
-    for (key, value) in entries {
-        txn.put(key, value).await.map_err(to_app_error)?;
-    }
-    Ok(())
+    let mutations = entries
+        .into_iter()
+        .map(|(key, value)| put_mutation(key, value))
+        .collect();
+    mutate_many(txn, mutations).await
 }
 
-/// 複数のキーをまとめて消す（往復についての注意は [`put_many`] と同じ）。
 pub(super) async fn delete_many(
     txn: &Mutex<LazyTxn>,
     keys: impl IntoIterator<Item = Vec<u8>>,
 ) -> Result<(), AppError> {
-    let mut txn = txn.lock().await;
-    for key in keys {
-        txn.delete(key).await.map_err(to_app_error)?;
-    }
-    Ok(())
+    let mutations = keys.into_iter().map(delete_mutation).collect();
+    mutate_many(txn, mutations).await
 }
 
 /// 複数キーをまとめて引く。存在しないキーは結果に現れない。
@@ -241,7 +421,11 @@ pub(super) async fn batch_get<R: Reader>(
         return Ok(Vec::new());
     }
     let mut txn = txn.lock().await;
-    txn.read_many(keys).await.map_err(to_app_error)
+    let mut out = Vec::new();
+    for chunk in keys.chunks(BATCH_KEYS) {
+        out.extend(txn.read_many(chunk.to_vec()).await.map_err(to_app_error)?);
+    }
+    Ok(out)
 }
 
 fn range_from(start: Vec<u8>, end: Option<Vec<u8>>) -> BoundRange {
@@ -282,7 +466,8 @@ pub(super) async fn scan_prefix<R: Reader>(
 }
 
 /// 指定範囲のキーだけを取り出す（バッチ分割して読み切る）。
-async fn scan_keys_range<R: Reader>(
+/// `start`（含む）から `end`（排他、`None` なら終端まで）のキーを取り出す。
+pub(super) async fn scan_keys_range<R: Reader>(
     txn: &Mutex<R>,
     start: Vec<u8>,
     end: Option<Vec<u8>>,
@@ -425,19 +610,21 @@ pub(super) async fn put_shard(
     entry: &[u8],
 ) -> Result<(), AppError> {
     let count_key = keys::shard_count(table_id, region);
-    let mut txn_guard = txn.lock().await;
-    txn_guard
-        .put(keys::shard(table_id, region), frame(entry))
-        .await
-        .map_err(to_app_error)?;
-    match ShardEntry::leaf_count(entry)? {
-        Some(count) => txn_guard
-            .put(count_key, count.to_le_bytes().to_vec())
-            .await
-            .map_err(to_app_error),
+    let count = match ShardEntry::leaf_count(entry)? {
+        Some(count) => put_mutation(count_key, count.to_le_bytes().to_vec()),
         // ポインタノードは件数を持たない。リーフから昇格した場合に備えて消す。
-        None => txn_guard.delete(count_key).await.map_err(to_app_error),
-    }
+        None => delete_mutation(count_key),
+    };
+    // 本体と件数を 1 リクエストにまとめる。悲観トランザクションでは 1 キーごとに
+    // タイムスタンプ取得とロック RPC がかかるので、分けると往復が倍になる。
+    mutate_many(
+        txn,
+        vec![
+            put_mutation(keys::shard(table_id, region), frame(entry)),
+            count,
+        ],
+    )
+    .await
 }
 
 /// シャードエントリを削除する（件数キーも一緒に消える）。
@@ -446,15 +633,76 @@ pub(super) async fn delete_shard(
     table_id: TableId,
     region: &FlexId,
 ) -> Result<(), AppError> {
-    let mut txn_guard = txn.lock().await;
-    txn_guard
-        .delete(keys::shard(table_id, region))
-        .await
-        .map_err(to_app_error)?;
-    txn_guard
-        .delete(keys::shard_count(table_id, region))
-        .await
-        .map_err(to_app_error)
+    delete_many(
+        txn,
+        [
+            keys::shard(table_id, region),
+            keys::shard_count(table_id, region),
+        ],
+    )
+    .await
+}
+
+/// シャード領域をまとめてロックし、**ロック時点の**内容を返す。
+///
+/// 返る地図には要求した全領域が入る（未作成領域は `None`）。存在しないキーも
+/// ロックされるので、「空の領域を他者が埋める」「親へ畳んで消す」といった操作も
+/// この呼び出しで排他される。
+///
+/// キーは [`BTreeSet`](std::collections::BTreeSet) に集めてから渡すこと。反復順
+/// （＝バイト昇順）がそのままデッドロック回避の全順序になる。
+pub(super) async fn lock_shards(
+    txn: &Mutex<LazyTxn>,
+    table_id: TableId,
+    regions: impl IntoIterator<Item = FlexId>,
+) -> Result<BTreeMap<FlexId, Option<ShardValue>>, AppError> {
+    // 領域 → キーの対応を作り、ロックは昇順のキー列で要求する。
+    let by_key: BTreeMap<Vec<u8>, FlexId> = regions
+        .into_iter()
+        .map(|r| (keys::shard(table_id, &r), r))
+        .collect();
+    if by_key.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+
+    let mut found = {
+        let mut txn = txn.lock().await;
+        txn.lock_and_read(by_key.keys().cloned().collect())
+            .await
+            .map_err(to_app_error)?
+    };
+
+    // 存在したものを埋め、残りは未作成として `None` にする。
+    let mut out = BTreeMap::new();
+    for (key, region) in by_key {
+        let value = match found.remove(&key) {
+            Some(framed) => Some(ShardValue::verify(framed)?),
+            None => None,
+        };
+        out.insert(region, value);
+    }
+    Ok(out)
+}
+
+/// プレフィックスに一致するキーを、上限件数まで削除する。
+///
+/// 1 トランザクションに全部を詰めると TiKV のトランザクションサイズ上限に当たるので、
+/// 呼び出し側が繰り返し呼べるよう「削除した件数」を返す。0 なら消し切っている。
+pub(super) async fn delete_prefix_chunk(
+    txn: &Mutex<LazyTxn>,
+    prefix: &[u8],
+    limit: u32,
+) -> Result<usize, AppError> {
+    let end = keys::prefix_end(prefix);
+    let batch = {
+        let mut txn = txn.lock().await;
+        txn.read_range_keys(range_from(prefix.to_vec(), end), limit)
+            .await
+            .map_err(to_app_error)?
+    };
+    let removed = batch.len();
+    delete_many(txn, batch).await?;
+    Ok(removed)
 }
 
 /// テーブルが保持する [`FlexId`] の総数を、件数キーだけを読んで合算する。

@@ -1,26 +1,13 @@
-//! データベースとテーブルのカタログ操作。
-//!
-//! ロックの粒度については [`LockScope`] とモジュール冒頭のコメントを参照。
-//! テーブル集合を変更・走査する操作はデータベース単位のロックを、
-//! シャード集合を触る操作はテーブル単位のロックを宣言する。
-//!
-//! ロックを**複数宣言する順序は問わない**。取得順は保持集合（`BTreeSet`）が
-//! バイト昇順で決めるので、宣言側で並べ替える必要はない（`super::mod` を参照）。
-
-use tokio::sync::Mutex;
-
 use super::keys::{self, LockScope};
+use super::kv::Reader;
+use super::{TikvRead, TikvWrite, kv};
 use crate::error::AppError;
 use crate::models::database::table::{
     Table, TableConstraints, TableDataType, TableMetadata, UpdateTableConstraints,
 };
 use crate::models::database::{DatabaseInfoResponse, DatabaseMetadata};
 use crate::models::id::{DatabaseId, TableId};
-
-use super::kv::Reader;
-use super::{TikvRead, TikvWrite, kv};
-
-// --- 直列化 ---
+use tokio::sync::Mutex;
 
 fn encode_database(meta: &DatabaseMetadata) -> Result<Vec<u8>, AppError> {
     serde_json::to_vec(meta)
@@ -41,8 +28,6 @@ fn decode_table(bytes: &[u8]) -> Result<TableMetadata, AppError> {
     serde_json::from_slice(bytes)
         .map_err(|e| AppError::InternalError(format!("failed to decode table metadata: {e}")))
 }
-
-// --- 読み書き共通の参照系（トランザクションだけを受け取る） ---
 
 pub(super) async fn database_meta<R: Reader>(
     txn: &Mutex<R>,
@@ -164,8 +149,6 @@ pub(super) async fn table_list_by_id<R: Reader>(
         .collect()
 }
 
-// --- 読み取り側 ---
-
 impl<R: Reader> TikvRead<'_, R> {
     pub(super) async fn database_list_impl(
         &self,
@@ -197,26 +180,17 @@ impl<R: Reader> TikvRead<'_, R> {
         table_list_by_id(&self.txn, db_id).await
     }
 
-    /// テーブルの保持件数。
-    ///
-    /// 件数専用キー（`0x08`）だけを読む。シャード本体から数えると、合算のために
-    /// テーブル全体のリーフをネットワーク越しに転送することになる（`kv.rs` の
-    /// シャードの保存の節を参照）。
     pub(super) async fn table_count_impl(&self, table_id: TableId) -> Result<u64, AppError> {
         kv::table_flex_id_count(&self.txn, table_id).await
     }
 }
 
-// --- 書き込み側 ---
-
 impl TikvWrite<'_> {
-    /// データベースを作成する。名前そのものが排他の単位になる。
     pub(super) async fn database_create_impl(
         &mut self,
         name: &str,
         description: Option<String>,
     ) -> Result<DatabaseInfoResponse, AppError> {
-        // 「存在しないことを確認してから作る」ので、その名前を指すデータベーススコープを取る。
         let id = DatabaseId(uuid::Uuid::now_v7());
         self.require_lock(LockScope::Database, name.as_bytes())?;
 
@@ -245,9 +219,6 @@ impl TikvWrite<'_> {
     }
 
     /// データベースを配下のテーブルごと削除する。
-    ///
-    /// テーブル集合の走査と削除を安全に行うため、まずデータベーススコープを取り、
-    /// 判明した各テーブルのスコープも宣言する（足りなければフレームワークがやり直す）。
     pub(super) async fn database_remove_impl(&mut self, name: &str) -> Result<(), AppError> {
         if name.is_empty() {
             return Err(AppError::DatabaseNotFound {
@@ -263,19 +234,18 @@ impl TikvWrite<'_> {
             });
         };
 
-        // 配下テーブルを列挙し、それぞれのテーブルスコープを宣言する。
-        // データベーススコープを保持しているのでこの一覧は変化しない。
+        // 配下テーブルを列挙する。データベーススコープを保持しているので、
+        // この一覧が途中で増えることはない（`table_create` も同じロックを取る）。
         let tables = table_list_by_id(&self.txn, meta.id).await?;
-        let table_ids: Vec<[u8; 16]> = tables.iter().map(|t| t.id.into_bytes()).collect();
-        self.require_locks(table_ids.iter().map(|id| (LockScope::Table, id.as_slice())))?;
-
         for table in tables {
-            self.remove_table_contents(meta.id, &table.name, table.id)
-                .await?;
+            self.retire_table(meta.id, &table.name, table.id).await?;
         }
 
-        kv::delete(&self.txn, keys::database(name)).await?;
-        kv::delete(&self.txn, keys::database_id_index(meta.id)).await?;
+        kv::delete_many(
+            &self.txn,
+            [keys::database(name), keys::database_id_index(meta.id)],
+        )
+        .await?;
         Ok(())
     }
 
@@ -355,14 +325,8 @@ impl TikvWrite<'_> {
             });
         }
 
-        // コピー元テーブルのシャードを読むため、各テーブルのスコープも宣言する。
+        // コピー元テーブルのシャードはスナップショットから読む（`copy_table_into`）。
         let src_tables = table_list_by_id(&self.txn, src_meta.id).await?;
-        let src_table_ids: Vec<[u8; 16]> = src_tables.iter().map(|t| t.id.into_bytes()).collect();
-        self.require_locks(
-            src_table_ids
-                .iter()
-                .map(|id| (LockScope::Table, id.as_slice())),
-        )?;
 
         let copy_db_id = DatabaseId(uuid::Uuid::now_v7());
         let copy_meta = DatabaseMetadata {
@@ -482,7 +446,9 @@ impl TikvWrite<'_> {
         description: Option<Option<String>>,
         validate_existing_data: bool,
     ) -> Result<Table, AppError> {
-        // 改名はテーブル集合の変更、既存データ検証はシャード集合の走査なので両方を取る。
+        // 改名はデータベースのテーブル集合の変更なので、その名前を排他する。
+        // 既存データ検証はスナップショット走査で、テーブル単位の排他は取らない
+        // （`validate_existing_data` の注記を参照）。
         self.require_lock(LockScope::Database, db_name.as_bytes())?;
 
         let db_meta =
@@ -497,10 +463,6 @@ impl TikvWrite<'_> {
             .ok_or_else(|| AppError::TableNotFound {
                 name: table_name.to_string(),
             })?;
-
-        if validate_existing_data {
-            self.require_lock(LockScope::Table, &table.id.into_bytes())?;
-        }
 
         let changed_name = match new_name {
             Some(nn) if nn != table_name => {
@@ -572,7 +534,8 @@ impl TikvWrite<'_> {
         db_name: &str,
         table_name: &str,
     ) -> Result<(), AppError> {
-        // テーブル集合からの除去（DB スコープ）とシャード集合の削除（テーブルスコープ）の両方。
+        // 変えるのはデータベースのテーブル集合だけ。シャード実体は論理削除して
+        // 回収に回すので、テーブル全体を排他する必要はない（`retire_table` を参照）。
         self.require_lock(LockScope::Database, db_name.as_bytes())?;
 
         let db_meta =
@@ -587,10 +550,7 @@ impl TikvWrite<'_> {
                 name: table_name.to_string(),
             })?;
 
-        self.require_lock(LockScope::Table, &table.id.into_bytes())?;
-
-        self.remove_table_contents(db_meta.id, table_name, table.id)
-            .await
+        self.retire_table(db_meta.id, table_name, table.id).await
     }
 
     pub(super) async fn table_copy_impl(
@@ -612,14 +572,12 @@ impl TikvWrite<'_> {
             .ok_or_else(|| AppError::DatabaseNotFound {
                 name: src_db_name.to_string(),
             })?;
-        let src_table = table_meta(&self.txn, src_db.id, src_table_name)
+        // 存在確認だけ。実体の読み出しは `copy_table_into` がスナップショットから行う。
+        table_meta(&self.txn, src_db.id, src_table_name)
             .await?
             .ok_or_else(|| AppError::TableNotFound {
                 name: src_table_name.to_string(),
             })?;
-
-        // コピー元のシャードを一貫して読むため、その集合も排他する。
-        self.require_lock(LockScope::Table, &src_table.id.into_bytes())?;
 
         let copy_db = database_meta(&self.txn, copy_db_name)
             .await?
@@ -640,7 +598,13 @@ impl TikvWrite<'_> {
             .await
     }
 
-    /// テーブル 1 つを複製する。呼び出し側が必要なロックを取得済みであること。
+    /// テーブル 1 つを複製する。
+    ///
+    /// コピー元のシャードは**スナップショットから読む**（ロックを取らない）。
+    /// したがって得られるのは「このトランザクションの開始時点における一貫したコピー」で、
+    /// コピー中に走った書き込みは含まれない。テーブル全体を排他して「コピー中は
+    /// 書き込みを止める」意味論も考えられるが、複数インスタンスが同じクラスタへ
+    /// 書き込む前提ではそちらの代償が大きすぎる。
     async fn copy_table_into(
         &mut self,
         src_db_id: DatabaseId,
@@ -676,13 +640,12 @@ impl TikvWrite<'_> {
         )
         .await?;
 
-        // シャード本体・件数キー・値インデックスを、キー先頭の table_id だけ
-        // 差し替えて複製する。値はそのまま持ち回る（シャード値のフレームはキーに
-        // 依存しないので、検証済みのバイト列を再フレームせずそのまま置ける）。
-        for prefix in [
-            keys::shards_of(src_meta.id),
-            keys::shard_counts_of(src_meta.id),
-        ] {
+        // テーブルのデータ実体を、キー先頭の table_id だけ差し替えて複製する。
+        // 対象は `keys::table_data_prefixes` が一括で決める。ここで自前に並べると、
+        // 名前空間が増えたときに回収側だけが追随して複製が取りこぼす。
+        // 値はそのまま持ち回る（シャード値のフレームはキーに依存しないので、
+        // 検証済みのバイト列を再フレームせずそのまま置ける）。
+        for prefix in keys::table_data_prefixes(src_meta.id) {
             let entries = kv::scan_prefix(&self.txn, &prefix).await?;
             let mut copied = Vec::with_capacity(entries.len());
             for (key, value) in entries {
@@ -692,16 +655,6 @@ impl TikvWrite<'_> {
             }
             kv::put_many(&self.txn, copied).await?;
         }
-
-        let index_keys =
-            kv::scan_prefix_keys(&self.txn, &keys::value_index_of(src_meta.id)).await?;
-        let mut copied = Vec::with_capacity(index_keys.len());
-        for key in index_keys {
-            let mut dst = key;
-            keys::replace_leading_id(&mut dst, copy_id)?;
-            copied.push((dst, Vec::new()));
-        }
-        kv::put_many(&self.txn, copied).await?;
 
         Ok(Table {
             id: copy_id,
@@ -713,30 +666,37 @@ impl TikvWrite<'_> {
         })
     }
 
-    /// テーブルのシャード・値インデックス・カタログ項目をまとめて削除する。
-    /// 呼び出し側が該当スコープのロックを取得済みであること。
-    async fn remove_table_contents(
+    /// テーブルを**論理削除**する。
+    ///
+    /// カタログ項目を消して回収待ち行列へ積むだけで、シャード実体には触れない。
+    /// 実体の削除は [`gc`](super::gc) が後から分割して行う。こうする理由は 2 つある。
+    ///
+    /// - **テーブル全体の排他が要らなくなる。** データ書き込みはリーフ単位でしか
+    ///   ロックを取らないので（`data.rs`）、実体をここで消そうとすると並行中の
+    ///   書き込みと衝突しないことを保証できない。カタログから辿れなくしてしまえば、
+    ///   取り残されたキーは誰にも見えず、回収するだけでよい。
+    /// - **1 トランザクションのサイズ上限に縛られない。** 大きなテーブルの全キーを
+    ///   1 つのトランザクションへ詰めると TiKV の上限に当たる。回収は冪等なので
+    ///   分割コミットしてよく、原子性を失わない。
+    ///
+    /// `TableId` は UUIDv7 なので再利用されない。回収前に飛び込んだ書き込みが
+    /// 残骸を作っても、次の掃除で回収される。
+    async fn retire_table(
         &mut self,
         db_id: DatabaseId,
         table_name: &str,
         table_id: TableId,
     ) -> Result<(), AppError> {
-        for prefix in [
-            keys::shards_of(table_id),
-            keys::shard_counts_of(table_id),
-            keys::value_index_of(table_id),
-        ] {
-            let keys = kv::scan_prefix_keys(&self.txn, &prefix).await?;
-            kv::delete_many(&self.txn, keys).await?;
-        }
-        kv::delete_many(
+        // カタログ項目の除去と回収待ち行列への登録は 1 回の変更にまとめる。
+        // 悲観トランザクションでは 1 キーごとにロック RPC がかかるため。
+        kv::write_batch(
             &self.txn,
             [
                 keys::table(db_id, table_name),
                 keys::table_id_index(table_id),
             ],
+            [self.retire(table_id)],
         )
-        .await?;
-        Ok(())
+        .await
     }
 }
