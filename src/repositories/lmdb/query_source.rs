@@ -3,11 +3,23 @@
 //! Kasane-Logic の [`Source`] は「範囲を指定して読む」ことしか要求しないため、テーブル全体を
 //! メモリへ展開せずにクエリの入力になれる。演算そのものはインメモリの作業木
 //! （[`WorkingTree`]）上で行われ、本アダプタは**入力の読み出し方**だけを担う。
+//!
+//! # 断面を固定する理由
+//!
+//! [`Source::read_subset`] は 1 回のクエリ実行で複数回呼ばれる（対象領域ごと、
+//! そしてクエリが同じテーブルを複数箇所で参照すればその数だけ）。呼ばれるたびに
+//! 読み取りトランザクションを開き直すと、そのつど別のスナップショットを見ることになり、
+//! 途中で走った書き込みを一部だけ見た結果が混ざりうる。
+//!
+//! そこでクエリの開始時に開いた 1 つのトランザクション
+//! （[`LmdbQuerySnapshot`](super::LmdbQuerySnapshot)）を全ソースで共有する。
+//! TiKV 側が開始タイムスタンプを共有するのと同じ役割。
 
+use heed::Database;
 use heed::types::Bytes;
-use heed::{Database, Env, WithoutTls};
 use kasane_logic::{Error as LogicError, FlexId, RangeId, SafeValue, Source, WorkingTree};
 
+use super::LmdbQuerySnapshot;
 use super::keys::TableIdAndFlexId;
 use super::shard;
 use crate::models::id::TableId;
@@ -16,12 +28,12 @@ pub use crate::repositories::traits::DecodeFn;
 
 /// 1テーブルを 1 つのクエリ入力源として見せるアダプタ。
 ///
-/// 読み取りトランザクションを**保持しない**のが要点。`Source` は rayon 有効時に
-/// `Send + Sync` を要求されるうえ、実行器は複数回・複数スレッドから読み得るため、
-/// `Env` だけを持ち `read_subset` の内側で短命な読み取りトランザクションを開く。
-/// ゼロコピー参照はその内側で所有値へデコードするので、トランザクション外へ漏れない。
+/// トランザクションはクエリ全体で 1 つを共有する（`Arc<Mutex<_>>`）。実行器は
+/// 複数回・複数スレッドから読み得るので、`Sync` を得るために排他で包んでいる。
+/// ゼロコピー参照は `read_subset` の内側で所有値へデコードするので、
+/// トランザクション外へ漏れない。
 pub struct TableSource<V> {
-    env: Env<WithoutTls>,
+    snapshot: LmdbQuerySnapshot,
     tables_data: Database<TableIdAndFlexId, Bytes>,
     table_id: TableId,
     decode: DecodeFn<V>,
@@ -29,13 +41,13 @@ pub struct TableSource<V> {
 
 impl<V> TableSource<V> {
     pub fn new(
-        env: Env<WithoutTls>,
+        snapshot: LmdbQuerySnapshot,
         tables_data: Database<TableIdAndFlexId, Bytes>,
         table_id: TableId,
         decode: DecodeFn<V>,
     ) -> Self {
         Self {
-            env,
+            snapshot,
             tables_data,
             table_id,
             decode,
@@ -47,9 +59,16 @@ impl super::AppDb {
     /// テーブル 1 つをクエリの入力源として見せるアダプタを作る。
     ///
     /// ストレージのハンドル（`Env` / `Database`）をサービス層へ露出させないための入口。
-    /// サービス層は「どのテーブルを、どう復元して読むか」だけを指定する。
-    pub fn table_source<V>(&self, table_id: TableId, decode: DecodeFn<V>) -> TableSource<V> {
-        TableSource::new(self.env.clone(), self.tables_data, table_id, decode)
+    /// サービス層は「どのテーブルを、どう復元して読むか」と、
+    /// 「どの断面から読むか」（[`Storage::query_snapshot`](crate::repositories::Storage::query_snapshot)
+    /// で 1 度だけ作り、全ソースへ配る）を指定する。
+    pub fn table_source<V>(
+        &self,
+        table_id: TableId,
+        decode: DecodeFn<V>,
+        snapshot: LmdbQuerySnapshot,
+    ) -> TableSource<V> {
+        TableSource::new(snapshot, self.tables_data, table_id, decode)
     }
 }
 
@@ -61,10 +80,11 @@ where
     type Value = V;
 
     fn read_subset(&self, bounds: &[RangeId]) -> Result<WorkingTree<V>, LogicError> {
-        let txn = self
-            .env
-            .read_txn()
-            .map_err(|e| LogicError::SourceRead(e.to_string()))?;
+        // クエリ全体で 1 つの断面を共有する。ここでの排他は「同時に触らせない」ためで、
+        // トランザクション自体はクエリの開始時に開かれている。
+        let txn = self.snapshot.lock().map_err(|_| {
+            LogicError::SourceRead("query snapshot was poisoned by a panicking reader".to_string())
+        })?;
 
         let mut cells: Vec<(FlexId, V)> = Vec::new();
         for range in bounds {

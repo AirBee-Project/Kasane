@@ -9,5 +9,9 @@
 pub mod shard_entry;
 pub mod value_index;
 
-/// 値インデックスとシャードのキー先頭に置く `TableId` のバイト長。
-pub const TABLE_ID_LEN: usize = 16;
+/// キーへ埋め込む識別子のバイト長。
+///
+/// `DatabaseId` も `TableId` も中身は UUID なので、キーの中では同じ固定長を占める。
+/// 固定長であること自体がキーレイアウトの前提で、これがあるおかげで
+/// 「識別子 ‖ 可変長の続き」を曖昧さなく分解できる。
+pub const UUID_LEN: usize = 16;

@@ -16,10 +16,11 @@ use crate::models::users::{
 };
 use crate::repositories::CatalogRepository;
 
+use super::kv::Reader;
 use super::{TikvRead, TikvWrite, kv};
 
-pub(super) async fn user_meta(
-    txn: &Mutex<tikv_client::Transaction>,
+pub(super) async fn user_meta<R: Reader>(
+    txn: &Mutex<R>,
     username: &str,
 ) -> Result<Option<UserMetadata>, AppError> {
     match kv::get(txn, keys::user(username)).await? {
@@ -40,7 +41,7 @@ async fn put_user_meta(
     kv::put(txn, keys::user(username), bytes).await
 }
 
-impl TikvRead<'_> {
+impl<R: Reader> TikvRead<'_, R> {
     pub(super) async fn get_user_impl(&self, username: &str) -> Result<Option<User>, AppError> {
         Ok(user_meta(&self.txn, username)
             .await?

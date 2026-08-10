@@ -4,6 +4,7 @@
 //! フラットな 1 本しかない。そこで**先頭 1 バイトの名前空間タグ**で論理テーブルを分ける。
 //!
 //! ```text
+//!   0x00 ‖ "initialized"                 -> クラスタ初期化済みマーカー
 //!   0x01 ‖ name                          -> DatabaseMetadata
 //!   0x02 ‖ db_id(16) ‖ table_name        -> TableMetadata
 //!   0x03 ‖ db_id(16)                     -> データベース名
@@ -21,14 +22,16 @@
 
 use kasane_logic::FlexId;
 
+use crate::error::AppError;
 use crate::models::id::{DatabaseId, TableId};
-
-use crate::repositories::encoding::TABLE_ID_LEN;
+use crate::repositories::encoding::UUID_LEN;
 
 /// 論理テーブルを区別する名前空間タグ。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Ns {
+    /// クラスタ全体に関わる印。今のところ初期化済みマーカーだけ。
+    Meta = 0x00,
     Databases = 0x01,
     Tables = 0x02,
     DatabaseIdIndex = 0x03,
@@ -54,6 +57,15 @@ fn with_ns(ns: Ns, rest: &[u8]) -> Vec<u8> {
     key
 }
 
+/// `0x00 ‖ "initialized"`
+///
+/// このクラスタが Kasane 用に初期化済みであることを示す印。既定ユーザーの投入は
+/// **この印の有無**で判定する（`root` の有無で判定すると、消した管理者が
+/// 次の起動で既定パスワードのまま復活してしまう）。
+pub fn cluster_initialized() -> Vec<u8> {
+    with_ns(Ns::Meta, b"initialized")
+}
+
 /// `0x01 ‖ name`
 pub fn database(name: &str) -> Vec<u8> {
     with_ns(Ns::Databases, name.as_bytes())
@@ -66,7 +78,7 @@ pub fn database_id_index(db_id: DatabaseId) -> Vec<u8> {
 
 /// `0x02 ‖ db_id ‖ table_name`
 pub fn table(db_id: DatabaseId, table_name: &str) -> Vec<u8> {
-    let mut rest = Vec::with_capacity(TABLE_ID_LEN + table_name.len());
+    let mut rest = Vec::with_capacity(UUID_LEN + table_name.len());
     rest.extend_from_slice(&db_id.into_bytes());
     rest.extend_from_slice(table_name.as_bytes());
     with_ns(Ns::Tables, &rest)
@@ -78,16 +90,13 @@ pub fn tables_of(db_id: DatabaseId) -> Vec<u8> {
 }
 
 /// [`tables_of`] で引いたキーからテーブル名を取り出す。
-pub fn table_name_from_key(key: &[u8]) -> Result<&str, crate::error::AppError> {
-    let head = 1 + TABLE_ID_LEN;
+pub fn table_name_from_key(key: &[u8]) -> Result<&str, AppError> {
+    let head = 1 + UUID_LEN;
     if key.len() < head {
-        return Err(crate::error::AppError::InternalError(
-            "table key too short".to_string(),
-        ));
+        return Err(AppError::InternalError("table key too short".to_string()));
     }
-    std::str::from_utf8(&key[head..]).map_err(|e| {
-        crate::error::AppError::InternalError(format!("table name is not valid utf-8: {e}"))
-    })
+    std::str::from_utf8(&key[head..])
+        .map_err(|e| AppError::InternalError(format!("table name is not valid utf-8: {e}")))
 }
 
 /// `0x04 ‖ table_id`
@@ -101,15 +110,49 @@ pub fn user(username: &str) -> Vec<u8> {
 }
 
 /// [`Ns::Users`] のキーからユーザー名を取り出す。
-pub fn username_from_key(key: &[u8]) -> Result<&str, crate::error::AppError> {
-    std::str::from_utf8(&key[1..]).map_err(|e| {
-        crate::error::AppError::InternalError(format!("username is not valid utf-8: {e}"))
+pub fn username_from_key(key: &[u8]) -> Result<&str, AppError> {
+    body_after_tag(key, "user").and_then(|body| {
+        std::str::from_utf8(body)
+            .map_err(|e| AppError::InternalError(format!("username is not valid utf-8: {e}")))
     })
+}
+
+/// [`Ns::Databases`] のキーからデータベース名を取り出す。
+pub fn database_name_from_key(key: &[u8]) -> Result<&str, AppError> {
+    body_after_tag(key, "database").and_then(|body| {
+        std::str::from_utf8(body)
+            .map_err(|e| AppError::InternalError(format!("database name is not valid utf-8: {e}")))
+    })
+}
+
+/// 名前空間タグ 1 バイトを剥がす。
+///
+/// スキャンで引いたキーは必ずタグを持つが、その前提を暗黙にせず確認する。
+/// 添字だけで剥がすと、想定外の短いキーが来たときに panic になる。
+fn body_after_tag<'k>(key: &'k [u8], what: &str) -> Result<&'k [u8], AppError> {
+    key.split_first()
+        .map(|(_tag, body)| body)
+        .ok_or_else(|| AppError::InternalError(format!("{what} key is empty")))
+}
+
+/// キー内の識別子（名前空間タグ直後の [`UUID_LEN`] バイト）を差し替える。
+///
+/// シャードと値インデックスのキーはどちらも `タグ ‖ table_id ‖ …` なので、
+/// テーブルの複製ではこの部分だけを付け替えれば残りをそのまま流用できる。
+pub fn replace_leading_id(key: &mut [u8], id: TableId) -> Result<(), AppError> {
+    let end = 1 + UUID_LEN;
+    if key.len() < end {
+        return Err(AppError::InternalError(
+            "key is too short to carry a table id".to_string(),
+        ));
+    }
+    key[1..end].copy_from_slice(&id.into_bytes());
+    Ok(())
 }
 
 /// `0x06 ‖ table_id ‖ flex_id`
 pub fn shard(table_id: TableId, region: &FlexId) -> Vec<u8> {
-    let mut rest = Vec::with_capacity(TABLE_ID_LEN + FlexId::ENCODED_LEN);
+    let mut rest = Vec::with_capacity(UUID_LEN + FlexId::ENCODED_LEN);
     rest.extend_from_slice(&table_id.into_bytes());
     rest.extend_from_slice(&region.encode());
     with_ns(Ns::TablesData, &rest)
@@ -143,7 +186,11 @@ pub fn value_index_of(table_id: TableId) -> Vec<u8> {
 
 /// ロック階層のスコープ。粒度ごとに別のキーを取ることで、無関係な書き込み同士が
 /// ロックを奪い合わないようにする。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// **判別値の並び順に意味がある。** ロックキーは `0x7F ‖ scope ‖ id` で、取得は
+/// 常にキーのバイト昇順で行われるため（`super::mod` のデッドロックの節）、この
+/// 判別値の大小がそのままロック階層の取得順になる。粗い粒度から順に並べること。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum LockScope {
     /// データベースのテーブル集合を触る操作（テーブルの作成・削除・複製、DB 削除）。
@@ -201,6 +248,7 @@ mod tests {
     fn namespaces_do_not_overlap() {
         // 別々の名前空間のキーは、先頭タグだけで必ず区別できる。
         let keys = [
+            cluster_initialized(),
             database("x"),
             table(db_id(1), "x"),
             database_id_index(db_id(1)),
@@ -267,6 +315,38 @@ mod tests {
 
         assert!(neg < zero, "負の値が 0 より後ろに並んでいる");
         assert!(zero < pos, "0 が正の値より後ろに並んでいる");
+    }
+
+    #[test]
+    fn short_keys_are_rejected_instead_of_panicking() {
+        // スキャン由来なら必ず十分な長さがあるが、その前提が崩れても panic させない。
+        assert!(table_name_from_key(&[Ns::Tables as u8]).is_err());
+        assert!(username_from_key(&[]).is_err());
+        assert!(database_name_from_key(&[]).is_err());
+
+        let mut too_short = vec![Ns::TablesData as u8, 0x00];
+        assert!(replace_leading_id(&mut too_short, table_id(1)).is_err());
+    }
+
+    #[test]
+    fn replacing_the_leading_id_keeps_the_rest_of_the_key() {
+        let region = FlexId::UPPER_MAX;
+        let mut key = shard(table_id(1), &region);
+        replace_leading_id(&mut key, table_id(2)).unwrap();
+        assert_eq!(key, shard(table_id(2), &region));
+    }
+
+    #[test]
+    fn names_round_trip_through_their_keys() {
+        assert_eq!(username_from_key(&user("alice")).unwrap(), "alice");
+        assert_eq!(database_name_from_key(&database("mydb")).unwrap(), "mydb");
+    }
+
+    #[test]
+    fn lock_scopes_are_ordered_from_coarse_to_fine() {
+        // この並びが崩れると、BTreeSet 経由の取得順がロック階層と食い違う。
+        assert!(LockScope::Database < LockScope::Table);
+        assert!(LockScope::Table < LockScope::User);
     }
 
     #[test]

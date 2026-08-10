@@ -15,11 +15,14 @@ use crate::models::id::{DatabaseId, TableId};
 use crate::models::users::{PrivilegeRule, PrivilegeTarget, User, UserMetadata};
 use crate::repositories::{CatalogRepository, ReadRepository, ValueGroups, WriteRepository};
 
+use super::kv::Reader;
 use super::{TikvRead, TikvWrite, catalog, users};
 
+/// [`CatalogRepository`] の点参照は読み取り側と書き込み側で同一なので、
+/// impl ヘッダだけを差し替えて本体を共有する。
 macro_rules! impl_catalog_repository {
-    ($target:ty) => {
-        impl CatalogRepository for $target {
+    ($($header:tt)*) => {
+        $($header)* {
             async fn database_id(&self, name: &str) -> Result<Option<DatabaseId>, AppError> {
                 catalog::database_id(&self.txn, name).await
             }
@@ -51,10 +54,10 @@ macro_rules! impl_catalog_repository {
     };
 }
 
-impl_catalog_repository!(TikvRead<'_>);
-impl_catalog_repository!(TikvWrite<'_>);
+impl_catalog_repository!(impl<R: Reader> CatalogRepository for TikvRead<'_, R>);
+impl_catalog_repository!(impl CatalogRepository for TikvWrite<'_>);
 
-impl ReadRepository for TikvRead<'_> {
+impl<R: Reader> ReadRepository for TikvRead<'_, R> {
     async fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
         catalog::database_info(&self.txn, name).await
     }

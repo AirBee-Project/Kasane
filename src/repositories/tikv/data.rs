@@ -8,8 +8,11 @@
 //!
 //! - ノードの取得がネットワーク越しになるため、木の降下では**同じ深さのノードをまとめて**
 //!   取得する（`batch_get`）。1 ノードずつ引くと深さ × 往復のレイテンシがかかる。
-//! - ゼロコピー（mmap 上の `ArchivedSpatialIdMap` を直接読む）は使えないので、
-//!   常に所有バイト列から `SpatialIdMap` を復元する。
+//! - mmap 上の `ArchivedSpatialIdMap` を直接読むことはできないので、常に受信バッファから
+//!   `SpatialIdMap` を復元する。ただし**受信バッファへのゼロコピー**は保たれる
+//!   （[`kv::ShardValue`] が検証済みペイロードへの借用を返す）。
+//! - 受信バッファは信用できないので、rkyv の非検証アクセスへ渡す前に
+//!   [`kv::ShardValue`] の完全性検証を通す（`kv.rs` のフレームの節を参照）。
 //! - 再帰は `Box::pin` で明示的に間接化する（async fn の再帰のため）。
 
 use kasane_logic::{FlexId, RangeId, SpatialIdMap, SpatialIdSet};
@@ -26,34 +29,33 @@ use crate::repositories::encoding::shard_entry::{
 };
 use crate::repositories::encoding::value_index;
 
+use super::kv::{Reader, ShardValue};
 use super::{TikvRead, TikvWrite, kv};
-
-type Txn = Mutex<tikv_client::Transaction>;
 
 // --- ノードの読み書き ---
 
-async fn load_node(
-    txn: &Txn,
+async fn load_node<R: Reader>(
+    txn: &Mutex<R>,
     table_id: TableId,
     region: &FlexId,
-) -> Result<Option<Vec<u8>>, AppError> {
-    kv::get(txn, keys::shard(table_id, region)).await
+) -> Result<Option<ShardValue>, AppError> {
+    kv::get_shard(txn, keys::shard(table_id, region)).await
 }
 
 /// 複数領域のノードをまとめて取得する。存在しない領域は結果に含まれない。
 ///
 /// 呼び出し側はキーではなく領域で引きたいので、領域をキーにして返す
 /// （キーで返すと、引くたびにキーを組み立て直すことになる）。
-async fn load_nodes(
-    txn: &Txn,
+async fn load_nodes<R: Reader>(
+    txn: &Mutex<R>,
     table_id: TableId,
     regions: &[FlexId],
-) -> Result<FxHashMap<FlexId, Vec<u8>>, AppError> {
+) -> Result<FxHashMap<FlexId, ShardValue>, AppError> {
     let by_key: FxHashMap<Vec<u8>, FlexId> = regions
         .iter()
         .map(|r| (keys::shard(table_id, r), *r))
         .collect();
-    let pairs = kv::batch_get(txn, by_key.keys().cloned().collect()).await?;
+    let pairs = kv::batch_get_shards(txn, by_key.keys().cloned().collect()).await?;
     Ok(pairs
         .into_iter()
         .filter_map(|(key, value)| by_key.get(&key).map(|region| (*region, value)))
@@ -61,13 +63,14 @@ async fn load_nodes(
 }
 
 /// リーフのバイト列から [`SpatialIdMap`] を復元する。未作成なら空のマップ。
-fn decode_leaf(region: &FlexId, bytes: Option<&[u8]>) -> Result<SpatialIdMap<Vec<u8>>, AppError> {
-    let Some(bytes) = bytes else {
+fn decode_leaf(region: &FlexId, entry: Option<&[u8]>) -> Result<SpatialIdMap<Vec<u8>>, AppError> {
+    let Some(entry) = entry else {
         return Ok(SpatialIdMap::new_in_shard(*region));
     };
-    match ShardEntry::leaf_payload(bytes)? {
-        // 自分自身が書いたバイト列。形式バージョンは検証されるので、
-        // 古い形式が黙って誤読されることはない。
+    match ShardEntry::leaf_payload(entry)? {
+        // SAFETY: `entry` は `kv::ShardValue` の CRC 検証を通ったバイト列で、
+        // 保存時に自分が書いたものと一致することが確認済み。形式バージョンは
+        // `from_bytes` 側でさらに検証されるので、古い形式が黙って誤読されることもない。
         Some(map_bytes) => unsafe { SpatialIdMap::<Vec<u8>>::from_bytes(map_bytes) }
             .map_err(|e| AppError::InternalError(format!("rkyv deserialize: {e}"))),
         None => Err(AppError::InternalError(
@@ -85,20 +88,20 @@ pub(super) struct RoutedLeaf {
     /// 到達した `flex_id` 群。
     pub queries: Vec<FlexId>,
     /// リーフのバイト列。未作成領域なら `None`。
-    pub node: Option<Vec<u8>>,
+    pub node: Option<ShardValue>,
 }
 
 impl RoutedLeaf {
     fn leaf_map(&self) -> Result<SpatialIdMap<Vec<u8>>, AppError> {
-        decode_leaf(&self.region, self.node.as_deref())
+        decode_leaf(&self.region, self.node.as_ref().map(ShardValue::entry))
     }
 }
 
 /// 複数の `flex_id` を木の降下でまとめて振り分ける。
 ///
 /// 書き込み経路でも使うため、まだノードが作られていない領域も担当リーフとして返す。
-async fn route_leaves_batched(
-    txn: &Txn,
+async fn route_leaves_batched<R: Reader>(
+    txn: &Mutex<R>,
     table_id: TableId,
     ids: &[FlexId],
 ) -> Result<Vec<RoutedLeaf>, AppError> {
@@ -123,8 +126,8 @@ async fn route_leaves_batched(
 ///
 /// 幅優先で「同じ深さのノードをまとめて取得」してから振り分けることで、
 /// ネットワーク往復を木の深さ分に抑える。
-async fn descend_batched(
-    txn: &Txn,
+async fn descend_batched<R: Reader>(
+    txn: &Mutex<R>,
     table_id: TableId,
     root: FlexId,
     ids: Vec<FlexId>,
@@ -147,7 +150,7 @@ async fn descend_batched(
             let children = match &node {
                 // 未作成領域 or 実データリーフ → ここへ到達した全 flex_id が担当。
                 None => None,
-                Some(bytes) => ShardEntry::child_pointers(bytes)?,
+                Some(value) => ShardEntry::child_pointers(value.entry())?,
             };
 
             match children {
@@ -183,11 +186,11 @@ async fn descend_batched(
 }
 
 /// `range` と重なる**既存のリーフ領域**を集める（読み取り経路）。
-async fn route_leaves_for_range(
-    txn: &Txn,
+async fn route_leaves_for_range<R: Reader>(
+    txn: &Mutex<R>,
     table_id: TableId,
     range: &RangeId,
-) -> Result<Vec<(FlexId, Vec<u8>)>, AppError> {
+) -> Result<Vec<(FlexId, ShardValue)>, AppError> {
     let mut out = Vec::new();
     let mut level: Vec<FlexId> = [FlexId::LOWER_MAX, FlexId::UPPER_MAX]
         .into_iter()
@@ -200,12 +203,12 @@ async fn route_leaves_for_range(
         let mut next: Vec<FlexId> = Vec::new();
         for region in level {
             // 未作成領域＝データ無し。読み取りでは辿る必要がない。
-            let Some(bytes) = nodes.remove(&region) else {
+            let Some(value) = nodes.remove(&region) else {
                 continue;
             };
-            match ShardEntry::child_pointers(&bytes)? {
+            match ShardEntry::child_pointers(value.entry())? {
                 // 読んだバイト列をそのまま返し、呼び出し側の再取得をなくす。
-                None => out.push((region, bytes)),
+                None => out.push((region, value)),
                 Some(children) => {
                     next.extend(children.into_iter().filter(|c| c.intersects_range(range)));
                 }
@@ -218,8 +221,8 @@ async fn route_leaves_for_range(
 }
 
 /// `region` を直接の子に持つ親ポインタノードを見つけ、`(親領域, 親の全子領域)` を返す。
-async fn find_parent_pointer(
-    txn: &Txn,
+async fn find_parent_pointer<R: Reader>(
+    txn: &Mutex<R>,
     table_id: TableId,
     region: &FlexId,
 ) -> Result<Option<(FlexId, Vec<FlexId>)>, AppError> {
@@ -235,10 +238,10 @@ async fn find_parent_pointer(
 
     let mut cur = root;
     loop {
-        let Some(bytes) = load_node(txn, table_id, &cur).await? else {
+        let Some(value) = load_node(txn, table_id, &cur).await? else {
             return Ok(None);
         };
-        let Some(children) = ShardEntry::child_pointers(&bytes)? else {
+        let Some(children) = ShardEntry::child_pointers(value.entry())? else {
             return Ok(None);
         };
         // region が直接の子なら、cur が親。
@@ -258,7 +261,7 @@ async fn find_parent_pointer(
 
 // --- 読み取り ---
 
-impl TikvRead<'_> {
+impl<R: Reader> TikvRead<'_, R> {
     pub(super) async fn data_get_impl(
         &self,
         table_id: TableId,
@@ -329,6 +332,13 @@ impl TikvRead<'_> {
         Ok(out)
     }
 
+    /// 値が `lo`〜`hi`（両端含む）に入るセルを引く。
+    ///
+    /// 値インデックスのキーは `0x07 ‖ table_id ‖ vkey ‖ flexid` と値を可変長のまま
+    /// 連結しているため、可変長型では**バイト範囲だけでは絞りきれない**。
+    /// `vkey` が `hi` の真の接頭辞になっている行は、続く flexid のバイト次第で
+    /// `hi ‖ 0xFF…` を超えた位置に並びうる（例: `hi = "bz"` に対する値 `"b"`）。
+    /// そこで型の幅で読む範囲を決め、取り出した `vkey` で最終的に絞る。
     pub(super) async fn data_filter_range_impl(
         &self,
         table_id: TableId,
@@ -336,17 +346,31 @@ impl TikvRead<'_> {
         lo: &[u8],
         hi: &[u8],
     ) -> Result<Vec<FlexId>, AppError> {
-        let start =
-            keys::value_index_prefix(table_id, &value_index::order_preserving(data_type, lo));
-        // hi 側は flexid 部を最大化して `(hi, *)` まで含める。
-        let mut end =
-            keys::value_index_prefix(table_id, &value_index::order_preserving(data_type, hi));
-        end.extend_from_slice(&[0xFF; FlexId::ENCODED_LEN]);
+        let lo_vkey = value_index::order_preserving(data_type, lo);
+        let hi_vkey = value_index::order_preserving(data_type, hi);
 
-        let keys = kv::scan_inclusive_keys(&self.txn, start, end).await?;
-        keys.iter()
-            .map(|key| value_index::flexid_from_key(&key[1..]))
-            .collect()
+        let keys = if data_type.has_fixed_width_value() {
+            // 全キーが同じ長さなので、この範囲が過不足なく該当行を覆う。
+            let start = keys::value_index_prefix(table_id, &lo_vkey);
+            let mut end = keys::value_index_prefix(table_id, &hi_vkey);
+            // hi 側は flexid 部を最大化して `(hi, *)` まで含める。
+            end.extend_from_slice(&[0xFF; FlexId::ENCODED_LEN]);
+            kv::scan_inclusive_keys(&self.txn, start, end).await?
+        } else {
+            // 可変長。取りこぼさない範囲はテーブルの値インデックス全体しかない。
+            kv::scan_prefix_keys(&self.txn, &keys::value_index_of(table_id)).await?
+        };
+
+        let mut out = Vec::new();
+        for key in keys {
+            let entry = &key[1..];
+            let vkey = value_index::vkey_from_key(entry)?;
+            if vkey < lo_vkey.as_slice() || vkey > hi_vkey.as_slice() {
+                continue;
+            }
+            out.push(value_index::flexid_from_key(entry)?);
+        }
+        Ok(out)
     }
 
     /// クエリ実行器の入力として、指定範囲のセルを読み出す。
@@ -357,8 +381,8 @@ impl TikvRead<'_> {
     ) -> Result<Vec<(FlexId, Vec<u8>)>, AppError> {
         let leaves = route_leaves_for_range(&self.txn, table_id, range).await?;
         let mut out = Vec::new();
-        for (region, bytes) in leaves {
-            let map = decode_leaf(&region, Some(&bytes))?;
+        for (region, value) in leaves {
+            let map = decode_leaf(&region, Some(value.entry()))?;
             for (id, value) in map.get(range) {
                 out.push((id, value.clone()));
             }
@@ -535,10 +559,10 @@ impl TikvWrite<'_> {
         self.emit_child(table_id, lo_r, lo, &mut children).await?;
         self.emit_child(table_id, hi_r, hi, &mut children).await?;
 
-        kv::put(
+        kv::put_shard(
             &self.txn,
             keys::shard(table_id, &region),
-            ShardEntry::encode_pointers(&children),
+            &ShardEntry::encode_pointers(&children),
         )
         .await
     }
@@ -579,10 +603,10 @@ impl TikvWrite<'_> {
                 let mut grand = Vec::new();
                 self.emit_child(table_id, clo_r, clo, &mut grand).await?;
                 self.emit_child(table_id, chi_r, chi, &mut grand).await?;
-                kv::put(
+                kv::put_shard(
                     &self.txn,
                     keys::shard(table_id, &cr),
-                    ShardEntry::encode_pointers(&grand),
+                    &ShardEntry::encode_pointers(&grand),
                 )
                 .await?;
                 out.push(cr);
@@ -601,10 +625,10 @@ impl TikvWrite<'_> {
         let bytes = map
             .to_bytes()
             .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
-        kv::put(
+        kv::put_shard(
             &self.txn,
             keys::shard(table_id, region),
-            ShardEntry::encode_leaf(map.count() as u32, &bytes),
+            &ShardEntry::encode_leaf(map.count() as u32, &bytes),
         )
         .await
     }
@@ -631,10 +655,10 @@ impl TikvWrite<'_> {
             let mut mergeable = true;
             for cr in &child_regions {
                 // 空領域のキーはそもそも存在しないのでスキップ。
-                let Some(bytes) = nodes.get(cr) else {
+                let Some(value) = nodes.get(cr) else {
                     continue;
                 };
-                match ShardEntry::leaf_count(bytes)? {
+                match ShardEntry::leaf_count(value.entry())? {
                     Some(count) => {
                         combined += count as usize;
                         if combined > MERGE_FLEX_ID_THRESHOLD {
@@ -656,7 +680,7 @@ impl TikvWrite<'_> {
             // バイト列は上の一括取得で手元にあるので引き直さない。
             let mut child_maps: Vec<SpatialIdMap<Vec<u8>>> = Vec::new();
             for cr in &child_regions {
-                let map = decode_leaf(cr, nodes.get(cr).map(Vec::as_slice))?;
+                let map = decode_leaf(cr, nodes.get(cr).map(ShardValue::entry))?;
                 if !map.is_empty() {
                     child_maps.push(map);
                 }
@@ -701,11 +725,12 @@ impl TikvWrite<'_> {
         data_type: TableDataType,
         constraints: Option<&crate::models::database::table::TableConstraints>,
     ) -> Result<(), AppError> {
-        let entries = kv::scan_prefix(&self.txn, &keys::shards_of(table_id)).await?;
-        for (_, bytes) in entries {
-            let ShardEntry::Leaf(map_bytes) = ShardEntry::decode(&bytes)? else {
+        let entries = kv::scan_shard_prefix(&self.txn, &keys::shards_of(table_id)).await?;
+        for (_, value) in entries {
+            let ShardEntry::Leaf(map_bytes) = ShardEntry::decode(value.entry())? else {
                 continue;
             };
+            // SAFETY: `decode_leaf` と同じ根拠（CRC 検証済みのバイト列）。
             let map = unsafe { SpatialIdMap::<Vec<u8>>::from_bytes(&map_bytes) }
                 .map_err(|e| AppError::InternalError(format!("rkyv deserialize: {e}")))?;
             for (_, stored) in map.iter() {

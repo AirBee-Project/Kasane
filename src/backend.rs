@@ -52,7 +52,9 @@ pub fn default_target() -> String {
 
 #[cfg(feature = "backend-tikv")]
 pub fn default_target() -> String {
-    std::env::var("KASANE_TIKV_PD_ENDPOINTS").unwrap_or_else(|_| "127.0.0.1:2379".to_string())
+    crate::repositories::tikv::TikvConfig::from_env()
+        .pd_endpoints
+        .join(",")
 }
 
 /// ストレージを開く。
@@ -68,12 +70,6 @@ pub async fn open(target: &str) -> Result<Db, AppError> {
 pub async fn open(target: &str) -> Result<Db, AppError> {
     use crate::repositories::tikv::{TikvConfig, TikvDb};
 
-    let config = TikvConfig {
-        pd_endpoints: target
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect(),
-    };
-    TikvDb::connect(config).await
+    // 接続設定の解釈（既定値・TLS・区切り方）は init.rs に一本化してある。
+    TikvDb::connect(TikvConfig::from_endpoints(target)).await
 }

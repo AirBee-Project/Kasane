@@ -30,6 +30,9 @@ use value::{Decoder, Value, ValueQuery};
 /// 解決済みのテーブルメタデータ表（`(database, table)` -> `Table`）。
 type ResolvedTables = HashMap<(String, String), Table>;
 
+/// このクエリが読む断面。全ソースで共有する（[`Storage::query_snapshot`] を参照）。
+type QuerySnapshot = <crate::backend::Db as Storage>::QuerySnapshot;
+
 /// AST が参照する全テーブルを解決する。
 async fn resolve_tables(
     app_state: &AppState,
@@ -133,27 +136,33 @@ impl QueryNode {
         &self,
         app_state: &AppState,
         tables: &ResolvedTables,
+        snapshot: &QuerySnapshot,
     ) -> Result<ValueQuery<V>, AppError> {
         match self {
             QueryNode::Source { database, table } => {
                 let meta = &tables[&(database.clone(), table.clone())];
                 let decode = build_decoder::<V>(meta)?;
-                Ok(app_state.db.table_source::<V>(meta.id, decode).query())
+                Ok(app_state
+                    .db
+                    .table_source::<V>(meta.id, decode, snapshot.clone())
+                    .query())
             }
 
-            QueryNode::ShiftX { input, z, index } => {
-                Ok(input.translate::<V>(app_state, tables)?.shift_x(*z, *index))
-            }
-            QueryNode::ShiftY { input, z, index } => {
-                Ok(input.translate::<V>(app_state, tables)?.shift_y(*z, *index))
-            }
-            QueryNode::ShiftF { input, z, index } => {
-                Ok(input.translate::<V>(app_state, tables)?.shift_f(*z, *index))
-            }
+            QueryNode::ShiftX { input, z, index } => Ok(input
+                .translate::<V>(app_state, tables, snapshot)?
+                .shift_x(*z, *index)),
+            QueryNode::ShiftY { input, z, index } => Ok(input
+                .translate::<V>(app_state, tables, snapshot)?
+                .shift_y(*z, *index)),
+            QueryNode::ShiftF { input, z, index } => Ok(input
+                .translate::<V>(app_state, tables, snapshot)?
+                .shift_f(*z, *index)),
 
-            QueryNode::ZoomOut { input, z, policy } => {
-                V::zoom_out(input.translate::<V>(app_state, tables)?, *z, *policy)
-            }
+            QueryNode::ZoomOut { input, z, policy } => V::zoom_out(
+                input.translate::<V>(app_state, tables, snapshot)?,
+                *z,
+                *policy,
+            ),
 
             QueryNode::ExtrudeX {
                 input,
@@ -162,7 +171,7 @@ impl QueryNode {
                 end,
                 policy,
             } => V::extrude_x(
-                input.translate::<V>(app_state, tables)?,
+                input.translate::<V>(app_state, tables, snapshot)?,
                 *z,
                 *start,
                 *end,
@@ -175,7 +184,7 @@ impl QueryNode {
                 end,
                 policy,
             } => V::extrude_y(
-                input.translate::<V>(app_state, tables)?,
+                input.translate::<V>(app_state, tables, snapshot)?,
                 *z,
                 *start,
                 *end,
@@ -188,7 +197,7 @@ impl QueryNode {
                 end,
                 policy,
             } => V::extrude_f(
-                input.translate::<V>(app_state, tables)?,
+                input.translate::<V>(app_state, tables, snapshot)?,
                 *z,
                 *start,
                 *end,
@@ -201,7 +210,7 @@ impl QueryNode {
                 radius,
                 policy,
             } => V::falloff_x(
-                input.translate::<V>(app_state, tables)?,
+                input.translate::<V>(app_state, tables, snapshot)?,
                 *z,
                 *radius,
                 *policy,
@@ -212,7 +221,7 @@ impl QueryNode {
                 radius,
                 policy,
             } => V::falloff_y(
-                input.translate::<V>(app_state, tables)?,
+                input.translate::<V>(app_state, tables, snapshot)?,
                 *z,
                 *radius,
                 *policy,
@@ -223,7 +232,7 @@ impl QueryNode {
                 radius,
                 policy,
             } => V::falloff_f(
-                input.translate::<V>(app_state, tables)?,
+                input.translate::<V>(app_state, tables, snapshot)?,
                 *z,
                 *radius,
                 *policy,
@@ -235,14 +244,14 @@ impl QueryNode {
                 default,
                 policy,
             } => V::merge(
-                left.translate::<V>(app_state, tables)?,
-                right.translate::<V>(app_state, tables)?,
+                left.translate::<V>(app_state, tables, snapshot)?,
+                right.translate::<V>(app_state, tables, snapshot)?,
                 V::from_json(default)?,
                 *policy,
             ),
 
             QueryNode::FilterValues { input, condition } => {
-                let q = input.translate::<V>(app_state, tables)?;
+                let q = input.translate::<V>(app_state, tables, snapshot)?;
                 let parse = |v: &Option<serde_json::Value>| -> Result<Option<V>, AppError> {
                     v.as_ref().map(V::from_json).transpose()
                 };
@@ -296,6 +305,7 @@ impl QueryNode {
                     input.as_ref(),
                     app_state,
                     tables,
+                    snapshot,
                     mapping,
                     default
                 )
@@ -312,10 +322,11 @@ fn build_map_values<U: Value, V: Value>(
     input: &QueryNode,
     app_state: &AppState,
     tables: &ResolvedTables,
+    snapshot: &QuerySnapshot,
     mapping: &[MappingEntry],
     default: &serde_json::Value,
 ) -> Result<ValueQuery<V>, AppError> {
-    let input = input.translate::<U>(app_state, tables)?;
+    let input = input.translate::<U>(app_state, tables, snapshot)?;
 
     let mut lookup: BTreeMap<U, V> = BTreeMap::new();
     for entry in mapping {
@@ -355,6 +366,10 @@ pub async fn execute(
     // そのあとの評価（同期のクエリ実行器）だけをブロッキングタスクへ渡す。
     let tables = resolve_tables(app_state, &request.query).await?;
 
+    // このクエリが読む断面をここで 1 つに固定し、全ソースへ配る。
+    // ソースごと・領域ごとに取り直すと、途中の書き込みを一部だけ見た結果が混ざる。
+    let snapshot = app_state.db.query_snapshot().await?;
+
     let app_state = app_state.clone();
     let format = query_params.format;
     let limit = query_params.limit;
@@ -370,7 +385,7 @@ pub async fn execute(
             // 作業木は単一の値型で組まれるため、ここで値型ごとに単型化する。
             // Enum は格納こそ ID だが、クエリ上は選択肢の文字列（String）として扱う。
             for_value_type!(
-                value_type, run, &app_state, &request, &tables, format, limit
+                value_type, run, &app_state, &request, &tables, &snapshot, format, limit
             )
         })
     })
@@ -382,6 +397,7 @@ fn run<V: Value>(
     app_state: &AppState,
     request: &ExecuteQueryRequest,
     tables: &ResolvedTables,
+    snapshot: &QuerySnapshot,
     format: OutputFormat,
     limit: Option<usize>,
 ) -> Result<GetDataResponse, AppError> {
@@ -398,7 +414,7 @@ fn run<V: Value>(
         return data_response::build(empty, format, limit, |v| Ok(v.to_json()));
     }
 
-    let ast = request.query.translate::<V>(app_state, tables)?;
+    let ast = request.query.translate::<V>(app_state, tables, snapshot)?;
     tracing::debug!(
         "Executing query over {} source table(s), {} target region(s)",
         tables.len(),

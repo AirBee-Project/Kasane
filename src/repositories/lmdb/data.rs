@@ -251,6 +251,12 @@ impl<'a> KasaneDbRead<'a> {
     }
 
     /// 値が `lo`〜`hi`（両端含む）に入るセルの [`FlexId`] を集める。
+    ///
+    /// インデックスキーは `table_id ‖ vkey ‖ flexid` と値を可変長のまま連結しているため、
+    /// 可変長型では**バイト範囲だけでは絞りきれない**。`vkey` が `hi` の真の接頭辞に
+    /// なっている行は、続く flexid のバイト次第で `hi ‖ 0xFF…` を超えた位置に並びうる
+    /// （例: `hi = "bz"` に対する値 `"b"` は、flexid が `0x7A` より大きいと範囲外に出る）。
+    /// そこで型の幅で読む範囲を決め、取り出した `vkey` で最終的に絞る。
     #[tracing::instrument(skip_all)]
     pub fn data_filter_range_impl(
         &self,
@@ -259,22 +265,44 @@ impl<'a> KasaneDbRead<'a> {
         lo: &[u8],
         hi: &[u8],
     ) -> Result<Vec<FlexId>, AppError> {
-        let start =
-            value_index::make_prefix(table_id, &value_index::order_preserving(data_type, lo));
-        // hi 側は flexid 部を最大化して `(hi, *)` まで含める。
-        let mut end =
-            value_index::make_prefix(table_id, &value_index::order_preserving(data_type, hi));
-        end.extend_from_slice(&[0xFF; FlexId::ENCODED_LEN]);
-
-        let bounds = (
-            std::ops::Bound::Included(start.as_slice()),
-            std::ops::Bound::Included(end.as_slice()),
-        );
+        let lo_vkey = value_index::order_preserving(data_type, lo);
+        let hi_vkey = value_index::order_preserving(data_type, hi);
 
         let mut out = Vec::new();
-        for item in self.db.value_index.range(&self.read_txn, &bounds)? {
-            let (key, _) = item?;
+        let keep = |key: &[u8], out: &mut Vec<FlexId>| -> Result<(), AppError> {
+            let vkey = value_index::vkey_from_key(key)?;
+            if vkey < lo_vkey.as_slice() || vkey > hi_vkey.as_slice() {
+                return Ok(());
+            }
             out.push(value_index::flexid_from_key(key)?);
+            Ok(())
+        };
+
+        if data_type.has_fixed_width_value() {
+            // 全キーが同じ長さなので、この範囲が過不足なく該当行を覆う。
+            let start = value_index::make_prefix(table_id, &lo_vkey);
+            // hi 側は flexid 部を最大化して `(hi, *)` まで含める。
+            let mut end = value_index::make_prefix(table_id, &hi_vkey);
+            end.extend_from_slice(&[0xFF; FlexId::ENCODED_LEN]);
+            let bounds = (
+                std::ops::Bound::Included(start.as_slice()),
+                std::ops::Bound::Included(end.as_slice()),
+            );
+            for item in self.db.value_index.range(&self.read_txn, &bounds)? {
+                let (key, _) = item?;
+                keep(key, &mut out)?;
+            }
+        } else {
+            // 可変長。取りこぼさない範囲はテーブルの値インデックス全体しかない。
+            let prefix = table_id.0.into_bytes();
+            for item in self
+                .db
+                .value_index
+                .prefix_iter(&self.read_txn, prefix.as_slice())?
+            {
+                let (key, _) = item?;
+                keep(key, &mut out)?;
+            }
         }
         Ok(out)
     }

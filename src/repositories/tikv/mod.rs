@@ -42,9 +42,20 @@
 //! - まだ保持していないロックが宣言されたら、その場で巻き戻して
 //!   **集めたロックを揃えた状態でやり直す**
 //!
-//! 単純な操作（`data_insert` など）は最初の宣言で判明するため、やり直しの 1 周目は
-//! I/O を伴わない。`Storage::write` のシグネチャは変わらず、サービス層はロックの存在を
-//! 知らないままでいられる。
+//! `Storage::write` のシグネチャは変わらず、サービス層はロックの存在を知らないままでいられる。
+//!
+//! # デッドロックしない理由
+//!
+//! 保持中／不足中のロックはどちらも [`BTreeSet<Vec<u8>>`] で持つので、取得は常に
+//! **ロックキーのバイト昇順**になる。キーは `0x7F ‖ scope ‖ id`（`keys.rs`）で、
+//! [`LockScope`] の判別値が Database < Table < User と並ぶよう振られているため、
+//! この昇順がそのまま「データベース単位 → テーブル単位 → ユーザー単位」の階層順になる。
+//! 全操作が同じ全順序でロックを取るので、待ちグラフに循環ができない。
+//!
+//! 順序は集合の型が決めるので、呼び出し側が並べ替える必要はない。ただし
+//! [`tikv_client::Transaction::lock_keys`] はリージョンごとにリクエストを束ねるため、
+//! 1 回の呼び出しの**内部**での取得順までは保証されない。そこで最後の砦として、
+//! TiKV 側が検出したデッドロックは [`is_retryable`] が拾ってやり直す。
 
 mod catalog;
 mod data;
@@ -59,6 +70,7 @@ pub use init::TikvConfig;
 pub use query_source::TikvTableSource;
 
 use std::collections::BTreeSet;
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use tikv_client::{Transaction, TransactionClient};
@@ -74,23 +86,57 @@ fn to_app_error(err: tikv_client::Error) -> AppError {
     AppError::StorageError(err.to_string())
 }
 
-/// ロック不足でやり直すことを示す内部専用のエラー。
+/// ロックが足りないので、この試行を捨ててやり直すことを示すマーカー。
 ///
-/// [`Storage::write`] がクロージャの結果を見る前にロック充足を確認するため、この値が
-/// 呼び出し元へ漏れることはない。
-fn restart_sentinel() -> AppError {
-    AppError::InternalError("lock declaration requires a restart".to_string())
+/// [`AppError`] とは別の型にしてあるのが要点で、[`TikvWrite::require_lock`] の戻り値を
+/// 見ればそれが「アプリケーションの失敗」ではなく「制御用の巻き戻し」だと型で判る。
+/// 操作側は `?` で伝播させるだけでよく、その際 [`From`] でアプリケーションエラーへ落ちる。
+///
+/// [`Storage::write`] はクロージャの結果を見る**前に**ロック充足を確認するので、
+/// 変換後の値が呼び出し元へ届くことはない。届いたとすればそれは実装のバグであり、
+/// メッセージからそう判るようにしてある。
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct NeedsRestart;
+
+impl From<NeedsRestart> for AppError {
+    fn from(_: NeedsRestart) -> Self {
+        AppError::InternalError(
+            "lock declaration escaped the write retry loop (this is a bug in the tikv backend)"
+                .to_string(),
+        )
+    }
 }
 
 /// TiKV が「やり直せば通る」種類の失敗を返したか。
 ///
-/// ロック保持者がコミットすると待機側は `WriteConflict { reason: PessimisticRetry }` を
-/// 受け取る。tikv-client はこれを内部でリトライせず呼び出し側へ委ねるため、ここで判定して
-/// 自分でやり直す。こうすることで「書き込みは待たされても失敗しない」という
-/// LMDB の性質が呼び出し側から見て保たれる。
+/// ロック保持者がコミットすると待機側は書き込み競合として弾かれる。tikv-client は
+/// これを内部でリトライせず呼び出し側へ委ねるため、ここで判定して自分でやり直す。
+/// こうすることで「書き込みは待たされても失敗しない」という LMDB の性質が
+/// 呼び出し側から見て保たれる。
+///
+/// 判定は `KeyError` のフィールドを直接見る。Debug 文字列の部分一致だと、
+/// 利用者が付けた名前がたまたま一致して誤ってやり直したり、tikv-client 側の
+/// 文言変更で黙って「待てば通る失敗」が 500 に化けたりする。
 fn is_retryable(err: &tikv_client::Error) -> bool {
-    let s = format!("{err:?}");
-    s.contains("PessimisticRetry") || s.contains("WriteConflict") || s.contains("Deadlock")
+    use tikv_client::Error;
+
+    match err {
+        // `conflict` は書き込み競合（悲観トランザクションでの `PessimisticRetry` を含む）、
+        // `deadlock` は TiKV のデッドロック検出、`retryable` は
+        // 「クライアントはトランザクションをやり直してよい」という明示の指示。
+        Error::KeyError(key_error) => {
+            key_error.conflict.is_some()
+                || key_error.deadlock.is_some()
+                || !key_error.retryable.is_empty()
+        }
+        Error::MultipleKeyErrors(errors) | Error::ExtractedErrors(errors) => {
+            errors.iter().any(is_retryable)
+        }
+        Error::PessimisticLockError { inner, .. } => is_retryable(inner),
+        // `UndeterminedError` はコミットの成否が不明なので、やり直すと二重適用に
+        // なりうる。ここでは拾わず、呼び出し元へそのまま伝える。
+        _ => false,
+    }
 }
 
 /// TiKV バックエンドのハンドル。複製してもクラスタへの接続は共有される。
@@ -107,18 +153,17 @@ struct LockGuard {
 }
 
 impl LockGuard {
-    /// ロックキーを**渡された順序どおりに**取得する。
+    /// ロックキーをまとめて取得する。
     ///
-    /// 呼び出し側は常に同じ順序（データベース単位 → テーブル単位）で並べること。
-    /// 全操作がこの順序を守る限り、待ちグラフに循環ができずデッドロックしない。
+    /// `keys` が [`BTreeSet`] なのは偶然ではない。反復順（＝バイト昇順）が
+    /// そのままデッドロック回避に必要な全順序になる（モジュール冒頭を参照）。
+    /// まとめて渡すのは、`lock_keys` がリージョンごとに 1 リクエストへ束ねるため。
+    /// 1 キーずつ呼ぶとロック数だけ往復が増える。
     async fn acquire(
         client: &TransactionClient,
         keys: &BTreeSet<Vec<u8>>,
     ) -> Result<Self, tikv_client::Error> {
         let mut txn = client.begin_pessimistic().await?;
-        // まとめて渡す。`lock_keys` はリージョンごとに 1 リクエストへ束ねるので、
-        // 1 キーずつ呼ぶとロック数だけ往復が増える。`BTreeSet` の反復順が
-        // そのままデッドロック回避に必要な固定順序になる。
         if let Err(e) = txn.lock_keys(keys.iter().cloned()).await {
             let _ = txn.rollback().await;
             return Err(e);
@@ -132,15 +177,33 @@ impl LockGuard {
 }
 
 /// 読み取りトランザクション。
-pub struct TikvRead<'a> {
-    pub(crate) txn: tokio::sync::Mutex<Transaction>,
-    pub(crate) _db: &'a TikvDb,
+///
+/// `R` は読み取り元のスナップショット。通常の読み取りは [`Transaction`]、
+/// クエリ実行器の入力源は開始タイムスタンプを固定した [`tikv_client::Snapshot`] を使う
+/// （`query_source.rs` を参照）。
+pub struct TikvRead<'a, R = Transaction> {
+    pub(crate) txn: tokio::sync::Mutex<R>,
+    /// ストレージのハンドルより長生きしないことを型で示すだけのマーカー。
+    pub(crate) _db: PhantomData<&'a TikvDb>,
+}
+
+impl<R> TikvRead<'_, R> {
+    pub(crate) fn new(reader: R) -> Self {
+        Self {
+            txn: tokio::sync::Mutex::new(reader),
+            _db: PhantomData,
+        }
+    }
+
+    pub(crate) fn into_inner(self) -> R {
+        self.txn.into_inner()
+    }
 }
 
 /// 書き込みトランザクション。
 pub struct TikvWrite<'a> {
     pub(crate) txn: tokio::sync::Mutex<Transaction>,
-    pub(crate) _db: &'a TikvDb,
+    pub(crate) _db: PhantomData<&'a TikvDb>,
     /// この試行で保持しているロック。
     held: BTreeSet<Vec<u8>>,
     /// 操作が宣言したが、まだ保持していないロック。
@@ -151,30 +214,30 @@ pub struct TikvWrite<'a> {
 impl TikvWrite<'_> {
     /// この操作が触る範囲を宣言する。**実際にデータへ触れる前**に呼ぶこと。
     ///
-    /// まだ取得していないロックだった場合は [`RESTART_SENTINEL`] を返す。呼び出し側が
+    /// まだ取得していないロックだった場合は [`NeedsRestart`] を返す。呼び出し側が
     /// `?` で伝播させれば、その試行は破棄され、宣言されたロックを揃えた状態で
     /// クロージャが最初から実行し直される。
     ///
     /// 宣言忘れをコンパイラに検出させるため、確認を戻り値に持たせている
     /// （フラグを別途調べる方式では、確認を書き忘れてもコンパイルが通ってしまう）。
-    pub(crate) fn require_lock(&mut self, scope: LockScope, id: &[u8]) -> Result<(), AppError> {
+    pub(crate) fn require_lock(&mut self, scope: LockScope, id: &[u8]) -> Result<(), NeedsRestart> {
         let key = keys::lock(scope, id);
         if self.held.contains(&key) {
             return Ok(());
         }
         self.missing.insert(key);
-        Err(restart_sentinel())
+        Err(NeedsRestart)
     }
 
     /// 複数スコープをまとめて宣言する。
     ///
     /// 1 つずつ宣言してやり直すと 1 回の試行で 1 つしかロックを集められないので、
-    /// 複数必要な操作はここで全部宣言してから戻る。
-    /// 順序は呼び出し側の責任（データベース単位 → テーブル単位）。
+    /// 複数必要な操作はここで全部宣言してから戻る。取得順は集合が決めるので、
+    /// 渡す順序は問わない（モジュール冒頭のデッドロックの節を参照）。
     pub(crate) fn require_locks<'k>(
         &mut self,
         scopes: impl IntoIterator<Item = (LockScope, &'k [u8])>,
-    ) -> Result<(), AppError> {
+    ) -> Result<(), NeedsRestart> {
         let mut missing_any = false;
         for (scope, id) in scopes {
             if self.require_lock(scope, id).is_err() {
@@ -182,7 +245,7 @@ impl TikvWrite<'_> {
             }
         }
         if missing_any {
-            return Err(restart_sentinel());
+            return Err(NeedsRestart);
         }
         Ok(())
     }
@@ -193,8 +256,15 @@ impl TikvWrite<'_> {
 }
 
 impl Storage for TikvDb {
-    type Read<'a> = TikvRead<'a>;
+    type Read<'a> = TikvRead<'a, Transaction>;
     type Write<'a> = TikvWrite<'a>;
+    /// 断面は開始タイムスタンプそのもの。各読み取りはこの時刻の
+    /// [`tikv_client::Snapshot`] を開く（`query_source.rs`）。
+    type QuerySnapshot = tikv_client::Timestamp;
+
+    async fn query_snapshot(&self) -> Result<Self::QuerySnapshot, AppError> {
+        self.client.current_timestamp().await.map_err(to_app_error)
+    }
 
     async fn read<T, F>(&self, f: F) -> Result<T, AppError>
     where
@@ -204,13 +274,9 @@ impl Storage for TikvDb {
         // 読み取りはロックを取らない。スナップショットから読むだけなので
         // 書き込みをブロックせず、書き込みにもブロックされない（LMDB と同じ）。
         let txn = self.client.begin_optimistic().await.map_err(to_app_error)?;
-        let r = TikvRead {
-            txn: tokio::sync::Mutex::new(txn),
-            _db: self,
-        };
+        let r = TikvRead::new(txn);
         let out = f(&r).await;
-        let mut txn = r.txn.into_inner();
-        let _ = txn.rollback().await;
+        let _ = r.into_inner().rollback().await;
         out
     }
 
@@ -247,13 +313,16 @@ impl Storage for TikvDb {
             };
             let mut w = TikvWrite {
                 txn: tokio::sync::Mutex::new(txn),
-                _db: self,
+                _db: PhantomData,
                 held: locks.clone(),
                 missing: BTreeSet::new(),
             };
 
             // やり直しに備えて複製を渡す。`f` 自体は次の試行のために残す。
             let result = f.clone()(&mut w).await;
+            // ロック充足の確認は**結果より先**に行う。こうしておけば、クロージャが
+            // `NeedsRestart` 由来のエラーを握り潰して `Ok` を返しても、その試行は
+            // 確実に捨てられる（＝宣言し忘れた範囲へ書いたまま commit されない）。
             let need_more = w.needs_more_locks();
             let newly_required = std::mem::take(&mut w.missing);
             let mut txn = w.txn.into_inner();
@@ -291,8 +360,47 @@ impl Storage for TikvDb {
             }
         }
 
+        // ここへ来る理由は 2 つある。競合し続けた（`last_error` あり）か、
+        // ロック宣言が収束しなかった（実装のバグ）か。区別できるようにしておく。
         Err(last_error.unwrap_or_else(|| {
-            AppError::Conflict("write retries exhausted due to lock contention".to_string())
+            AppError::Conflict(format!(
+                "write did not settle within {MAX_ATTEMPTS} attempts ({} lock(s) held at the end)",
+                locks.len()
+            ))
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `LockScope` の判別値が「データベース → テーブル → ユーザー」の順に並ぶこと。
+    ///
+    /// ロックキーのバイト昇順がそのまま取得順になるので、この並びが崩れると
+    /// デッドロック回避の前提が壊れる。
+    #[test]
+    fn lock_scopes_sort_into_the_hierarchy_order() {
+        let db = keys::lock(LockScope::Database, b"z-database");
+        let table = keys::lock(LockScope::Table, b"a-table");
+        let user = keys::lock(LockScope::User, b"a-user");
+
+        // id の中身に関わらず、スコープの順序が先に効く。
+        assert!(db < table);
+        assert!(table < user);
+
+        let ordered: Vec<_> = BTreeSet::from([user.clone(), table.clone(), db.clone()])
+            .into_iter()
+            .collect();
+        assert_eq!(ordered, vec![db, table, user]);
+    }
+
+    #[test]
+    fn restart_marker_is_labelled_as_a_bug_when_converted() {
+        let err: AppError = NeedsRestart.into();
+        let AppError::InternalError(message) = err else {
+            panic!("NeedsRestart は InternalError へ落ちるべき");
+        };
+        assert!(message.contains("bug"), "実装バグと判る文言であること");
     }
 }

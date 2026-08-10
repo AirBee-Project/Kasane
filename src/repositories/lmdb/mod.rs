@@ -38,7 +38,7 @@ pub mod users;
 pub use init::initialize_database;
 
 use heed::types::*;
-use heed::{Database, Env};
+use heed::{Database, Env, WithoutTls};
 
 use crate::error::AppError;
 use crate::models::{database::DatabaseMetadata, database::table::TableMetadata};
@@ -69,7 +69,7 @@ pub struct AppDb {
     pub table_id_index: Database<SerdeBincode<crate::models::id::TableId>, Str>,
 
     /// 登録済みのユーザーを管理する
-    /// Key: ユーザーID（現状は UUID などの文字列）(`Str`) -> Value: ユーザー名など (`Str`)
+    /// Key: ユーザー名 (`Str`) -> Value: `UserMetadata` の JSON (`Str`)
     pub users: Database<Str, Str>,
 
     /// FlexTree
@@ -120,9 +120,29 @@ impl<'a> KasaneDbWrite<'a> {
     }
 }
 
+/// クエリ 1 回分の読み取り断面。
+///
+/// LMDB の読み取りトランザクションはそれ自体が MVCC スナップショットなので、
+/// 1 つを開いてクエリ中の全ソースで共有すれば断面が固定される。
+///
+/// `Env` を所有する [`Env::static_read_txn`] を使うのが要点で、これにより
+/// トランザクションが `'static` になり、`'static` を要求する
+/// [`Source`](kasane_logic::Source) の中へそのまま持ち込める。
+///
+/// `Mutex` で包むのは共有のため。`RoTxn` は（`WithoutTls` でも）スレッド間の
+/// 移動はできるが同時使用はできないので、`Sync` を得るには排他が要る。
+/// 読み取りが直列化されるのは TiKV 側（`Mutex<Transaction>`）と同じ性質。
+pub type LmdbQuerySnapshot = std::sync::Arc<std::sync::Mutex<heed::RoTxn<'static, WithoutTls>>>;
+
 impl Storage for AppDb {
     type Read<'a> = KasaneDbRead<'a>;
     type Write<'a> = KasaneDbWrite<'a>;
+    type QuerySnapshot = LmdbQuerySnapshot;
+
+    async fn query_snapshot(&self) -> Result<Self::QuerySnapshot, AppError> {
+        let txn = self.env.clone().static_read_txn()?;
+        Ok(std::sync::Arc::new(std::sync::Mutex::new(txn)))
+    }
 
     async fn read<T, F>(&self, f: F) -> Result<T, AppError>
     where

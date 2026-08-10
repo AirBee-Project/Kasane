@@ -76,8 +76,12 @@ fn table_source_read_subset_returns_all_cells() {
         w.commit().unwrap();
     }
 
+    // クエリ 1 回分の断面。書き込みを終えてから開くので、全セルが見えるはず。
+    let snapshot = Arc::new(std::sync::Mutex::new(
+        db.env.clone().static_read_txn().unwrap(),
+    ));
     let source: TableSource<i32> = TableSource::new(
-        db.env.clone(),
+        snapshot,
         db.tables_data,
         table_id,
         Arc::new(|b: &[u8]| <[u8; 4]>::try_from(b).ok().map(i32::from_be_bytes)),

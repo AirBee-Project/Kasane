@@ -21,6 +21,21 @@ pub trait Storage: Clone + Send + Sync + 'static {
     where
         Self: 'a;
 
+    /// クエリ 1 回分の読み取り断面。
+    ///
+    /// 中身はバックエンドが決める（LMDB は読み取りトランザクション、TiKV は開始
+    /// タイムスタンプ）。サービス層はこれを [`query_snapshot`](Self::query_snapshot) で
+    /// 1 つ作り、そのクエリが使う全テーブルの入力源へ配るだけでよい。
+    type QuerySnapshot: Clone + Send + 'static;
+
+    /// このクエリが見る断面を確定させる。
+    ///
+    /// クエリ実行器の [`Source`](kasane_logic::Source) は対象領域ごと・参照箇所ごとに
+    /// 何度も読みに来る。読むたびに断面を取り直すと、途中で走った書き込みを一部だけ
+    /// 見た結果が混ざる。断面をここで 1 つに固定することで、1 回のクエリ結果が
+    /// 必ず「ある一点のデータベースの状態」に対応する。
+    async fn query_snapshot(&self) -> Result<Self::QuerySnapshot, AppError>;
+
     /// 読み取りトランザクションを開いてクロージャを実行する。
     ///
     /// 戻り値の Future に `Send` を課していないのは、バックエンドが feature で 1 つに

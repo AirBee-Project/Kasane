@@ -374,10 +374,23 @@ async fn separate_instances_stay_consistent() {
     drop_db(&a, &name).await;
 }
 
-/// 起動時の root ユーザー作成が、複数インスタンス同時起動でも二重にならないこと。
+/// 既定ユーザーの投入まわりの契約。
+///
+/// クラスタ全体で 1 つしかない `root` を触るので、他のテストと競合しないよう
+/// 1 つのテストにまとめてある（分けると並列実行で互いの前提を壊す）。
+///
+/// 1. 複数インスタンスが同時起動しても二重に作られない
+/// 2. **削除した管理者が、再起動で既定パスワードのまま復活しない**
+///
+/// 2 が要点。投入を「`root` が居なければ作る」で判定すると、意図して消した管理者が
+/// 次の起動で `ROOT_PASSWORD`（未設定なら既定値）のまま戻ってくる。それは消せない
+/// 管理者アカウント＝常設のバックドアなので、初期化済みマーカーで判定して
+/// 「投入は文字どおり 1 度きり」にしてある。
 #[tokio::test]
-async fn root_user_is_seeded_exactly_once() {
-    // 同時接続。どちらも `connect` の中で root の有無を見て作ろうとする。
+async fn the_default_admin_is_seeded_exactly_once_and_never_resurrected() {
+    use kasane::models::users::{PrivilegeRule, UserRole};
+
+    // 同時接続。どちらも初期化済みマーカーを見て投入しようとする。
     let (a, b) = tokio::join!(connect(), connect());
 
     let users = a.read(async |r| r.get_all_users().await).await.unwrap();
@@ -387,6 +400,146 @@ async fn root_user_is_seeded_exactly_once() {
     // どちらのインスタンスからも同じ root が見えること。
     let from_b = b.read(async |r| r.get_user("root").await).await.unwrap();
     assert!(from_b.is_some(), "別インスタンスから root が見えない");
+
+    // --- 削除しても復活しないこと ---
+
+    a.write(async |w| w.delete_user("root").await)
+        .await
+        .unwrap();
+
+    // 「再起動」に相当する新しい接続。
+    let restarted = connect().await;
+    let after = restarted
+        .read(async |r| r.get_user("root").await)
+        .await
+        .unwrap();
+    assert!(
+        after.is_none(),
+        "削除した root が再起動で復活した（初期化判定が root の有無に依存している）"
+    );
+
+    // 後片付け: 次回の実行のために管理者を戻す。
+    restarted
+        .write(async |w| {
+            w.create_user(
+                "root",
+                uuid::Uuid::now_v7(),
+                kasane::services::auth::hash_password("password").unwrap(),
+                &[PrivilegeRule::Global {
+                    role: UserRole::Admin,
+                }],
+            )
+            .await
+        })
+        .await
+        .unwrap();
+}
+
+/// **書き込みクロージャが複数回呼ばれること、そして捨てられた試行が commit されないこと。**
+///
+/// `Storage::write` はロックが足りない試行を巻き戻してやり直す。この「やり直し」は
+/// TiKV でしか起きないので、LMDB のテストを全部通っても再実行前提が守られているとは
+/// 限らない。契約そのものをここで固定する。
+///
+/// `table_remove` は 2 段階でロックが判明する（DB スコープを取って初めて `TableId` が
+/// 判る）ので、必ず 2 回以上クロージャが走る。
+#[tokio::test]
+async fn the_write_closure_is_re_run_until_its_locks_are_held() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let db = connect().await;
+    let name = unique_db("retry_contract");
+
+    {
+        let name = name.clone();
+        db.write(async move |w| {
+            w.database_create(&name, None).await?;
+            w.table_create(&name, "t", TableDataType::Int, 25, None, None)
+                .await
+        })
+        .await
+        .unwrap();
+    }
+
+    let attempts = Arc::new(AtomicUsize::new(0));
+
+    {
+        let name = name.clone();
+        let attempts = attempts.clone();
+        db.write(async move |w| {
+            attempts.fetch_add(1, Ordering::SeqCst);
+            w.table_remove(&name, "t").await
+        })
+        .await
+        .unwrap();
+    }
+
+    assert!(
+        attempts.load(Ordering::SeqCst) >= 2,
+        "クロージャが 1 回しか呼ばれていない。ロックの二段階宣言が働いていないか、\
+         やり直しの契約が変わっている（呼ばれた回数: {})",
+        attempts.load(Ordering::SeqCst)
+    );
+
+    // 捨てられた試行があっても、結果は 1 回ぶんだけ適用されていること。
+    let remaining = {
+        let name = name.clone();
+        db.read(async move |r| r.table_list(&name).await)
+            .await
+            .unwrap()
+    };
+    assert!(remaining.is_empty(), "テーブルが削除されていない");
+
+    drop_db(&db, &name).await;
+}
+
+/// 捨てられた試行の書き込みがコミットされないこと。
+///
+/// ロック不足でやり直した 1 周目にも `data_insert` などは走りうる（宣言より前に
+/// 部分的に処理が進む操作があれば）。その周回が commit されないことを、
+/// 「途中でエラーを返した書き込みは何も残さない」形で確かめる。
+#[tokio::test]
+async fn a_failed_closure_leaves_nothing_behind() {
+    let db = connect().await;
+    let name = unique_db("discarded");
+
+    let table = {
+        let name = name.clone();
+        db.write(async move |w| {
+            w.database_create(&name, None).await?;
+            w.table_create(&name, "t", TableDataType::Int, 25, None, None)
+                .await
+        })
+        .await
+        .unwrap()
+    };
+
+    let mut ids = SpatialIdSet::new();
+    ids.insert(SingleId::new(20, 0, 7, 7).unwrap());
+
+    let failed = db
+        .write(async move |w| {
+            w.data_insert(
+                table.id,
+                TableDataType::Int,
+                ids.clone(),
+                &1i64.to_be_bytes(),
+            )
+            .await?;
+            // 書いたあとで失敗する。ここまでの変更は捨てられなければならない。
+            Err::<(), _>(AppError::InternalError("deliberate failure".to_string()))
+        })
+        .await;
+    assert!(failed.is_err(), "意図的な失敗が伝わっていない");
+
+    let count = db
+        .read(async move |r| r.table_count(table.id).await)
+        .await
+        .unwrap();
+    assert_eq!(count, 0, "失敗した書き込みのセルが残っている");
+
+    drop_db(&db, &name).await;
 }
 
 #[tokio::test]

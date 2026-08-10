@@ -1,12 +1,28 @@
 //! TiKV 上のシャードツリーを、Kasane-Logic のクエリ入力源として見せるアダプタ。
 //!
+//! # スナップショットを固定する理由
+//!
+//! [`Source::read_subset`] は 1 回のクエリ実行で**複数回**呼ばれる（対象領域ごと、
+//! そしてクエリが同じテーブルを複数箇所で参照すればその数だけ）。呼ばれるたびに
+//! 新しいトランザクションを開くと、そのつど別の `start_ts` で読むことになり、
+//! 途中で走った書き込みを一部だけ見た結果が混ざりうる。
+//!
+//! そこでアダプタの構築時に**タイムスタンプを 1 つ確定させ**、以降の読み取りは
+//! すべてその時点のスナップショットから行う。LMDB 側は単一ライタかつ読み取りが
+//! ローカルなので実害が出にくいが、TiKV では複数インスタンスの同時書き込みが
+//! 通常運用なので、ここを固定しないとクエリ結果が引き裂かれる。
+//!
+//! # ランタイムハンドルを持ち回る理由
+//!
 //! Kasane-Logic の [`Source`] は同期 I/F なので、非同期の TiKV アクセスをその内側で
-//! 完了させる必要がある。クエリ実行そのものはサービス層で `spawn_blocking` の中から
-//! 呼ばれるため、ここでの `block_on` はブロッキングスレッド上で行われ、
-//! 非同期ランタイムのワーカーを塞がない。
+//! 完了させる必要がある。[`tokio::runtime::Handle::current`] を `read_subset` の中で
+//! 呼ぶと、実行器が別スレッドプール（rayon など）から読みに来たときにランタイム文脈が
+//! 無くて panic する。構築はサービス層（ランタイム文脈内）で行われるので、
+//! そこで取得したハンドルを持ち回れば、どのスレッドから呼ばれても成立する。
 
 use kasane_logic::{Error as LogicError, RangeId, SafeValue, Source, WorkingTree};
-use tokio::sync::Mutex;
+use tikv_client::{Timestamp, TransactionOptions};
+use tokio::runtime::Handle;
 
 use crate::models::id::TableId;
 use crate::repositories::traits::DecodeFn;
@@ -15,20 +31,33 @@ use super::{TikvDb, TikvRead};
 
 /// 1 テーブルを 1 つのクエリ入力源として見せるアダプタ。
 ///
-/// トランザクションを保持しない。`Source` は実行器から複数回・複数スレッドで呼ばれうるため、
-/// クライアントだけを持ち、`read_subset` の内側で短命なスナップショットを開く。
+/// トランザクションは保持しない（`Source` は実行器から複数回・複数スレッドで呼ばれうる）。
+/// 代わりに**開始タイムスタンプ**を保持し、読み取りのたびにその時点のスナップショットを
+/// 開く。こうすると同じクエリ内の全読み取りが同一の断面を見る。
 pub struct TikvTableSource<V> {
     db: TikvDb,
     table_id: TableId,
     decode: DecodeFn<V>,
+    /// このクエリが見る断面。構築時に 1 度だけ確定する。
+    snapshot_ts: Timestamp,
+    /// 構築時（ランタイム文脈内）に捕まえたハンドル。
+    handle: Handle,
 }
 
 impl<V> TikvTableSource<V> {
-    pub fn new(db: TikvDb, table_id: TableId, decode: DecodeFn<V>) -> Self {
+    fn new(
+        db: TikvDb,
+        table_id: TableId,
+        decode: DecodeFn<V>,
+        snapshot_ts: Timestamp,
+        handle: Handle,
+    ) -> Self {
         Self {
             db,
             table_id,
             decode,
+            snapshot_ts,
+            handle,
         }
     }
 }
@@ -38,8 +67,22 @@ impl TikvDb {
     ///
     /// ストレージのハンドルをサービス層へ露出させないための入口
     /// （LMDB 側の同名メソッドと対になる）。
-    pub fn table_source<V>(&self, table_id: TableId, decode: DecodeFn<V>) -> TikvTableSource<V> {
-        TikvTableSource::new(self.clone(), table_id, decode)
+    ///
+    /// 同一クエリ内の複数ソースが同じ断面を見るよう、`snapshot_ts` は
+    /// [`TikvDb::query_snapshot`] で 1 度だけ取ったものを共有して渡す。
+    pub fn table_source<V>(
+        &self,
+        table_id: TableId,
+        decode: DecodeFn<V>,
+        snapshot_ts: Timestamp,
+    ) -> TikvTableSource<V> {
+        TikvTableSource::new(
+            self.clone(),
+            table_id,
+            decode,
+            snapshot_ts,
+            Handle::current(),
+        )
     }
 }
 
@@ -50,21 +93,19 @@ where
     type Value = V;
 
     fn read_subset(&self, bounds: &[RangeId]) -> Result<WorkingTree<V>, LogicError> {
-        let handle = tokio::runtime::Handle::current();
         let db = self.db.clone();
         let table_id = self.table_id;
         let bounds = bounds.to_vec();
+        let snapshot_ts = self.snapshot_ts.clone();
 
-        let cells = handle.block_on(async move {
-            let txn = db
-                .client
-                .begin_optimistic()
-                .await
-                .map_err(|e| LogicError::SourceRead(e.to_string()))?;
-            let reader = TikvRead {
-                txn: Mutex::new(txn),
-                _db: &db,
-            };
+        let cells = self.handle.block_on(async move {
+            // 固定タイムスタンプのスナップショット。読み取り専用なので
+            // commit も rollback も要らず、drop するだけで閉じられる。
+            let snapshot = db.client.snapshot(
+                snapshot_ts,
+                TransactionOptions::new_optimistic().read_only(),
+            );
+            let reader = TikvRead::new(snapshot);
 
             let mut cells = Vec::new();
             for range in &bounds {
@@ -74,7 +115,6 @@ where
                     .map_err(|e| LogicError::SourceRead(e.to_string()))?;
                 cells.extend(got);
             }
-            let _ = reader.txn.into_inner().rollback().await;
             Ok::<_, LogicError>(cells)
         })?;
 

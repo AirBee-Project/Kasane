@@ -7,6 +7,7 @@ on:
     paths:
       - "src/**"
       - "tests/**"
+      - "deployment/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - "build.rs"
@@ -17,8 +18,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
-    name: Verify (Production)
+  # ストレージバックエンドはビルドごとに 1 つしか選べないので、検証も
+  # バックエンドごとに 1 ジョブ立てる。片方だけを回していると、選ばれなかった側は
+  # コンパイルすらされずに壊れていく。
+  lmdb:
+    name: Verify (LMDB)
     runs-on: ubuntu-latest
 
     steps:
@@ -39,6 +43,8 @@ jobs:
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
+        with:
+          key: lmdb
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -79,3 +85,92 @@ jobs:
 
           # Lint OpenAPI spec
           npx --yes @redocly/cli lint openapi.json
+
+  tikv:
+    name: Verify (TiKV)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install mold
+        uses: rui314/setup-mold@v1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          profile: minimal
+          components: clippy
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: tikv
+
+      - name: Clippy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo clippy \
+            --locked \
+            --lib \
+            --bins \
+            --tests \
+            --no-default-features \
+            --features "production,backend-tikv" \
+            -- -D warnings
+
+      # 結合テストは実クラスタを相手にする。開発用と同じ compose 定義を使うので、
+      # CI とローカルで同じ構成を検証することになる。
+      - name: Start TiKV
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose -f deployment/tikv/docker-compose.yml up -d --wait
+
+      - name: Wait for the cluster to accept writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          # compose の healthcheck は PD だけを見る。TiKV ストアが PD へ登録され、
+          # リージョンが用意できるまでは書き込みが通らないので、そこまで待つ。
+          for _ in $(seq 1 60); do
+            if docker exec kasane-pd /pd-ctl -u http://127.0.0.1:2379 store \
+                 | grep -q '"state_name": "Up"'; then
+              echo "TiKV store is up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "TiKV store did not come up in time" >&2
+          docker compose -f deployment/tikv/docker-compose.yml logs >&2
+          exit 1
+
+      - name: Test
+        shell: bash
+        env:
+          KASANE_TIKV_PD_ENDPOINTS: 127.0.0.1:2379
+        run: |
+          set -euo pipefail
+          cargo nextest run \
+            --locked \
+            --lib \
+            --bins \
+            --tests \
+            --no-default-features \
+            --features "production,backend-tikv" \
+            --run-ignored all
+
+      - name: Dump cluster logs on failure
+        if: failure()
+        shell: bash
+        run: docker compose -f deployment/tikv/docker-compose.yml logs
+
+      - name: Stop TiKV
+        if: always()
+        shell: bash
+        run: docker compose -f deployment/tikv/docker-compose.yml down -v

@@ -17,6 +17,25 @@ pub enum TableDataType {
     Presence = 5,
 }
 
+impl TableDataType {
+    /// 格納バイト列の長さが、この型では常に一定か。
+    ///
+    /// 値インデックスのキーは `table_id ‖ 値 ‖ flex_id` と値を可変長のまま連結するので、
+    /// 型の幅が一定なときだけキー長も一定になり、範囲スキャンの境界がそのまま
+    /// 正確な境界として使える。`Text` だけが可変長で、そこでは境界の外側にも
+    /// 該当キーが出うる（`repositories::traits::ReadRepository::data_filter_range` を参照）。
+    pub fn has_fixed_width_value(self) -> bool {
+        match self {
+            // i64 = 8 バイト / 真偽値 = 1 バイト / Enum は選択肢 ID（u16）/ Presence は値なし。
+            TableDataType::Int
+            | TableDataType::Boolean
+            | TableDataType::Enum
+            | TableDataType::Presence => true,
+            TableDataType::Text => false,
+        }
+    }
+}
+
 /// テーブルの値に対する制約。
 ///
 /// `type` フィールドで制約の種類を指定する。指定できる種類は対象のデータ型に依存する。

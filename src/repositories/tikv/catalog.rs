@@ -3,6 +3,9 @@
 //! ロックの粒度については [`LockScope`] とモジュール冒頭のコメントを参照。
 //! テーブル集合を変更・走査する操作はデータベース単位のロックを、
 //! シャード集合を触る操作はテーブル単位のロックを宣言する。
+//!
+//! ロックを**複数宣言する順序は問わない**。取得順は保持集合（`BTreeSet`）が
+//! バイト昇順で決めるので、宣言側で並べ替える必要はない（`super::mod` を参照）。
 
 use tokio::sync::Mutex;
 
@@ -15,6 +18,7 @@ use crate::models::database::{DatabaseInfoResponse, DatabaseMetadata};
 use crate::models::id::{DatabaseId, TableId};
 use crate::repositories::encoding::shard_entry::ShardEntry;
 
+use super::kv::Reader;
 use super::{TikvRead, TikvWrite, kv};
 
 // --- 直列化 ---
@@ -41,8 +45,8 @@ fn decode_table(bytes: &[u8]) -> Result<TableMetadata, AppError> {
 
 // --- 読み書き共通の参照系（トランザクションだけを受け取る） ---
 
-pub(super) async fn database_meta(
-    txn: &Mutex<tikv_client::Transaction>,
+pub(super) async fn database_meta<R: Reader>(
+    txn: &Mutex<R>,
     name: &str,
 ) -> Result<Option<DatabaseMetadata>, AppError> {
     if name.is_empty() {
@@ -54,15 +58,15 @@ pub(super) async fn database_meta(
     }
 }
 
-pub(super) async fn database_id(
-    txn: &Mutex<tikv_client::Transaction>,
+pub(super) async fn database_id<R: Reader>(
+    txn: &Mutex<R>,
     name: &str,
 ) -> Result<Option<DatabaseId>, AppError> {
     Ok(database_meta(txn, name).await?.map(|meta| meta.id))
 }
 
-pub(super) async fn table_meta(
-    txn: &Mutex<tikv_client::Transaction>,
+pub(super) async fn table_meta<R: Reader>(
+    txn: &Mutex<R>,
     db_id: DatabaseId,
     table_name: &str,
 ) -> Result<Option<TableMetadata>, AppError> {
@@ -75,16 +79,16 @@ pub(super) async fn table_meta(
     }
 }
 
-pub(super) async fn table_id(
-    txn: &Mutex<tikv_client::Transaction>,
+pub(super) async fn table_id<R: Reader>(
+    txn: &Mutex<R>,
     db_id: DatabaseId,
     table_name: &str,
 ) -> Result<Option<TableId>, AppError> {
     Ok(table_meta(txn, db_id, table_name).await?.map(|m| m.id))
 }
 
-pub(super) async fn database_name(
-    txn: &Mutex<tikv_client::Transaction>,
+pub(super) async fn database_name<R: Reader>(
+    txn: &Mutex<R>,
     db_id: DatabaseId,
 ) -> Result<Option<String>, AppError> {
     match kv::get(txn, keys::database_id_index(db_id)).await? {
@@ -95,8 +99,8 @@ pub(super) async fn database_name(
     }
 }
 
-pub(super) async fn table_name(
-    txn: &Mutex<tikv_client::Transaction>,
+pub(super) async fn table_name<R: Reader>(
+    txn: &Mutex<R>,
     table_id: TableId,
 ) -> Result<Option<String>, AppError> {
     match kv::get(txn, keys::table_id_index(table_id)).await? {
@@ -107,8 +111,8 @@ pub(super) async fn table_name(
     }
 }
 
-pub(super) async fn table_names(
-    txn: &Mutex<tikv_client::Transaction>,
+pub(super) async fn table_names<R: Reader>(
+    txn: &Mutex<R>,
     db_id: DatabaseId,
 ) -> Result<Vec<String>, AppError> {
     let keys = kv::scan_prefix_keys(txn, &keys::tables_of(db_id)).await?;
@@ -117,8 +121,8 @@ pub(super) async fn table_names(
         .collect()
 }
 
-pub(super) async fn table_info(
-    txn: &Mutex<tikv_client::Transaction>,
+pub(super) async fn table_info<R: Reader>(
+    txn: &Mutex<R>,
     db_name: &str,
     table_name: &str,
 ) -> Result<Option<Table>, AppError> {
@@ -135,8 +139,8 @@ pub(super) async fn table_info(
         .map(|meta| Table::from_meta(table_name, meta)))
 }
 
-pub(super) async fn database_info(
-    txn: &Mutex<tikv_client::Transaction>,
+pub(super) async fn database_info<R: Reader>(
+    txn: &Mutex<R>,
     name: &str,
 ) -> Result<Option<DatabaseInfoResponse>, AppError> {
     Ok(database_meta(txn, name)
@@ -147,8 +151,8 @@ pub(super) async fn database_info(
         }))
 }
 
-pub(super) async fn table_list_by_id(
-    txn: &Mutex<tikv_client::Transaction>,
+pub(super) async fn table_list_by_id<R: Reader>(
+    txn: &Mutex<R>,
     db_id: DatabaseId,
 ) -> Result<Vec<Table>, AppError> {
     let entries = kv::scan_prefix(txn, &keys::tables_of(db_id)).await?;
@@ -163,7 +167,7 @@ pub(super) async fn table_list_by_id(
 
 // --- 読み取り側 ---
 
-impl TikvRead<'_> {
+impl<R: Reader> TikvRead<'_, R> {
     pub(super) async fn database_list_impl(
         &self,
     ) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
@@ -171,9 +175,7 @@ impl TikvRead<'_> {
         entries
             .iter()
             .map(|(key, value)| {
-                let name = std::str::from_utf8(&key[1..]).map_err(|e| {
-                    AppError::InternalError(format!("database name is not valid utf-8: {e}"))
-                })?;
+                let name = keys::database_name_from_key(key)?;
                 let meta = decode_database(value)?;
                 Ok((
                     meta.id,
@@ -197,10 +199,10 @@ impl TikvRead<'_> {
     }
 
     pub(super) async fn table_count_impl(&self, table_id: TableId) -> Result<u64, AppError> {
-        let entries = kv::scan_prefix(&self.txn, &keys::shards_of(table_id)).await?;
+        let entries = kv::scan_shard_prefix(&self.txn, &keys::shards_of(table_id)).await?;
         let mut total = 0u64;
         for (_, value) in entries {
-            if let Some(count) = ShardEntry::leaf_count(&value)? {
+            if let Some(count) = ShardEntry::leaf_count(value.entry())? {
                 total += count as u64;
             }
         }
@@ -291,11 +293,12 @@ impl TikvWrite<'_> {
             crate::services::helpers::name_valid::name_valid(final_new_name)?;
         }
 
-        // 旧名と新名の両方を排他する。順序を固定しないと、逆向きの同時改名で
-        // デッドロックしうるため、辞書順で取る。
-        let mut names = [name, final_new_name];
-        names.sort_unstable();
-        self.require_locks(names.map(|n| (LockScope::Database, n.as_bytes())))?;
+        // 旧名と新名の両方を排他する（片方だけでは、逆向きの同時改名で両者が
+        // 相手の名前へ書き込みうる）。取得順は保持集合が決めるので、ここでは並べない。
+        self.require_locks([
+            (LockScope::Database, name.as_bytes()),
+            (LockScope::Database, final_new_name.as_bytes()),
+        ])?;
 
         let Some(mut meta) = database_meta(&self.txn, name).await? else {
             return Err(AppError::DatabaseNotFound {
@@ -338,9 +341,10 @@ impl TikvWrite<'_> {
     ) -> Result<DatabaseInfoResponse, AppError> {
         crate::services::helpers::name_valid::name_valid(copy_name)?;
 
-        let mut names = [src_db_name, copy_name];
-        names.sort_unstable();
-        self.require_locks(names.map(|n| (LockScope::Database, n.as_bytes())))?;
+        self.require_locks([
+            (LockScope::Database, src_db_name.as_bytes()),
+            (LockScope::Database, copy_name.as_bytes()),
+        ])?;
 
         let src_meta = database_meta(&self.txn, src_db_name)
             .await?
@@ -572,7 +576,6 @@ impl TikvWrite<'_> {
         table_name: &str,
     ) -> Result<(), AppError> {
         // テーブル集合からの除去（DB スコープ）とシャード集合の削除（テーブルスコープ）の両方。
-        // 順序は必ず「データベース → テーブル」。
         self.require_lock(LockScope::Database, db_name.as_bytes())?;
 
         let db_meta =
@@ -602,9 +605,10 @@ impl TikvWrite<'_> {
     ) -> Result<Table, AppError> {
         crate::services::helpers::name_valid::name_valid(copy_table_name)?;
 
-        let mut db_names = [src_db_name, copy_db_name];
-        db_names.sort_unstable();
-        self.require_locks(db_names.map(|n| (LockScope::Database, n.as_bytes())))?;
+        self.require_locks([
+            (LockScope::Database, src_db_name.as_bytes()),
+            (LockScope::Database, copy_db_name.as_bytes()),
+        ])?;
 
         let src_db = database_meta(&self.txn, src_db_name)
             .await?
@@ -676,10 +680,12 @@ impl TikvWrite<'_> {
         .await?;
 
         // シャードと値インデックスを、キー先頭の table_id だけ差し替えて複製する。
+        // 値はそのまま持ち回る（シャード値のフレームはキーに依存しないので、
+        // 検証済みのバイト列を再フレームせずそのまま置ける）。
         let shards = kv::scan_prefix(&self.txn, &keys::shards_of(src_meta.id)).await?;
         for (key, value) in shards {
             let mut dst = key;
-            replace_table_id(&mut dst, copy_id);
+            keys::replace_leading_id(&mut dst, copy_id)?;
             kv::put(&self.txn, dst, value).await?;
         }
 
@@ -687,7 +693,7 @@ impl TikvWrite<'_> {
             kv::scan_prefix_keys(&self.txn, &keys::value_index_of(src_meta.id)).await?;
         for key in index_keys {
             let mut dst = key;
-            replace_table_id(&mut dst, copy_id);
+            keys::replace_leading_id(&mut dst, copy_id)?;
             kv::put(&self.txn, dst, Vec::new()).await?;
         }
 
@@ -719,11 +725,4 @@ impl TikvWrite<'_> {
         kv::delete(&self.txn, keys::table_id_index(table_id)).await?;
         Ok(())
     }
-}
-
-/// キー内の `table_id`（名前空間タグ直後の 16 バイト）を差し替える。
-fn replace_table_id(key: &mut [u8], table_id: TableId) {
-    let head = 1;
-    let len = crate::repositories::encoding::TABLE_ID_LEN;
-    key[head..head + len].copy_from_slice(&table_id.into_bytes());
 }
