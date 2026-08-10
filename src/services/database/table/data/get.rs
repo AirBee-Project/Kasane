@@ -25,9 +25,14 @@ pub async fn get(
     let query_format = query.format;
     let query_limit = query.limit;
 
-    // レスポンス組み立てまでトランザクションの内側で行う。LMDB ではこのクロージャ全体が
-    // 1 つの blocking タスク上で回るため、CPU バウンドな復元処理も非同期ランタイムを塞がない。
-    app_state
+    // トランザクションの内側で行うのは読み出しまで。
+    //
+    // レスポンス組み立て（値の復元と JSON 化）はセル数に比例する CPU バウンド処理で、
+    // ここに置くとバックエンドによって走る場所が変わってしまう。LMDB はクロージャ全体を
+    // blocking タスク上で回すので問題ないが、TiKV は非同期ワーカー上で回すため、
+    // 大きな結果ではワーカーを占有する。トランザクションの外へ出して明示的に
+    // blocking タスクへ渡せば、どちらのバックエンドでも同じ扱いになる。
+    let (table, groups) = app_state
         .db
         .read(async move |db| {
             let table = match db.table_info(&db_name, &table_name).await {
@@ -46,10 +51,18 @@ pub async fn get(
 
             let ids = process_spatial_ids(&spatial_ids, table.max_zoom_level, &zoom_level_policy)?;
             let groups = db.data_get(table.id, ids, query_limit).await?;
+            Ok((table, groups))
+        })
+        .await?;
 
+    let span = tracing::Span::current();
+    tokio::task::spawn_blocking(move || {
+        span.in_scope(|| {
             data_response::build(groups, query_format, query_limit, |bytes| {
                 restore_value(table.data_type, table.constraints.as_ref(), bytes)
             })
         })
-        .await
+    })
+    .await
+    .map_err(|e| AppError::InternalError(e.to_string()))?
 }

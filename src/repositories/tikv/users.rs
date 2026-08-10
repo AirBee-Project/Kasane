@@ -32,7 +32,7 @@ pub(super) async fn user_meta<R: Reader>(
 }
 
 async fn put_user_meta(
-    txn: &Mutex<tikv_client::Transaction>,
+    txn: &Mutex<kv::LazyTxn>,
     username: &str,
     meta: &UserMetadata,
 ) -> Result<(), AppError> {

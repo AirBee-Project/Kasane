@@ -521,17 +521,14 @@ impl TikvWrite<'_> {
         new_keys: FxHashSet<Vec<u8>>,
     ) -> Result<(), AppError> {
         // 昇順に適用する（キーが連続していた方がリージョン跨ぎのアクセスが減る）。
-        let mut to_delete: Vec<&Vec<u8>> = old_keys.difference(&new_keys).collect();
+        // まとめて渡すのは、1 件ずつだとキーの数だけミューテックスを取り直すため。
+        let mut to_delete: Vec<Vec<u8>> = old_keys.difference(&new_keys).cloned().collect();
         to_delete.sort_unstable();
-        for key in to_delete {
-            kv::delete(&self.txn, key.clone()).await?;
-        }
+        kv::delete_many(&self.txn, to_delete).await?;
 
-        let mut to_put: Vec<&Vec<u8>> = new_keys.difference(&old_keys).collect();
+        let mut to_put: Vec<Vec<u8>> = new_keys.difference(&old_keys).cloned().collect();
         to_put.sort_unstable();
-        for key in to_put {
-            kv::put(&self.txn, key.clone(), Vec::new()).await?;
-        }
+        kv::put_many(&self.txn, to_put.into_iter().map(|key| (key, Vec::new()))).await?;
         Ok(())
     }
 
@@ -544,7 +541,7 @@ impl TikvWrite<'_> {
     ) -> Result<(), AppError> {
         if !map.should_split_shard(MAX_FLEX_ID_PER_SHARD) {
             if map.is_empty() {
-                kv::delete(&self.txn, keys::shard(table_id, &region)).await?;
+                kv::delete_shard(&self.txn, table_id, &region).await?;
             } else {
                 self.put_leaf(table_id, &region, &map).await?;
             }
@@ -561,7 +558,8 @@ impl TikvWrite<'_> {
 
         kv::put_shard(
             &self.txn,
-            keys::shard(table_id, &region),
+            table_id,
+            &region,
             &ShardEntry::encode_pointers(&children),
         )
         .await
@@ -579,7 +577,7 @@ impl TikvWrite<'_> {
         Box::pin(async move {
             if cm.is_empty() {
                 // 空領域：被覆として領域だけ積む。万一の古いキーは消す。
-                kv::delete(&self.txn, keys::shard(table_id, &cr)).await?;
+                kv::delete_shard(&self.txn, table_id, &cr).await?;
                 out.push(cr);
                 return Ok(());
             }
@@ -605,7 +603,8 @@ impl TikvWrite<'_> {
                 self.emit_child(table_id, chi_r, chi, &mut grand).await?;
                 kv::put_shard(
                     &self.txn,
-                    keys::shard(table_id, &cr),
+                    table_id,
+                    &cr,
                     &ShardEntry::encode_pointers(&grand),
                 )
                 .await?;
@@ -627,7 +626,8 @@ impl TikvWrite<'_> {
             .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
         kv::put_shard(
             &self.txn,
-            keys::shard(table_id, region),
+            table_id,
+            region,
             &ShardEntry::encode_leaf(map.count() as u32, &bytes),
         )
         .await
@@ -704,12 +704,12 @@ impl TikvWrite<'_> {
 
             // 親キーをリーフ（空なら削除）に置換し、子キーを削除する。
             if merged.is_empty() {
-                kv::delete(&self.txn, keys::shard(table_id, &parent_region)).await?;
+                kv::delete_shard(&self.txn, table_id, &parent_region).await?;
             } else {
                 self.put_leaf(table_id, &parent_region, &merged).await?;
             }
             for cr in &child_regions {
-                kv::delete(&self.txn, keys::shard(table_id, cr)).await?;
+                kv::delete_shard(&self.txn, table_id, cr).await?;
             }
 
             // 親が新たなリーフになった → さらに上へ伝播。

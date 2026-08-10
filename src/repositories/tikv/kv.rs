@@ -10,11 +10,16 @@
 //! そちらは [`tikv_client::Snapshot`] を使う。両者は読み取り系のシグネチャが同一なので、
 //! ここで 1 つの trait にまとめ、下の自由関数を両方で使い回す。
 
-use tikv_client::{BoundRange, Snapshot, Transaction};
+use std::sync::Arc;
+
+use kasane_logic::FlexId;
+use tikv_client::{BoundRange, Snapshot, Transaction, TransactionClient};
 use tokio::sync::Mutex;
 
 use super::keys;
 use crate::error::AppError;
+use crate::models::id::TableId;
+use crate::repositories::encoding::shard_entry::ShardEntry;
 
 use super::to_app_error;
 
@@ -102,6 +107,77 @@ macro_rules! impl_reader {
 impl_reader!(Transaction);
 impl_reader!(Snapshot);
 
+// --- 作業トランザクション（遅延生成） ---
+
+/// 書き込み側のトランザクション。**最初に実際へ触れるまで開かない。**
+///
+/// 書き込みクロージャの 1 周目は、必要なロックを宣言した時点で巻き戻される
+/// （`super::mod` の「必要なロックをどう知るか」）。その周回でトランザクションを
+/// 開いてしまうと、何もせずに捨てるためだけに PD からタイムスタンプを取ることになる。
+/// 遅延生成にすると、1 周目はネットワークに一切触れずに終わる。
+///
+/// 開くのが遅れることは正しさを損なわない。むしろ「ロックを取ってから
+/// `start_ts` を確定させる」という不変条件を、より遅い側へ寄せて強めている。
+pub struct LazyTxn {
+    client: Arc<TransactionClient>,
+    txn: Option<Transaction>,
+}
+
+impl LazyTxn {
+    pub(super) fn new(client: Arc<TransactionClient>) -> Self {
+        Self { client, txn: None }
+    }
+
+    async fn open(&mut self) -> Result<&mut Transaction, tikv_client::Error> {
+        if self.txn.is_none() {
+            self.txn = Some(self.client.begin_pessimistic().await?);
+        }
+        Ok(self.txn.as_mut().expect("直前に開いた"))
+    }
+
+    /// 開いていたトランザクションを取り出す。一度も触れていなければ `None`。
+    pub(super) fn into_opened(self) -> Option<Transaction> {
+        self.txn
+    }
+
+    async fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), tikv_client::Error> {
+        self.open().await?.put(key, value).await
+    }
+
+    async fn delete(&mut self, key: Vec<u8>) -> Result<(), tikv_client::Error> {
+        self.open().await?.delete(key).await
+    }
+}
+
+impl Reader for LazyTxn {
+    async fn read_one(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>, tikv_client::Error> {
+        self.open().await?.read_one(key).await
+    }
+
+    async fn read_many(
+        &mut self,
+        keys: Vec<Vec<u8>>,
+    ) -> Result<Vec<(Vec<u8>, Vec<u8>)>, tikv_client::Error> {
+        self.open().await?.read_many(keys).await
+    }
+
+    async fn read_range(
+        &mut self,
+        range: BoundRange,
+        limit: u32,
+    ) -> Result<Vec<(Vec<u8>, Vec<u8>)>, tikv_client::Error> {
+        self.open().await?.read_range(range, limit).await
+    }
+
+    async fn read_range_keys(
+        &mut self,
+        range: BoundRange,
+        limit: u32,
+    ) -> Result<Vec<Vec<u8>>, tikv_client::Error> {
+        self.open().await?.read_range_keys(range, limit).await
+    }
+}
+
 // --- 素の KV 操作 ---
 
 pub(super) async fn get<R: Reader>(
@@ -113,7 +189,7 @@ pub(super) async fn get<R: Reader>(
 }
 
 pub(super) async fn put(
-    txn: &Mutex<Transaction>,
+    txn: &Mutex<LazyTxn>,
     key: Vec<u8>,
     value: Vec<u8>,
 ) -> Result<(), AppError> {
@@ -121,9 +197,37 @@ pub(super) async fn put(
     txn.put(key, value).await.map_err(to_app_error)
 }
 
-pub(super) async fn delete(txn: &Mutex<Transaction>, key: Vec<u8>) -> Result<(), AppError> {
+pub(super) async fn delete(txn: &Mutex<LazyTxn>, key: Vec<u8>) -> Result<(), AppError> {
     let mut txn = txn.lock().await;
     txn.delete(key).await.map_err(to_app_error)
+}
+
+/// 複数のキーをまとめて書く。
+///
+/// `put` を 1 件ずつ呼ぶとキーの数だけミューテックスを取り直すことになる。
+/// tikv-client 側では書き込みはローカルバッファへの追記なので、
+/// ロックを 1 回にまとめれば往復もロック競合も減る。
+pub(super) async fn put_many(
+    txn: &Mutex<LazyTxn>,
+    entries: impl IntoIterator<Item = (Vec<u8>, Vec<u8>)>,
+) -> Result<(), AppError> {
+    let mut txn = txn.lock().await;
+    for (key, value) in entries {
+        txn.put(key, value).await.map_err(to_app_error)?;
+    }
+    Ok(())
+}
+
+/// 複数のキーをまとめて消す（[`put_many`] と同じ理由）。
+pub(super) async fn delete_many(
+    txn: &Mutex<LazyTxn>,
+    keys: impl IntoIterator<Item = Vec<u8>>,
+) -> Result<(), AppError> {
+    let mut txn = txn.lock().await;
+    for key in keys {
+        txn.delete(key).await.map_err(to_app_error)?;
+    }
+    Ok(())
 }
 
 /// 複数キーをまとめて引く。存在しないキーは結果に現れない。
@@ -291,12 +395,80 @@ fn frame(entry: &[u8]) -> Vec<u8> {
     out
 }
 
+// --- シャードの保存 ---
+//
+// シャードは 2 本のキーで表される。
+//
+// ```text
+//   0x06 ‖ table_id ‖ flex_id -> crc32 ‖ ShardEntry     （本体）
+//   0x08 ‖ table_id ‖ flex_id -> 保持件数（u32 LE）      （リーフのみ）
+// ```
+//
+// 件数はエントリのヘッダにも入っているが、そちらを読むにはリーフの本体
+// （`SpatialIdMap` の rkyv バイト列）ごと転送することになる。`table_count` は
+// 件数を合算するだけなので、テーブル全体を転送するのは割に合わない。件数だけを
+// 別キーへ切り出すと、集計はシャード数 × 4 バイトで済む。
+//
+// LMDB 側にこのキーは無い。あちらは mmap 上をストリームで舐められるので、
+// 本体を持ってくる代償が無いため。`keys.rs` はもともとバックエンド固有なので、
+// この差はレイアウトの差として閉じている。
+//
+// 2 本のキーが食い違わないよう、書き込みと削除は必ずこの節の関数を通す。
+
+/// シャードエントリを保存する。リーフなら件数キーも同時に更新する。
 pub(super) async fn put_shard(
-    txn: &Mutex<Transaction>,
-    key: Vec<u8>,
+    txn: &Mutex<LazyTxn>,
+    table_id: TableId,
+    region: &FlexId,
     entry: &[u8],
 ) -> Result<(), AppError> {
-    put(txn, key, frame(entry)).await
+    let count_key = keys::shard_count(table_id, region);
+    let mut txn_guard = txn.lock().await;
+    txn_guard
+        .put(keys::shard(table_id, region), frame(entry))
+        .await
+        .map_err(to_app_error)?;
+    match ShardEntry::leaf_count(entry)? {
+        Some(count) => txn_guard
+            .put(count_key, count.to_le_bytes().to_vec())
+            .await
+            .map_err(to_app_error),
+        // ポインタノードは件数を持たない。リーフから昇格した場合に備えて消す。
+        None => txn_guard.delete(count_key).await.map_err(to_app_error),
+    }
+}
+
+/// シャードエントリを削除する（件数キーも一緒に消える）。
+pub(super) async fn delete_shard(
+    txn: &Mutex<LazyTxn>,
+    table_id: TableId,
+    region: &FlexId,
+) -> Result<(), AppError> {
+    let mut txn_guard = txn.lock().await;
+    txn_guard
+        .delete(keys::shard(table_id, region))
+        .await
+        .map_err(to_app_error)?;
+    txn_guard
+        .delete(keys::shard_count(table_id, region))
+        .await
+        .map_err(to_app_error)
+}
+
+/// テーブルが保持する [`FlexId`] の総数を、件数キーだけを読んで合算する。
+pub(super) async fn table_flex_id_count<R: Reader>(
+    txn: &Mutex<R>,
+    table_id: TableId,
+) -> Result<u64, AppError> {
+    let entries = scan_prefix(txn, &keys::shard_counts_of(table_id)).await?;
+    let mut total = 0u64;
+    for (_, value) in entries {
+        let bytes: [u8; 4] = value.as_slice().try_into().map_err(|_| {
+            AppError::StorageError("shard count entry is not four bytes".to_string())
+        })?;
+        total += u32::from_le_bytes(bytes) as u64;
+    }
+    Ok(total)
 }
 
 pub(super) async fn get_shard<R: Reader>(

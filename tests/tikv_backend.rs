@@ -244,6 +244,109 @@ async fn shard_split_preserves_all_cells() {
     drop_db(&db, &name).await;
 }
 
+/// **件数索引が、シャード本体から数えた実数と一致し続けること。**
+///
+/// `table_count` は件数だけを切り出した索引（`0x08`）を読む。本体から数えないので速い
+/// 代わりに、シャードを書き換える経路のどれかが索引の更新を落とすと黙ってずれる。
+/// 分割・統合・削除・複製をひととおり通したうえで、実数と突き合わせる。
+#[tokio::test]
+async fn the_count_index_tracks_the_shard_entries() {
+    let db = connect().await;
+    let name = unique_db("count_index");
+
+    let table = {
+        let name = name.clone();
+        db.write(async move |w| {
+            w.database_create(&name, None).await?;
+            w.table_create(&name, "t", TableDataType::Int, 25, None, None)
+                .await
+        })
+        .await
+        .unwrap()
+    };
+
+    // 分割が起きる規模まで入れる。
+    const N: u32 = 1500;
+    for chunk_start in (0..N).step_by(500) {
+        let chunk: Vec<u32> = (chunk_start..(chunk_start + 500).min(N)).collect();
+        db.write(async move |w| {
+            for &i in &chunk {
+                let mut ids = SpatialIdSet::new();
+                ids.insert(SingleId::new(20, 0, i, 0).unwrap());
+                w.data_insert(table.id, TableDataType::Int, ids, &(i as i64).to_be_bytes())
+                    .await?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    }
+    assert_eq!(
+        db.read(async move |r| r.table_count(table.id).await)
+            .await
+            .unwrap(),
+        N as u64,
+        "挿入後の件数がずれている"
+    );
+
+    // 統合が起きる規模まで消す。
+    const REMOVED: u32 = 1200;
+    for chunk_start in (0..REMOVED).step_by(400) {
+        let chunk: Vec<u32> = (chunk_start..(chunk_start + 400).min(REMOVED)).collect();
+        db.write(async move |w| {
+            for &i in &chunk {
+                let mut ids = SpatialIdSet::new();
+                ids.insert(SingleId::new(20, 0, i, 0).unwrap());
+                w.data_remove(table.id, TableDataType::Int, ids).await?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    }
+    let after_removal = db
+        .read(async move |r| r.table_count(table.id).await)
+        .await
+        .unwrap();
+    assert_eq!(
+        after_removal,
+        (N - REMOVED) as u64,
+        "削除・統合後の件数がずれている"
+    );
+
+    // 実際に読めるセル数とも一致すること（索引だけが正しくても意味がない）。
+    let mut all = SpatialIdSet::new();
+    for i in 0..N {
+        all.insert(SingleId::new(20, 0, i, 0).unwrap());
+    }
+    let groups = db
+        .read(async move |r| r.data_get(table.id, all.clone(), None).await)
+        .await
+        .unwrap();
+    let actual: usize = groups.iter().map(|(_, ids)| ids.len()).sum();
+    assert_eq!(
+        actual as u64, after_removal,
+        "件数索引と実際に読めるセル数が食い違っている"
+    );
+
+    // 複製先にも件数が引き継がれること。
+    let copy = {
+        let name = name.clone();
+        db.write(async move |w| w.table_copy(&name, "t", &name, "t_copy").await)
+            .await
+            .unwrap()
+    };
+    assert_eq!(
+        db.read(async move |r| r.table_count(copy.id).await)
+            .await
+            .unwrap(),
+        after_removal,
+        "複製したテーブルの件数が引き継がれていない"
+    );
+
+    drop_db(&db, &name).await;
+}
+
 /// 並行書き込みが直列化され、更新が失われないこと。
 #[tokio::test]
 async fn concurrent_writes_do_not_lose_updates() {

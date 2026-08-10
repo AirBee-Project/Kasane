@@ -41,13 +41,6 @@ mimalloc = { version = "0.1", optional = true }
 
 [features]
 default = ["backend-lmdb"]
-
-# ストレージバックエンドは排他選択（1 バイナリ = 1 バックエンド）。
-# 両方有効／どちらも無効な場合は src/backend.rs の compile_error! で弾かれる。
-#
-# 下の `production` はテレメトリ等の直交した設定なので、バックエンドを含まない。
-# `--no-default-features` と併用する場合はバックエンドも明示すること
-# （例: --features "production,backend-lmdb"）。
 backend-lmdb = ["dep:heed"]
 backend-tikv = ["dep:tikv-client", "dep:crc32fast"]
 

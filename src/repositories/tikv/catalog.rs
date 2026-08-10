@@ -16,7 +16,6 @@ use crate::models::database::table::{
 };
 use crate::models::database::{DatabaseInfoResponse, DatabaseMetadata};
 use crate::models::id::{DatabaseId, TableId};
-use crate::repositories::encoding::shard_entry::ShardEntry;
 
 use super::kv::Reader;
 use super::{TikvRead, TikvWrite, kv};
@@ -198,15 +197,13 @@ impl<R: Reader> TikvRead<'_, R> {
         table_list_by_id(&self.txn, db_id).await
     }
 
+    /// テーブルの保持件数。
+    ///
+    /// 件数専用キー（`0x08`）だけを読む。シャード本体から数えると、合算のために
+    /// テーブル全体のリーフをネットワーク越しに転送することになる（`kv.rs` の
+    /// シャードの保存の節を参照）。
     pub(super) async fn table_count_impl(&self, table_id: TableId) -> Result<u64, AppError> {
-        let entries = kv::scan_shard_prefix(&self.txn, &keys::shards_of(table_id)).await?;
-        let mut total = 0u64;
-        for (_, value) in entries {
-            if let Some(count) = ShardEntry::leaf_count(value.entry())? {
-                total += count as u64;
-            }
-        }
-        Ok(total)
+        kv::table_flex_id_count(&self.txn, table_id).await
     }
 }
 
@@ -679,23 +676,32 @@ impl TikvWrite<'_> {
         )
         .await?;
 
-        // シャードと値インデックスを、キー先頭の table_id だけ差し替えて複製する。
-        // 値はそのまま持ち回る（シャード値のフレームはキーに依存しないので、
-        // 検証済みのバイト列を再フレームせずそのまま置ける）。
-        let shards = kv::scan_prefix(&self.txn, &keys::shards_of(src_meta.id)).await?;
-        for (key, value) in shards {
-            let mut dst = key;
-            keys::replace_leading_id(&mut dst, copy_id)?;
-            kv::put(&self.txn, dst, value).await?;
+        // シャード本体・件数キー・値インデックスを、キー先頭の table_id だけ
+        // 差し替えて複製する。値はそのまま持ち回る（シャード値のフレームはキーに
+        // 依存しないので、検証済みのバイト列を再フレームせずそのまま置ける）。
+        for prefix in [
+            keys::shards_of(src_meta.id),
+            keys::shard_counts_of(src_meta.id),
+        ] {
+            let entries = kv::scan_prefix(&self.txn, &prefix).await?;
+            let mut copied = Vec::with_capacity(entries.len());
+            for (key, value) in entries {
+                let mut dst = key;
+                keys::replace_leading_id(&mut dst, copy_id)?;
+                copied.push((dst, value));
+            }
+            kv::put_many(&self.txn, copied).await?;
         }
 
         let index_keys =
             kv::scan_prefix_keys(&self.txn, &keys::value_index_of(src_meta.id)).await?;
+        let mut copied = Vec::with_capacity(index_keys.len());
         for key in index_keys {
             let mut dst = key;
             keys::replace_leading_id(&mut dst, copy_id)?;
-            kv::put(&self.txn, dst, Vec::new()).await?;
+            copied.push((dst, Vec::new()));
         }
+        kv::put_many(&self.txn, copied).await?;
 
         Ok(Table {
             id: copy_id,
@@ -715,14 +721,22 @@ impl TikvWrite<'_> {
         table_name: &str,
         table_id: TableId,
     ) -> Result<(), AppError> {
-        for key in kv::scan_prefix_keys(&self.txn, &keys::shards_of(table_id)).await? {
-            kv::delete(&self.txn, key).await?;
+        for prefix in [
+            keys::shards_of(table_id),
+            keys::shard_counts_of(table_id),
+            keys::value_index_of(table_id),
+        ] {
+            let keys = kv::scan_prefix_keys(&self.txn, &prefix).await?;
+            kv::delete_many(&self.txn, keys).await?;
         }
-        for key in kv::scan_prefix_keys(&self.txn, &keys::value_index_of(table_id)).await? {
-            kv::delete(&self.txn, key).await?;
-        }
-        kv::delete(&self.txn, keys::table(db_id, table_name)).await?;
-        kv::delete(&self.txn, keys::table_id_index(table_id)).await?;
+        kv::delete_many(
+            &self.txn,
+            [
+                keys::table(db_id, table_name),
+                keys::table_id_index(table_id),
+            ],
+        )
+        .await?;
         Ok(())
     }
 }

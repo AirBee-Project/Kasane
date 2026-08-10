@@ -19,8 +19,7 @@
 //! TiKV の悲観ロックは取得時に取り直した `for_update_ts` で取られるのに対し、
 //! `txn.get()` はトランザクション開始時の `start_ts` スナップショットを読む。
 //! そのため「1 つのトランザクション内でロックしてから読む」と、ロック取得前に
-//! コミットされた他者の変更を見落として lost update になる（実測済み。
-//! `docs/tikv-migration-phase0.md` を参照）。
+//! コミットされた他者の変更を見落として lost update になる
 //!
 //! そこで LMDB の `env.write_txn()` と同じ順序――**ライタミューテックス取得 →
 //! スナップショット確定**――を 2 つのトランザクションに分けて再現する。
@@ -43,6 +42,13 @@
 //!   **集めたロックを揃えた状態でやり直す**
 //!
 //! `Storage::write` のシグネチャは変わらず、サービス層はロックの存在を知らないままでいられる。
+//!
+//! やり直しの 1 周目は**ネットワークに触れない**。ロック集合が空の周回では
+//! ロック用トランザクションを開かず（空の `lock_keys` は何もしないのに、開くだけで
+//! PD からタイムスタンプを取ることになる）、作業トランザクションも実際にデータへ
+//! 触れるまで開かない（[`kv::LazyTxn`]）。結果として、`data_insert` のように
+//! 最初の宣言でロックが判明する操作は、トランザクション 2 本
+//! （ロック用と作業用）で完結する。
 //!
 //! # デッドロックしない理由
 //!
@@ -78,9 +84,25 @@ use tikv_client::{Transaction, TransactionClient};
 use crate::error::AppError;
 use crate::repositories::Storage;
 use keys::LockScope;
+use kv::LazyTxn;
 
 /// 競合・ロック待ちでやり直す上限。
 const MAX_ATTEMPTS: usize = 20;
+
+/// 競合でやり直すときの最初の待ち時間。以降は試行ごとに倍にする。
+///
+/// 待たずに `continue` すると、混み合っている相手へ PD 往復を伴う再挑戦を
+/// 詰めて投げることになり、競合をさらに悪化させる。
+const RETRY_BACKOFF_BASE: std::time::Duration = std::time::Duration::from_millis(5);
+/// 待ち時間の上限。
+const RETRY_BACKOFF_MAX: std::time::Duration = std::time::Duration::from_millis(200);
+
+/// `attempt` 回目の競合に対する待ち時間。
+fn retry_backoff(attempt: u32) -> std::time::Duration {
+    RETRY_BACKOFF_BASE
+        .saturating_mul(1u32 << attempt.min(8))
+        .min(RETRY_BACKOFF_MAX)
+}
 
 fn to_app_error(err: tikv_client::Error) -> AppError {
     AppError::StorageError(err.to_string())
@@ -176,6 +198,20 @@ impl LockGuard {
     }
 }
 
+/// ロックを保持していれば解放する。空集合の試行では取っていないので何もしない。
+async fn release(guard: Option<LockGuard>) {
+    if let Some(guard) = guard {
+        guard.release().await;
+    }
+}
+
+/// 開いていれば巻き戻す。一度も触れていない試行では開いていないので何もしない。
+async fn rollback(txn: Option<Transaction>) {
+    if let Some(mut txn) = txn {
+        let _ = txn.rollback().await;
+    }
+}
+
 /// 読み取りトランザクション。
 ///
 /// `R` は読み取り元のスナップショット。通常の読み取りは [`Transaction`]、
@@ -201,8 +237,11 @@ impl<R> TikvRead<'_, R> {
 }
 
 /// 書き込みトランザクション。
+///
+/// 中身の [`LazyTxn`] は**最初に実際へ触れるまで開かない**。ロック宣言だけで
+/// 巻き戻る 1 周目が、ネットワークに触れずに終わるようにするため。
 pub struct TikvWrite<'a> {
-    pub(crate) txn: tokio::sync::Mutex<Transaction>,
+    pub(crate) txn: tokio::sync::Mutex<LazyTxn>,
     pub(crate) _db: PhantomData<&'a TikvDb>,
     /// この試行で保持しているロック。
     held: BTreeSet<Vec<u8>>,
@@ -290,29 +329,35 @@ impl Storage for TikvDb {
     {
         let mut locks: BTreeSet<Vec<u8>> = BTreeSet::new();
         let mut last_error: Option<AppError> = None;
+        // 競合でのやり直しだけを数える。ロック不足での巻き戻しは待つ理由がない
+        // （相手を待っているのではなく、必要な範囲が判っただけなので）。
+        let mut conflicts: u32 = 0;
 
         for _ in 0..MAX_ATTEMPTS {
-            // 1. ロックを取得する（初回は空集合＝ロックなしで走らせ、必要な範囲を宣言させる）。
-            let guard = match LockGuard::acquire(&self.client, &locks).await {
-                Ok(guard) => guard,
-                Err(e) if is_retryable(&e) => {
-                    last_error = Some(to_app_error(e));
-                    continue;
+            // 1. ロックを取得する。初回は集合が空なので、そもそもトランザクションを
+            //    開かない（空の `lock_keys` は何もしないのに、開くだけで PD から
+            //    タイムスタンプを取ることになる）。
+            let guard = if locks.is_empty() {
+                None
+            } else {
+                match LockGuard::acquire(&self.client, &locks).await {
+                    Ok(guard) => Some(guard),
+                    Err(e) if is_retryable(&e) => {
+                        last_error = Some(to_app_error(e));
+                        tokio::time::sleep(retry_backoff(conflicts)).await;
+                        conflicts += 1;
+                        continue;
+                    }
+                    Err(e) => return Err(to_app_error(e)),
                 }
-                Err(e) => return Err(to_app_error(e)),
             };
 
-            // 2. ロックを保持した状態で作業トランザクションを開始する。
-            //    ここで start_ts が確定するので、前任者のコミットが必ず見える。
-            let txn = match self.client.begin_pessimistic().await {
-                Ok(txn) => txn,
-                Err(e) => {
-                    guard.release().await;
-                    return Err(to_app_error(e));
-                }
-            };
+            // 2. 作業トランザクションはロックを保持した状態で開く。実際に開くのは
+            //    クロージャが最初にデータへ触れたときで（[`LazyTxn`]）、そこで
+            //    start_ts が確定する。ロック取得より後になるので、前任者のコミットが
+            //    必ず見える。
             let mut w = TikvWrite {
-                txn: tokio::sync::Mutex::new(txn),
+                txn: tokio::sync::Mutex::new(LazyTxn::new(self.client.clone())),
                 _db: PhantomData,
                 held: locks.clone(),
                 missing: BTreeSet::new(),
@@ -325,35 +370,39 @@ impl Storage for TikvDb {
             // 確実に捨てられる（＝宣言し忘れた範囲へ書いたまま commit されない）。
             let need_more = w.needs_more_locks();
             let newly_required = std::mem::take(&mut w.missing);
-            let mut txn = w.txn.into_inner();
+            // 一度もデータへ触れていなければトランザクションは開いていない。
+            let txn = w.txn.into_inner().into_opened();
 
             // 3. ロックが足りなければ、この試行は捨ててロックを揃えてやり直す。
             if need_more {
-                let _ = txn.rollback().await;
-                guard.release().await;
+                rollback(txn).await;
+                release(guard).await;
                 locks.extend(newly_required);
                 continue;
             }
 
             let outcome = match result {
-                Ok(value) => match txn.commit().await {
-                    Ok(_) => Ok(value),
-                    Err(e) => Err(e),
+                Ok(value) => match txn {
+                    Some(mut txn) => txn.commit().await.map(|_| value),
+                    // 何も書かずに終わった（読み取りだけ、あるいは即座に確定した）。
+                    None => Ok(value),
                 },
                 Err(app_err) => {
                     // クロージャが失敗したらコミットしない。ロックは必ず解放する。
-                    let _ = txn.rollback().await;
-                    guard.release().await;
+                    rollback(txn).await;
+                    release(guard).await;
                     return Err(app_err);
                 }
             };
 
-            guard.release().await;
+            release(guard).await;
 
             match outcome {
                 Ok(value) => return Ok(value),
                 Err(e) if is_retryable(&e) => {
                     last_error = Some(to_app_error(e));
+                    tokio::time::sleep(retry_backoff(conflicts)).await;
+                    conflicts += 1;
                     continue;
                 }
                 Err(e) => return Err(to_app_error(e)),

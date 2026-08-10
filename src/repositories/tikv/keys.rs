@@ -12,6 +12,7 @@
 //!   0x05 ‖ username                      -> UserMetadata
 //!   0x06 ‖ table_id(16) ‖ flex_id        -> シャードエントリ
 //!   0x07 ‖ table_id(16) ‖ vkey ‖ flex_id -> 値インデックス（値なし）
+//!   0x08 ‖ table_id(16) ‖ flex_id        -> シャードの保持件数（u32 LE）
 //!   0x7F ‖ scope ‖ id                    -> ロック専用キー（値を書かない）
 //! ```
 //!
@@ -39,6 +40,8 @@ pub enum Ns {
     Users = 0x05,
     TablesData = 0x06,
     ValueIndex = 0x07,
+    /// シャードが保持する `FlexId` 件数だけを切り出した索引（`kv.rs` の保存の節を参照）。
+    ShardCount = 0x08,
     /// ロック取得専用。実データは書かない（[`super::super`] のロック階層を参照）。
     Lock = 0x7F,
 }
@@ -163,6 +166,21 @@ pub fn shards_of(table_id: TableId) -> Vec<u8> {
     with_ns(Ns::TablesData, &table_id.into_bytes())
 }
 
+/// `0x08 ‖ table_id ‖ flex_id`
+///
+/// 本体（[`shard`]）と同じ並びにしてあるので、テーブル単位のプレフィックスも対応する。
+pub fn shard_count(table_id: TableId, region: &FlexId) -> Vec<u8> {
+    let mut rest = Vec::with_capacity(UUID_LEN + FlexId::ENCODED_LEN);
+    rest.extend_from_slice(&table_id.into_bytes());
+    rest.extend_from_slice(&region.encode());
+    with_ns(Ns::ShardCount, &rest)
+}
+
+/// あるテーブルの全シャード件数を覆うプレフィックス。
+pub fn shard_counts_of(table_id: TableId) -> Vec<u8> {
+    with_ns(Ns::ShardCount, &table_id.into_bytes())
+}
+
 /// `0x07 ‖ table_id ‖ vkey ‖ flex_id`
 pub fn value_index(table_id: TableId, vkey: &[u8], flex_id: &FlexId) -> Vec<u8> {
     with_ns(
@@ -255,6 +273,7 @@ mod tests {
             table_id_index(table_id(1)),
             user("x"),
             shards_of(table_id(1)),
+            shard_counts_of(table_id(1)),
             value_index_of(table_id(1)),
             lock(LockScope::Database, b"some-db"),
         ];
