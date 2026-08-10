@@ -296,7 +296,7 @@ impl<R: Reader> TikvRead<'_, R> {
                 }
                 for query in &leaf.queries {
                     for (got, value) in map.get(query) {
-                        // 値の複製は distinct な値の分だけで済ませる（セル数ではなく）。
+                        // 値の複製は distinct な値の分だけで済ませる（ FlexId 数ではなく）。
                         match by_value.get_mut(value) {
                             Some(ids) => ids.push(got),
                             None => {
@@ -337,7 +337,7 @@ impl<R: Reader> TikvRead<'_, R> {
         Ok(out)
     }
 
-    /// 値が `lo`〜`hi`（両端含む）に入るセルを引く。
+    /// 値が `lo`〜`hi`（両端含む）に入る FlexId を引く。
     ///
     /// 値インデックスのキーは `0x07 ‖ table_id ‖ vkey ‖ flexid` と値を可変長のまま
     /// 連結しているため、可変長型では**バイト範囲だけでは絞りきれない**。
@@ -381,9 +381,9 @@ impl<R: Reader> TikvRead<'_, R> {
         Ok(out)
     }
 
-    /// クエリ実行器の入力として、指定範囲のセルを読み出す。
+    /// クエリ実行器の入力として、指定範囲の FlexId を読み出す。
     #[tracing::instrument(skip_all, fields(table_id = %table_id))]
-    pub(super) async fn read_cells_in_range(
+    pub(super) async fn read_flex_ids_in_range(
         &self,
         table_id: TableId,
         range: &RangeId,

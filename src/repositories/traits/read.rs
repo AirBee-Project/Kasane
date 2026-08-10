@@ -41,7 +41,7 @@ pub trait ReadRepository: CatalogRepository {
         limit: Option<usize>,
     ) -> Result<ValueGroups, AppError>;
 
-    /// 値が `value` と等しいセルを引く（値インデックス経由）。
+    /// 値が `value` と等しい FlexId を引く（値インデックス経由）。
     async fn data_filter_eq(
         &self,
         table_id: TableId,
@@ -49,7 +49,7 @@ pub trait ReadRepository: CatalogRepository {
         value: &[u8],
     ) -> Result<Vec<FlexId>, AppError>;
 
-    /// 値が `lo`〜`hi`（両端含む）に入るセルを引く。
+    /// 値が `lo`〜`hi`（両端含む）に入る FlexId を引く。
     async fn data_filter_range(
         &self,
         table_id: TableId,

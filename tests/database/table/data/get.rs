@@ -71,7 +71,7 @@ use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 #[tokio::test]
-/// RangeIdとFlexIdでのレスポンスフォーマットを検証する。
+/// RangeIdと FlexId でのレスポンスフォーマットを検証する。
 async fn test_table_data_get_format_options() {
     let test_app = TestApp::new().await;
 

@@ -16,7 +16,7 @@ fn range_routing_reaches_the_same_leaves_as_id_routing() {
     let db = initialize_database(tmp.path().to_str().unwrap());
     let table_id = TableId(uuid::Uuid::now_v7());
 
-    // 4セルを個別のトランザクションで書き込む（API 経由と同じ形）。
+    // 4 FlexId を個別のトランザクションで書き込む（API 経由と同じ形）。
     for i in 0..4u32 {
         let wtxn = db.env.write_txn().unwrap();
         let mut w = KasaneDbWrite::new(wtxn, &db);
@@ -55,9 +55,9 @@ fn range_routing_reaches_the_same_leaves_as_id_routing() {
     );
 }
 
-/// `TableSource::read_subset` が範囲内の全セルを返すこと。
+/// `TableSource::read_subset` が範囲内の全 FlexId を返すこと。
 #[test]
-fn table_source_read_subset_returns_all_cells() {
+fn table_source_read_subset_returns_all_flex_ids() {
     use kasane::repositories::lmdb::query_source::TableSource;
     use kasane_logic::Source;
     use std::sync::Arc;
@@ -76,7 +76,7 @@ fn table_source_read_subset_returns_all_cells() {
         w.commit().unwrap();
     }
 
-    // クエリ 1 回分の断面。書き込みを終えてから開くので、全セルが見えるはず。
+    // クエリ 1 回分の断面。書き込みを終えてから開くので、全 FlexId が見えるはず。
     let snapshot = Arc::new(std::sync::Mutex::new(
         db.env.clone().static_read_txn().unwrap(),
     ));
@@ -95,9 +95,9 @@ fn table_source_read_subset_returns_all_cells() {
     assert_eq!(got, vec![0, 1, 2, 3], "read_subset が取りこぼしている");
 }
 
-/// 対象空間IDの集合から得た外接範囲が、全セルを覆っていること。
+/// 対象空間IDの集合から得た外接範囲が、全 FlexId を覆っていること。
 #[test]
-fn bounding_box_of_target_set_covers_every_cell() {
+fn bounding_box_of_target_set_covers_every_flex_id() {
     let mut set = SpatialIdSet::new();
     for i in 0..4u32 {
         set.insert(SingleId::new(20, 0, 790000 + i, 500000).unwrap());
@@ -108,7 +108,7 @@ fn bounding_box_of_target_set_covers_every_cell() {
     assert_eq!(bbox.x(), [790000, 790003], "bbox={bbox}");
     assert_eq!(bbox.y(), [500000, 500000], "bbox={bbox}");
 
-    // 各セルが集合に含まれると判定されること（最終フィルタと同じ条件）。
+    // 各 FlexId が集合に含まれると判定されること（最終フィルタと同じ条件）。
     for i in 0..4u32 {
         let id = SingleId::new(20, 0, 790000 + i, 500000).unwrap();
         assert!(

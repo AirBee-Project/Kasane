@@ -40,7 +40,7 @@ where
                 // 結合し直してから、各領域を single_ids で展開する。
                 //
                 // flat_single_ids_in は使わない：あちらは Set 全体の最大ズームへ空間側も
-                // 強制的に均してしまい、本来1エントリで表せる粗いブロックまで最深セル単位へ
+                // 強制的に均してしまい、本来1エントリで表せる粗いブロックまで最深 FlexId 単位へ
                 // 分解してしまう（例: 917件で済むはずが4242件に膨れる）。
                 let set: SpatialIdSet = flex_ids.into_iter().collect();
                 let mut out = Vec::new();

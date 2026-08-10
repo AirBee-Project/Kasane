@@ -50,10 +50,10 @@ async fn make_table(db: &TikvDb, db_name: &str) -> Table {
     .unwrap()
 }
 
-/// `xs` の各値を `(20, f, x, y)` のセルとして書き込む。
+/// `xs` の各値を `(20, f, x, y)` の FlexId として書き込む。
 ///
 /// 1 トランザクションが大きくなりすぎないようチャンクに分ける。値は `x` そのもの。
-async fn insert_cells(
+async fn insert_flex_ids(
     db: &TikvDb,
     table_id: TableId,
     xs: impl IntoIterator<Item = u32>,
@@ -78,7 +78,7 @@ async fn insert_cells(
     }
 }
 
-/// 2 つのインスタンスから並行に 1 セルずつ書き込み、両方の完了を待つ。
+/// 2 つのインスタンスから並行に 1 FlexId ずつ書き込み、両方の完了を待つ。
 ///
 /// `x` は `(writer 番号, i)` から決める。同じリーフを狙うか離すかを呼び出し側が選べる。
 async fn insert_from_both(
@@ -116,7 +116,7 @@ async fn insert_from_both(
     }
 }
 
-/// 指定したセル群のうち、実際に読み戻せた件数。
+/// 指定した FlexId 群のうち、実際に読み戻せた件数。
 async fn count_readable(db: &TikvDb, table_id: TableId, ids: SpatialIdSet) -> usize {
     let groups = db
         .read(async move |r| r.data_get(table_id, ids.clone(), None).await)
@@ -125,8 +125,8 @@ async fn count_readable(db: &TikvDb, table_id: TableId, ids: SpatialIdSet) -> us
     groups.iter().map(|(_, ids)| ids.len()).sum()
 }
 
-/// `(20, f, x, y)` のセル集合。
-fn cells(xs: impl IntoIterator<Item = u32>, f: i32, y: u32) -> SpatialIdSet {
+/// `(20, f, x, y)` の FlexId 集合。
+fn flex_ids(xs: impl IntoIterator<Item = u32>, f: i32, y: u32) -> SpatialIdSet {
     let mut set = SpatialIdSet::new();
     for x in xs {
         set.insert(SingleId::new(20, f, x, y).unwrap());
@@ -279,23 +279,23 @@ async fn table_and_data_roundtrip() {
     drop_db(&db, &name).await;
 }
 
-/// シャードの分割が起きる規模を書き込んでも、全セルが読み戻せること。
+/// シャードの分割が起きる規模を書き込んでも、全 FlexId が読み戻せること。
 #[tokio::test]
-async fn shard_split_preserves_all_cells() {
+async fn shard_split_preserves_all_flex_ids() {
     let db = connect().await;
     let name = unique_db("split");
 
     let table = make_table(&db, &name).await;
 
-    // MAX_FLEX_ID_PER_SHARD (1024) を超える数のセルを、それぞれ別の値で入れる。
+    // MAX_FLEX_ID_PER_SHARD (1024) を超える数の FlexId を、それぞれ別の値で入れる。
     const N: u32 = 1500;
-    insert_cells(&db, table.id, 0..N, 0, 0).await;
+    insert_flex_ids(&db, table.id, 0..N, 0, 0).await;
 
     let count = db
         .read(async move |r| r.table_count(table.id).await)
         .await
         .unwrap();
-    assert_eq!(count, N as u64, "分割後にセルが失われている");
+    assert_eq!(count, N as u64, "分割後に FlexId が失われている");
 
     // 個別の値がインデックスから正しく引けること（分割境界を跨いでも壊れない）。
     for probe in [0u32, 777, N - 1] {
@@ -335,7 +335,7 @@ async fn text_range_filter_keeps_values_that_prefix_the_upper_bound() {
         .unwrap()
     };
 
-    // 値と、それを置くセルの x 座標。
+    // 値と、それを置く FlexId の x 座標。
     let rows: [(&str, u32); 6] = [
         ("a", 1),   // 範囲外（下限未満）
         ("b", 2),   // 該当。"bz" の真の接頭辞 ＝ 取りこぼしやすい行
@@ -395,7 +395,7 @@ async fn text_range_filter_keeps_values_that_prefix_the_upper_bound() {
 /// read-modify-write を並行で走らせる」テストになる。リーフ単位ロックが効いていなければ、
 /// 後勝ちで互いの挿入を上書きし合って件数が合わなくなる。
 ///
-/// `separate_instances_stay_consistent` はセルが散らばるのでリーフが分かれうるが、
+/// `separate_instances_stay_consistent` は FlexId が散らばるのでリーフが分かれうるが、
 /// こちらは意図的に 1 リーフへ集中させている。
 #[tokio::test]
 async fn concurrent_writers_on_the_same_leaf_do_not_lose_updates() {
@@ -422,7 +422,7 @@ async fn concurrent_writers_on_the_same_leaf_do_not_lose_updates() {
         "同一リーフへの並行書き込みで更新が失われた"
     );
 
-    // 実際に全セルが引けること（件数だけ合っていても意味がない）。
+    // 実際に全 FlexId が引けること（件数だけ合っていても意味がない）。
     let mut all = SpatialIdSet::new();
     for x in 0..PER_WRITER * 2 {
         all.insert(SingleId::new(20, 0, x, 0).unwrap());
@@ -432,7 +432,11 @@ async fn concurrent_writers_on_the_same_leaf_do_not_lose_updates() {
         .await
         .unwrap();
     let actual: usize = groups.iter().map(|(_, ids)| ids.len()).sum();
-    assert_eq!(actual, (PER_WRITER * 2) as usize, "読み戻せないセルがある");
+    assert_eq!(
+        actual,
+        (PER_WRITER * 2) as usize,
+        "読み戻せない FlexId がある"
+    );
 
     drop_db(&a, &name).await;
 }
@@ -452,7 +456,7 @@ async fn writes_to_distant_regions_make_progress_together() {
     let table = make_table(&a, &name).await;
 
     // 先に木を育てて、離れた領域が別リーフになるようにする。
-    insert_cells(&a, table.id, (0..2000u32).map(|i| i * 400), 0, 0).await;
+    insert_flex_ids(&a, table.id, (0..2000u32).map(|i| i * 400), 0, 0).await;
 
     const PER_WRITER: u32 = 30;
     // 2 つの書き込み列を大きく離す。
@@ -463,7 +467,7 @@ async fn writes_to_distant_regions_make_progress_together() {
     .await;
 
     for base in BASES {
-        let got = count_readable(&a, table.id, cells(base..base + PER_WRITER, 0, 1)).await;
+        let got = count_readable(&a, table.id, flex_ids(base..base + PER_WRITER, 0, 1)).await;
         assert_eq!(
             got, PER_WRITER as usize,
             "base={base} の書き込みが欠けている"
@@ -481,7 +485,7 @@ async fn removing_a_table_retires_it_and_gc_reclaims_the_data() {
 
     let table = make_table(&db, &name).await;
 
-    insert_cells(&db, table.id, 0..1500u32, 0, 3).await;
+    insert_flex_ids(&db, table.id, 0..1500u32, 0, 3).await;
     assert_eq!(
         db.read(async move |r| r.table_count(table.id).await)
             .await
@@ -533,7 +537,7 @@ async fn the_count_index_tracks_the_shard_entries() {
 
     // 分割が起きる規模まで入れる。
     const N: u32 = 1500;
-    insert_cells(&db, table.id, 0..N, 0, 0).await;
+    insert_flex_ids(&db, table.id, 0..N, 0, 0).await;
     assert_eq!(
         db.read(async move |r| r.table_count(table.id).await)
             .await
@@ -567,11 +571,11 @@ async fn the_count_index_tracks_the_shard_entries() {
         "削除・統合後の件数がずれている"
     );
 
-    // 実際に読めるセル数とも一致すること（索引だけが正しくても意味がない）。
-    let actual = count_readable(&db, table.id, cells(0..N, 0, 0)).await;
+    // 実際に読める FlexId 数とも一致すること（索引だけが正しくても意味がない）。
+    let actual = count_readable(&db, table.id, flex_ids(0..N, 0, 0)).await;
     assert_eq!(
         actual as u64, after_removal,
-        "件数索引と実際に読めるセル数が食い違っている"
+        "件数索引と実際に読める FlexId 数が食い違っている"
     );
 
     // 複製先にも件数が引き継がれること。
@@ -600,7 +604,7 @@ async fn concurrent_writes_do_not_lose_updates() {
 
     let table = make_table(&db, &name).await;
 
-    // 同一テーブルへ別セルを並行に書き込む。テーブルスコープのロックを奪い合う。
+    // 同一テーブルへ別の FlexId を並行に書き込む。テーブルスコープのロックを奪い合う。
     const WRITERS: u32 = 8;
     let mut handles = Vec::new();
     for i in 0..WRITERS {
@@ -652,7 +656,7 @@ async fn separate_instances_stay_consistent() {
 
     let table = make_table(&a, &name).await;
 
-    // 同じテーブルへ、両インスタンスから交互のセルを同時に書く。
+    // 同じテーブルへ、両インスタンスから交互の FlexId を同時に書く。
     const PER_INSTANCE: u32 = 12;
     let mut handles = Vec::new();
     for (offset, db) in [(0u32, a.clone()), (1u32, b.clone())] {
@@ -858,7 +862,7 @@ async fn a_failed_closure_leaves_nothing_behind() {
         .read(async move |r| r.table_count(table.id).await)
         .await
         .unwrap();
-    assert_eq!(count, 0, "失敗した書き込みのセルが残っている");
+    assert_eq!(count, 0, "失敗した書き込みの FlexId が残っている");
 
     drop_db(&db, &name).await;
 }

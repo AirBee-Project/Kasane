@@ -98,7 +98,7 @@ where
         let bounds = bounds.to_vec();
         let snapshot_ts = self.snapshot_ts.clone();
 
-        let cells = self.handle.block_on(async move {
+        let flex_ids = self.handle.block_on(async move {
             // 固定タイムスタンプのスナップショット。読み取り専用なので
             // commit も rollback も要らず、drop するだけで閉じられる。
             let snapshot = db.client.snapshot(
@@ -107,21 +107,21 @@ where
             );
             let reader = TikvRead::new(snapshot);
 
-            let mut cells = Vec::new();
+            let mut flex_ids = Vec::new();
             for range in &bounds {
                 let got = reader
-                    .read_cells_in_range(table_id, range)
+                    .read_flex_ids_in_range(table_id, range)
                     .await
                     .map_err(|e| LogicError::SourceRead(e.to_string()))?;
-                cells.extend(got);
+                flex_ids.extend(got);
             }
-            Ok::<_, LogicError>(cells)
+            Ok::<_, LogicError>(flex_ids)
         })?;
 
-        // 復元できない値（型に合わない格納値）のセルは結果に含めない。
-        // 重なり合う bounds から同じセルを複数回読んでも、いずれも同じ
+        // 復元できない値（型に合わない格納値）の FlexId は結果に含めない。
+        // 重なり合う bounds から同じ FlexId を複数回読んでも、いずれも同じ
         // `(FlexId, 値)` なので union がそのまま吸収する。
-        Ok(cells
+        Ok(flex_ids
             .into_iter()
             .filter_map(|(id, raw)| (self.decode)(&raw).map(|v| (id, v)))
             .collect())

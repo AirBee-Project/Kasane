@@ -75,7 +75,7 @@ fn siblings_merge_after_mass_remove() {
     );
     assert!(!has_pointer, "no pointer node should remain after merge");
 
-    // 4. table_count が残数と一致、かつ残りの全セルが読めること。
+    // 4. table_count が残数と一致、かつ残りの全 FlexId が読めること。
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
     let remaining = (n - keep_from) as u64;
     assert_eq!(r.table_count_impl(table_id).unwrap(), remaining);
@@ -93,5 +93,8 @@ fn siblings_merge_after_mass_remove() {
         }
     }
     let expected: HashSet<u32> = (keep_from..n).map(|i| i * 4).collect();
-    assert_eq!(xs, expected, "remaining cells must be readable after merge");
+    assert_eq!(
+        xs, expected,
+        "remaining flex_ids must be readable after merge"
+    );
 }

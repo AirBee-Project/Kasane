@@ -266,7 +266,7 @@ pub enum QueryNode {
     },
 
     /// 2つの部分式を `policy` で重ね合わせる。
-    /// 片側にしか値が無いセルは `default` を相手側の値とみなす。
+    /// 片側にしか値が無い FlexId は `default` を相手側の値とみなす。
     Merge {
         #[schema(no_recursion)]
         left: Box<QueryNode>,

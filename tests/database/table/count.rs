@@ -74,7 +74,7 @@ async fn test_table_count_dynamic() {
     let count = get_table_count(&test_app, "count_test_table").await;
     assert_eq!(count, 2, "Count should remain 2 after overwrite");
 
-    // range を使って範囲で挿入（例: z=21 のセルを 4 つ追加）
+    // range を使って範囲で挿入（例: z=21 の FlexId を 4 つ追加）
     let range_id_query = serde_json::json!([{ "z": 21, "f": [0,0], "x": [1000, 1001], "y": [1000, 1001], "type": "rangeId" }]);
     put_data(
         &test_app,
@@ -86,7 +86,7 @@ async fn test_table_count_dynamic() {
     let count = get_table_count(&test_app, "count_test_table").await;
     assert_eq!(
         count, 3,
-        "Count should be 3 after adding 4 cells via range (merged into 1 parent block)"
+        "Count should be 3 after adding 4 flex_ids via range (merged into 1 parent block)"
     );
 
     // 1件目のデータを削除

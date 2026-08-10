@@ -11,10 +11,10 @@ async fn seed(
     test_app: &TestApp,
     table: &str,
     data_type: &str,
-    cells: &[(i64, serde_json::Value)],
+    flex_ids: &[(i64, serde_json::Value)],
 ) {
     test_app.create_table("test_db", table, data_type, 25).await;
-    for (x, v) in cells {
+    for (x, v) in flex_ids {
         put_data(
             test_app,
             table,
@@ -289,11 +289,11 @@ async fn rejects_numeric_policy_on_text() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
-/// 演算子を挟まないクエリで、対象領域の全セルが返ること。
+/// 演算子を挟まないクエリで、対象領域の全 FlexId が返ること。
 ///
-/// 対象領域の求め方を誤ると一部のセルだけが返る退行が起きるため、複数セルで固定する。
+/// 対象領域の求め方を誤ると一部の FlexId だけが返る退行が起きるため、複数 FlexId で固定する。
 #[tokio::test]
-async fn source_only_returns_all_cells() {
+async fn source_only_returns_all_flex_ids() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
@@ -327,7 +327,7 @@ async fn source_only_returns_all_cells() {
 // 演算子パラメータの検証
 //
 // クエリは遅延評価（`run_on_subset`）でしか実行されないため、そこで
-// `validate()` を通していないと、範囲外パラメータを持つ演算子がセルを黙って
+// `validate()` を通していないと、範囲外パラメータを持つ演算子が FlexId を黙って
 // 捨てて「エラーではなく空の結果 (200)」を返してしまう。以下はその退行を防ぐ。
 // ---------------------------------------------------------------------------
 
@@ -523,7 +523,7 @@ async fn limit_keeps_dictionary_and_groups_consistent() {
 
 /// `limit` での打ち切りは順序を問わず行われること。
 ///
-/// 保持セル数を `limit` 件へ抑える短絡評価により、上位 `limit` 件が保証されるわけではないことの確認。
+/// 保持 FlexId 数を `limit` 件へ抑える短絡評価により、上位 `limit` 件が保証されるわけではないことの確認。
 #[tokio::test]
 async fn limit_truncates_the_results() {
     let app = TestApp::new().await;
@@ -560,7 +560,7 @@ async fn limit_truncates_the_results() {
 
 /// `limit` 無指定なら全件返ること（上の2件の裏取り）。
 #[tokio::test]
-async fn no_limit_returns_every_cell() {
+async fn no_limit_returns_every_flex_id() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
@@ -710,14 +710,14 @@ async fn explicit_value_type_rejects_unreadable_source() {
 // 要求空間IDのズームレベル
 //
 // クエリ結果の解像度は演算子が決めるものであり、入力テーブルの `max_zoom_level`
-// （＝そのテーブルが保存する最小セル）とは別物。要求空間IDを `max_zoom_level` で
-// 丸めていた頃は、クエリ自身が生成したセルを指名できず 400 になっていた。
+// （＝そのテーブルが保存する最小 FlexId ）とは別物。要求空間IDを `max_zoom_level` で
+// 丸めていた頃は、クエリ自身が生成した FlexId を指名できず 400 になっていた。
 // ---------------------------------------------------------------------------
 
-/// `max_zoom_level` より細かい空間IDで、クエリが生成したセルを指名できる。
+/// `max_zoom_level` より細かい空間IDで、クエリが生成した FlexId を指名できる。
 ///
-/// `max_zoom_level = 20` のテーブルに z=25 のサブセル shift を掛けると、結果は
-/// z=21〜25 のセルを含む。それを z=25 の空間IDで取得できること。
+/// `max_zoom_level = 20` のテーブルに z=25 のサブ FlexId shift を掛けると、結果は
+/// z=21〜25 の FlexId を含む。それを z=25 の空間IDで取得できること。
 #[tokio::test]
 async fn accepts_targets_finer_than_source_max_zoom_level() {
     let app = TestApp::new().await;
@@ -733,14 +733,14 @@ async fn accepts_targets_finer_than_source_max_zoom_level() {
     )
     .await;
 
-    // z=25 で 1 セル分ずらす（z=20 セルの 1/32）
+    // z=25 で 1 FlexId 分ずらす（z=20 FlexId の 1/32）
     let query =
         serde_json::json!({ "type": "shiftX", "z": 25, "index": 1, "input": source("t_fine") });
 
     let (status, result) = post_query(
         &app,
         &serde_json::json!({
-            // 元セル(z=20, x=800000) を z=25 へ落とすと x=25600000。shift 後は +1。
+            // 元の FlexId(z=20, x=800000) を z=25 へ落とすと x=25600000。shift 後は +1。
             "spatial_ids": [{ "z": 25, "f": 0, "x": 25600001, "y": 16000000, "type": "singleId" }],
             "query": query
         }),
@@ -754,7 +754,7 @@ async fn accepts_targets_finer_than_source_max_zoom_level() {
         "max_zoom_level より細かい要求が弾かれている: {result}"
     );
     assert_eq!(values(&result), vec![7]);
-    assert!(total_ids(&result) > 0, "セルが返っていない: {result}");
+    assert!(total_ids(&result) > 0, "FlexId が返っていない: {result}");
 }
 
 /// 粗い側（`max_zoom_level` 未満）の要求は従来どおり通る。
@@ -1172,14 +1172,14 @@ async fn map_values_supports_enum_source() {
     assert_eq!(total_ids(&result), 2);
 }
 
-/// 値の無いセルは `default` にならず、欠損のまま残る。
+/// 値の無い FlexId は `default` にならず、欠損のまま残る。
 #[tokio::test]
-async fn map_values_keeps_missing_cells() {
+async fn map_values_keeps_missing_flex_ids() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(
         &app,
-        "t_map_missing_cell",
+        "t_map_missing_flex_id",
         "Int",
         &[
             (810000, serde_json::json!(1)),
@@ -1202,7 +1202,7 @@ async fn map_values_keeps_missing_cells() {
                     { "from": 1, "to": "One" }
                 ],
                 "default": "Other",
-                "input": source("t_map_missing_cell")
+                "input": source("t_map_missing_flex_id")
             }
         }),
         "?format=singleId",

@@ -99,7 +99,7 @@ impl From<TableDataType> for JsonValueType {
 impl TableConstraints {
     /// `Enum` の選択肢に未割り当ての ID を振る。
     ///
-    /// 割り当て規則は**保存される値そのもの**（セルには ID が入る）なので、バックエンドごとに
+    /// 割り当て規則は**保存される値そのもの**（ FlexId には ID が入る）なので、バックエンドごとに
     /// 持たせるとストレージ間で値の意味がずれる。制約の定義と同じ場所に 1 つだけ置く。
     pub fn with_enum_ids(
         data_type: TableDataType,

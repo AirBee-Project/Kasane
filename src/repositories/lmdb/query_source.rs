@@ -86,7 +86,7 @@ where
             LogicError::SourceRead("query snapshot was poisoned by a panicking reader".to_string())
         })?;
 
-        let mut cells: Vec<(FlexId, V)> = Vec::new();
+        let mut flex_ids: Vec<(FlexId, V)> = Vec::new();
         for range in bounds {
             let leaves =
                 shard::route_leaves_for_range(&self.tables_data, &txn, self.table_id, range)
@@ -99,16 +99,16 @@ where
                 let Some(arch) = arch else { continue };
 
                 for (id, raw) in arch.get_range(range) {
-                    // 復元できない値（型に合わない格納値）のセルは結果に含めない。
+                    // 復元できない値（型に合わない格納値）の FlexId は結果に含めない。
                     if let Some(value) = (self.decode)(raw) {
-                        cells.push((id, value));
+                        flex_ids.push((id, value));
                     }
                 }
             }
         }
-        // 重なり合う bounds から同じセルを複数回読むことはあるが、いずれも
+        // 重なり合う bounds から同じ FlexId を複数回読むことはあるが、いずれも
         // まったく同じ `(FlexId, 値)` なので、`from_flexids` の union がそのまま吸収する。
-        Ok(cells.into_iter().collect())
+        Ok(flex_ids.into_iter().collect())
     }
 
     fn read_all(self: Box<Self>) -> Result<WorkingTree<V>, LogicError> {

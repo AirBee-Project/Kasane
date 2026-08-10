@@ -14,7 +14,7 @@ fn insert_into_empty_region_after_split_is_not_lost() {
     let table_id = TableId(uuid::Uuid::now_v7());
     let dt = TableDataType::Text;
 
-    // 1. 5000 セル（y=0,f=0 の x 線）を挿入 → split。
+    // 1. 5000 FlexId （y=0,f=0 の x 線）を挿入 → split。
     {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
         let mut ids = SpatialIdSet::new();
@@ -25,7 +25,7 @@ fn insert_into_empty_region_after_split_is_not_lost() {
         w.commit().unwrap();
     }
 
-    // 2. 分割時に空だった「広い」領域（x ≥ 2^19、データは x < 2^19 に集中）へ1セル挿入。
+    // 2. 分割時に空だった「広い」領域（x ≥ 2^19、データは x < 2^19 に集中）へ1 FlexId 挿入。
     //    この x-upper 兄弟は split 時に空でスキップされている。
     let target = SingleId::new(20, 0, 600000, 0).unwrap();
     {

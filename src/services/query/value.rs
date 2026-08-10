@@ -17,7 +17,7 @@ use crate::{
 /// 値型 `V` に対するクエリ AST。
 pub type ValueQuery<V> = Query<V>;
 
-/// 格納バイト列を値へ復元するデコーダ。`None` を返したセルは結果から除外される。
+/// 格納バイト列を値へ復元するデコーダ。`None` を返した FlexId は結果から除外される。
 pub type Decoder<V> = Arc<dyn Fn(&[u8]) -> Option<V> + Send + Sync>;
 
 #[macro_export]
@@ -118,7 +118,7 @@ pub trait Value: SafeValue + Ord + 'static {
     /// このテーブルの格納バイト列を `Self` へ復元するデコーダを返す。
     ///
     /// `Enum` のように復元に制約情報（ID→文字列の対応）が要る型もあるため制約を受け取り、
-    /// 逆引き表などの前計算を 1 度だけ行ったクロージャを返す。`None` を返したセルは除外。
+    /// 逆引き表などの前計算を 1 度だけ行ったクロージャを返す。`None` を返した FlexId は除外。
     fn decoder(constraints: Option<&TableConstraints>) -> Result<Decoder<Self>, AppError>;
 
     /// `Self` を格納バイト列へ符号化する（`constraints` の範囲・選択肢検証込み）。

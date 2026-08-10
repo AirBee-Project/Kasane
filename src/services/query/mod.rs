@@ -338,7 +338,7 @@ impl QueryNode {
 /// `MapValues` を、入力側 `U` から出力側 `V` への写像として組み立てる。
 ///
 /// 対応表は JSON リテラルなので、ここで一度だけ `U`/`V` へ解釈しておき、
-/// セルごとの評価では引き当てるだけにする。
+/// FlexId ごとの評価では引き当てるだけにする。
 fn build_map_values<U: Value, V: Value>(
     input: &QueryNode,
     app_state: &AppState,
@@ -427,7 +427,7 @@ fn run<V: Value>(
 
     // 要求された空間IDそのものを評価境界にする。
     //
-    // 外接矩形1つにまとめる手もあるが、`bounding_box()` は全セルを覆う保証が無く
+    // 外接矩形1つにまとめる手もあるが、`bounding_box()` は全 FlexId を覆う保証が無く
     // 取りこぼしが起きる。個々の領域を渡せば正確で、無関係な領域を読まずに済む。
     let bounds: Vec<RangeId> = targets.iter().map(|id| RangeId::from(&id)).collect();
     if bounds.is_empty() {
@@ -452,31 +452,31 @@ fn run<V: Value>(
     // --- フェーズ 3: 評価実行（最も重い処理）---
     // 対象領域をまとめて1回だけ評価し、結果を要求空間IDで絞る。
     // 空間ID1件ずつ `get()` を回すとクエリが件数分再実行されてしまう。
-    let cells = tracing::info_span!("query.run_within", target_regions = bounds.len())
+    let flex_ids = tracing::info_span!("query.run_within", target_regions = bounds.len())
         .in_scope(|| optimized.run_within(bounds).map_err(AppError::LogicError))?
         .into_iter()
         .filter(|(flex_id, _)| targets.get(flex_id).next().is_some());
 
-    let by_value = group_by_value(cells, limit);
+    let by_value = group_by_value(flex_ids, limit);
     data_response::build(by_value, format, limit, |v| Ok(v.to_json()))
 }
 
-/// セル列を値ごとにグループ化する（レスポンスは値辞書 + 空間ID群の形）。
+/// FlexId 列を値ごとにグループ化する（レスポンスは値辞書 + 空間ID群の形）。
 ///
-/// `limit` が指定されている場合、保持するセルを `limit` 件までに抑える。
+/// `limit` が指定されている場合、保持する FlexId を `limit` 件までに抑える。
 /// 本来は値の昇順に並べて上位 `limit` 件を返すべきだが、高速化のため順序を問わず
 /// `limit` 件に達した時点で短絡評価（打ち切り）を行う。
 ///
-/// `singleId` 形式では 1 つの `FlexId` が複数セルへ展開されるので、`limit` 件の
+/// `singleId` 形式では 1 つの `FlexId` が複数 FlexId へ展開されるので、`limit` 件の
 /// `FlexId` を残せば出力は必ず `limit` 件以上に届く（不足しない）。
 fn group_by_value<V: Value>(
-    cells: impl Iterator<Item = (kasane_logic::FlexId, V)>,
+    flex_ids: impl Iterator<Item = (kasane_logic::FlexId, V)>,
     limit: Option<usize>,
 ) -> BTreeMap<V, Vec<kasane_logic::FlexId>> {
     let mut by_value: BTreeMap<V, Vec<kasane_logic::FlexId>> = BTreeMap::new();
     let mut held = 0usize;
 
-    for (flex_id, value) in cells {
+    for (flex_id, value) in flex_ids {
         by_value.entry(value).or_default().push(flex_id);
         held += 1;
 

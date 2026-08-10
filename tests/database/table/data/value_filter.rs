@@ -32,7 +32,7 @@ fn value_filter_eq_and_range_after_split() {
     let table_id = TableId(uuid::Uuid::now_v7());
     let dt = TableDataType::Int;
 
-    // 分割閾値を超える数のセルを、各々別の値で挿入する（高カーディナリティ数値）。
+    // 分割閾値を超える数の FlexId を、各々別の値で挿入する（高カーディナリティ数値）。
     let n: i32 = 5000;
     {
         let wtxn = db.env.write_txn().unwrap();
@@ -50,7 +50,7 @@ fn value_filter_eq_and_range_after_split() {
     let eq = r.data_filter_eq_impl(table_id, dt, &enc(1234)).unwrap();
     assert_eq!(xs(&eq), HashSet::from([1234u32 * 4]));
 
-    // 範囲: 10 <= value <= 20 → 11 セル。順序保存エンコードが効くことを確認。
+    // 範囲: 10 <= value <= 20 → 11 FlexId 。順序保存エンコードが効くことを確認。
     let rng = r
         .data_filter_range_impl(table_id, dt, &enc(10), &enc(20))
         .unwrap();
@@ -126,7 +126,7 @@ fn text_range_filter_keeps_values_that_prefix_the_upper_bound() {
     let table_id = TableId(uuid::Uuid::now_v7());
     let dt = TableDataType::Text;
 
-    // 値と、それを置くセルの x 座標。
+    // 値と、それを置く FlexId の x 座標。
     let rows: [(&str, u32); 7] = [
         ("a", 1),     // 範囲外（下限未満）
         ("b", 2),     // 該当。"bz" の真の接頭辞 ＝ 取りこぼしやすい行

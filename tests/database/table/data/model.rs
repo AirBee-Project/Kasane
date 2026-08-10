@@ -1,12 +1,12 @@
 //! コアロジック（動的シャード分割/統合・被覆・値インデックス・件数）の
 //! ランダム差分（モデルベース）検証。
 //!
-//! 各セルに**一意な値**を割り当てて compaction を抑止し、参照モデル（正解の値）の
+//! 各 FlexId に**一意な値**を割り当てて compaction を抑止し、参照モデル（正解の値）の
 //! `HashMap<(x,y), value>` と突き合わせながら挿入/上書き/削除をランダムに繰り返す。
 //! 各ラウンド後に次を検証する:
 //!   - `data_get`（全域）が正解の値と**完全一致**（データロス・誤値・余剰のいずれも無い）
 //!   - `table_count` == 正解の値件数（リーフ件数ヘッダ集計の正しさ）
-//!   - `data_filter_eq` が一意値で正しいセルを返す（値インデックスの整合）
+//!   - `data_filter_eq` が一意値で正しい FlexId を返す（値インデックスの整合）
 //!
 //! 挿入過多で `>MAX` 分割を、削除過多で `<閾値` 統合を必ず通過させ、その前後で
 //! 被覆（取りこぼし無し）が壊れないことを担保する。
@@ -41,7 +41,7 @@ impl XorShift {
 
 const Z: u8 = 20;
 const F: i32 = 0;
-/// 66*66 = 4356 セル。`MAX_FLEX_ID_PER_SHARD` を超えるので全セル挿入で必ず分割が起きる。
+/// 66*66 = 4356 FlexId 。`MAX_FLEX_ID_PER_SHARD` を超えるので全 FlexId 挿入で必ず分割が起きる。
 const W: u32 = 66;
 const H: u32 = 66;
 
@@ -82,11 +82,11 @@ fn read_all(db: &kasane::repositories::lmdb::AppDb, table_id: TableId) -> HashMa
         let v = dec(&value);
         for flex_id in flex_ids {
             for sid in flex_id.single_ids() {
-                // 一意値なので 1 セルへ展開されるはず。重複は二重被覆のバグを示す。
+                // 一意値なので 1 FlexId へ展開されるはず。重複は二重被覆のバグを示す。
                 let prev = actual.insert((sid.x(), sid.y()), v);
                 assert!(
                     prev.is_none(),
-                    "cell ({},{}) returned twice (covering overlap?)",
+                    "flex_id ({},{}) returned twice (covering overlap?)",
                     sid.x(),
                     sid.y()
                 );
@@ -109,7 +109,7 @@ fn verify(
     assert_eq!(
         actual.len(),
         oracle.len(),
-        "cell count mismatch: actual={}, oracle={}",
+        "flex_id count mismatch: actual={}, oracle={}",
         actual.len(),
         oracle.len()
     );
@@ -123,8 +123,8 @@ fn verify(
         "table_count diverged from the model"
     );
 
-    // 3) 値インデックス: 在のセルを数個サンプルし、その一意値で eq フィルタすると
-    //    ちょうどそのセルだけが返る。
+    // 3) 値インデックス: 在の FlexId を数個サンプルし、その一意値で eq フィルタすると
+    //    ちょうどその FlexId だけが返る。
     if !oracle.is_empty() {
         let keys: Vec<(u32, u32)> = oracle.keys().copied().collect();
         for _ in 0..8 {
@@ -139,7 +139,7 @@ fn verify(
             assert_eq!(
                 hits,
                 HashSet::from([(x, y)]),
-                "filter_eq for unique value {v} must return exactly its one cell"
+                "filter_eq for unique value {v} must return exactly its one flex_id"
             );
         }
     }
@@ -157,7 +157,7 @@ fn randomized_model_matches_oracle() {
     let mut oracle: HashMap<(u32, u32), i32> = HashMap::new();
     let mut next_val: i32 = 1;
 
-    // フェーズ A: 全 4356 セルを一意値で確定挿入 → 必ず分割（>MAX）。
+    // フェーズ A: 全 4356 FlexId を一意値で確定挿入 → 必ず分割（>MAX）。
     {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
         for x in 0..W {

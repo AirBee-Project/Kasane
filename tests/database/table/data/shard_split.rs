@@ -1,6 +1,6 @@
 //! 動的シャード分割のエンドツーエンド検証。
 //!
-//! 閾値 `MAX_FLEX_ID_PER_SHARD` を超える数の互いに素なセルを挿入し、
+//! 閾値 `MAX_FLEX_ID_PER_SHARD` を超える数の互いに素な FlexId を挿入し、
 //! 1) 実際に分割が起きてポインタノードが生成されること、
 //! 2) 分割後も全件が読み戻せること、
 //! 3) `table_count` が全件と一致すること、を直接確認する。
@@ -20,8 +20,8 @@ fn dynamic_shard_splits_and_reads_back() {
     let db = initialize_database(tmp.path().to_str().unwrap());
     let table_id = TableId(uuid::Uuid::now_v7());
 
-    // 閾値を超える数の互いに素なセルを上半球(f=0)へ挿入する。
-    // x を 4 間隔にして兄弟マージを防ぎ、各セルが独立リーフになるようにする。
+    // 閾値を超える数の互いに素な FlexId を上半球(f=0)へ挿入する。
+    // x を 4 間隔にして兄弟マージを防ぎ、各 FlexId が独立リーフになるようにする。
     let n: u32 = 5000;
     {
         let wtxn = db.env.write_txn().unwrap();
@@ -63,7 +63,7 @@ fn dynamic_shard_splits_and_reads_back() {
     // 2. table_count が全件と一致（ポインタノードは 0 扱い、子リーフ合算）。
     assert_eq!(r.table_count_impl(table_id).unwrap(), n as u64);
 
-    // 3. 全域を range クエリして、分割後も全 5000 セルが読めることを検証。
+    // 3. 全域を range クエリして、分割後も全 5000 FlexId が読めることを検証。
     let mut query = SpatialIdSet::new();
     query.insert(RangeId::new(20, [0, 0], [0, (n - 1) * 4], [0, 0]).unwrap());
     let got = r.data_get_impl(table_id, query, None).unwrap();
@@ -80,6 +80,6 @@ fn dynamic_shard_splits_and_reads_back() {
     let expected: HashSet<u32> = (0..n).map(|i| i * 4).collect();
     assert_eq!(
         xs, expected,
-        "all inserted cells must be readable after split"
+        "all inserted flex_ids must be readable after split"
     );
 }

@@ -1,7 +1,7 @@
-//! 同値セルの compaction を跨いだ正しさ検証。
+//! 同値の FlexId の compaction を跨いだ正しさ検証。
 //!
-//! 同じ値の隣接セルは内部木で粗い FlexId へ畳まれる（compaction）。その状態で
-//!   1) 全セルが正しく読み戻せること（被覆・データロス無し）、
+//! 同じ値の隣接 FlexId は内部木で粗い FlexId へ畳まれる（compaction）。その状態で
+//!   1) 全 FlexId が正しく読み戻せること（被覆・データロス無し）、
 //!   2) 値インデックスが compaction 境界を跨いでも整合すること
 //!      （上書き・削除で旧値の取りこぼし／残留が起きないこと）。
 //!
@@ -28,7 +28,7 @@ fn rect(x0: u32, x1: u32, y0: u32, y1: u32) -> SpatialIdSet {
     set
 }
 
-fn cells(x0: u32, x1: u32, y0: u32, y1: u32) -> HashSet<(u32, u32)> {
+fn flex_ids(x0: u32, x1: u32, y0: u32, y1: u32) -> HashSet<(u32, u32)> {
     let mut s = HashSet::new();
     for x in x0..=x1 {
         for y in y0..=y1 {
@@ -38,8 +38,8 @@ fn cells(x0: u32, x1: u32, y0: u32, y1: u32) -> HashSet<(u32, u32)> {
     s
 }
 
-/// 値 `v` を eq フィルタし、ヒットした全 FlexId を単体セル `(x,y)` 集合へ展開する。
-fn filter_cells(
+/// 値 `v` を eq フィルタし、ヒットした全 FlexId を単体 FlexId `(x,y)` 集合へ展開する。
+fn filter_flex_ids(
     db: &kasane::repositories::lmdb::AppDb,
     table_id: TableId,
     v: i32,
@@ -84,7 +84,7 @@ fn compaction_roundtrip_and_index_cleanup() {
     let table_id = TableId(uuid::Uuid::now_v7());
     let dt = TableDataType::Int;
 
-    // 16x16 = 256 セルを単一値 7 で挿入 → 内部で粗い FlexId へ compaction される。
+    // 16x16 = 256 FlexId を単一値 7 で挿入 → 内部で粗い FlexId へ compaction される。
     {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
         w.data_insert_impl(table_id, dt, rect(0, 15, 0, 15), &enc(7))
@@ -103,13 +103,13 @@ fn compaction_roundtrip_and_index_cleanup() {
         assert!(cnt > 0);
     }
 
-    // 1) 全 256 セルが値 7 で読み戻せる（compaction しても取りこぼし無し）。
+    // 1) 全 256 FlexId が値 7 で読み戻せる（compaction しても取りこぼし無し）。
     let all = read_rect(&db, table_id, 0, 15, 0, 15);
-    assert_eq!(all.len(), 256, "all 256 cells must be present");
+    assert_eq!(all.len(), 256, "all 256 flex_ids must be present");
     assert!(all.values().all(|&v| v == 7));
 
-    // 2) filter_eq(7) は compaction されていてもちょうど 256 セルを被覆する。
-    assert_eq!(filter_cells(&db, table_id, 7), cells(0, 15, 0, 15));
+    // 2) filter_eq(7) は compaction されていてもちょうど 256 FlexId を被覆する。
+    assert_eq!(filter_flex_ids(&db, table_id, 7), flex_ids(0, 15, 0, 15));
 
     // 左半分(x 0..7)を値 9 で上書き → compaction 境界を跨ぐ差分更新。
     {
@@ -121,13 +121,13 @@ fn compaction_roundtrip_and_index_cleanup() {
 
     // 3) 上書き後、値ごとに正しく分かれる（旧値 7 の残留も、新値 9 の欠落も無い）。
     assert_eq!(
-        filter_cells(&db, table_id, 9),
-        cells(0, 7, 0, 15),
+        filter_flex_ids(&db, table_id, 9),
+        flex_ids(0, 7, 0, 15),
         "overwritten half must filter as value 9"
     );
     assert_eq!(
-        filter_cells(&db, table_id, 7),
-        cells(8, 15, 0, 15),
+        filter_flex_ids(&db, table_id, 7),
+        flex_ids(8, 15, 0, 15),
         "remaining half must filter as value 7 with no stale entries"
     );
     let mixed = read_rect(&db, table_id, 0, 15, 0, 15);
@@ -144,12 +144,12 @@ fn compaction_roundtrip_and_index_cleanup() {
         w.commit().unwrap();
     }
     assert!(
-        filter_cells(&db, table_id, 7).is_empty(),
+        filter_flex_ids(&db, table_id, 7).is_empty(),
         "value 7 must be fully gone from the index after removal"
     );
     assert_eq!(
-        filter_cells(&db, table_id, 9),
-        cells(0, 7, 0, 15),
+        filter_flex_ids(&db, table_id, 9),
+        flex_ids(0, 7, 0, 15),
         "value 9 half must be untouched by the removal"
     );
 
@@ -159,7 +159,7 @@ fn compaction_roundtrip_and_index_cleanup() {
         w.data_remove_impl(table_id, dt, rect(0, 7, 0, 15)).unwrap();
         w.commit().unwrap();
     }
-    assert!(filter_cells(&db, table_id, 9).is_empty());
+    assert!(filter_flex_ids(&db, table_id, 9).is_empty());
     assert_eq!(read_rect(&db, table_id, 0, 15, 0, 15).len(), 0);
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
     assert_eq!(r.table_count_impl(table_id).unwrap(), 0);
