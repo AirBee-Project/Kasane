@@ -1,23 +1,3 @@
-//! アプリ全体で使う値型の抽象（`Value` trait）。
-//!
-//! テーブルの `data_type` は実行時の値だが、Kasane-Logic の作業木や格納・復元は
-//! 具体的な Rust 型で行うため、`data_type` → 具体型の単型化を [`for_value_type!`](crate::for_value_type) の
-//! 1 箇所に集約する。各具体型は [`Value`] を実装し、
-//!
-//! - 格納バイト列 ⇄ 値（[`Value::decoder`] / [`Value::encode`]）
-//! - JSON ⇄ 値（[`Value::from_json`] / [`Value::to_json`]）
-//! - クエリ演算子（`zoom_out` などと `MergePolicy` の適用可否）
-//!
-//! を型ごとに一手に引き受ける。`search`（格納値の復元）と `query`（演算結果）は
-//! いずれもこの trait を通すので、型ごとの処理を二重に書かずに済む。
-//!
-//! 演算子・`MergePolicy` の適用可否は 2 階層：
-//! - 全型: `Overwrite` / `KeepExisting` / `Max` / `Min`（`Ord` があればよい）
-//! - 数値型（`Int` = i64 / `Float` = f64）: 加えて `Sum` / `Difference` / `Average` と `falloffLinear*`
-//!
-//! 使えない組合せは 400 を返す。
-
-use core::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -40,13 +20,6 @@ pub type ValueQuery<V> = Query<V>;
 /// 格納バイト列を値へ復元するデコーダ。`None` を返したセルは結果から除外される。
 pub type Decoder<V> = Arc<dyn Fn(&[u8]) -> Option<V> + Send + Sync>;
 
-/// `TableDataType` を対応する具体型へ単型化し、`$func::<V>(..)` を呼ぶ。
-///
-/// 「実行時の型 → コンパイル時の型」の分岐はここ 1 箇所だけ。型を増減するときも
-/// この match だけを直せばよい。
-///
-/// 呼ぶ関数が型引数を 2 つ以上取る場合は、残りを `[..]` で後ろへ続ける
-/// （例: `for_value_type!(dt, f[V], args..)` は `f::<単型化した型, V>(args..)`）。
 #[macro_export]
 macro_rules! for_value_type {
     ($dt:expr, $func:ident $([$($rest:ty),* $(,)?])? $(, $arg:expr)* $(,)?) => {{
@@ -59,10 +32,6 @@ macro_rules! for_value_type {
         }
     }};
 }
-
-// ---------------------------------------------------------------------------
-// エラー
-// ---------------------------------------------------------------------------
 
 fn unsupported_op(op: &str, value_type: &str) -> AppError {
     AppError::ConstraintViolation {
