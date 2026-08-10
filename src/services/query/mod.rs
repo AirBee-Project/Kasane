@@ -295,7 +295,7 @@ impl QueryNode {
                 operator,
                 operand,
             } => {
-                let q = input.translate::<V>(app_state, tables)?;
+                let q = input.translate::<V>(app_state, tables, snapshot)?;
                 V::apply_math(q, *operator, *operand)
             }
 
