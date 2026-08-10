@@ -1,8 +1,8 @@
-//! [`TikvRead`] / [`TikvWrite`] を抽象 API の trait 群へ適合させる層。
+//! [`KasaneDbRead`] / [`KasaneDbWrite`] を抽象 API の trait 群へ適合させる層。
 //!
 //! 実処理は `catalog` / `users` / `data` の各モジュールにあり、ここはその委譲だけを行う。
 //! trait の実装は 1 つのブロックにまとめる必要があるため、操作の定義（モジュール分割）と
-//! trait への適合（この 1 箇所）を分けている。
+//! trait への適合（この 1 箇所）を分けている（TiKV 実装も同じ構成）。
 
 use kasane_logic::{FlexId, SpatialIdSet};
 
@@ -15,13 +15,16 @@ use crate::models::id::{DatabaseId, TableId};
 use crate::models::users::{PrivilegeRule, PrivilegeTarget, User, UserMetadata};
 use crate::repositories::{CatalogRepository, ReadRepository, ValueGroups, WriteRepository};
 
-use super::{TikvRead, TikvWrite, catalog, users};
+use super::{KasaneDbRead, KasaneDbWrite, catalog, users};
 
+/// 点参照 6 つを、トランザクションを保持するフィールド名を指定して実装する。
+///
+/// `RwTxn` は `RoTxn` へ Deref するので、実体は読み書きで同じ自由関数を呼ぶ。
 macro_rules! impl_catalog_repository {
-    ($target:ty) => {
+    ($target:ty, $txn:ident) => {
         impl CatalogRepository for $target {
             async fn database_id(&self, name: &str) -> Result<Option<DatabaseId>, AppError> {
-                catalog::database_id(&self.txn, name).await
+                catalog::database_id(self.db, &self.$txn, name)
             }
 
             async fn table_id(
@@ -29,54 +32,54 @@ macro_rules! impl_catalog_repository {
                 db_id: DatabaseId,
                 table_name: &str,
             ) -> Result<Option<TableId>, AppError> {
-                catalog::table_id(&self.txn, db_id, table_name).await
+                catalog::table_id(self.db, &self.$txn, db_id, table_name)
             }
 
             async fn database_name(&self, db_id: DatabaseId) -> Result<Option<String>, AppError> {
-                catalog::database_name(&self.txn, db_id).await
+                catalog::database_name(self.db, &self.$txn, db_id)
             }
 
             async fn table_name(&self, table_id: TableId) -> Result<Option<String>, AppError> {
-                catalog::table_name(&self.txn, table_id).await
+                catalog::table_name(self.db, &self.$txn, table_id)
             }
 
             async fn user_meta(&self, username: &str) -> Result<Option<UserMetadata>, AppError> {
-                users::user_meta(&self.txn, username).await
+                users::user_meta(self.db, &self.$txn, username)
             }
 
             async fn table_names(&self, db_id: DatabaseId) -> Result<Vec<String>, AppError> {
-                catalog::table_names(&self.txn, db_id).await
+                catalog::table_names(self.db, &self.$txn, db_id)
             }
         }
     };
 }
 
-impl_catalog_repository!(TikvRead<'_>);
-impl_catalog_repository!(TikvWrite<'_>);
+impl_catalog_repository!(KasaneDbRead<'_>, read_txn);
+impl_catalog_repository!(KasaneDbWrite<'_>, write_txn);
 
-impl ReadRepository for TikvRead<'_> {
+impl ReadRepository for KasaneDbRead<'_> {
     async fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
-        catalog::database_info(&self.txn, name).await
+        self.database_info_impl(name)
     }
 
     async fn database_list(&self) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
-        self.database_list_impl().await
+        self.database_list_impl()
     }
 
     async fn table_info(&self, db_name: &str, table_name: &str) -> Result<Option<Table>, AppError> {
-        catalog::table_info(&self.txn, db_name, table_name).await
+        self.table_info_impl(db_name, table_name)
     }
 
     async fn table_list(&self, db_name: &str) -> Result<Vec<Table>, AppError> {
-        self.table_list_impl(db_name).await
+        self.table_list_impl(db_name)
     }
 
     async fn table_list_by_id(&self, db_id: DatabaseId) -> Result<Vec<Table>, AppError> {
-        catalog::table_list_by_id(&self.txn, db_id).await
+        self.table_list_by_id_impl(db_id)
     }
 
     async fn table_count(&self, table_id: TableId) -> Result<u64, AppError> {
-        self.table_count_impl(table_id).await
+        self.table_count_impl(table_id)
     }
 
     async fn data_get(
@@ -85,7 +88,7 @@ impl ReadRepository for TikvRead<'_> {
         ids: SpatialIdSet,
         limit: Option<usize>,
     ) -> Result<ValueGroups, AppError> {
-        self.data_get_impl(table_id, ids, limit).await
+        self.data_get_impl(table_id, ids, limit)
     }
 
     async fn data_filter_eq(
@@ -94,7 +97,7 @@ impl ReadRepository for TikvRead<'_> {
         data_type: TableDataType,
         value: &[u8],
     ) -> Result<Vec<FlexId>, AppError> {
-        self.data_filter_eq_impl(table_id, data_type, value).await
+        self.data_filter_eq_impl(table_id, data_type, value)
     }
 
     async fn data_filter_range(
@@ -105,7 +108,6 @@ impl ReadRepository for TikvRead<'_> {
         hi: &[u8],
     ) -> Result<Vec<FlexId>, AppError> {
         self.data_filter_range_impl(table_id, data_type, lo, hi)
-            .await
     }
 
     async fn get_user(&self, username: &str) -> Result<Option<User>, AppError> {
@@ -117,17 +119,17 @@ impl ReadRepository for TikvRead<'_> {
     }
 
     async fn get_all_users(&self) -> Result<Vec<User>, AppError> {
-        self.get_all_users_impl().await
+        self.get_all_users_impl()
     }
 }
 
-impl WriteRepository for TikvWrite<'_> {
+impl WriteRepository for KasaneDbWrite<'_> {
     async fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
-        catalog::database_info(&self.txn, name).await
+        self.database_info_impl(name)
     }
 
     async fn table_info(&self, db_name: &str, table_name: &str) -> Result<Option<Table>, AppError> {
-        catalog::table_info(&self.txn, db_name, table_name).await
+        self.table_info_impl(db_name, table_name)
     }
 
     async fn database_create(
@@ -135,11 +137,11 @@ impl WriteRepository for TikvWrite<'_> {
         name: &str,
         description: Option<String>,
     ) -> Result<DatabaseInfoResponse, AppError> {
-        self.database_create_impl(name, description).await
+        self.database_create_impl(name, description)
     }
 
     async fn database_remove(&mut self, name: &str) -> Result<(), AppError> {
-        self.database_remove_impl(name).await
+        self.database_remove_impl(name)
     }
 
     async fn database_update(
@@ -148,7 +150,7 @@ impl WriteRepository for TikvWrite<'_> {
         new_name: Option<String>,
         description: Option<Option<String>>,
     ) -> Result<(), AppError> {
-        self.database_update_impl(name, new_name, description).await
+        self.database_update_impl(name, new_name, description)
     }
 
     async fn database_copy(
@@ -156,7 +158,7 @@ impl WriteRepository for TikvWrite<'_> {
         src_db_name: &str,
         copy_name: &str,
     ) -> Result<DatabaseInfoResponse, AppError> {
-        self.database_copy_impl(src_db_name, copy_name).await
+        self.database_copy_impl(src_db_name, copy_name)
     }
 
     async fn table_create(
@@ -176,7 +178,6 @@ impl WriteRepository for TikvWrite<'_> {
             constraints,
             description,
         )
-        .await
     }
 
     async fn table_update(
@@ -196,11 +197,10 @@ impl WriteRepository for TikvWrite<'_> {
             description,
             validate_existing_data,
         )
-        .await
     }
 
     async fn table_remove(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError> {
-        self.table_remove_impl(db_name, table_name).await
+        self.table_remove_impl(db_name, table_name)
     }
 
     async fn table_copy(
@@ -211,7 +211,6 @@ impl WriteRepository for TikvWrite<'_> {
         copy_table_name: &str,
     ) -> Result<Table, AppError> {
         self.table_copy_impl(src_db_name, src_table_name, copy_db_name, copy_table_name)
-            .await
     }
 
     async fn data_insert(
@@ -221,7 +220,7 @@ impl WriteRepository for TikvWrite<'_> {
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
-        self.data_insert_impl(table_id, data_type, ids, data).await
+        self.data_insert_impl(table_id, data_type, ids, data)
     }
 
     async fn data_upsert(
@@ -231,7 +230,7 @@ impl WriteRepository for TikvWrite<'_> {
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
-        self.data_upsert_impl(table_id, data_type, ids, data).await
+        self.data_upsert_impl(table_id, data_type, ids, data)
     }
 
     async fn data_remove(
@@ -240,7 +239,7 @@ impl WriteRepository for TikvWrite<'_> {
         data_type: TableDataType,
         ids: SpatialIdSet,
     ) -> Result<(), AppError> {
-        self.data_remove_impl(table_id, data_type, ids).await
+        self.data_remove_impl(table_id, data_type, ids)
     }
 
     async fn create_user(

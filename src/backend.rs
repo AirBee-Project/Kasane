@@ -24,9 +24,11 @@ compile_error!(
      backend-lmdb か backend-tikv のどちらかを有効にしてください"
 );
 
+use crate::error::AppError;
+
 /// このビルドで使うストレージ。
 #[cfg(feature = "backend-lmdb")]
-pub type Db = crate::db_init::AppDb;
+pub type Db = crate::repositories::lmdb::AppDb;
 
 #[cfg(feature = "backend-tikv")]
 pub type Db = crate::repositories::tikv::TikvDb;
@@ -37,3 +39,41 @@ pub const NAME: &str = "lmdb";
 
 #[cfg(feature = "backend-tikv")]
 pub const NAME: &str = "tikv";
+
+/// 接続先の既定値。
+///
+/// 何を指すかはバックエンドによって変わる（LMDB はデータディレクトリ、
+/// TiKV は PD エンドポイント）。呼び出し側はこの区別を知らずに、
+/// [`open`] へそのまま渡せばよい。
+#[cfg(feature = "backend-lmdb")]
+pub fn default_target() -> String {
+    std::env::var("DATABASE_DIR").unwrap_or_else(|_| "default_kasane_db".to_string())
+}
+
+#[cfg(feature = "backend-tikv")]
+pub fn default_target() -> String {
+    std::env::var("KASANE_TIKV_PD_ENDPOINTS").unwrap_or_else(|_| "127.0.0.1:2379".to_string())
+}
+
+/// ストレージを開く。
+///
+/// バックエンドごとの構築手順をここに閉じることで、呼び出し側（`main`）に
+/// feature 分岐が残らない。
+#[cfg(feature = "backend-lmdb")]
+pub async fn open(target: &str) -> Result<Db, AppError> {
+    Ok(crate::repositories::lmdb::initialize_database(target))
+}
+
+#[cfg(feature = "backend-tikv")]
+pub async fn open(target: &str) -> Result<Db, AppError> {
+    use crate::repositories::tikv::{TikvConfig, TikvDb};
+
+    let config = TikvConfig {
+        pd_endpoints: target
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect(),
+    };
+    TikvDb::connect(config).await
+}

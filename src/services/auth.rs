@@ -1,4 +1,4 @@
-use crate::repositories::{MetaRepository, Storage};
+use crate::repositories::{CatalogRepository, Storage};
 use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},

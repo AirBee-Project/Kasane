@@ -5,7 +5,8 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode},
 };
-use kasane::{AppState, db_init, kasane};
+use kasane::repositories::lmdb as lmdb_backend;
+use kasane::{AppState, kasane};
 
 use tower::ServiceExt;
 
@@ -19,7 +20,7 @@ impl PermissionTestApp {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let temp_dir = tempfile::TempDir::new().unwrap();
-        let db = db_init::initialize_database(temp_dir.path().to_str().unwrap());
+        let db = lmdb_backend::initialize_database(temp_dir.path().to_str().unwrap());
 
         let app_state = AppState { db };
         // We DO NOT inject the root token automatically here.
@@ -1620,7 +1621,7 @@ async fn test_missing_table_reports_not_found_consistently() {
 /// `GET /users/{u}/privileges` は解決できないルールを隠すため、残留の有無は
 /// API からは観測できない。ここではメタデータを直接読む。
 async fn stored_privilege_count(app_state: &AppState, username: &str) -> usize {
-    use kasane::repositories::{MetaRepository, Storage};
+    use kasane::repositories::{CatalogRepository, Storage};
     let username = username.to_string();
     app_state
         .db

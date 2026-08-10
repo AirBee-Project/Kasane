@@ -8,11 +8,11 @@ use heed::types::Bytes;
 use heed::{Database, Env, WithoutTls};
 use kasane_logic::{Error as LogicError, FlexId, RangeId, SafeValue, Source, WorkingTree};
 
+use super::keys::TableIdAndFlexId;
 use super::shard;
-use crate::db_init::TableIdAndFlexId;
 use crate::models::id::TableId;
 
-pub use crate::repositories::storage::DecodeFn;
+pub use crate::repositories::traits::DecodeFn;
 
 /// 1テーブルを 1 つのクエリ入力源として見せるアダプタ。
 ///
@@ -43,7 +43,7 @@ impl<V> TableSource<V> {
     }
 }
 
-impl crate::db_init::AppDb {
+impl super::AppDb {
     /// テーブル 1 つをクエリの入力源として見せるアダプタを作る。
     ///
     /// ストレージのハンドル（`Env` / `Database`）をサービス層へ露出させないための入口。

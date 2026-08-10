@@ -1,8 +1,59 @@
-use crate::{
-    error::AppError,
-    models::users::{MAX_PRIVILEGE_RULES, PrivilegeRule, PrivilegeTarget, UserMetadata},
-    repositories::{KasaneDbWrite, MetaRepository},
+//! ユーザーと権限の永続化。
+//!
+//! 権限ルールの名前 ⇄ ID 変換そのものは
+//! [`CatalogRepository`](crate::repositories::CatalogRepository) の既定実装が 1 箇所だけ持つ。
+//! ここにあるのは LMDB への読み書きだけ。
+
+use crate::error::AppError;
+use crate::models::users::{
+    MAX_PRIVILEGE_RULES, PrivilegeRule, PrivilegeTarget, User, UserMetadata,
 };
+use crate::repositories::CatalogRepository;
+
+use super::{AppDb, KasaneDbRead, KasaneDbWrite};
+
+/// ユーザーのメタデータへの点参照。
+pub(super) fn user_meta(
+    db: &AppDb,
+    txn: &heed::RoTxn<heed::WithoutTls>,
+    username: &str,
+) -> Result<Option<UserMetadata>, AppError> {
+    match db.users.get(txn, username)? {
+        Some(val) => Ok(Some(serde_json::from_str(val).map_err(|_| {
+            AppError::InternalError("Failed to parse user metadata".into())
+        })?)),
+        None => Ok(None),
+    }
+}
+
+impl<'a> KasaneDbRead<'a> {
+    #[tracing::instrument(skip_all, fields(username = %username))]
+    pub async fn get_user_impl(&self, username: &str) -> Result<Option<User>, AppError> {
+        Ok(CatalogRepository::user_meta(self, username)
+            .await?
+            .map(|meta| User::from_meta(username, meta)))
+    }
+
+    #[tracing::instrument(skip_all, fields(username = %username))]
+    pub async fn require_user_impl(&self, username: &str) -> Result<User, AppError> {
+        Ok(User::from_meta(
+            username,
+            self.require_user_meta(username).await?,
+        ))
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub fn get_all_users_impl(&self) -> Result<Vec<User>, AppError> {
+        let mut users = Vec::new();
+        for item in self.db.users.iter(&self.read_txn)? {
+            let (username, val) = item?;
+            let meta: UserMetadata = serde_json::from_str(val)
+                .map_err(|_| AppError::InternalError("Failed to parse user metadata".into()))?;
+            users.push(User::from_meta(username, meta));
+        }
+        Ok(users)
+    }
+}
 
 impl<'a> KasaneDbWrite<'a> {
     fn put_user_meta(&mut self, username: &str, meta: &UserMetadata) -> Result<(), AppError> {
@@ -24,7 +75,10 @@ impl<'a> KasaneDbWrite<'a> {
         password_hash: String,
         privileges: &[PrivilegeRule],
     ) -> Result<(), AppError> {
-        if MetaRepository::user_meta(self, username).await?.is_some() {
+        if CatalogRepository::user_meta(self, username)
+            .await?
+            .is_some()
+        {
             return Err(AppError::Conflict("User already exists".to_string()));
         }
         let meta = UserMetadata {

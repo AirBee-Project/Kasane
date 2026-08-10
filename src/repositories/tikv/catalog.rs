@@ -6,13 +6,13 @@
 
 use tokio::sync::Mutex;
 
+use super::keys::{self, LockScope};
 use crate::error::AppError;
 use crate::models::database::table::{
     Table, TableConstraints, TableDataType, TableMetadata, UpdateTableConstraints,
 };
 use crate::models::database::{DatabaseInfoResponse, DatabaseMetadata};
 use crate::models::id::{DatabaseId, TableId};
-use crate::repositories::encoding::flat_keys::{self, LockScope};
 use crate::repositories::encoding::shard_entry::ShardEntry;
 
 use super::{TikvRead, TikvWrite, kv};
@@ -48,7 +48,7 @@ pub(super) async fn database_meta(
     if name.is_empty() {
         return Ok(None);
     }
-    match kv::get(txn, flat_keys::database(name)).await? {
+    match kv::get(txn, keys::database(name)).await? {
         Some(bytes) => Ok(Some(decode_database(&bytes)?)),
         None => Ok(None),
     }
@@ -69,7 +69,7 @@ pub(super) async fn table_meta(
     if table_name.is_empty() {
         return Ok(None);
     }
-    match kv::get(txn, flat_keys::table(db_id, table_name)).await? {
+    match kv::get(txn, keys::table(db_id, table_name)).await? {
         Some(bytes) => Ok(Some(decode_table(&bytes)?)),
         None => Ok(None),
     }
@@ -87,7 +87,7 @@ pub(super) async fn database_name(
     txn: &Mutex<tikv_client::Transaction>,
     db_id: DatabaseId,
 ) -> Result<Option<String>, AppError> {
-    match kv::get(txn, flat_keys::database_id_index(db_id)).await? {
+    match kv::get(txn, keys::database_id_index(db_id)).await? {
         Some(bytes) => Ok(Some(String::from_utf8(bytes).map_err(|e| {
             AppError::InternalError(format!("database name is not valid utf-8: {e}"))
         })?)),
@@ -99,7 +99,7 @@ pub(super) async fn table_name(
     txn: &Mutex<tikv_client::Transaction>,
     table_id: TableId,
 ) -> Result<Option<String>, AppError> {
-    match kv::get(txn, flat_keys::table_id_index(table_id)).await? {
+    match kv::get(txn, keys::table_id_index(table_id)).await? {
         Some(bytes) => Ok(Some(String::from_utf8(bytes).map_err(|e| {
             AppError::InternalError(format!("table name is not valid utf-8: {e}"))
         })?)),
@@ -111,9 +111,9 @@ pub(super) async fn table_names(
     txn: &Mutex<tikv_client::Transaction>,
     db_id: DatabaseId,
 ) -> Result<Vec<String>, AppError> {
-    let keys = kv::scan_prefix_keys(txn, &flat_keys::tables_of(db_id)).await?;
+    let keys = kv::scan_prefix_keys(txn, &keys::tables_of(db_id)).await?;
     keys.iter()
-        .map(|key| flat_keys::table_name_from_key(key).map(str::to_string))
+        .map(|key| keys::table_name_from_key(key).map(str::to_string))
         .collect()
 }
 
@@ -151,11 +151,11 @@ pub(super) async fn table_list_by_id(
     txn: &Mutex<tikv_client::Transaction>,
     db_id: DatabaseId,
 ) -> Result<Vec<Table>, AppError> {
-    let entries = kv::scan_prefix(txn, &flat_keys::tables_of(db_id)).await?;
+    let entries = kv::scan_prefix(txn, &keys::tables_of(db_id)).await?;
     entries
         .iter()
         .map(|(key, value)| {
-            let name = flat_keys::table_name_from_key(key)?;
+            let name = keys::table_name_from_key(key)?;
             Ok(Table::from_meta(name, decode_table(value)?))
         })
         .collect()
@@ -167,7 +167,7 @@ impl TikvRead<'_> {
     pub(super) async fn database_list_impl(
         &self,
     ) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
-        let entries = kv::scan_prefix(&self.txn, &flat_keys::Ns::Databases.prefix()).await?;
+        let entries = kv::scan_prefix(&self.txn, &keys::Ns::Databases.prefix()).await?;
         entries
             .iter()
             .map(|(key, value)| {
@@ -197,7 +197,7 @@ impl TikvRead<'_> {
     }
 
     pub(super) async fn table_count_impl(&self, table_id: TableId) -> Result<u64, AppError> {
-        let entries = kv::scan_prefix(&self.txn, &flat_keys::shards_of(table_id)).await?;
+        let entries = kv::scan_prefix(&self.txn, &keys::shards_of(table_id)).await?;
         let mut total = 0u64;
         for (_, value) in entries {
             if let Some(count) = ShardEntry::leaf_count(&value)? {
@@ -231,15 +231,10 @@ impl TikvWrite<'_> {
             id,
             description: description.clone(),
         };
+        kv::put(&self.txn, keys::database(name), encode_database(&meta)?).await?;
         kv::put(
             &self.txn,
-            flat_keys::database(name),
-            encode_database(&meta)?,
-        )
-        .await?;
-        kv::put(
-            &self.txn,
-            flat_keys::database_id_index(id),
+            keys::database_id_index(id),
             name.as_bytes().to_vec(),
         )
         .await?;
@@ -280,8 +275,8 @@ impl TikvWrite<'_> {
                 .await?;
         }
 
-        kv::delete(&self.txn, flat_keys::database(name)).await?;
-        kv::delete(&self.txn, flat_keys::database_id_index(meta.id)).await?;
+        kv::delete(&self.txn, keys::database(name)).await?;
+        kv::delete(&self.txn, keys::database_id_index(meta.id)).await?;
         Ok(())
     }
 
@@ -319,17 +314,17 @@ impl TikvWrite<'_> {
         }
 
         if name != final_new_name {
-            kv::delete(&self.txn, flat_keys::database(name)).await?;
+            kv::delete(&self.txn, keys::database(name)).await?;
             kv::put(
                 &self.txn,
-                flat_keys::database_id_index(meta.id),
+                keys::database_id_index(meta.id),
                 final_new_name.as_bytes().to_vec(),
             )
             .await?;
         }
         kv::put(
             &self.txn,
-            flat_keys::database(final_new_name),
+            keys::database(final_new_name),
             encode_database(&meta)?,
         )
         .await?;
@@ -375,13 +370,13 @@ impl TikvWrite<'_> {
         };
         kv::put(
             &self.txn,
-            flat_keys::database(copy_name),
+            keys::database(copy_name),
             encode_database(&copy_meta)?,
         )
         .await?;
         kv::put(
             &self.txn,
-            flat_keys::database_id_index(copy_db_id),
+            keys::database_id_index(copy_db_id),
             copy_name.as_bytes().to_vec(),
         )
         .await?;
@@ -455,13 +450,13 @@ impl TikvWrite<'_> {
         };
         kv::put(
             &self.txn,
-            flat_keys::table(db_meta.id, table_name),
+            keys::table(db_meta.id, table_name),
             encode_table(&meta)?,
         )
         .await?;
         kv::put(
             &self.txn,
-            flat_keys::table_id_index(id),
+            keys::table_id_index(id),
             table_name.as_bytes().to_vec(),
         )
         .await?;
@@ -553,17 +548,17 @@ impl TikvWrite<'_> {
         };
 
         if changed_name {
-            kv::delete(&self.txn, flat_keys::table(db_meta.id, table_name)).await?;
+            kv::delete(&self.txn, keys::table(db_meta.id, table_name)).await?;
             kv::put(
                 &self.txn,
-                flat_keys::table_id_index(table.id),
+                keys::table_id_index(table.id),
                 table.name.as_bytes().to_vec(),
             )
             .await?;
         }
         kv::put(
             &self.txn,
-            flat_keys::table(db_meta.id, &table.name),
+            keys::table(db_meta.id, &table.name),
             encode_table(&meta)?,
         )
         .await?;
@@ -669,19 +664,19 @@ impl TikvWrite<'_> {
 
         kv::put(
             &self.txn,
-            flat_keys::table(dst_db_id, dst_table_name),
+            keys::table(dst_db_id, dst_table_name),
             encode_table(&copy_meta)?,
         )
         .await?;
         kv::put(
             &self.txn,
-            flat_keys::table_id_index(copy_id),
+            keys::table_id_index(copy_id),
             dst_table_name.as_bytes().to_vec(),
         )
         .await?;
 
         // シャードと値インデックスを、キー先頭の table_id だけ差し替えて複製する。
-        let shards = kv::scan_prefix(&self.txn, &flat_keys::shards_of(src_meta.id)).await?;
+        let shards = kv::scan_prefix(&self.txn, &keys::shards_of(src_meta.id)).await?;
         for (key, value) in shards {
             let mut dst = key;
             replace_table_id(&mut dst, copy_id);
@@ -689,7 +684,7 @@ impl TikvWrite<'_> {
         }
 
         let index_keys =
-            kv::scan_prefix_keys(&self.txn, &flat_keys::value_index_of(src_meta.id)).await?;
+            kv::scan_prefix_keys(&self.txn, &keys::value_index_of(src_meta.id)).await?;
         for key in index_keys {
             let mut dst = key;
             replace_table_id(&mut dst, copy_id);
@@ -714,14 +709,14 @@ impl TikvWrite<'_> {
         table_name: &str,
         table_id: TableId,
     ) -> Result<(), AppError> {
-        for key in kv::scan_prefix_keys(&self.txn, &flat_keys::shards_of(table_id)).await? {
+        for key in kv::scan_prefix_keys(&self.txn, &keys::shards_of(table_id)).await? {
             kv::delete(&self.txn, key).await?;
         }
-        for key in kv::scan_prefix_keys(&self.txn, &flat_keys::value_index_of(table_id)).await? {
+        for key in kv::scan_prefix_keys(&self.txn, &keys::value_index_of(table_id)).await? {
             kv::delete(&self.txn, key).await?;
         }
-        kv::delete(&self.txn, flat_keys::table(db_id, table_name)).await?;
-        kv::delete(&self.txn, flat_keys::table_id_index(table_id)).await?;
+        kv::delete(&self.txn, keys::table(db_id, table_name)).await?;
+        kv::delete(&self.txn, keys::table_id_index(table_id)).await?;
         Ok(())
     }
 }

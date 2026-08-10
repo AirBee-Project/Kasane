@@ -1,10 +1,7 @@
 use std::net::SocketAddr;
 
 use clap::Parser;
-use kasane::{AppState, kasane};
-
-#[cfg(feature = "backend-lmdb")]
-use kasane::db_init;
+use kasane::{AppState, backend, kasane};
 
 #[cfg(feature = "production")]
 #[global_allocator]
@@ -13,15 +10,13 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
 struct Args {
-    #[arg(long, default_value_t = default_database_path())]
+    /// ストレージの接続先。何を指すかはビルド時に選ばれたバックエンドによる
+    /// （LMDB はデータディレクトリ、TiKV は PD エンドポイントのカンマ区切り）。
+    #[arg(long, default_value_t = backend::default_target())]
     database_path: String,
 
     #[arg(long, default_value_t = default_port())]
     port: u16,
-}
-
-fn default_database_path() -> String {
-    std::env::var("DATABASE_DIR").unwrap_or_else(|_| "default_kasane_db".to_string())
 }
 
 fn default_port() -> u16 {
@@ -68,24 +63,9 @@ async fn main() {
     let args = Args::parse();
 
     // バックエンドはビルド時に 1 つへ確定している（kasane::backend を参照）。
-    #[cfg(feature = "backend-lmdb")]
-    let (db, target) = (
-        db_init::initialize_database(&args.database_path),
-        args.database_path.clone(),
-    );
-
-    #[cfg(feature = "backend-tikv")]
-    let (db, target) = {
-        use kasane::repositories::tikv::{TikvConfig, TikvDb};
-        let config = TikvConfig::from_env();
-        let target = config.pd_endpoints.join(",");
-        (
-            TikvDb::connect(config)
-                .await
-                .expect("failed to connect to TiKV"),
-            target,
-        )
-    };
+    let db = backend::open(&args.database_path)
+        .await
+        .expect("failed to open the storage backend");
 
     let app = kasane(AppState { db });
 
@@ -94,8 +74,8 @@ async fn main() {
     tracing::info!(
         "Kasane is running on http://{} (backend: {}, target: {})",
         listener.local_addr().unwrap(),
-        kasane::backend::NAME,
-        target,
+        backend::NAME,
+        args.database_path,
     );
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())

@@ -1,8 +1,417 @@
-use crate::{
-    error::AppError,
-    models::database::table::{Table, TableConstraints, TableDataType, TableMetadata},
-    repositories::KasaneDbWrite,
-};
+//! データベースとテーブルのカタログ操作。
+//!
+//! 抽象 API は [`ReadRepository`](crate::repositories::ReadRepository) /
+//! [`WriteRepository`](crate::repositories::WriteRepository) 側にあり、ここのメソッドは
+//! `repository.rs` から委譲される。同名にすると inherent 側が常に優先されて trait メソッドを
+//! 呼べなくなるため、`_impl` を付けて区別している（TiKV 実装も同じ規約）。
+
+use heed::BytesDecode;
+use uuid::Uuid;
+
+use crate::error::AppError;
+use crate::models::database::table::{Table, TableConstraints, TableDataType, TableMetadata};
+use crate::models::database::{DatabaseInfoResponse, DatabaseMetadata};
+use crate::models::id::{DatabaseId, TableId};
+
+use super::keys::DbIdAndName;
+use super::{AppDb, KasaneDbRead, KasaneDbWrite};
+
+/// メタデータへの点参照。
+///
+/// `RwTxn` は `RoTxn` へ Deref するので、読み取り・書き込みどちらのトランザクションからも
+/// 同じ関数を呼べる（TiKV 実装が `&Mutex<Transaction>` を受け取るのと同じ形）。
+pub(super) fn database_id(
+    db: &AppDb,
+    txn: &heed::RoTxn<heed::WithoutTls>,
+    name: &str,
+) -> Result<Option<DatabaseId>, AppError> {
+    if name.is_empty() {
+        return Ok(None);
+    }
+    Ok(db.databases.get(txn, name)?.map(|meta| meta.id))
+}
+
+pub(super) fn table_id(
+    db: &AppDb,
+    txn: &heed::RoTxn<heed::WithoutTls>,
+    db_id: DatabaseId,
+    table_name: &str,
+) -> Result<Option<TableId>, AppError> {
+    if table_name.is_empty() {
+        return Ok(None);
+    }
+    Ok(db
+        .tables
+        .get(txn, &(db_id, table_name))?
+        .map(|meta| meta.id))
+}
+
+/// `DatabaseId` からデータベース名を引く（`database_id_index` への点参照）。
+pub(super) fn database_name(
+    db: &AppDb,
+    txn: &heed::RoTxn<heed::WithoutTls>,
+    db_id: DatabaseId,
+) -> Result<Option<String>, AppError> {
+    Ok(db.database_id_index.get(txn, &db_id)?.map(str::to_string))
+}
+
+/// `TableId` からテーブル名を引く（`table_id_index` への点参照）。
+pub(super) fn table_name(
+    db: &AppDb,
+    txn: &heed::RoTxn<heed::WithoutTls>,
+    table_id: TableId,
+) -> Result<Option<String>, AppError> {
+    Ok(db.table_id_index.get(txn, &table_id)?.map(str::to_string))
+}
+
+/// データベース配下のテーブル名を列挙する。
+///
+/// 全走査に依存する逆引きは持たず、`tables` のプレフィックススキャンで済ませている。
+pub(super) fn table_names(
+    db: &AppDb,
+    txn: &heed::RoTxn<heed::WithoutTls>,
+    db_id: DatabaseId,
+) -> Result<Vec<String>, AppError> {
+    let prefix = db_id.into_bytes();
+    let mut names = Vec::new();
+    for item in db
+        .tables
+        .remap_types::<heed::types::Bytes, heed::types::Bytes>()
+        .prefix_iter(txn, prefix.as_slice())?
+    {
+        let (k_bytes, _) = item?;
+        let (_, name) = DbIdAndName::bytes_decode(k_bytes)
+            .map_err(|e| AppError::InternalError(format!("Failed to decode table key: {e}")))?;
+        names.push(name.to_string());
+    }
+    Ok(names)
+}
+
+/// LMDB 上での実装本体。
+///
+/// 抽象 API は [`ReadRepository`](crate::repositories::ReadRepository) 側にあり、
+/// ここのメソッドはそこから委譲される。同名にすると inherent 側が常に優先されて
+/// trait メソッドを呼べなくなるため、`_impl` を付けて区別している
+/// （TiKV 実装も同じ規約）。
+impl<'a> KasaneDbRead<'a> {
+    /// Databaseの情報を取得する
+    #[tracing::instrument(skip_all)]
+    pub fn database_info_impl(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
+        if name.is_empty() {
+            return Ok(None);
+        }
+        let db = self.db.databases;
+        if let Some(meta) = db.get(&self.read_txn, name)? {
+            Ok(Some(DatabaseInfoResponse {
+                name: name.to_string(),
+                description: meta.description,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Databaseの一覧を [`DatabaseId`] つきで取得する。
+    ///
+    /// 呼び出し側は権限の絞り込みに ID を使うため、同じメタデータを引き直さずに
+    /// 済むよう ID を添えて返す。
+    #[tracing::instrument(skip_all)]
+    pub fn database_list_impl(&self) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
+        let db = self.db.databases;
+        let mut list = Vec::new();
+        for res in db.iter(&self.read_txn)? {
+            let (k, meta) = res.map_err(AppError::from)?;
+            list.push((
+                meta.id,
+                DatabaseInfoResponse {
+                    name: k.to_string(),
+                    description: meta.description,
+                },
+            ));
+        }
+        Ok(list)
+    }
+}
+
+impl<'a> KasaneDbWrite<'a> {
+    /// Databaseの情報を取得する
+    #[tracing::instrument(skip_all)]
+    pub fn database_info_impl(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
+        let db = self.db.databases;
+        if let Some(meta) = db.get(&self.write_txn, name)? {
+            Ok(Some(DatabaseInfoResponse {
+                name: name.to_string(),
+                description: meta.description,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Databaseを作成する
+    #[tracing::instrument(skip_all)]
+    pub fn database_create_impl(
+        &mut self,
+        name: &str,
+        description: Option<String>,
+    ) -> Result<DatabaseInfoResponse, AppError> {
+        if self.database_info_impl(name)?.is_some() {
+            return Err(AppError::DatabaseAlreadyExists {
+                name: name.to_string(),
+            });
+        }
+
+        let id = Uuid::now_v7();
+        let meta = DatabaseMetadata {
+            id: crate::models::id::DatabaseId(id),
+            description: description.clone(),
+        };
+
+        let db_id = crate::models::id::DatabaseId(id);
+        self.db.databases.put(&mut self.write_txn, name, &meta)?;
+        self.db
+            .database_id_index
+            .put(&mut self.write_txn, &db_id, name)?;
+
+        Ok(DatabaseInfoResponse {
+            name: name.to_string(),
+            description,
+        })
+    }
+
+    /// Databaseを削除する
+    #[tracing::instrument(skip_all)]
+    pub fn database_remove_impl(&mut self, name: &str) -> Result<(), AppError> {
+        if name.is_empty() {
+            return Err(AppError::DatabaseNotFound {
+                name: name.to_string(),
+            });
+        }
+        let Some(meta) = self.db.databases.get(&self.write_txn, name)? else {
+            return Err(AppError::DatabaseNotFound {
+                name: name.to_string(),
+            });
+        };
+
+        // 配下テーブルの列挙と削除は、この 1 つの書き込みトランザクション内で行う。
+        // 列挙だけを別の読み取りトランザクションで済ませると、その隙間に作られた
+        // テーブルが削除対象から漏れ、親を失って到達不能なまま残ってしまう。
+        for table_name in table_names(self.db, &self.write_txn, meta.id)? {
+            self.table_remove_impl(name, &table_name)?;
+        }
+
+        // ユーザーが持つ権限はデータベース ID で保存されており、削除したデータベースの
+        // ID が再利用されることはない。よって残った権限ルールが後から作られた同名の
+        // データベースに効くことはなく、ここで掃除する必要はない
+        // （逆引きインデックスから消えるので、表示上は解決できないルールとして隠れる）。
+        self.db.databases.delete(&mut self.write_txn, name)?;
+        self.db
+            .database_id_index
+            .delete(&mut self.write_txn, &meta.id)?;
+
+        Ok(())
+    }
+
+    /// Databaseの名前や説明を変更する
+    #[tracing::instrument(skip_all)]
+    pub fn database_update_impl(
+        &mut self,
+        name: &str,
+        new_name: Option<String>,
+        description: Option<Option<String>>,
+    ) -> Result<(), AppError> {
+        let final_new_name = new_name.as_deref().unwrap_or(name);
+
+        if name != final_new_name {
+            // new_nameの妥当性を検証
+            crate::services::helpers::name_valid::name_valid(final_new_name)?;
+        }
+
+        // 変更元の存在確認
+        let mut meta = {
+            let db = self.db.databases;
+            if let Some(meta) = db.get(&self.write_txn, name)? {
+                meta
+            } else {
+                return Err(AppError::DatabaseNotFound {
+                    name: name.to_string(),
+                });
+            }
+        };
+
+        if name != final_new_name {
+            // コピー先が既に存在するか確認
+            let db = self.db.databases;
+            if db.get(&self.write_txn, final_new_name)?.is_some() {
+                return Err(AppError::DatabaseAlreadyExists {
+                    name: final_new_name.to_string(),
+                });
+            }
+        }
+
+        // 説明の更新
+        if let Some(desc) = description {
+            meta.description = desc;
+        }
+
+        let db = self.db.databases;
+        if name != final_new_name {
+            // lmdbから古いエントリを削除し、新しいエントリを追加
+            db.delete(&mut self.write_txn, name)?;
+            self.db
+                .database_id_index
+                .put(&mut self.write_txn, &meta.id, final_new_name)?;
+        }
+        db.put(&mut self.write_txn, final_new_name, &meta)?;
+        Ok(())
+    }
+
+    /// Databaseをコピーする。
+    #[tracing::instrument(skip_all)]
+    pub fn database_copy_impl(
+        &mut self,
+        src_db_name: &str,
+        copy_name: &str,
+    ) -> Result<DatabaseInfoResponse, AppError> {
+        // コピー先データベース名の妥当性検証
+        crate::services::helpers::name_valid::name_valid(copy_name)?;
+
+        // 1. コピー元データベースの存在確認
+        let src_db_meta = {
+            let db = self.db.databases;
+            db.get(&self.write_txn, src_db_name)?
+                .ok_or_else(|| AppError::DatabaseNotFound {
+                    name: src_db_name.to_string(),
+                })?
+        };
+
+        // 2. コピー先データベースがすでに存在するかチェック
+        if self.database_info_impl(copy_name)?.is_some() {
+            return Err(AppError::DatabaseAlreadyExists {
+                name: copy_name.to_string(),
+            });
+        }
+
+        // 3. コピー先データベースを作成
+        let copy_db_id = crate::models::id::DatabaseId(Uuid::now_v7());
+        let copy_meta = DatabaseMetadata {
+            id: copy_db_id,
+            description: src_db_meta.description.clone(),
+        };
+
+        self.db
+            .databases
+            .put(&mut self.write_txn, copy_name, &copy_meta)?;
+        self.db
+            .database_id_index
+            .put(&mut self.write_txn, &copy_db_id, copy_name)?;
+
+        // 4. コピー元データベース内の全テーブル名を取得
+        let table_names = table_names(self.db, &self.write_txn, src_db_meta.id)?;
+
+        // 5. 各テーブルをコピー
+        for table_name in table_names {
+            self.table_copy_impl(src_db_name, &table_name, copy_name, &table_name)?;
+        }
+
+        Ok(DatabaseInfoResponse {
+            name: copy_name.to_string(),
+            description: src_db_meta.description,
+        })
+    }
+}
+
+impl<'a> KasaneDbRead<'a> {
+    /// Tableの情報を取得する
+    #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
+    pub fn table_info_impl(
+        &self,
+        db_name: &str,
+        table_name: &str,
+    ) -> Result<Option<Table>, AppError> {
+        if db_name.is_empty() {
+            return Ok(None);
+        }
+        let db_meta = {
+            let db = self.db.databases;
+            if let Some(m) = db.get(&self.read_txn, db_name)? {
+                m
+            } else {
+                return Err(AppError::DatabaseNotFound {
+                    name: db_name.to_string(),
+                });
+            }
+        };
+
+        let db_tables = self.db.tables;
+        if let Some(m) = db_tables.get(&self.read_txn, &(db_meta.id, table_name))? {
+            Ok(Some(Table::from_meta(table_name, m)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Tableの一覧を取得する
+    #[tracing::instrument(skip_all, fields(db_name = %db_name))]
+    pub fn table_list_impl(&self, db_name: &str) -> Result<Vec<Table>, AppError> {
+        let db_id = database_id(self.db, &self.read_txn, db_name)?.ok_or_else(|| {
+            AppError::DatabaseNotFound {
+                name: db_name.to_string(),
+            }
+        })?;
+        self.table_list_by_id_impl(db_id)
+    }
+
+    /// Tableの一覧を [`DatabaseId`](crate::models::id::DatabaseId) から取得する。
+    /// 既に ID を解決済みの呼び出し側が、名前からの引き直しを避けるために使う。
+    #[tracing::instrument(skip_all)]
+    pub fn table_list_by_id_impl(
+        &self,
+        db_id: crate::models::id::DatabaseId,
+    ) -> Result<Vec<Table>, AppError> {
+        let db_id_bytes = db_id.into_bytes();
+        let db = self.db.tables;
+
+        let mut tables = Vec::new();
+        for iter in db
+            .remap_types::<heed::types::Bytes, heed::types::Bytes>()
+            .prefix_iter(&self.read_txn, db_id_bytes.as_slice())?
+        {
+            let (k_bytes, v_bytes) = iter?;
+            let (_, name) = super::keys::DbIdAndName::bytes_decode(k_bytes).unwrap();
+            let m = heed::types::SerdeJson::<crate::models::database::table::TableMetadata>::bytes_decode(v_bytes).unwrap();
+            tables.push(Table {
+                id: m.id,
+                name: name.to_string(),
+                data_type: m.data_type,
+                max_zoom_level: m.max_zoom_level,
+                constraints: m.constraints,
+                description: m.description,
+            });
+        }
+        Ok(tables)
+    }
+
+    /// テーブルが保持する [`FlexId`](kasane_logic::FlexId) の総数を返す。
+    #[tracing::instrument(skip_all)]
+    pub fn table_count_impl(&self, table_id: crate::models::id::TableId) -> Result<u64, AppError> {
+        use super::shard::ShardEntry;
+
+        let mut total = 0u64;
+        for item in self
+            .db
+            .tables_data
+            .remap_key_type::<heed::types::Bytes>()
+            .prefix_iter(&self.read_txn, table_id.0.as_bytes())?
+        {
+            let (_, bytes) = item?;
+            if let Some(count) = ShardEntry::leaf_count(bytes)? {
+                total += count as u64;
+            }
+        }
+        Ok(total)
+    }
+}
 
 impl<'a> KasaneDbWrite<'a> {
     /// Tableの情報を取得する
@@ -221,7 +630,7 @@ impl<'a> KasaneDbWrite<'a> {
 
         for iter in tables_data.prefix_iter(&self.write_txn, prefix.as_slice())? {
             let (_, v_bytes) = iter?;
-            use crate::repositories::database::table::data::shard::ShardEntry;
+            use super::shard::ShardEntry;
             match ShardEntry::decode(v_bytes)? {
                 ShardEntry::Leaf(map_bytes) => {
                     let map =

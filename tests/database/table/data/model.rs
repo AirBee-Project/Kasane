@@ -13,10 +13,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use kasane::db_init::initialize_database;
 use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
-use kasane::repositories::{KasaneDbRead, KasaneDbWrite};
+use kasane::repositories::lmdb::initialize_database;
+use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
 use kasane_logic::{RangeId, SingleId, SpatialIdSet};
 
 /// 依存を増やさないための決定的 RNG（xorshift64）。
@@ -53,7 +53,7 @@ fn dec(b: &[u8]) -> i32 {
 }
 
 /// このテーブルのシャードキー数とポインタノードの有無。
-fn shard_stats(db: &kasane::db_init::AppDb, table_id: TableId) -> (usize, bool) {
+fn shard_stats(db: &kasane::repositories::lmdb::AppDb, table_id: TableId) -> (usize, bool) {
     let rtxn = db.env.read_txn().unwrap();
     let mut keys = 0usize;
     let mut has_pointer = false;
@@ -71,7 +71,7 @@ fn shard_stats(db: &kasane::db_init::AppDb, table_id: TableId) -> (usize, bool) 
 }
 
 /// `data_get`（全域）を `(x,y) -> value` のマップへ復元する。
-fn read_all(db: &kasane::db_init::AppDb, table_id: TableId) -> HashMap<(u32, u32), i32> {
+fn read_all(db: &kasane::repositories::lmdb::AppDb, table_id: TableId) -> HashMap<(u32, u32), i32> {
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), db);
     let mut query = SpatialIdSet::new();
     query.insert(RangeId::new(Z, [F, F], [0, W - 1], [0, H - 1]).unwrap());
@@ -98,7 +98,7 @@ fn read_all(db: &kasane::db_init::AppDb, table_id: TableId) -> HashMap<(u32, u32
 
 /// 正解の値と DB の全状態を突き合わせる。
 fn verify(
-    db: &kasane::db_init::AppDb,
+    db: &kasane::repositories::lmdb::AppDb,
     table_id: TableId,
     dt: TableDataType,
     oracle: &HashMap<(u32, u32), i32>,

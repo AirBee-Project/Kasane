@@ -16,10 +16,28 @@ cargo build --no-default-features --features backend-tikv
 | 場所 | 役割 |
 |---|---|
 | `repositories/storage.rs` | 抽象 API。`Storage` / `ReadRepository` / `WriteRepository` / `MetaRepository` |
-| `repositories/encoding/` | バックエンド非依存のバイト表現（シャードノード形式、値インデックスのキー、TiKV のキーレイアウト） |
-| `repositories/lmdb.rs` ほか | LMDB 実装 |
+| `repositories/encoding/` | 両バックエンドで共通のバイト表現（シャードノード形式、値インデックスのキー） |
+| `repositories/lmdb/` | LMDB 実装 |
 | `repositories/tikv/` | TiKV 実装 |
-| `backend.rs` | feature で選ばれた実装を `Db` という 1 つの名前に束ねる |
+| `backend.rs` | feature で選ばれた実装を `Db` という 1 つの名前に束ね、その構築（`open`）も行う |
+
+2 つのバックエンドは**同じファイル構成**を持つ。片方を読めばもう片方の対応箇所がすぐ分かり、
+新しいバックエンドを追加するときの雛形にもなる。
+
+| ファイル | 役割 |
+|---|---|
+| `mod.rs` | ストレージ本体と、トランザクション境界（`Storage` 実装） |
+| `init.rs` | そのバックエンド固有の初期化設定（環境変数・接続先・既定ユーザーの投入） |
+| `keys.rs` | キーのバイト表現 |
+| `shard.rs`（LMDB）/ `kv.rs`（TiKV） | そのバックエンド固有の低レベルアクセス |
+| `catalog.rs` | データベース・テーブルのカタログ操作 |
+| `data.rs` | FlexTree のデータ操作 |
+| `users.rs` | ユーザーと権限 |
+| `query_source.rs` | クエリ実行器への入力源 |
+| `repository.rs` | 抽象 trait への適合（委譲のみ） |
+
+バックエンド固有のキーレイアウトは各実装の `keys.rs` にある。`encoding/` に置くのは
+**どちらのバックエンドでも同じになる**表現だけ。
 
 トランザクション境界はクロージャで表される。
 

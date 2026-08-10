@@ -9,7 +9,7 @@ use kasane_logic::{Error as LogicError, RangeId, SafeValue, Source, WorkingTree}
 use tokio::sync::Mutex;
 
 use crate::models::id::TableId;
-use crate::repositories::storage::DecodeFn;
+use crate::repositories::traits::DecodeFn;
 
 use super::{TikvDb, TikvRead};
 

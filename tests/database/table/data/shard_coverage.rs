@@ -1,9 +1,9 @@
 //! 【バグ実証】split 後に「分割時に空だった領域」へ挿入すると失われないか検証する。
 
-use kasane::db_init::initialize_database;
 use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
-use kasane::repositories::{KasaneDbRead, KasaneDbWrite};
+use kasane::repositories::lmdb::initialize_database;
+use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
 use kasane_logic::{SingleId, SpatialIdSet};
 
 // binary covering trie でこのバグ（split 後の空領域への挿入消失）が解消されることの回帰テスト。

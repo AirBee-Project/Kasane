@@ -298,10 +298,101 @@ async fn concurrent_writes_do_not_lose_updates() {
     drop_db(&db, &name).await;
 }
 
+/// **複数の Kasane インスタンスが同じクラスタへ同時に書いても整合性が保たれること。**
+///
+/// 排他はすべて TiKV 側の悲観ロックで行っており、プロセスローカルなロックは持たない。
+/// それを実証するため、独立した [`TikvDb`]（＝別々の接続）を 2 つ用意し、
+/// 同一テーブルへ同時に書き込む。クライアント側で直列化しているなら、
+/// 別インスタンス同士では効かず件数が合わなくなる。
+#[tokio::test]
+async fn separate_instances_stay_consistent() {
+    // 2 つの Kasane プロセスに相当する、独立した接続。
+    let a = connect().await;
+    let b = connect().await;
+    let name = unique_db("multi_instance");
+
+    let table = {
+        let name = name.clone();
+        a.write(async move |w| {
+            w.database_create(&name, None).await?;
+            w.table_create(&name, "t", TableDataType::Int, 25, None, None)
+                .await
+        })
+        .await
+        .unwrap()
+    };
+
+    // 同じテーブルへ、両インスタンスから交互のセルを同時に書く。
+    const PER_INSTANCE: u32 = 12;
+    let mut handles = Vec::new();
+    for (offset, db) in [(0u32, a.clone()), (1u32, b.clone())] {
+        handles.push(tokio::spawn(async move {
+            for i in 0..PER_INSTANCE {
+                let x = i * 2 + offset;
+                let db = db.clone();
+                let mut ids = SpatialIdSet::new();
+                ids.insert(SingleId::new(20, 0, x, 0).unwrap());
+                db.write(async move |w| {
+                    w.data_insert(
+                        table.id,
+                        TableDataType::Int,
+                        ids.clone(),
+                        &(x as i64).to_be_bytes(),
+                    )
+                    .await
+                })
+                .await
+                .unwrap();
+            }
+        }));
+    }
+    for h in handles {
+        h.await.unwrap();
+    }
+
+    // 片方のインスタンスから読んで、両者の書き込みが漏れなく見えること。
+    let count = b
+        .read(async move |r| r.table_count(table.id).await)
+        .await
+        .unwrap();
+    assert_eq!(
+        count,
+        (PER_INSTANCE * 2) as u64,
+        "インスタンスを跨いだ書き込みで更新が失われた（排他がプロセス内に閉じている）"
+    );
+
+    // 値インデックスも両者ぶん揃っていること（シャード更新の差分が競合していない）。
+    for probe in [0u32, 1, PER_INSTANCE * 2 - 1] {
+        let value = (probe as i64).to_be_bytes().to_vec();
+        let hits = a
+            .read(async move |r| r.data_filter_eq(table.id, TableDataType::Int, &value).await)
+            .await
+            .unwrap();
+        assert_eq!(hits.len(), 1, "値 {probe} が値インデックスから引けない");
+    }
+
+    drop_db(&a, &name).await;
+}
+
+/// 起動時の root ユーザー作成が、複数インスタンス同時起動でも二重にならないこと。
+#[tokio::test]
+async fn root_user_is_seeded_exactly_once() {
+    // 同時接続。どちらも `connect` の中で root の有無を見て作ろうとする。
+    let (a, b) = tokio::join!(connect(), connect());
+
+    let users = a.read(async |r| r.get_all_users().await).await.unwrap();
+    let roots = users.iter().filter(|u| u.username == "root").count();
+    assert_eq!(roots, 1, "root ユーザーが重複して作られている");
+
+    // どちらのインスタンスからも同じ root が見えること。
+    let from_b = b.read(async |r| r.get_user("root").await).await.unwrap();
+    assert!(from_b.is_some(), "別インスタンスから root が見えない");
+}
+
 #[tokio::test]
 async fn user_privileges_roundtrip() {
     use kasane::models::users::{DataRole, PrivilegeRule};
-    use kasane::repositories::MetaRepository;
+    use kasane::repositories::CatalogRepository;
 
     let db = connect().await;
     let name = unique_db("perm");

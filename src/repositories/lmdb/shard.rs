@@ -2,7 +2,7 @@ use heed::types::Bytes;
 use heed::{Database, RoTxn, WithoutTls};
 use kasane_logic::{ArchivedSpatialIdMap, FlexId, SpatialIdMap};
 
-use crate::db_init::TableIdAndFlexId;
+use super::keys::TableIdAndFlexId;
 use crate::error::AppError;
 use crate::models::id::TableId;
 

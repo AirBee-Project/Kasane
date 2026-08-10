@@ -4,7 +4,7 @@ use crate::{
     models::users::{
         CreateUserRequest, PrivilegeRule, PrivilegeTarget, UpdatePasswordRequest, UserInfoResponse,
     },
-    repositories::{MetaRepository, ReadRepository, Storage, WriteRepository},
+    repositories::{CatalogRepository, ReadRepository, Storage, WriteRepository},
     services::auth::hash_password,
 };
 use uuid::Uuid;

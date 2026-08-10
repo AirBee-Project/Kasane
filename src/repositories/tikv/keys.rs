@@ -23,7 +23,7 @@ use kasane_logic::FlexId;
 
 use crate::models::id::{DatabaseId, TableId};
 
-use super::TABLE_ID_LEN;
+use crate::repositories::encoding::TABLE_ID_LEN;
 
 /// 論理テーブルを区別する名前空間タグ。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -124,7 +124,7 @@ pub fn shards_of(table_id: TableId) -> Vec<u8> {
 pub fn value_index(table_id: TableId, vkey: &[u8], flex_id: &FlexId) -> Vec<u8> {
     with_ns(
         Ns::ValueIndex,
-        &super::value_index::make_key(table_id, vkey, flex_id),
+        &crate::repositories::encoding::value_index::make_key(table_id, vkey, flex_id),
     )
 }
 
@@ -132,7 +132,7 @@ pub fn value_index(table_id: TableId, vkey: &[u8], flex_id: &FlexId) -> Vec<u8> 
 pub fn value_index_prefix(table_id: TableId, vkey: &[u8]) -> Vec<u8> {
     with_ns(
         Ns::ValueIndex,
-        &super::value_index::make_prefix(table_id, vkey),
+        &crate::repositories::encoding::value_index::make_prefix(table_id, vkey),
     )
 }
 
@@ -255,7 +255,10 @@ mod tests {
         let t = table_id(1);
         let region = FlexId::UPPER_MAX;
         let enc = |v: i64| {
-            super::super::value_index::order_preserving(TableDataType::Int, &v.to_be_bytes())
+            crate::repositories::encoding::value_index::order_preserving(
+                TableDataType::Int,
+                &v.to_be_bytes(),
+            )
         };
 
         let neg = value_index(t, &enc(-5), &region);

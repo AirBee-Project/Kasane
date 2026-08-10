@@ -1,5 +1,19 @@
 //! TiKV バックエンド。
 //!
+//! ファイル構成は LMDB 実装（`super::lmdb`）と対になっている。
+//!
+//! | ファイル | 役割 |
+//! |---|---|
+//! | `mod.rs` | ストレージ本体と、トランザクション境界（[`Storage`] 実装） |
+//! | `init.rs` | このバックエンド固有の初期化設定 |
+//! | `keys.rs` | キーのバイト表現 |
+//! | `kv.rs` | このバックエンド固有の低レベルアクセス（LMDB 側は `shard.rs`） |
+//! | `catalog.rs` | データベース・テーブルのカタログ操作 |
+//! | `data.rs` | FlexTree のデータ操作 |
+//! | `users.rs` | ユーザーと権限 |
+//! | `query_source.rs` | クエリ実行器への入力源 |
+//! | `repository.rs` | 抽象 trait への適合 |
+//!
 //! # トランザクションの組み立て方
 //!
 //! TiKV の悲観ロックは取得時に取り直した `for_update_ts` で取られるのに対し、
@@ -34,11 +48,14 @@
 
 mod catalog;
 mod data;
+mod init;
+mod keys;
 mod kv;
 mod query_source;
 mod repository;
 mod users;
 
+pub use init::TikvConfig;
 pub use query_source::TikvTableSource;
 
 use std::collections::BTreeSet;
@@ -48,7 +65,7 @@ use tikv_client::{Transaction, TransactionClient};
 
 use crate::error::AppError;
 use crate::repositories::Storage;
-use crate::repositories::encoding::flat_keys::{self, LockScope};
+use keys::LockScope;
 
 /// 競合・ロック待ちでやり直す上限。
 const MAX_ATTEMPTS: usize = 20;
@@ -76,44 +93,12 @@ fn is_retryable(err: &tikv_client::Error) -> bool {
     s.contains("PessimisticRetry") || s.contains("WriteConflict") || s.contains("Deadlock")
 }
 
-/// TiKV への接続設定。
-#[derive(Debug, Clone)]
-pub struct TikvConfig {
-    /// PD のエンドポイント（`host:port`）。
-    pub pd_endpoints: Vec<String>,
-}
-
-impl TikvConfig {
-    /// 環境変数から組み立てる。`KASANE_TIKV_PD_ENDPOINTS` はカンマ区切り。
-    pub fn from_env() -> Self {
-        let raw = std::env::var("KASANE_TIKV_PD_ENDPOINTS")
-            .unwrap_or_else(|_| "127.0.0.1:2379".to_string());
-        Self {
-            pd_endpoints: raw
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect(),
-        }
-    }
-}
-
 /// TiKV バックエンドのハンドル。複製してもクラスタへの接続は共有される。
+///
+/// 構築は `init.rs`（[`TikvDb::connect`]）が担う。
 #[derive(Clone)]
 pub struct TikvDb {
-    client: Arc<TransactionClient>,
-}
-
-impl TikvDb {
-    pub async fn connect(config: TikvConfig) -> Result<Self, AppError> {
-        let client = TransactionClient::new(config.pd_endpoints.clone())
-            .await
-            .map_err(to_app_error)?;
-        tracing::info!("connected to TiKV via PD {:?}", config.pd_endpoints);
-        Ok(Self {
-            client: Arc::new(client),
-        })
-    }
+    pub(super) client: Arc<TransactionClient>,
 }
 
 /// 保持中のロック。解放は必ず rollback で行う。
@@ -173,7 +158,7 @@ impl TikvWrite<'_> {
     /// 宣言忘れをコンパイラに検出させるため、確認を戻り値に持たせている
     /// （フラグを別途調べる方式では、確認を書き忘れてもコンパイルが通ってしまう）。
     pub(crate) fn require_lock(&mut self, scope: LockScope, id: &[u8]) -> Result<(), AppError> {
-        let key = flat_keys::lock(scope, id);
+        let key = keys::lock(scope, id);
         if self.held.contains(&key) {
             return Ok(());
         }

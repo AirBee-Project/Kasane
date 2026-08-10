@@ -5,10 +5,10 @@
 
 use std::collections::HashSet;
 
-use kasane::db_init::initialize_database;
 use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
-use kasane::repositories::{KasaneDbRead, KasaneDbWrite};
+use kasane::repositories::lmdb::initialize_database;
+use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
 use kasane_logic::{SingleId, SpatialIdSet};
 
 /// i32 を `interpret_value` と同じ格納形式（ビッグエンディアン）へ。

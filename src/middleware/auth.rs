@@ -1,4 +1,4 @@
-use crate::repositories::{MetaRepository, ReadRepository, Storage};
+use crate::repositories::{CatalogRepository, ReadRepository, Storage};
 use axum::{extract::Request, http::header, middleware::Next, response::Response};
 
 use crate::models::id::DatabaseId;
@@ -181,7 +181,7 @@ fn denied(db_name: &str, table_name: Option<&str>, required: UserRole) -> AppErr
 ///
 /// データベース自体が解決できないときは `None`。呼び出し側は 404 ではなく 403 を返す
 /// （権限のない利用者に名前の存在有無を教えないため）。
-async fn resolve_scope<R: MetaRepository>(
+async fn resolve_scope<R: CatalogRepository>(
     repo: &R,
     db_name: &str,
     table_name: Option<&str>,

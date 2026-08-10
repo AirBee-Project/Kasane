@@ -11,10 +11,6 @@ pub mod routes;
 pub mod services;
 pub mod telemetry;
 
-/// LMDB バックエンドの初期化とキー表現。
-#[cfg(feature = "backend-lmdb")]
-pub mod db_init;
-
 /// リクエスト間で共有する状態。
 ///
 /// 保持するのはビルド時に選択されたストレージ 1 つだけで、その中身は

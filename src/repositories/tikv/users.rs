@@ -9,12 +9,12 @@
 
 use tokio::sync::Mutex;
 
+use super::keys::{self, LockScope};
 use crate::error::AppError;
 use crate::models::users::{
     MAX_PRIVILEGE_RULES, PrivilegeRule, PrivilegeTarget, User, UserMetadata,
 };
-use crate::repositories::MetaRepository;
-use crate::repositories::encoding::flat_keys::{self, LockScope};
+use crate::repositories::CatalogRepository;
 
 use super::{TikvRead, TikvWrite, kv};
 
@@ -22,7 +22,7 @@ pub(super) async fn user_meta(
     txn: &Mutex<tikv_client::Transaction>,
     username: &str,
 ) -> Result<Option<UserMetadata>, AppError> {
-    match kv::get(txn, flat_keys::user(username)).await? {
+    match kv::get(txn, keys::user(username)).await? {
         Some(bytes) => Ok(Some(serde_json::from_slice(&bytes).map_err(|_| {
             AppError::InternalError("Failed to parse user metadata".into())
         })?)),
@@ -37,7 +37,7 @@ async fn put_user_meta(
 ) -> Result<(), AppError> {
     let bytes = serde_json::to_vec(meta)
         .map_err(|_| AppError::InternalError("Failed to serialize user metadata".into()))?;
-    kv::put(txn, flat_keys::user(username), bytes).await
+    kv::put(txn, keys::user(username), bytes).await
 }
 
 impl TikvRead<'_> {
@@ -55,11 +55,11 @@ impl TikvRead<'_> {
     }
 
     pub(super) async fn get_all_users_impl(&self) -> Result<Vec<User>, AppError> {
-        let entries = kv::scan_prefix(&self.txn, &flat_keys::Ns::Users.prefix()).await?;
+        let entries = kv::scan_prefix(&self.txn, &keys::Ns::Users.prefix()).await?;
         entries
             .iter()
             .map(|(key, value)| {
-                let username = flat_keys::username_from_key(key)?;
+                let username = keys::username_from_key(key)?;
                 let meta: UserMetadata = serde_json::from_slice(value)
                     .map_err(|_| AppError::InternalError("Failed to parse user metadata".into()))?;
                 Ok(User::from_meta(username, meta))
@@ -153,6 +153,6 @@ impl TikvWrite<'_> {
         self.require_lock(LockScope::User, username.as_bytes())?;
 
         self.require_user_meta(username).await?;
-        kv::delete(&self.txn, flat_keys::user(username)).await
+        kv::delete(&self.txn, keys::user(username)).await
     }
 }

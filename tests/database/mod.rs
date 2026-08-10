@@ -2,7 +2,8 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode},
 };
-use kasane::{AppState, db_init, kasane};
+use kasane::repositories::lmdb as lmdb_backend;
+use kasane::{AppState, kasane};
 
 use tower::ServiceExt;
 
@@ -15,7 +16,7 @@ impl DbTestApp {
     #[allow(clippy::new_without_default)]
     pub async fn new() -> Self {
         let temp_dir = tempfile::TempDir::new().unwrap();
-        let db = db_init::initialize_database(temp_dir.path().to_str().unwrap());
+        let db = lmdb_backend::initialize_database(temp_dir.path().to_str().unwrap());
 
         let app_state = AppState { db };
         let token = kasane::services::auth::generate_jwt(&app_state, "root")

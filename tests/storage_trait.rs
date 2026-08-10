@@ -1,16 +1,15 @@
-//! LMDB バックエンド向けの結合テスト。TiKV バックエンドのビルドでは対象外。
-#![cfg(feature = "backend-lmdb")]
-
 //! [`Storage`] trait 経由でのトランザクション境界が実際に機能することの検証。
 //!
 //! クロージャ方式の非同期 API が、実 LMDB に対して読み書き・コミット・
 //! エラー時の破棄まで期待どおりに振る舞うことを確かめる。
+//! TiKV バックエンドのビルドでは対象外（同等の検証は `tikv_backend.rs`）。
+#![cfg(feature = "backend-lmdb")]
 
-use kasane::db_init::initialize_database;
 use kasane::error::AppError;
+use kasane::repositories::lmdb::initialize_database;
 use kasane::repositories::{ReadRepository, Storage, WriteRepository};
 
-fn temp_db() -> (tempfile::TempDir, kasane::db_init::AppDb) {
+fn temp_db() -> (tempfile::TempDir, kasane::repositories::lmdb::AppDb) {
     let tmp = tempfile::TempDir::new().unwrap();
     let db = initialize_database(tmp.path().to_str().unwrap());
     (tmp, db)
@@ -81,7 +80,7 @@ async fn write_closure_sees_its_own_writes() {
 #[tokio::test]
 async fn meta_repository_defaults_work_over_async_lookups() {
     use kasane::models::users::{DataRole, PrivilegeRule};
-    use kasane::repositories::MetaRepository;
+    use kasane::repositories::CatalogRepository;
 
     let (_tmp, db) = temp_db();
 
@@ -93,7 +92,7 @@ async fn meta_repository_defaults_work_over_async_lookups() {
 
     // 名前 → ID の解決と、その逆の描画が既定実装を通して往復すること。
     let rendered = Storage::read(&db, async |r| {
-        let stored = MetaRepository::resolve_privileges(
+        let stored = CatalogRepository::resolve_privileges(
             r,
             &[PrivilegeRule::Database {
                 db_name: "perm_db".into(),
@@ -101,7 +100,7 @@ async fn meta_repository_defaults_work_over_async_lookups() {
             }],
         )
         .await?;
-        MetaRepository::render_privileges(r, &stored).await
+        CatalogRepository::render_privileges(r, &stored).await
     })
     .await
     .unwrap();

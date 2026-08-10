@@ -6,8 +6,8 @@
 use tikv_client::{BoundRange, Transaction};
 use tokio::sync::Mutex;
 
+use super::keys;
 use crate::error::AppError;
-use crate::repositories::encoding::flat_keys;
 
 use super::to_app_error;
 
@@ -61,7 +61,7 @@ pub(super) async fn scan_prefix(
     txn: &Mutex<Transaction>,
     prefix: &[u8],
 ) -> Result<Vec<(Vec<u8>, Vec<u8>)>, AppError> {
-    let end = flat_keys::prefix_end(prefix);
+    let end = keys::prefix_end(prefix);
     let mut start = prefix.to_vec();
     let mut out: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
 
@@ -125,7 +125,7 @@ pub(super) async fn scan_prefix_keys(
     txn: &Mutex<Transaction>,
     prefix: &[u8],
 ) -> Result<Vec<Vec<u8>>, AppError> {
-    scan_keys_range(txn, prefix.to_vec(), flat_keys::prefix_end(prefix)).await
+    scan_keys_range(txn, prefix.to_vec(), keys::prefix_end(prefix)).await
 }
 
 /// `start`（含む）から `end_inclusive`（含む）までのキーを取り出す。

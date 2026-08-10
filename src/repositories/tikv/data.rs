@@ -16,11 +16,11 @@ use kasane_logic::{FlexId, RangeId, SpatialIdMap, SpatialIdSet};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::Mutex;
 
+use super::keys::{self, LockScope};
 use crate::error::AppError;
 use crate::models::database::table::TableDataType;
 use crate::models::id::TableId;
 use crate::repositories::ValueGroups;
-use crate::repositories::encoding::flat_keys::{self, LockScope};
 use crate::repositories::encoding::shard_entry::{
     MAX_FLEX_ID_PER_SHARD, MERGE_FLEX_ID_THRESHOLD, ShardEntry,
 };
@@ -37,7 +37,7 @@ async fn load_node(
     table_id: TableId,
     region: &FlexId,
 ) -> Result<Option<Vec<u8>>, AppError> {
-    kv::get(txn, flat_keys::shard(table_id, region)).await
+    kv::get(txn, keys::shard(table_id, region)).await
 }
 
 /// 複数領域のノードをまとめて取得する。存在しない領域は結果に含まれない。
@@ -51,7 +51,7 @@ async fn load_nodes(
 ) -> Result<FxHashMap<FlexId, Vec<u8>>, AppError> {
     let by_key: FxHashMap<Vec<u8>, FlexId> = regions
         .iter()
-        .map(|r| (flat_keys::shard(table_id, r), *r))
+        .map(|r| (keys::shard(table_id, r), *r))
         .collect();
     let pairs = kv::batch_get(txn, by_key.keys().cloned().collect()).await?;
     Ok(pairs
@@ -315,7 +315,7 @@ impl TikvRead<'_> {
         value: &[u8],
     ) -> Result<Vec<FlexId>, AppError> {
         let vkey = value_index::order_preserving(data_type, value);
-        let prefix = flat_keys::value_index_prefix(table_id, &vkey);
+        let prefix = keys::value_index_prefix(table_id, &vkey);
         let keys = kv::scan_prefix_keys(&self.txn, &prefix).await?;
 
         let mut out = Vec::new();
@@ -337,10 +337,10 @@ impl TikvRead<'_> {
         hi: &[u8],
     ) -> Result<Vec<FlexId>, AppError> {
         let start =
-            flat_keys::value_index_prefix(table_id, &value_index::order_preserving(data_type, lo));
+            keys::value_index_prefix(table_id, &value_index::order_preserving(data_type, lo));
         // hi 側は flexid 部を最大化して `(hi, *)` まで含める。
         let mut end =
-            flat_keys::value_index_prefix(table_id, &value_index::order_preserving(data_type, hi));
+            keys::value_index_prefix(table_id, &value_index::order_preserving(data_type, hi));
         end.extend_from_slice(&[0xFF; FlexId::ENCODED_LEN]);
 
         let keys = kv::scan_inclusive_keys(&self.txn, start, end).await?;
@@ -520,7 +520,7 @@ impl TikvWrite<'_> {
     ) -> Result<(), AppError> {
         if !map.should_split_shard(MAX_FLEX_ID_PER_SHARD) {
             if map.is_empty() {
-                kv::delete(&self.txn, flat_keys::shard(table_id, &region)).await?;
+                kv::delete(&self.txn, keys::shard(table_id, &region)).await?;
             } else {
                 self.put_leaf(table_id, &region, &map).await?;
             }
@@ -537,7 +537,7 @@ impl TikvWrite<'_> {
 
         kv::put(
             &self.txn,
-            flat_keys::shard(table_id, &region),
+            keys::shard(table_id, &region),
             ShardEntry::encode_pointers(&children),
         )
         .await
@@ -555,7 +555,7 @@ impl TikvWrite<'_> {
         Box::pin(async move {
             if cm.is_empty() {
                 // 空領域：被覆として領域だけ積む。万一の古いキーは消す。
-                kv::delete(&self.txn, flat_keys::shard(table_id, &cr)).await?;
+                kv::delete(&self.txn, keys::shard(table_id, &cr)).await?;
                 out.push(cr);
                 return Ok(());
             }
@@ -581,7 +581,7 @@ impl TikvWrite<'_> {
                 self.emit_child(table_id, chi_r, chi, &mut grand).await?;
                 kv::put(
                     &self.txn,
-                    flat_keys::shard(table_id, &cr),
+                    keys::shard(table_id, &cr),
                     ShardEntry::encode_pointers(&grand),
                 )
                 .await?;
@@ -603,7 +603,7 @@ impl TikvWrite<'_> {
             .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
         kv::put(
             &self.txn,
-            flat_keys::shard(table_id, region),
+            keys::shard(table_id, region),
             ShardEntry::encode_leaf(map.count() as u32, &bytes),
         )
         .await
@@ -680,12 +680,12 @@ impl TikvWrite<'_> {
 
             // 親キーをリーフ（空なら削除）に置換し、子キーを削除する。
             if merged.is_empty() {
-                kv::delete(&self.txn, flat_keys::shard(table_id, &parent_region)).await?;
+                kv::delete(&self.txn, keys::shard(table_id, &parent_region)).await?;
             } else {
                 self.put_leaf(table_id, &parent_region, &merged).await?;
             }
             for cr in &child_regions {
-                kv::delete(&self.txn, flat_keys::shard(table_id, cr)).await?;
+                kv::delete(&self.txn, keys::shard(table_id, cr)).await?;
             }
 
             // 親が新たなリーフになった → さらに上へ伝播。
@@ -701,7 +701,7 @@ impl TikvWrite<'_> {
         data_type: TableDataType,
         constraints: Option<&crate::models::database::table::TableConstraints>,
     ) -> Result<(), AppError> {
-        let entries = kv::scan_prefix(&self.txn, &flat_keys::shards_of(table_id)).await?;
+        let entries = kv::scan_prefix(&self.txn, &keys::shards_of(table_id)).await?;
         for (_, bytes) in entries {
             let ShardEntry::Leaf(map_bytes) = ShardEntry::decode(&bytes)? else {
                 continue;
@@ -728,7 +728,7 @@ fn index_key(
     value: &[u8],
     flex_id: &FlexId,
 ) -> Vec<u8> {
-    flat_keys::value_index(
+    keys::value_index(
         table_id,
         &value_index::order_preserving(data_type, value),
         flex_id,

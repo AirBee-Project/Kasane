@@ -1,4 +1,4 @@
-use crate::repositories::{MetaRepository, Storage};
+use crate::repositories::{CatalogRepository, Storage};
 use axum::{Json, extract::State};
 
 use crate::{

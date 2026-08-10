@@ -3,11 +3,11 @@
 //! 空間IDを個別に辿る `route_leaves_batched`（search が使う）と、範囲で辿る
 //! `route_leaves_for_range`（query が使う）が同じリーフ集合へ到達することを確かめる。
 
-use kasane::db_init::initialize_database;
 use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
-use kasane::repositories::database::table::data::shard;
-use kasane::repositories::{KasaneDbRead, KasaneDbWrite};
+use kasane::repositories::lmdb::initialize_database;
+use kasane::repositories::lmdb::shard;
+use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
 use kasane_logic::{RangeId, SingleId, SpatialIdSet};
 
 #[test]
@@ -58,7 +58,7 @@ fn range_routing_reaches_the_same_leaves_as_id_routing() {
 /// `TableSource::read_subset` が範囲内の全セルを返すこと。
 #[test]
 fn table_source_read_subset_returns_all_cells() {
-    use kasane::repositories::database::table::data::query_source::TableSource;
+    use kasane::repositories::lmdb::query_source::TableSource;
     use kasane_logic::Source;
     use std::sync::Arc;
 

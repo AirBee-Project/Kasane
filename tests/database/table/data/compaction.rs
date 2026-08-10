@@ -9,10 +9,10 @@
 
 use std::collections::HashSet;
 
-use kasane::db_init::initialize_database;
 use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
-use kasane::repositories::{KasaneDbRead, KasaneDbWrite};
+use kasane::repositories::lmdb::initialize_database;
+use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
 use kasane_logic::{RangeId, SpatialIdSet};
 
 const Z: u8 = 20;
@@ -39,7 +39,11 @@ fn cells(x0: u32, x1: u32, y0: u32, y1: u32) -> HashSet<(u32, u32)> {
 }
 
 /// 値 `v` を eq フィルタし、ヒットした全 FlexId を単体セル `(x,y)` 集合へ展開する。
-fn filter_cells(db: &kasane::db_init::AppDb, table_id: TableId, v: i32) -> HashSet<(u32, u32)> {
+fn filter_cells(
+    db: &kasane::repositories::lmdb::AppDb,
+    table_id: TableId,
+    v: i32,
+) -> HashSet<(u32, u32)> {
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), db);
     r.data_filter_eq_impl(table_id, TableDataType::Int, &enc(v))
         .unwrap()
@@ -50,7 +54,7 @@ fn filter_cells(db: &kasane::db_init::AppDb, table_id: TableId, v: i32) -> HashS
 
 /// `data_get` で矩形全域を読み、`(x,y) -> value` を復元する。
 fn read_rect(
-    db: &kasane::db_init::AppDb,
+    db: &kasane::repositories::lmdb::AppDb,
     table_id: TableId,
     x0: u32,
     x1: u32,
