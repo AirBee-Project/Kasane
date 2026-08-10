@@ -28,12 +28,12 @@ http:
           "z": 23,
           "policy": "average",
           "input": {
-            "type": "falloffLinearY",
+            "type": "falloffY",
             "z": 25,
             "radius": 3,
             "policy": "max",
             "input": {
-              "type": "falloffLinearX",
+              "type": "falloffX",
               "z": 25,
               "radius": 3,
               "policy": "max",
@@ -69,7 +69,7 @@ examples:
       実用パイプラインの例。点で持つ熱源テーブル（Int）を高度方向へ引き延ばし、
       XY 方向に線形減衰させて影響圏を作り、ズームアウトで粗く平均集約する。
       内側の演算が先に適用され、query は外側＝最後の演算がルートになる木で表す。
-      falloffLinear* は値の乗除算を要するため Int でのみ使える
+      falloff* は値の乗除算を要するため Int でのみ使える
     request:
       url: "{{baseUrl}}/query"
       method: POST
@@ -86,12 +86,12 @@ examples:
               "z": 23,
               "policy": "average",
               "input": {
-                "type": "falloffLinearY",
+                "type": "falloffY",
                 "z": 25,
                 "radius": 3,
                 "policy": "max",
                 "input": {
-                  "type": "falloffLinearX",
+                  "type": "falloffX",
                   "z": 25,
                   "radius": 3,
                   "policy": "max",
@@ -144,7 +144,7 @@ examples:
             ]
           }
   - name: 400 Response
-    description: falloffLinear* を非数値型のテーブルに使った
+    description: falloff* を非数値型のテーブルに使った
     request:
       url: "{{baseUrl}}/query"
       method: POST
@@ -156,7 +156,7 @@ examples:
               { "type": "singleId", "z": 23, "f": 0, "x": 7300000, "y": 3276800 }
             ],
             "query": {
-              "type": "falloffLinearX",
+              "type": "falloffX",
               "z": 25,
               "radius": 3,
               "policy": "max",

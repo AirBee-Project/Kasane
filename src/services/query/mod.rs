@@ -191,37 +191,49 @@ impl QueryNode {
                 *policy,
             ),
 
-            QueryNode::FalloffLinearX {
+            QueryNode::FalloffX {
                 input,
                 z,
                 radius,
+                pattern,
+                direction,
                 policy,
             } => V::falloff_x(
                 input.translate::<V>(app_state, tables)?,
                 *z,
                 *radius,
+                direction.map(Into::into),
+                (*pattern).into(),
                 *policy,
             ),
-            QueryNode::FalloffLinearY {
+            QueryNode::FalloffY {
                 input,
                 z,
                 radius,
+                pattern,
+                direction,
                 policy,
             } => V::falloff_y(
                 input.translate::<V>(app_state, tables)?,
                 *z,
                 *radius,
+                direction.map(Into::into),
+                (*pattern).into(),
                 *policy,
             ),
-            QueryNode::FalloffLinearF {
+            QueryNode::FalloffF {
                 input,
                 z,
                 radius,
+                pattern,
+                direction,
                 policy,
             } => V::falloff_f(
                 input.translate::<V>(app_state, tables)?,
                 *z,
                 *radius,
+                direction.map(Into::into),
+                (*pattern).into(),
                 *policy,
             ),
 

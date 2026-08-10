@@ -80,6 +80,46 @@ pub enum MathOperator {
     Divide,
 }
 
+#[derive(Debug, Deserialize, ToSchema, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum FalloffPattern {
+    Linear,
+    QuadraticIn,
+    QuadraticOut,
+}
+
+impl Default for FalloffPattern {
+    fn default() -> Self {
+        FalloffPattern::Linear
+    }
+}
+
+impl From<FalloffPattern> for kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern {
+    fn from(val: FalloffPattern) -> Self {
+        match val {
+            FalloffPattern::Linear => Self::Linear,
+            FalloffPattern::QuadraticIn => Self::QuadraticIn,
+            FalloffPattern::QuadraticOut => Self::QuadraticOut,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, ToSchema, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum Direction {
+    Upper,
+    Lower,
+}
+
+impl From<Direction> for kasane_logic::spatial_id::helpers::Side {
+    fn from(val: Direction) -> Self {
+        match val {
+            Direction::Upper => Self::Upper,
+            Direction::Lower => Self::Lower,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, ToSchema, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum QueryNode {
@@ -176,36 +216,54 @@ pub enum QueryNode {
         policy: MergePolicyKind,
     },
 
-    /// X方向へ、指定距離で0になるよう値を線形減衰させる
-    FalloffLinearX {
+    /// X方向へ、指定距離で0になるよう値を減衰させる
+    FalloffX {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
         #[schema(example = 25)]
         z: u8,
         #[schema(example = 3)]
         radius: u32,
+        #[serde(default)]
+        #[schema(example = "linear")]
+        pattern: FalloffPattern,
+        #[serde(default)]
+        #[schema(example = "upper")]
+        direction: Option<Direction>,
         #[schema(example = "max")]
         policy: MergePolicyKind,
     },
-    /// Y方向へ、指定距離で0になるよう値を線形減衰させる
-    FalloffLinearY {
+    /// Y方向へ、指定距離で0になるよう値を減衰させる
+    FalloffY {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
         #[schema(example = 25)]
         z: u8,
         #[schema(example = 3)]
         radius: u32,
+        #[serde(default)]
+        #[schema(example = "linear")]
+        pattern: FalloffPattern,
+        #[serde(default)]
+        #[schema(example = "upper")]
+        direction: Option<Direction>,
         #[schema(example = "max")]
         policy: MergePolicyKind,
     },
-    /// F方向へ、指定距離で0になるよう値を線形減衰させる
-    FalloffLinearF {
+    /// F方向へ、指定距離で0になるよう値を減衰させる
+    FalloffF {
         #[schema(no_recursion)]
         input: Box<QueryNode>,
         #[schema(example = 25)]
         z: u8,
         #[schema(example = 3)]
         radius: u32,
+        #[serde(default)]
+        #[schema(example = "linear")]
+        pattern: FalloffPattern,
+        #[serde(default)]
+        #[schema(example = "upper")]
+        direction: Option<Direction>,
         #[schema(example = "max")]
         policy: MergePolicyKind,
     },
@@ -261,9 +319,9 @@ impl QueryNode {
             | QueryNode::ExtrudeX { input, .. }
             | QueryNode::ExtrudeY { input, .. }
             | QueryNode::ExtrudeF { input, .. }
-            | QueryNode::FalloffLinearX { input, .. }
-            | QueryNode::FalloffLinearY { input, .. }
-            | QueryNode::FalloffLinearF { input, .. }
+            | QueryNode::FalloffX { input, .. }
+            | QueryNode::FalloffY { input, .. }
+            | QueryNode::FalloffF { input, .. }
             | QueryNode::MathValues { input, .. }
             | QueryNode::MapValues { input, .. } => (Some(&**input), None),
             QueryNode::Merge { left, right, .. } => (Some(&**left), Some(&**right)),
@@ -306,14 +364,18 @@ impl QueryNode {
         "z": 23,
         "policy": "average",
         "input": {
-            "type": "falloffLinearY",
+            "type": "falloffY",
             "z": 25,
             "radius": 3,
+            "pattern": "linear",
+            "direction": null,
             "policy": "max",
             "input": {
-                "type": "falloffLinearX",
+                "type": "falloffX",
                 "z": 25,
                 "radius": 3,
+                "pattern": "linear",
+                "direction": null,
                 "policy": "max",
                  "input": {
                         "type": "source",
