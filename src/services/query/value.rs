@@ -192,6 +192,15 @@ pub trait Value: SafeValue + Ord + 'static {
     ) -> Result<ValueQuery<Self>, AppError> {
         Err(unsupported_op("falloffLinearF", Self::type_name()))
     }
+
+    /// 四則演算。既定では非対応。
+    fn apply_math(
+        _q: ValueQuery<Self>,
+        _op: crate::models::query::MathOperator,
+        _operand: crate::models::query::MathOperand,
+    ) -> Result<ValueQuery<Self>, AppError> {
+        Err(unsupported_op("math operation", Self::type_name()))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -349,6 +358,59 @@ impl Value for i64 {
 
     impl_ops!(i64, dispatch_full);
     impl_falloff!(i64, dispatch_full);
+
+    fn apply_math(
+        q: ValueQuery<Self>,
+        op: crate::models::query::MathOperator,
+        operand: crate::models::query::MathOperand,
+    ) -> Result<ValueQuery<Self>, AppError> {
+        use crate::models::query::{MathOperand, MathOperator};
+        match operand {
+            MathOperand::Int(i_op) => match op {
+                MathOperator::Add => Ok(q.map_values(move |v| v.saturating_add(i_op))),
+                MathOperator::Subtract => Ok(q.map_values(move |v| v.saturating_sub(i_op))),
+                MathOperator::Multiply => Ok(q.map_values(move |v| v.saturating_mul(i_op))),
+                MathOperator::Divide => {
+                    if i_op == 0 {
+                        return Err(AppError::ConstraintViolation {
+                            reason: "Division by zero".to_string(),
+                        });
+                    }
+                    Ok(q.map_values(move |v| v.checked_div(i_op).unwrap_or(i64::MAX)))
+                }
+            },
+            MathOperand::Float(f_op) => {
+                if f_op.fract() == 0.0 && f_op >= (i64::MIN as f64) && f_op <= (i64::MAX as f64) {
+                    let i_op = f_op as i64;
+                    return Self::apply_math(q, op, MathOperand::Int(i_op));
+                }
+
+                if op == MathOperator::Divide && f_op == 0.0 {
+                    return Err(AppError::ConstraintViolation {
+                        reason: "Division by zero".to_string(),
+                    });
+                }
+                match op {
+                    MathOperator::Add => Ok(q.map_values(move |v| {
+                        let res = (v as f64) + f_op;
+                        if res.is_nan() { 0 } else { res.round() as i64 }
+                    })),
+                    MathOperator::Subtract => Ok(q.map_values(move |v| {
+                        let res = (v as f64) - f_op;
+                        if res.is_nan() { 0 } else { res.round() as i64 }
+                    })),
+                    MathOperator::Multiply => Ok(q.map_values(move |v| {
+                        let res = (v as f64) * f_op;
+                        if res.is_nan() { 0 } else { res.round() as i64 }
+                    })),
+                    MathOperator::Divide => Ok(q.map_values(move |v| {
+                        let res = (v as f64) / f_op;
+                        if res.is_nan() { 0 } else { res.round() as i64 }
+                    })),
+                }
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

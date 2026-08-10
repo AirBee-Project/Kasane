@@ -146,6 +146,7 @@ const PRIVILEGE_LEGEND: &str = r#"
         crate::models::query::QueryNode,
         crate::models::query::MergePolicyKind,
         crate::models::query::FilterCondition,
+        crate::models::query::MathOperator,
     )),
     tags(
         (name = "Auth", description = "Authentication endpoints"),

@@ -62,6 +62,24 @@ pub struct MappingEntry {
     pub to: serde_json::Value,
 }
 
+/// 計算用のオペランド（整数と小数の両方を受け付ける）
+#[derive(Debug, Deserialize, ToSchema, Clone, Copy, PartialEq)]
+#[serde(untagged)]
+pub enum MathOperand {
+    Int(i64),
+    Float(f64),
+}
+
+/// 四則演算の演算子
+#[derive(Debug, Deserialize, ToSchema, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum MathOperator {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+}
+
 #[derive(Debug, Deserialize, ToSchema, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum QueryNode {
@@ -218,6 +236,16 @@ pub enum QueryNode {
         #[schema(example = json!("unknown"))]
         default: serde_json::Value,
     },
+
+    /// 値に対して四則演算を行う
+    MathValues {
+        #[schema(no_recursion)]
+        input: Box<QueryNode>,
+        #[schema(example = "multiply")]
+        operator: MathOperator,
+        #[schema(value_type = f64, example = 1.5)]
+        operand: MathOperand,
+    },
 }
 
 impl QueryNode {
@@ -236,6 +264,7 @@ impl QueryNode {
             | QueryNode::FalloffLinearX { input, .. }
             | QueryNode::FalloffLinearY { input, .. }
             | QueryNode::FalloffLinearF { input, .. }
+            | QueryNode::MathValues { input, .. }
             | QueryNode::MapValues { input, .. } => (Some(&**input), None),
             QueryNode::Merge { left, right, .. } => (Some(&**left), Some(&**right)),
         };

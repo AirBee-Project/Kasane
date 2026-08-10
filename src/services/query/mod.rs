@@ -265,6 +265,15 @@ impl QueryNode {
                 })
             }
 
+            QueryNode::MathValues {
+                input,
+                operator,
+                operand,
+            } => {
+                let q = input.translate::<V>(app_state, tables)?;
+                V::apply_math(q, *operator, *operand)
+            }
+
             QueryNode::MapValues {
                 input,
                 output_type,
