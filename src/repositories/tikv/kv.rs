@@ -204,9 +204,11 @@ pub(super) async fn delete(txn: &Mutex<LazyTxn>, key: Vec<u8>) -> Result<(), App
 
 /// 複数のキーをまとめて書く。
 ///
-/// `put` を 1 件ずつ呼ぶとキーの数だけミューテックスを取り直すことになる。
-/// tikv-client 側では書き込みはローカルバッファへの追記なので、
-/// ロックを 1 回にまとめれば往復もロック競合も減る。
+/// 減らせるのはミューテックスの取り直しだけで、**ネットワーク往復は減らない**。
+/// 悲観トランザクションの `put` は内部で対象キーの悲観ロックを取るため、
+/// 1 キーにつき TSO 取得 1 回と PessimisticLock RPC 1 回がかかる。
+/// これをまとめるには `Transaction::batch_mutate`（全キーのロックを 1 回の
+/// リクエストへ束ねる）へ寄せる必要があり、それは別途の課題。
 pub(super) async fn put_many(
     txn: &Mutex<LazyTxn>,
     entries: impl IntoIterator<Item = (Vec<u8>, Vec<u8>)>,
@@ -218,7 +220,7 @@ pub(super) async fn put_many(
     Ok(())
 }
 
-/// 複数のキーをまとめて消す（[`put_many`] と同じ理由）。
+/// 複数のキーをまとめて消す（往復についての注意は [`put_many`] と同じ）。
 pub(super) async fn delete_many(
     txn: &Mutex<LazyTxn>,
     keys: impl IntoIterator<Item = Vec<u8>>,
