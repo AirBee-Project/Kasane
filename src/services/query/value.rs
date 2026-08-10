@@ -192,6 +192,15 @@ pub trait Value: SafeValue + Ord + 'static {
     ) -> Result<ValueQuery<Self>, AppError> {
         Err(unsupported_op("falloffLinearF", Self::type_name()))
     }
+
+    /// 四則演算。既定では非対応。
+    fn apply_math(
+        _q: ValueQuery<Self>,
+        _op: crate::models::query::MathOperator,
+        _operand: f64,
+    ) -> Result<ValueQuery<Self>, AppError> {
+        Err(unsupported_op("math operation", Self::type_name()))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -349,6 +358,37 @@ impl Value for i64 {
 
     impl_ops!(i64, dispatch_full);
     impl_falloff!(i64, dispatch_full);
+
+    fn apply_math(
+        q: ValueQuery<Self>,
+        op: crate::models::query::MathOperator,
+        operand: f64,
+    ) -> Result<ValueQuery<Self>, AppError> {
+        use crate::models::query::MathOperator;
+        if op == MathOperator::Divide && operand == 0.0 {
+            return Err(AppError::ConstraintViolation {
+                reason: "Division by zero".to_string(),
+            });
+        }
+        Ok(q.map_values(move |v| {
+            let vf = v as f64;
+            let result = match op {
+                MathOperator::Add => vf + operand,
+                MathOperator::Subtract => vf - operand,
+                MathOperator::Multiply => vf * operand,
+                MathOperator::Divide => vf / operand, // zero check done above
+            };
+            if result.is_nan() {
+                0
+            } else if result >= i64::MAX as f64 {
+                i64::MAX
+            } else if result <= i64::MIN as f64 {
+                i64::MIN
+            } else {
+                result.round() as i64
+            }
+        }))
+    }
 }
 
 // ---------------------------------------------------------------------------
