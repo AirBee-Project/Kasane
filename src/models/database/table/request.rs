@@ -40,13 +40,6 @@ pub enum UpdateTableConstraints {
         #[serde(skip_serializing_if = "Option::is_none")]
         max: Option<Option<i64>>,
     },
-    #[schema(example = json!({"type": "Float", "min": 0.0, "max": 100.0}))]
-    Float {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        min: Option<Option<f64>>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        max: Option<Option<f64>>,
-    },
     #[schema(example = json!({"type": "Enum", "add_choices": ["yellow"], "remove_choices": ["red"]}))]
     Enum {
         #[serde(skip_serializing_if = "Option::is_none")]

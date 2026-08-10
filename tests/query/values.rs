@@ -206,40 +206,6 @@ async fn supports_boolean_tables() {
     assert_eq!(result["dictionary"][0], serde_json::json!(true));
 }
 
-/// Float テーブル（`Ord` ラッパー経由）にもクエリを適用できる。
-#[tokio::test]
-async fn supports_float_tables() {
-    let app = TestApp::new();
-    app.create_database("test_db").await;
-    seed(
-        &app,
-        "t_float",
-        "Float",
-        &[
-            (775000, serde_json::json!(1.5)),
-            (775001, serde_json::json!(9.5)),
-        ],
-    )
-    .await;
-
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": ids(775000, 2),
-            "query": {
-                "type": "filterValues", "mode": "inRange", "min": 5.0,
-                "input": source("t_float")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::OK, "body: {result}");
-    assert_eq!(total_ids(&result), 1);
-    assert_eq!(result["dictionary"][0], serde_json::json!(9.5));
-}
-
 /// 64bit 相当の大きな整数値にもクエリを適用できる（`Int` = i64）。
 #[tokio::test]
 async fn supports_large_int_values() {
@@ -973,49 +939,6 @@ async fn map_values_converts_boolean_to_int() {
     assert_eq!(total_ids(&result), 2);
 }
 
-/// Float を Boolean へ変換する。
-#[tokio::test]
-async fn map_values_converts_float_to_boolean() {
-    let app = TestApp::new();
-    app.create_database("test_db").await;
-    seed(
-        &app,
-        "t_map_float",
-        "Float",
-        &[
-            (803000, serde_json::json!(1.5)),
-            (803001, serde_json::json!(2.5)),
-            (803002, serde_json::json!(3.5)),
-        ],
-    )
-    .await;
-
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "value_type": "Boolean",
-            "spatial_ids": ids(803000, 3),
-            "query": {
-                "type": "mapValues",
-                "output_type": "Boolean",
-                "mapping": [
-                    { "from": 1.5, "to": true },
-                    { "from": 2.5, "to": false }
-                ],
-                "default": true,
-                "input": source("t_map_float")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::OK, "body: {result}");
-    // values() は Int/Float 専用なので辞書を直接見る。3.5 は対応表に無く default の true。
-    assert_eq!(result["dictionary"], serde_json::json!([false, true]));
-    assert_eq!(total_ids(&result), 3);
-}
-
 /// mapValues が `output_type` を持つため、リクエストの `value_type` を省略しても正常に推論される。
 #[tokio::test]
 async fn map_values_infers_type_from_output_type() {
@@ -1203,69 +1126,6 @@ async fn map_values_allows_empty_mapping() {
     assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(result["dictionary"], serde_json::json!(["Other"]));
     assert_eq!(total_ids(&result), 1);
-}
-
-/// Float の対応表で `-0.0` と `0.0` が同一視される。
-///
-/// `OrderedFloat` の順序は `total_cmp` なので、正規化しないと `-0.0` を書いた
-/// エントリが `0.0` に一致せず、重複としても検出されない。
-#[tokio::test]
-async fn map_values_treats_negative_zero_as_zero() {
-    let app = TestApp::new();
-    app.create_database("test_db").await;
-    seed(
-        &app,
-        "t_map_negzero",
-        "Float",
-        &[(811000, serde_json::json!(0.0))],
-    )
-    .await;
-
-    // `-0.0` のエントリが、格納された `0.0` に一致する。
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "value_type": "Int",
-            "spatial_ids": ids(811000, 1),
-            "query": {
-                "type": "mapValues",
-                "output_type": "Int",
-                "mapping": [{ "from": -0.0, "to": 7 }],
-                "default": -1,
-                "input": source("t_map_negzero")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "body: {result}");
-    assert_eq!(values(&result), vec![7]);
-
-    // 同じ理由で `0.0` と `-0.0` の併記は重複として弾かれる。
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "value_type": "Int",
-            "spatial_ids": ids(811000, 1),
-            "query": {
-                "type": "mapValues",
-                "output_type": "Int",
-                "mapping": [{ "from": 0.0, "to": 7 }, { "from": -0.0, "to": 8 }],
-                "default": -1,
-                "input": source("t_map_negzero")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(
-        result["error"]
-            .as_str()
-            .unwrap()
-            .contains("duplicate mapping key"),
-        "error: {result}"
-    );
 }
 
 /// Enum ソースは選択肢の文字列として対応表に照合される。

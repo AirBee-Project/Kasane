@@ -315,7 +315,7 @@ fn build_map_values<U: Value, V: Value>(
 
     let mut lookup: BTreeMap<U, V> = BTreeMap::new();
     for entry in mapping {
-        let from = U::from_json(&entry.from)?.normalize_for_map();
+        let from = U::from_json(&entry.from)?;
         let to = V::from_json(&entry.to).map_err(|e| AppError::ConstraintViolation {
             reason: format!(
                 "mapValues mapping value could not be parsed as the inferred type {}: {}",
@@ -338,12 +338,7 @@ fn build_map_values<U: Value, V: Value>(
         ),
     })?;
 
-    Ok(input.map_values(move |value| {
-        lookup
-            .get(&value.normalize_for_map())
-            .unwrap_or(&default)
-            .clone()
-    }))
+    Ok(input.map_values(move |value| lookup.get(&value).unwrap_or(&default).clone()))
 }
 
 /// クエリを実行し、対象空間IDの値を返す。

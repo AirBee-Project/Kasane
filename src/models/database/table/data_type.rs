@@ -9,8 +9,6 @@ pub enum TableDataType {
     Text = 0,
     /// 64ビット符号付き整数
     Int = 1,
-    /// 64ビット浮動小数点数
-    Float = 2,
     /// 真偽値
     Boolean = 3,
     /// 選択式文字列
@@ -23,7 +21,7 @@ pub enum TableDataType {
 ///
 /// `type` フィールドで制約の種類を指定する。指定できる種類は対象のデータ型に依存する。
 /// - `Text`: 文字列の長さ制約（`min_length`, `max_length`）
-/// - `Int` / `Float`: 数値の範囲制約（`min`, `max`）
+/// - `Int`: 数値の範囲制約（`min`, `max`）
 /// - `Enum`: 許容される選択肢の制約（`choices`）
 ///
 /// `Presence` および `Boolean` には制約を指定できない。
@@ -50,16 +48,6 @@ pub enum TableConstraints {
         #[serde(skip_serializing_if = "Option::is_none")]
         max: Option<i64>,
     },
-    /// `Float` 型に対する制約。
-    #[schema(example = json!({"type": "Float", "min": 0.0, "max": 100.0}))]
-    Float {
-        /// 最小値（境界値を含む）
-        #[serde(skip_serializing_if = "Option::is_none")]
-        min: Option<f64>,
-        /// 最大値（境界値を含む）
-        #[serde(skip_serializing_if = "Option::is_none")]
-        max: Option<f64>,
-    },
     /// `Enum` 型に対する制約。
     #[schema(example = json!({"type": "Enum", "choices": ["red", "blue", "green"]}))]
     Enum {
@@ -82,7 +70,7 @@ impl From<TableDataType> for JsonValueType {
     fn from(value: TableDataType) -> Self {
         match value {
             TableDataType::Text | TableDataType::Enum => JsonValueType::String,
-            TableDataType::Int | TableDataType::Float => JsonValueType::Number,
+            TableDataType::Int => JsonValueType::Number,
             TableDataType::Boolean => JsonValueType::Bool,
             TableDataType::Presence => JsonValueType::Null,
         }
@@ -106,16 +94,6 @@ impl TableConstraints {
                 }
             }
             TableConstraints::Int { min, max } => {
-                if let (Some(min), Some(max)) = (min, max)
-                    && min > max
-                {
-                    return Err(format!(
-                        "min ({}) must be less than or equal to max ({})",
-                        min, max
-                    ));
-                }
-            }
-            TableConstraints::Float { min, max } => {
                 if let (Some(min), Some(max)) = (min, max)
                     && min > max
                 {

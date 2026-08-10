@@ -48,7 +48,7 @@ examples:
     description: >-
       指定の値までズームレベルを落とし、重なった値を policy で集約する。
       policy は overwrite / keepExisting / max / min（全型）と
-      sum / difference / average（Int と Float のみ）。
+      sum / difference / average（Int のみ）。
     request:
       url: "{{baseUrl}}/query"
       method: POST

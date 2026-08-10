@@ -1,23 +1,3 @@
-//! アプリ全体で使う値型の抽象（`Value` trait）。
-//!
-//! テーブルの `data_type` は実行時の値だが、Kasane-Logic の作業木や格納・復元は
-//! 具体的な Rust 型で行うため、`data_type` → 具体型の単型化を [`for_value_type!`](crate::for_value_type) の
-//! 1 箇所に集約する。各具体型は [`Value`] を実装し、
-//!
-//! - 格納バイト列 ⇄ 値（[`Value::decoder`] / [`Value::encode`]）
-//! - JSON ⇄ 値（[`Value::from_json`] / [`Value::to_json`]）
-//! - クエリ演算子（`zoom_out` などと `MergePolicy` の適用可否）
-//!
-//! を型ごとに一手に引き受ける。`search`（格納値の復元）と `query`（演算結果）は
-//! いずれもこの trait を通すので、型ごとの処理を二重に書かずに済む。
-//!
-//! 演算子・`MergePolicy` の適用可否は 2 階層：
-//! - 全型: `Overwrite` / `KeepExisting` / `Max` / `Min`（`Ord` があればよい）
-//! - 数値型（`Int` = i64 / `Float` = f64）: 加えて `Sum` / `Difference` / `Average` と `falloffLinear*`
-//!
-//! 使えない組合せは 400 を返す。
-
-use core::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -40,97 +20,18 @@ pub type ValueQuery<V> = Query<V>;
 /// 格納バイト列を値へ復元するデコーダ。`None` を返したセルは結果から除外される。
 pub type Decoder<V> = Arc<dyn Fn(&[u8]) -> Option<V> + Send + Sync>;
 
-/// `TableDataType` を対応する具体型へ単型化し、`$func::<V>(..)` を呼ぶ。
-///
-/// 「実行時の型 → コンパイル時の型」の分岐はここ 1 箇所だけ。型を増減するときも
-/// この match だけを直せばよい。
-///
-/// 呼ぶ関数が型引数を 2 つ以上取る場合は、残りを `[..]` で後ろへ続ける
-/// （例: `for_value_type!(dt, f[V], args..)` は `f::<単型化した型, V>(args..)`）。
 #[macro_export]
 macro_rules! for_value_type {
     ($dt:expr, $func:ident $([$($rest:ty),* $(,)?])? $(, $arg:expr)* $(,)?) => {{
         use $crate::models::database::table::TableDataType;
         match $dt {
             TableDataType::Int => $func::<i64 $($(, $rest)*)?>($($arg),*),
-            TableDataType::Float => {
-                $func::<$crate::services::query::value::OrderedFloat $($(, $rest)*)?>($($arg),*)
-            }
             TableDataType::Text | TableDataType::Enum => $func::<String $($(, $rest)*)?>($($arg),*),
             TableDataType::Boolean => $func::<bool $($(, $rest)*)?>($($arg),*),
             TableDataType::Presence => $func::<() $($(, $rest)*)?>($($arg),*),
         }
     }};
 }
-
-// ---------------------------------------------------------------------------
-// 浮動小数の Ord ラッパー
-// ---------------------------------------------------------------------------
-
-/// 浮動小数（f64）を `Ord` にするラッパー。
-///
-/// [`SafeValue`] は `Ord` を要求するが浮動小数は `PartialOrd` しか持たないため、
-/// `total_cmp` による全順序を与える（NaN でも panic しない）。
-///
-/// # `ordered-float` クレートを使わない理由
-/// 全順序を与えるだけなら `ordered_float::OrderedFloat` で足りるが、この型には
-/// 加えて `From<u16>` / `From<u32>`（`zoomOut` の平均・`falloffLinear*` が要求）と
-/// `kasane_logic::merge_policy::saturating_add::Add` の実装が要る。
-/// いずれも「外部の型に外部のトレイト」となり orphan rule で実装できないため、
-/// ローカルの newtype が必須。`total_cmp` の再実装は 3 行なので依存を足す利点も無い。
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct OrderedFloat(pub f64);
-
-impl Eq for OrderedFloat {}
-impl Ord for OrderedFloat {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.0.total_cmp(&other.0)
-    }
-}
-impl PartialOrd for OrderedFloat {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl core::ops::Mul for OrderedFloat {
-    type Output = Self;
-    fn mul(self, rhs: Self) -> Self {
-        OrderedFloat(self.0 * rhs.0)
-    }
-}
-impl core::ops::Div for OrderedFloat {
-    type Output = Self;
-    fn div(self, rhs: Self) -> Self {
-        OrderedFloat(self.0 / rhs.0)
-    }
-}
-impl core::ops::Sub for OrderedFloat {
-    type Output = Self;
-    fn sub(self, rhs: Self) -> Self {
-        OrderedFloat(self.0 - rhs.0)
-    }
-}
-impl kasane_logic::merge_policy::saturating_add::Add for OrderedFloat {
-    fn saturating_add(self, rhs: Self) -> Self {
-        OrderedFloat(self.0 + rhs.0)
-    }
-}
-impl From<u16> for OrderedFloat {
-    fn from(v: u16) -> Self {
-        OrderedFloat(v as f64)
-    }
-}
-// `falloffLinear*` は `TryFrom<u32>` を要求するが、浮動小数への変換は必ず成功する。
-// `From` を実装すれば標準のブランケット実装経由で `TryFrom` も満たされる。
-impl From<u32> for OrderedFloat {
-    fn from(v: u32) -> Self {
-        OrderedFloat(v as f64)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// エラー
-// ---------------------------------------------------------------------------
 
 fn unsupported_op(op: &str, value_type: &str) -> AppError {
     AppError::ConstraintViolation {
@@ -228,14 +129,6 @@ pub trait Value: SafeValue + Ord + 'static {
 
     /// リクエスト中のリテラル（挿入値・フィルタ境界・merge の既定値）から作る。
     fn from_json(value: &serde_json::Value) -> Result<Self, AppError>;
-
-    /// 比較などで同値とみなすべき表現を正規化する（主に OrderedFloat の -0.0 対応用）。
-    fn normalize_for_map(self) -> Self
-    where
-        Self: Sized,
-    {
-        self
-    }
 
     fn zoom_out(
         q: ValueQuery<Self>,
@@ -456,68 +349,6 @@ impl Value for i64 {
 
     impl_ops!(i64, dispatch_full);
     impl_falloff!(i64, dispatch_full);
-}
-
-impl Value for OrderedFloat {
-    fn type_name() -> &'static str {
-        "Float"
-    }
-
-    fn accepts(data_type: TableDataType) -> bool {
-        data_type == TableDataType::Float
-    }
-
-    fn decoder(_constraints: Option<&TableConstraints>) -> Result<Decoder<Self>, AppError> {
-        Ok(Arc::new(|bytes: &[u8]| {
-            <[u8; 8]>::try_from(bytes)
-                .ok()
-                .map(|b| OrderedFloat(f64::from_be_bytes(b)))
-        }))
-    }
-
-    fn encode(&self, constraints: Option<&TableConstraints>) -> Result<Vec<u8>, AppError> {
-        if let Some(TableConstraints::Float { min, max }) = constraints {
-            check_range(&self.0, *min, *max)?;
-        }
-        Ok(self.0.to_be_bytes().to_vec())
-    }
-
-    fn to_json(&self) -> serde_json::Value {
-        serde_json::Number::from_f64(self.0)
-            .map(serde_json::Value::Number)
-            .unwrap_or(serde_json::Value::Null)
-    }
-
-    fn normalize_for_map(self) -> Self {
-        if self.0 == 0.0 {
-            OrderedFloat(0.0)
-        } else {
-            self
-        }
-    }
-
-    fn from_json(value: &serde_json::Value) -> Result<Self, AppError> {
-        let v = value
-            .as_f64()
-            .ok_or_else(|| AppError::NumericValueOutOfRange {
-                actual: value.to_string(),
-                expected: "Float".to_string(),
-            })?;
-        if v.is_finite() {
-            // `Ord` は `total_cmp` なので `-0.0 < 0.0` となり、両者は別の値として振る舞う。
-            // 格納・フィルタ境界・`mapValues` の対応表がいずれもこの経路を通るので、
-            // ここで `0.0` へ寄せておけば「`-0.0` を書いたのに一致しない」が起きない。
-            Ok(OrderedFloat(if v == 0.0 { 0.0 } else { v }))
-        } else {
-            Err(AppError::NumericValueOutOfRange {
-                actual: value.to_string(),
-                expected: "finite Float".to_string(),
-            })
-        }
-    }
-
-    impl_ops!(OrderedFloat, dispatch_full);
-    impl_falloff!(OrderedFloat, dispatch_full);
 }
 
 // ---------------------------------------------------------------------------
