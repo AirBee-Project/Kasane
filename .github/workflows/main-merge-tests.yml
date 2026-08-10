@@ -18,9 +18,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ストレージバックエンドはビルドごとに 1 つしか選べないので、検証も
-  # バックエンドごとに 1 ジョブ立てる。片方だけを回していると、選ばれなかった側は
-  # コンパイルすらされずに壊れていく。
   lmdb:
     name: Verify (LMDB)
     runs-on: ubuntu-latest
@@ -124,8 +121,6 @@ jobs:
             --features "production,backend-tikv" \
             -- -D warnings
 
-      # 結合テストは実クラスタを相手にする。開発用と同じ compose 定義を使うので、
-      # CI とローカルで同じ構成を検証することになる。
       - name: Start TiKV
         shell: bash
         run: |
