@@ -204,37 +204,49 @@ impl QueryNode {
                 *policy,
             ),
 
-            QueryNode::FalloffLinearX {
+            QueryNode::FalloffX {
                 input,
                 z,
                 radius,
+                pattern,
+                direction,
                 policy,
             } => V::falloff_x(
                 input.translate::<V>(app_state, tables, snapshot)?,
                 *z,
                 *radius,
+                direction.map(Into::into),
+                (*pattern).into(),
                 *policy,
             ),
-            QueryNode::FalloffLinearY {
+            QueryNode::FalloffY {
                 input,
                 z,
                 radius,
+                pattern,
+                direction,
                 policy,
             } => V::falloff_y(
                 input.translate::<V>(app_state, tables, snapshot)?,
                 *z,
                 *radius,
+                direction.map(Into::into),
+                (*pattern).into(),
                 *policy,
             ),
-            QueryNode::FalloffLinearF {
+            QueryNode::FalloffF {
                 input,
                 z,
                 radius,
+                pattern,
+                direction,
                 policy,
             } => V::falloff_f(
                 input.translate::<V>(app_state, tables, snapshot)?,
                 *z,
                 *radius,
+                direction.map(Into::into),
+                (*pattern).into(),
                 *policy,
             ),
 
@@ -276,6 +288,15 @@ impl QueryNode {
                         q.filter_not_in((start, end))
                     }
                 })
+            }
+
+            QueryNode::MathValues {
+                input,
+                operator,
+                operand,
+            } => {
+                let q = input.translate::<V>(app_state, tables)?;
+                V::apply_math(q, *operator, *operand)
             }
 
             QueryNode::MapValues {

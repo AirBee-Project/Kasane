@@ -167,30 +167,45 @@ pub trait Value: SafeValue + Ord + 'static {
         p: MergePolicyKind,
     ) -> Result<ValueQuery<Self>, AppError>;
 
-    /// 線形減衰。値の乗除算を要するため、既定では非対応。
+    /// 値の減衰。値の乗除算を要するため、既定では非対応。
     fn falloff_x(
         _q: ValueQuery<Self>,
         _z: u8,
         _r: u32,
+        _direction: Option<kasane_logic::spatial_id::helpers::Side>,
+        _pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
         _p: MergePolicyKind,
     ) -> Result<ValueQuery<Self>, AppError> {
-        Err(unsupported_op("falloffLinearX", Self::type_name()))
+        Err(unsupported_op("falloffX", Self::type_name()))
     }
     fn falloff_y(
         _q: ValueQuery<Self>,
         _z: u8,
         _r: u32,
+        _direction: Option<kasane_logic::spatial_id::helpers::Side>,
+        _pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
         _p: MergePolicyKind,
     ) -> Result<ValueQuery<Self>, AppError> {
-        Err(unsupported_op("falloffLinearY", Self::type_name()))
+        Err(unsupported_op("falloffY", Self::type_name()))
     }
     fn falloff_f(
         _q: ValueQuery<Self>,
         _z: u8,
         _r: u32,
+        _direction: Option<kasane_logic::spatial_id::helpers::Side>,
+        _pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
         _p: MergePolicyKind,
     ) -> Result<ValueQuery<Self>, AppError> {
-        Err(unsupported_op("falloffLinearF", Self::type_name()))
+        Err(unsupported_op("falloffF", Self::type_name()))
+    }
+
+    /// 四則演算。既定では非対応。
+    fn apply_math(
+        _q: ValueQuery<Self>,
+        _op: crate::models::query::MathOperator,
+        _operand: crate::models::query::MathOperand,
+    ) -> Result<ValueQuery<Self>, AppError> {
+        Err(unsupported_op("math operation", Self::type_name()))
     }
 }
 
@@ -278,32 +293,38 @@ macro_rules! impl_ops {
     };
 }
 
-/// 算術が使える型に `falloffLinear*` を生やす。
+/// 算術が使える型に `falloff*` を生やす。
 macro_rules! impl_falloff {
     ($ty:ty, $dispatch:ident) => {
         fn falloff_x(
             q: ValueQuery<Self>,
             z: u8,
             r: u32,
+            direction: Option<kasane_logic::spatial_id::helpers::Side>,
+            pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
             p: MergePolicyKind,
         ) -> Result<ValueQuery<Self>, AppError> {
-            $dispatch!($ty, q, falloff_linear_x(z, r), p)
+            $dispatch!($ty, q, falloff_x(z, r, direction, pattern), p)
         }
         fn falloff_y(
             q: ValueQuery<Self>,
             z: u8,
             r: u32,
+            direction: Option<kasane_logic::spatial_id::helpers::Side>,
+            pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
             p: MergePolicyKind,
         ) -> Result<ValueQuery<Self>, AppError> {
-            $dispatch!($ty, q, falloff_linear_y(z, r), p)
+            $dispatch!($ty, q, falloff_y(z, r, direction, pattern), p)
         }
         fn falloff_f(
             q: ValueQuery<Self>,
             z: u8,
             r: u32,
+            direction: Option<kasane_logic::spatial_id::helpers::Side>,
+            pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
             p: MergePolicyKind,
         ) -> Result<ValueQuery<Self>, AppError> {
-            $dispatch!($ty, q, falloff_linear_f(z, r), p)
+            $dispatch!($ty, q, falloff_f(z, r, direction, pattern), p)
         }
     };
 }
@@ -349,6 +370,59 @@ impl Value for i64 {
 
     impl_ops!(i64, dispatch_full);
     impl_falloff!(i64, dispatch_full);
+
+    fn apply_math(
+        q: ValueQuery<Self>,
+        op: crate::models::query::MathOperator,
+        operand: crate::models::query::MathOperand,
+    ) -> Result<ValueQuery<Self>, AppError> {
+        use crate::models::query::{MathOperand, MathOperator};
+        match operand {
+            MathOperand::Int(i_op) => match op {
+                MathOperator::Add => Ok(q.map_values(move |v| v.saturating_add(i_op))),
+                MathOperator::Subtract => Ok(q.map_values(move |v| v.saturating_sub(i_op))),
+                MathOperator::Multiply => Ok(q.map_values(move |v| v.saturating_mul(i_op))),
+                MathOperator::Divide => {
+                    if i_op == 0 {
+                        return Err(AppError::ConstraintViolation {
+                            reason: "Division by zero".to_string(),
+                        });
+                    }
+                    Ok(q.map_values(move |v| v.checked_div(i_op).unwrap_or(i64::MAX)))
+                }
+            },
+            MathOperand::Float(f_op) => {
+                if f_op.fract() == 0.0 && f_op >= (i64::MIN as f64) && f_op <= (i64::MAX as f64) {
+                    let i_op = f_op as i64;
+                    return Self::apply_math(q, op, MathOperand::Int(i_op));
+                }
+
+                if op == MathOperator::Divide && f_op == 0.0 {
+                    return Err(AppError::ConstraintViolation {
+                        reason: "Division by zero".to_string(),
+                    });
+                }
+                match op {
+                    MathOperator::Add => Ok(q.map_values(move |v| {
+                        let res = (v as f64) + f_op;
+                        if res.is_nan() { 0 } else { res.round() as i64 }
+                    })),
+                    MathOperator::Subtract => Ok(q.map_values(move |v| {
+                        let res = (v as f64) - f_op;
+                        if res.is_nan() { 0 } else { res.round() as i64 }
+                    })),
+                    MathOperator::Multiply => Ok(q.map_values(move |v| {
+                        let res = (v as f64) * f_op;
+                        if res.is_nan() { 0 } else { res.round() as i64 }
+                    })),
+                    MathOperator::Divide => Ok(q.map_values(move |v| {
+                        let res = (v as f64) / f_op;
+                        if res.is_nan() { 0 } else { res.round() as i64 }
+                    })),
+                }
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -255,7 +255,7 @@ async fn rejects_arithmetic_operator_on_text() {
         &serde_json::json!({
             "spatial_ids": ids(780000, 1),
             "query": {
-                "type": "falloffLinearX", "z": 20, "radius": 2, "policy": "max",
+                "type": "falloffX", "z": 20, "radius": 2, "policy": "max",
                 "input": source("t_txt3")
             }
         }),
