@@ -94,7 +94,9 @@ impl Default for FalloffPattern {
     }
 }
 
-impl From<FalloffPattern> for kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern {
+impl From<FalloffPattern>
+    for kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern
+{
     fn from(val: FalloffPattern) -> Self {
         match val {
             FalloffPattern::Linear => Self::Linear,
