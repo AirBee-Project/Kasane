@@ -244,7 +244,11 @@ impl TikvDb {
     async fn advance_gc_safepoint(&self, retention: Duration) -> Result<(), AppError> {
         use tikv_client::TimestampExt;
 
-        let now = self.client.current_timestamp().await.map_err(to_app_error)?;
+        let now = self
+            .client
+            .current_timestamp()
+            .await
+            .map_err(to_app_error)?;
 
         // タイムスタンプは上位ビットがミリ秒。保持期間ぶん手前へ戻した時刻を safepoint にする。
         let retention_ms = retention.as_millis() as i64;

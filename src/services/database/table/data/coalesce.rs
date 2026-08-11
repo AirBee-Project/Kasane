@@ -171,9 +171,7 @@ fn spawn_worker(
             let batched = entries.len();
 
             let result = db
-                .write(async move |w| {
-                    w.data_insert_many(table_id, index, entries.clone()).await
-                })
+                .write(async move |w| w.data_insert_many(table_id, index, entries.clone()).await)
                 .await;
 
             tracing::debug!(%table_id, batched, ok = result.is_ok(), "flushed a write batch");
