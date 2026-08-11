@@ -71,6 +71,13 @@ services:
     volumes:
       - tikv-data:/data/tikv
       - ./deployment/tikv.toml:/etc/tikv/tikv.toml:ro
+    # TiKV は nofile が閾値未満だと起動時チェックで FATAL になる。Docker の既定は
+    # 環境によって異なり、GitHub Actions では 65536 と足りない。閾値自体も
+    # deployment/tikv.toml で下げているが、こちらは TiKV の推奨に合わせた設定。
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
 
   # OpenTelemetry のトレース受け口と閲覧 UI。
   # `production` feature でビルドしたときだけアプリがトレースを送る。

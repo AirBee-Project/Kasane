@@ -28,6 +28,11 @@ use-unified-pool = true
 [rocksdb]
 max-background-jobs = 2
 max-sub-compactions = 1
+# TiKV は起動時に `rocksdb + raftdb の max-open-files + 1000` 以上の nofile を要求し、
+# 足りなければ FATAL で落ちる。既定 (40960 + 40960 + 1000 = 82920) は GitHub Actions の
+# Docker 既定 nofile 65536 を超えるため、要求値のほうを下げておく。
+max-open-files = 4096
 
 [raftdb]
 max-background-jobs = 2
+max-open-files = 4096
