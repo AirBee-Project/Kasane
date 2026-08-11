@@ -735,6 +735,39 @@ impl TikvWrite<'_> {
         Ok(routed)
     }
 
+    /// ロック済みのリーフ群へ変更を適用し、生じた変更をまとめて溜める。
+    ///
+    /// **計算は blocking タスクで回す。** リーフ 1 枚ごとに rkyv の復元と直列化が走る
+    /// 重い処理で、非同期ワーカー上に置くとハートビートまで巻き添えにする
+    /// （リーフの書き換えの節を参照）。ネットワークに触れるのはこの前後だけなので、
+    /// 計算をまるごと外へ出せる。
+    async fn apply_leaves(
+        &mut self,
+        table_id: TableId,
+        index: Option<TableDataType>,
+        leaves: Vec<RoutedLeaf>,
+        op: OwnedLeafOp,
+    ) -> Result<(), AppError> {
+        if leaves.is_empty() {
+            return Ok(());
+        }
+        // blocking タスクは呼び出し元のスパンを引き継がないので、明示的に渡す。
+        let span = tracing::Span::current();
+        let mutations = tokio::task::spawn_blocking(move || {
+            span.in_scope(|| {
+                let mut out = Vec::new();
+                for leaf in &leaves {
+                    apply_leaf(table_id, index, leaf, &op.borrow(), &mut out)?;
+                }
+                Ok::<_, AppError>(out)
+            })
+        })
+        .await
+        .map_err(|e| AppError::InternalError(format!("leaf write task: {e}")))??;
+
+        self.stage(mutations).await
+    }
+
     #[tracing::instrument(skip_all, fields(table_id = %table_id))]
     pub(super) async fn data_insert_impl(
         &mut self,
@@ -744,17 +777,9 @@ impl TikvWrite<'_> {
         data: &[u8],
     ) -> Result<(), AppError> {
         let flex_ids: Vec<FlexId> = ids.flex_ids().collect();
-        for leaf in self.lock_target_leaves(table_id, &flex_ids).await?.leaves {
-            let map = leaf.leaf_map()?;
-            let targets = leaf.queries;
-            self.apply_leaf(table_id, index, leaf.region, map, &targets, |m| {
-                for flex_id in &targets {
-                    m.insert(*flex_id, data.to_vec());
-                }
-            })
-            .await?;
-        }
-        Ok(())
+        let leaves = self.lock_target_leaves(table_id, &flex_ids).await?.leaves;
+        self.apply_leaves(table_id, index, leaves, OwnedLeafOp::Insert(data.to_vec()))
+            .await
     }
 
     #[tracing::instrument(skip_all, fields(table_id = %table_id))]
@@ -766,24 +791,9 @@ impl TikvWrite<'_> {
         data: &[u8],
     ) -> Result<(), AppError> {
         let flex_ids: Vec<FlexId> = ids.flex_ids().collect();
-        let data_vec = data.to_vec();
-        for leaf in self.lock_target_leaves(table_id, &flex_ids).await?.leaves {
-            let map = leaf.leaf_map()?;
-            let targets = leaf.queries;
-            self.apply_leaf(table_id, index, leaf.region, map, &targets, |m| {
-                let mut target_set = SpatialIdSet::new();
-                for flex_id in &targets {
-                    let occupied: SpatialIdSet = m.get(flex_id).map(|(f, _)| f).collect();
-                    target_set.clear();
-                    target_set.insert(*flex_id);
-                    for f in (&target_set - &occupied).flex_ids() {
-                        m.insert(f, data_vec.clone());
-                    }
-                }
-            })
-            .await?;
-        }
-        Ok(())
+        let leaves = self.lock_target_leaves(table_id, &flex_ids).await?.leaves;
+        self.apply_leaves(table_id, index, leaves, OwnedLeafOp::Upsert(data.to_vec()))
+            .await
     }
 
     #[tracing::instrument(skip_all, fields(table_id = %table_id))]
@@ -796,19 +806,9 @@ impl TikvWrite<'_> {
         let flex_ids: Vec<FlexId> = ids.flex_ids().collect();
         let routing = self.lock_target_leaves(table_id, &flex_ids).await?;
 
-        let mut affected: Vec<FlexId> = Vec::new();
-        for leaf in routing.leaves {
-            let map = leaf.leaf_map()?;
-            let targets = leaf.queries;
-            let region = leaf.region;
-            self.apply_leaf(table_id, index, region, map, &targets, |m| {
-                for flex_id in &targets {
-                    m.remove(flex_id);
-                }
-            })
+        let affected: Vec<FlexId> = routing.leaves.iter().map(|leaf| leaf.region).collect();
+        self.apply_leaves(table_id, index, routing.leaves, OwnedLeafOp::Remove)
             .await?;
-            affected.push(region);
-        }
 
         // 同じ親を持つ兄弟がそれぞれ上へ辿ると、先の統合で消えた領域を後から調べに
         // 行くことになる。決着のついた領域を共有して 1 度で終わらせる。
@@ -820,178 +820,286 @@ impl TikvWrite<'_> {
         Ok(())
     }
 
-    /// 1 つのリーフへの変更を適用し、値インデックスを差分更新してから保存する。
-    ///
-    /// `index` が `None`（索引を維持しないテーブル）なら、索引の差分計算そのものを飛ばす。
-    /// 索引キーは格納 `FlexId` 1 件につき 1 つ増えるので、ここを通るかどうかで
-    /// 1 回の書き込みが触るキー数が 3 桁変わる。
-    async fn apply_leaf<F>(
-        &mut self,
-        table_id: TableId,
-        index: Option<TableDataType>,
-        region: FlexId,
-        mut map: SpatialIdMap<Vec<u8>>,
-        input: &[FlexId],
-        modify: F,
-    ) -> Result<(), AppError>
-    where
-        F: FnOnce(&mut SpatialIdMap<Vec<u8>>),
-    {
-        let Some(data_type) = index else {
-            modify(&mut map);
-            return self.store_shard(table_id, region, map).await;
-        };
+    /// 溜めた変更をトランザクションへ渡す。
+    async fn stage(&mut self, mutations: Vec<kv::Mutation>) -> Result<(), AppError> {
+        kv::mutate_many(&self.txn, mutations).await
+    }
+}
 
-        let scan: SpatialIdSet = input.iter().cloned().collect();
+// --- リーフの書き換え（純粋な計算） ---
+//
+// ここから下はネットワークに触れない。ロック済みのリーフのバイト列を受け取り、
+// 適用すべき変更（[`kv::Mutation`]）を組み立てて返すだけである。
+//
+// 分けてあるのは、この計算が**重い**からである。リーフ 1 枚につき rkyv の復元
+// （`SpatialIdMap::from_bytes` は `Arc` 木を丸ごと組み直す）と直列化が走り、
+// 分割が起きればさらに増える。これを非同期ワーカー上で回すと、そのワーカーは
+// その間まったく他のタスクを進められない。
+//
+// 巻き添えになるのは無関係なリクエストだけではない。**tikv-client が spawn した
+// ハートビート**もワーカーを待つ。ハートビートはロックの寿命（20 秒）を 10 秒ごとに
+// 延ばしているので、そこが遅れるとロックが期限切れになり、他者に回収される。
+// 回収された側は失敗し、待っていた側は `Failed to resolve lock` を受け取る。
+// つまり**CPU をワーカーへ置いたままにすると、負荷が上がったときに書き込みが落ちる**。
+//
+// 呼び出し側は [`TikvWrite::apply_leaves`] でここを blocking タスクへ出す。
 
-        // 変更前の重なりリーフからインデックスキーを計算。
-        let mut old_keys = FxHashSet::default();
-        let mut pre_modify_scan = scan.clone();
-        for f_scan in scan.iter() {
-            for (f, v) in map.get_overlapping(&f_scan) {
-                old_keys.insert(index_key(table_id, data_type, v, &f));
-                pre_modify_scan.insert(f);
+/// 1 枚のリーフに何をするか。
+enum LeafOp<'a> {
+    /// 対象の空間 ID すべてへ書く（既存値は上書き）。
+    Insert(&'a [u8]),
+    /// まだ値の無い空間 ID にだけ書く。
+    Upsert(&'a [u8]),
+    /// 対象の空間 ID の値を消す。
+    Remove,
+}
+
+/// [`LeafOp`] の所有版。blocking タスクへ移すために借用を持たない形にしてある。
+enum OwnedLeafOp {
+    Insert(Vec<u8>),
+    Upsert(Vec<u8>),
+    Remove,
+}
+
+impl OwnedLeafOp {
+    fn borrow(&self) -> LeafOp<'_> {
+        match self {
+            OwnedLeafOp::Insert(data) => LeafOp::Insert(data),
+            OwnedLeafOp::Upsert(data) => LeafOp::Upsert(data),
+            OwnedLeafOp::Remove => LeafOp::Remove,
+        }
+    }
+}
+
+impl LeafOp<'_> {
+    fn apply(&self, map: &mut SpatialIdMap<Vec<u8>>, targets: &[FlexId]) {
+        match self {
+            LeafOp::Insert(data) => {
+                for flex_id in targets {
+                    map.insert(*flex_id, data.to_vec());
+                }
+            }
+            LeafOp::Upsert(data) => {
+                let mut target_set = SpatialIdSet::new();
+                for flex_id in targets {
+                    let occupied: SpatialIdSet = map.get(flex_id).map(|(f, _)| f).collect();
+                    target_set.clear();
+                    target_set.insert(*flex_id);
+                    for f in (&target_set - &occupied).flex_ids() {
+                        map.insert(f, data.to_vec());
+                    }
+                }
+            }
+            LeafOp::Remove => {
+                for flex_id in targets {
+                    map.remove(flex_id);
+                }
             }
         }
+    }
+}
 
-        modify(&mut map);
+/// 1 つのリーフへの変更を適用し、値インデックスの差分と保存を変更として組み立てる。
+///
+/// `index` が `None`（索引を維持しないテーブル）なら、索引の差分計算そのものを飛ばす。
+/// 索引キーは格納 `FlexId` 1 件につき 1 つ増えるので、ここを通るかどうかで
+/// 1 回の書き込みが触るキー数が 3 桁変わる。
+fn apply_leaf(
+    table_id: TableId,
+    index: Option<TableDataType>,
+    leaf: &RoutedLeaf,
+    op: &LeafOp<'_>,
+    out: &mut Vec<kv::Mutation>,
+) -> Result<(), AppError> {
+    let mut map = leaf.leaf_map()?;
+    let targets = &leaf.queries;
 
-        // 変更後の重なりリーフからインデックスキーを計算。
+    let Some(data_type) = index else {
+        op.apply(&mut map, targets);
+        return store_shard(table_id, leaf.region, map, out);
+    };
+
+    let scan: SpatialIdSet = targets.iter().cloned().collect();
+
+    // 変更前の重なりリーフからインデックスキーを計算。
+    let mut old_keys = FxHashSet::default();
+    let mut pre_modify_scan = scan.clone();
+    for f_scan in scan.iter() {
+        for (f, v) in map.get_overlapping(&f_scan) {
+            old_keys.insert(index_key(table_id, data_type, v, &f));
+            pre_modify_scan.insert(f);
+        }
+    }
+
+    op.apply(&mut map, targets);
+
+    // 変更後の重なりリーフからインデックスキーを計算。
+    let mut new_keys = FxHashSet::default();
+    for f_scan in pre_modify_scan.iter() {
+        for (f, v) in map.get_overlapping(&f_scan) {
+            new_keys.insert(index_key(table_id, data_type, v, &f));
+        }
+    }
+
+    kv::value_index_mutations(&old_keys, &new_keys, out);
+    store_shard(table_id, leaf.region, map, out)
+}
+
+/// 変更後のリーフを保存する。過大なら分割し、空なら削除する。
+fn store_shard(
+    table_id: TableId,
+    region: FlexId,
+    map: SpatialIdMap<Vec<u8>>,
+    out: &mut Vec<kv::Mutation>,
+) -> Result<(), AppError> {
+    if !map.should_split_shard(MAX_FLEX_ID_PER_SHARD) {
+        if map.is_empty() {
+            out.extend(kv::shard_deletions(table_id, &region));
+        } else {
+            put_leaf(table_id, &region, &map, out)?;
+        }
+        return Ok(());
+    }
+
+    // 分割が必要 → パス圧縮した被覆子領域を構築し、親をポインタノードにする。
+    //
+    // 子領域へ他者が到達する経路は今は存在しない（到達するには親がポインタノードで
+    // ある必要があり、それを作るのがこの処理自身）。したがって子のロックを別途
+    // 取る必要はなく、書き込み時の暗黙ロックで足りる。
+    let mut children = Vec::new();
+    let ((lo_r, lo), (hi_r, hi)) = map
+        .split_shard()
+        .ok_or_else(|| AppError::InternalError("split on shardless map".to_string()))?;
+    emit_child(table_id, lo_r, lo, &mut children, out)?;
+    emit_child(table_id, hi_r, hi, &mut children, out)?;
+
+    out.extend(kv::shard_mutations(
+        table_id,
+        &region,
+        &ShardEntry::encode_pointers(&children),
+    )?);
+    Ok(())
+}
+
+/// 分割された子シャードを保存するか、さらに分割するかを決める（パス圧縮の本体）。
+///
+/// 同期関数なので普通に再帰できる（非同期だった頃は `Box::pin` で間接化していた）。
+fn emit_child(
+    table_id: TableId,
+    cr: FlexId,
+    cm: SpatialIdMap<Vec<u8>>,
+    covers: &mut Vec<FlexId>,
+    out: &mut Vec<kv::Mutation>,
+) -> Result<(), AppError> {
+    if cm.is_empty() {
+        // 空領域：被覆として領域だけ積む。万一の古いキーは消す。
+        out.extend(kv::shard_deletions(table_id, &cr));
+        covers.push(cr);
+        return Ok(());
+    }
+    if !cm.should_split_shard(MAX_FLEX_ID_PER_SHARD) {
+        put_leaf(table_id, &cr, &cm, out)?;
+        covers.push(cr);
+        return Ok(());
+    }
+
+    // 過大：1 段だけ覗いて、退化分割か実分割かを決める。
+    let ((clo_r, clo), (chi_r, chi)) = cm
+        .split_shard()
+        .ok_or_else(|| AppError::InternalError("split on shardless map".to_string()))?;
+
+    if clo.is_empty() || chi.is_empty() {
+        // 退化分割：中間ポインタを作らず孫を巻き上げる（チェーン圧縮）。
+        emit_child(table_id, clo_r, clo, covers, out)?;
+        emit_child(table_id, chi_r, chi, covers, out)?;
+    } else {
+        // 実分割：cr を独立ポインタノードにする。
+        let mut grand = Vec::new();
+        emit_child(table_id, clo_r, clo, &mut grand, out)?;
+        emit_child(table_id, chi_r, chi, &mut grand, out)?;
+        out.extend(kv::shard_mutations(
+            table_id,
+            &cr,
+            &ShardEntry::encode_pointers(&grand),
+        )?);
+        covers.push(cr);
+    }
+    Ok(())
+}
+
+/// リーフを件数ヘッダ付きで保存する。
+fn put_leaf(
+    table_id: TableId,
+    region: &FlexId,
+    map: &SpatialIdMap<Vec<u8>>,
+    out: &mut Vec<kv::Mutation>,
+) -> Result<(), AppError> {
+    let bytes = map
+        .to_bytes()
+        .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
+    out.extend(kv::shard_mutations(
+        table_id,
+        region,
+        &ShardEntry::encode_leaf(map.count() as u32, &bytes),
+    )?);
+    Ok(())
+}
+
+/// 親へ畳んだ結果を変更として組み立てる（[`TikvWrite::try_merge_up`] の重い部分）。
+///
+/// 子のバイト列はロック時に手元へ来ているので引き直さない。
+fn merge_children(
+    table_id: TableId,
+    index: Option<TableDataType>,
+    parent_region: FlexId,
+    child_regions: &[FlexId],
+    locked: &std::collections::BTreeMap<FlexId, Option<ShardValue>>,
+) -> Result<Vec<kv::Mutation>, AppError> {
+    let mut child_maps: Vec<SpatialIdMap<Vec<u8>>> = Vec::new();
+    for cr in child_regions {
+        let entry = locked.get(cr).and_then(|v| v.as_ref());
+        let map = decode_leaf(cr, entry.map(ShardValue::entry))?;
+        if !map.is_empty() {
+            child_maps.push(map);
+        }
+    }
+
+    // 索引を維持しないテーブルでは、統合は木の形を変えるだけ。`(FlexId, 値)` の
+    // 対応は親へ移っても変わらないので、索引の差分計算そのものが要らない。
+    let old_keys = index.map(|data_type| {
+        let mut keys = FxHashSet::default();
+        for m in &child_maps {
+            for (f, v) in m.iter() {
+                keys.insert(index_key(table_id, data_type, v, &f));
+            }
+        }
+        keys
+    });
+
+    let merged = SpatialIdMap::merge_shards(parent_region, child_maps)?;
+
+    let mut out = Vec::new();
+    if let (Some(data_type), Some(old_keys)) = (index, old_keys) {
         let mut new_keys = FxHashSet::default();
-        for f_scan in pre_modify_scan.iter() {
-            for (f, v) in map.get_overlapping(&f_scan) {
-                new_keys.insert(index_key(table_id, data_type, v, &f));
-            }
+        for (f, v) in merged.iter() {
+            new_keys.insert(index_key(table_id, data_type, v, &f));
         }
-
-        self.update_value_index(old_keys, new_keys).await?;
-        self.store_shard(table_id, region, map).await
+        kv::value_index_mutations(&old_keys, &new_keys, &mut out);
     }
 
-    /// 値インデックスの差分だけを反映する。
-    async fn update_value_index(
-        &mut self,
-        old_keys: FxHashSet<Vec<u8>>,
-        new_keys: FxHashSet<Vec<u8>>,
-    ) -> Result<(), AppError> {
-        // 削除と書き込みをまとめて 1 回のリクエストにする。`write_batch` が
-        // キー順に並べ替えるので、キーが連続してリージョン跨ぎのアクセスが減り、
-        // 順序が固定されることでデッドロックも避けられる。
-        kv::write_batch(
-            &self.txn,
-            old_keys.difference(&new_keys).cloned(),
-            new_keys
-                .difference(&old_keys)
-                .map(|key| (key.clone(), Vec::new())),
-        )
-        .await
+    // 親キーをリーフ（空なら削除）に置換し、子キーを削除する。
+    if merged.is_empty() {
+        out.extend(kv::shard_deletions(table_id, &parent_region));
+    } else {
+        put_leaf(table_id, &parent_region, &merged, &mut out)?;
     }
-
-    /// 変更後のリーフを保存する。過大なら分割し、空なら削除する。
-    async fn store_shard(
-        &mut self,
-        table_id: TableId,
-        region: FlexId,
-        map: SpatialIdMap<Vec<u8>>,
-    ) -> Result<(), AppError> {
-        if !map.should_split_shard(MAX_FLEX_ID_PER_SHARD) {
-            if map.is_empty() {
-                kv::delete_shard(&self.txn, table_id, &region).await?;
-            } else {
-                self.put_leaf(table_id, &region, &map).await?;
-            }
-            return Ok(());
-        }
-
-        // 分割が必要 → パス圧縮した被覆子領域を構築し、親をポインタノードにする。
-        //
-        // 子領域へ他者が到達する経路は今は存在しない（到達するには親がポインタノードで
-        // ある必要があり、それを作るのがこの処理自身）。したがって子のロックを別途
-        // 取る必要はなく、書き込み時の暗黙ロックで足りる。
-        let mut children = Vec::new();
-        let ((lo_r, lo), (hi_r, hi)) = map
-            .split_shard()
-            .ok_or_else(|| AppError::InternalError("split on shardless map".to_string()))?;
-        self.emit_child(table_id, lo_r, lo, &mut children).await?;
-        self.emit_child(table_id, hi_r, hi, &mut children).await?;
-
-        kv::put_shard(
-            &self.txn,
-            table_id,
-            &region,
-            &ShardEntry::encode_pointers(&children),
-        )
-        .await
+    for cr in child_regions {
+        out.extend(kv::shard_deletions(table_id, cr));
     }
+    Ok(out)
+}
 
-    /// 分割された子シャードを保存するか、さらに分割するかを決める（パス圧縮の本体）。
-    fn emit_child<'s>(
-        &'s mut self,
-        table_id: TableId,
-        cr: FlexId,
-        cm: SpatialIdMap<Vec<u8>>,
-        out: &'s mut Vec<FlexId>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 's>> {
-        // async fn の再帰なので明示的に間接化する。
-        Box::pin(async move {
-            if cm.is_empty() {
-                // 空領域：被覆として領域だけ積む。万一の古いキーは消す。
-                kv::delete_shard(&self.txn, table_id, &cr).await?;
-                out.push(cr);
-                return Ok(());
-            }
-            if !cm.should_split_shard(MAX_FLEX_ID_PER_SHARD) {
-                self.put_leaf(table_id, &cr, &cm).await?;
-                out.push(cr);
-                return Ok(());
-            }
-
-            // 過大：1 段だけ覗いて、退化分割か実分割かを決める。
-            let ((clo_r, clo), (chi_r, chi)) = cm
-                .split_shard()
-                .ok_or_else(|| AppError::InternalError("split on shardless map".to_string()))?;
-
-            if clo.is_empty() || chi.is_empty() {
-                // 退化分割：中間ポインタを作らず孫を巻き上げる（チェーン圧縮）。
-                self.emit_child(table_id, clo_r, clo, out).await?;
-                self.emit_child(table_id, chi_r, chi, out).await?;
-            } else {
-                // 実分割：cr を独立ポインタノードにする。
-                let mut grand = Vec::new();
-                self.emit_child(table_id, clo_r, clo, &mut grand).await?;
-                self.emit_child(table_id, chi_r, chi, &mut grand).await?;
-                kv::put_shard(
-                    &self.txn,
-                    table_id,
-                    &cr,
-                    &ShardEntry::encode_pointers(&grand),
-                )
-                .await?;
-                out.push(cr);
-            }
-            Ok(())
-        })
-    }
-
-    /// リーフを件数ヘッダ付きで保存する。
-    async fn put_leaf(
-        &mut self,
-        table_id: TableId,
-        region: &FlexId,
-        map: &SpatialIdMap<Vec<u8>>,
-    ) -> Result<(), AppError> {
-        let bytes = map
-            .to_bytes()
-            .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
-        kv::put_shard(
-            &self.txn,
-            table_id,
-            region,
-            &ShardEntry::encode_leaf(map.count() as u32, &bytes),
-        )
-        .await
-    }
-
+impl TikvWrite<'_> {
     /// 削除でデータ量が減ったリーフを親へ統合し、可能な限り木を圧縮する。
     ///
     /// 統合は親と**その全子**を書き換えるので、判断の前にその集合をまとめてロックする。
@@ -1070,48 +1178,18 @@ impl TikvWrite<'_> {
                 break;
             }
 
-            // マージ可能が確定してから、子マップを復元する。
-            // バイト列はロック時に手元へ来ているので引き直さない。
-            let mut child_maps: Vec<SpatialIdMap<Vec<u8>>> = Vec::new();
-            for cr in &child_regions {
-                let entry = locked.get(cr).and_then(|v| v.as_ref());
-                let map = decode_leaf(cr, entry.map(ShardValue::entry))?;
-                if !map.is_empty() {
-                    child_maps.push(map);
-                }
-            }
+            // ここから先は重い（子マップの復元・統合・直列化）ので blocking タスクへ出す。
+            // 非同期ワーカー上に置くとハートビートを巻き添えにする
+            // （リーフの書き換えの節を参照）。
+            let span = tracing::Span::current();
+            let regions = child_regions.clone();
+            let mutations = tokio::task::spawn_blocking(move || {
+                span.in_scope(|| merge_children(table_id, index, parent_region, &regions, &locked))
+            })
+            .await
+            .map_err(|e| AppError::InternalError(format!("shard merge task: {e}")))??;
 
-            // 索引を維持しないテーブルでは、統合は木の形を変えるだけ。`(FlexId, 値)` の
-            // 対応は親へ移っても変わらないので、索引の差分計算そのものが要らない。
-            let old_keys = index.map(|data_type| {
-                let mut keys = FxHashSet::default();
-                for m in &child_maps {
-                    for (f, v) in m.iter() {
-                        keys.insert(index_key(table_id, data_type, v, &f));
-                    }
-                }
-                keys
-            });
-
-            let merged = SpatialIdMap::merge_shards(parent_region, child_maps)?;
-
-            if let (Some(data_type), Some(old_keys)) = (index, old_keys) {
-                let mut new_keys = FxHashSet::default();
-                for (f, v) in merged.iter() {
-                    new_keys.insert(index_key(table_id, data_type, v, &f));
-                }
-                self.update_value_index(old_keys, new_keys).await?;
-            }
-
-            // 親キーをリーフ（空なら削除）に置換し、子キーを削除する。
-            if merged.is_empty() {
-                kv::delete_shard(&self.txn, table_id, &parent_region).await?;
-            } else {
-                self.put_leaf(table_id, &parent_region, &merged).await?;
-            }
-            for cr in &child_regions {
-                kv::delete_shard(&self.txn, table_id, cr).await?;
-            }
+            self.stage(mutations).await?;
 
             // 子はもう存在しない。兄弟がここから上を辿り直さないよう印を付ける。
             settled.extend(child_regions);

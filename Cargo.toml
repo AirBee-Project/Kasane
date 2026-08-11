@@ -72,4 +72,16 @@ opt-level = 3
 lto = "fat"
 codegen-units = 1
 strip = true
-panic = "abort"
+# panic は巻き戻す（`abort` にしない）。
+#
+# 依存ライブラリの panic 1 つでプロセスが落ちるのは、データベースとして割に合わない。
+# 実際 tikv-client 0.3 は PD の応答に対して `unwrap()` を置いており、PD が一時的に
+# リーダ不在を返すと `pd/cluster.rs` の `resp.leader.as_ref().unwrap()` で落ちる。
+# これはリクエスト処理中の経路なので、`abort` だとサーバごと巻き添えになる。
+#
+# 巻き戻しなら tokio がタスク単位で panic を捕まえるので、被害はその 1 リクエストで済む。
+# 代償はバイナリサイズと僅かな実行コストだが、可用性と引き換えにする理由はない。
+#
+# なお `tikv_client::CheckLevel::Warn` を使っているのも同じ動機
+# （`repositories::tikv` のトランザクションの開き方を参照）。あちらは踏まないように
+# したが、依存の内側の `unwrap()` はこちらでは塞げない。

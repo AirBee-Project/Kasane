@@ -15,7 +15,7 @@
 use kasane::error::AppError;
 use kasane::models::database::table::{Table, TableDataType};
 use kasane::models::id::TableId;
-use kasane::repositories::tikv::{TikvConfig, TikvDb};
+use kasane::repositories::tikv::{GcConfig, TikvConfig, TikvDb};
 use kasane::repositories::{ReadRepository, Storage, WriteRepository};
 use kasane_logic::{SingleId, SpatialIdSet};
 
@@ -514,8 +514,8 @@ async fn removing_a_table_retires_it_and_gc_reclaims_the_data() {
     assert!(listed.is_empty(), "削除したテーブルが一覧に残っている");
 
     // 回収を回すと実体が消える。何度回しても壊れない（冪等）。
-    db.sweep_retired_tables().await.unwrap();
-    db.sweep_retired_tables().await.unwrap();
+    db.sweep_retired_tables(&GcConfig::eager()).await.unwrap();
+    db.sweep_retired_tables(&GcConfig::eager()).await.unwrap();
 
     assert_eq!(
         db.read(async move |r| r.table_count(table.id).await)

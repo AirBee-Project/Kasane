@@ -14,7 +14,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 use kasane_logic::FlexId;
-use tikv_client::proto::kvrpcpb::{Assertion, Mutation, Op};
+use rustc_hash::FxHashSet;
+pub(super) use tikv_client::proto::kvrpcpb::Mutation;
+use tikv_client::proto::kvrpcpb::{Assertion, Op};
 use tikv_client::{BoundRange, Snapshot, Timestamp, Transaction, TransactionClient};
 use tokio::sync::{Mutex, MutexGuard};
 
@@ -258,8 +260,12 @@ impl LazyTxn {
     /// tikv のエラーを記録しつつそのまま返す。
     ///
     /// 競合由来なら印を付けておき、`Storage::write` に新しいトランザクションで
-    /// やり直させる。**このトランザクションが出すエラーは必ずここを通る**
-    /// （下のメソッドがすべて自分で通す）ので、呼び出し側が記録し忘れる余地がない。
+    /// やり直させる。
+    ///
+    /// **このトランザクションが出す失敗は読み書きを問わずここを通すこと。** 通し忘れると
+    /// その失敗は `Storage::write` から「ただのアプリケーションエラー」に見え、
+    /// やり直されずに 500 として出ていく。読み取り側（[`Reader`] 実装）も同様で、
+    /// 木の降下が他者のロックに当たる経路があるため対象になる。
     fn note(&mut self, err: tikv_client::Error) -> tikv_client::Error {
         if super::is_retryable(&err) {
             self.conflicted = true;
@@ -406,7 +412,15 @@ impl Drop for LazyTxn {
     }
 }
 
-/// 読み取りは**自分の未送信の変更を先に見る**。
+/// 読み取りは**自分の未送信の変更を先に見る**。そして**失敗は必ず
+/// [`note`](LazyTxn::note) を通す**。
+///
+/// 後者は競合の取りこぼしを防ぐためにある。木の降下も含めて、書き込みトランザクション上の
+/// 読み取りは他者のロックに当たりうる。当たると tikv-client は `resolve_lock` で解決を
+/// 試み、相手がまだ生きていれば backoff（合計 1.5 秒ほど）を使い切って
+/// `ResolveLockError` を返す。**これは「今その相手が握っている」だけなのでやり直せば通る**
+/// が、`note` を通さないと `Storage::write` は競合だと気づけず、1 回で 500 を返してしまう。
+/// 混雑したときにだけ出るので、取りこぼしても空いていれば気づけない。
 ///
 /// 変更はコミット直前まで手元に溜まる（[`LazyTxn::pending`]）ので、TiKV へ聞いても
 /// 自分の書き込みは映っていない。1 つの書き込みクロージャが「書いてから読む」ことは
@@ -417,7 +431,8 @@ impl Reader for LazyTxn {
         if let Some(staged) = self.pending.get(&key) {
             return Ok(staged.clone());
         }
-        self.open().await?.read_one(key).await
+        let result = self.open().await?.read_one(key).await;
+        result.map_err(|e| self.note(e))
     }
 
     async fn read_many(
@@ -439,7 +454,8 @@ impl Reader for LazyTxn {
         let mut out = if ask.is_empty() {
             Vec::new()
         } else {
-            self.open().await?.read_many(ask).await?
+            let result = self.open().await?.read_many(ask).await;
+            result.map_err(|e| self.note(e))?
         };
         out.append(&mut staged);
         Ok(out)
@@ -451,7 +467,8 @@ impl Reader for LazyTxn {
         range: BoundRange,
         limit: u32,
     ) -> Result<Vec<(Vec<u8>, Vec<u8>)>, tikv_client::Error> {
-        self.open().await?.read_range(range, limit).await
+        let result = self.open().await?.read_range(range, limit).await;
+        result.map_err(|e| self.note(e))
     }
 
     async fn read_range_keys(
@@ -459,7 +476,8 @@ impl Reader for LazyTxn {
         range: BoundRange,
         limit: u32,
     ) -> Result<Vec<Vec<u8>>, tikv_client::Error> {
-        self.open().await?.read_range_keys(range, limit).await
+        let result = self.open().await?.read_range_keys(range, limit).await;
+        result.map_err(|e| self.note(e))
     }
 
     fn staged_range(&self, start: &[u8], end: Option<&[u8]>) -> Vec<(Vec<u8>, Option<Vec<u8>>)> {
@@ -879,45 +897,52 @@ fn frame(entry: &[u8]) -> Vec<u8> {
 //
 // 2 本のキーが食い違わないよう、書き込みと削除は必ずこの節の関数を通す。
 
-/// シャードエントリを保存する。リーフなら件数キーも同時に更新する。
-pub(super) async fn put_shard(
-    txn: &Readers<LazyTxn>,
+/// シャードの保存を表す変更を組み立てる。**ネットワークには触れない。**
+///
+/// 本体と件数の 2 本を必ず一組で返すのが要点で、片方だけ書いて食い違わせないための入口。
+///
+/// 送信と分けてあるのは、書き込み経路の重い計算（rkyv の復元・直列化）を非同期ワーカーの
+/// 外へ出すため。変更を値として組み立てられれば、その計算ごと blocking タスクへ移せる
+/// （`data.rs` の書き込みの節を参照）。
+pub(super) fn shard_mutations(
     table_id: TableId,
     region: &FlexId,
     entry: &[u8],
-) -> Result<(), AppError> {
+) -> Result<[Mutation; 2], AppError> {
     let count_key = keys::shard_count(table_id, region);
     let count = match ShardEntry::leaf_count(entry)? {
         Some(count) => put_mutation(count_key, count.to_le_bytes().to_vec()),
         // ポインタノードは件数を持たない。リーフから昇格した場合に備えて消す。
         None => delete_mutation(count_key),
     };
-    // 本体と件数を 1 リクエストにまとめる。悲観トランザクションでは 1 キーごとに
-    // タイムスタンプ取得とロック RPC がかかるので、分けると往復が倍になる。
-    mutate_many(
-        txn,
-        vec![
-            put_mutation(keys::shard(table_id, region), frame(entry)),
-            count,
-        ],
-    )
-    .await
+    Ok([
+        put_mutation(keys::shard(table_id, region), frame(entry)),
+        count,
+    ])
 }
 
-/// シャードエントリを削除する（件数キーも一緒に消える）。
-pub(super) async fn delete_shard(
-    txn: &Readers<LazyTxn>,
-    table_id: TableId,
-    region: &FlexId,
-) -> Result<(), AppError> {
-    delete_many(
-        txn,
-        [
-            keys::shard(table_id, region),
-            keys::shard_count(table_id, region),
-        ],
-    )
-    .await
+/// シャードの削除を表す変更（本体と件数の両方）。
+pub(super) fn shard_deletions(table_id: TableId, region: &FlexId) -> [Mutation; 2] {
+    [
+        delete_mutation(keys::shard(table_id, region)),
+        delete_mutation(keys::shard_count(table_id, region)),
+    ]
+}
+
+/// 値インデックスの差分を表す変更を組み立てる。
+///
+/// 変更前後で同じキーは触らない（消してから書き直すと MVCC のバージョンが無駄に増える）。
+pub(super) fn value_index_mutations(
+    old_keys: &FxHashSet<Vec<u8>>,
+    new_keys: &FxHashSet<Vec<u8>>,
+    out: &mut Vec<Mutation>,
+) {
+    out.extend(old_keys.difference(new_keys).cloned().map(delete_mutation));
+    out.extend(
+        new_keys
+            .difference(old_keys)
+            .map(|key| put_mutation(key.clone(), Vec::new())),
+    );
 }
 
 /// シャード領域をまとめてロックし、**ロック時点の**内容を返す。

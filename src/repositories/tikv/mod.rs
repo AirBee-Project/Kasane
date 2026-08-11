@@ -111,6 +111,7 @@ mod query_source;
 mod repository;
 mod users;
 
+pub use gc::GcConfig;
 pub use init::TikvConfig;
 pub use query_source::TikvTableSource;
 
@@ -199,8 +200,8 @@ fn to_app_error(err: tikv_client::Error) -> AppError {
 //
 // tikv-client の既定は [`CheckLevel::Panic`] で、コミットも rollback もされないまま
 // [`Transaction`] が drop されると panic する。HTTP ハンドラの Future はクライアント
-// 切断で途中破棄されうるため、この経路は通常運用で踏まれる。リリースビルドは
-// `panic = "abort"` なので、踏めばプロセスごと落ちる。
+// 切断で途中破棄されうるため、この経路は**通常運用で踏まれる**。
+// 踏めばそのリクエストは巻き添えになるし、ログも panic で埋まる。
 //
 // そこでこのバックエンドは `begin_optimistic` / `begin_pessimistic` を直接使わず、
 // 必ず下の 2 つを通して開く。破棄の後始末は [`rollback_in_background`] が引き受け、
@@ -298,10 +299,21 @@ fn is_retryable(err: &tikv_client::Error) -> bool {
         // `conflict` は書き込み競合（悲観トランザクションでの `PessimisticRetry` を含む）、
         // `deadlock` は TiKV のデッドロック検出、`retryable` は
         // 「クライアントはトランザクションをやり直してよい」という明示の指示。
+        //
+        // `commit_ts_expired` と `txn_not_found` は**この試行が寿命切れになった**印。
+        // ロックには TTL があり、ハートビートで延ばし続けられなかった（＝処理が
+        // TTL より長くかかった、あるいはハートビートが遅れた）トランザクションは、
+        // 他者のロック解決によって巻き戻される。そのあとコミットしようとすると
+        // 「コミット時刻が遅すぎる」「そんなトランザクションは無い」と返る。
+        //
+        // **どちらも何もコミットされていない**ので、新しいトランザクションでやり直すのが
+        // 正しい。ここを落とすと、混雑して 1 件が遅くなったときに 500 になる。
         Error::KeyError(key_error) => {
             key_error.conflict.is_some()
                 || key_error.deadlock.is_some()
                 || !key_error.retryable.is_empty()
+                || key_error.commit_ts_expired.is_some()
+                || key_error.txn_not_found.is_some()
         }
         // 他者のロックが載ったキーへ prewrite しようとして、解決を待ちきれなかった。
         //
@@ -786,6 +798,31 @@ mod tests {
         assert!(is_retryable(&Error::ExtractedErrors(vec![
             Error::ResolveLockError(Vec::new()),
         ])));
+
+        // この試行が寿命切れになった印。何もコミットされていないのでやり直せる。
+        let expired = Error::KeyError(Box::new(tikv_client::proto::kvrpcpb::KeyError {
+            commit_ts_expired: Some(Default::default()),
+            ..Default::default()
+        }));
+        assert!(
+            is_retryable(&expired),
+            "TTL 切れ（commit_ts_expired）がやり直し対象から漏れている"
+        );
+        let vanished = Error::KeyError(Box::new(tikv_client::proto::kvrpcpb::KeyError {
+            txn_not_found: Some(Default::default()),
+            ..Default::default()
+        }));
+        assert!(
+            is_retryable(&vanished),
+            "巻き戻された試行（txn_not_found）がやり直し対象から漏れている"
+        );
+
+        // 競合でも寿命切れでもない `KeyError` は拾わない（無限にやり直さないため）。
+        let other = Error::KeyError(Box::new(tikv_client::proto::kvrpcpb::KeyError {
+            already_exist: Some(Default::default()),
+            ..Default::default()
+        }));
+        assert!(!is_retryable(&other));
 
         // コミットの成否が不明なものはやり直してはならない（二重適用になりうる）。
         assert!(!is_retryable(&Error::UndeterminedError(Box::new(
