@@ -2,7 +2,7 @@ use crate::{
     AppState,
     error::AppError,
     models::{database::table::data::ZoomLevelPolicy, spatial_id::SpatialId},
-    repositories::{ReadRepository, Storage, WriteRepository},
+    repositories::{ReadRepository, Storage},
     services::helpers::{spatial_ids::process_spatial_ids, value::interpret_value},
 };
 
@@ -32,11 +32,11 @@ pub async fn insert(
 
     let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
 
+    // 同じテーブルへの同時書き込みは 1 トランザクションへ畳む。
+    // 1 件ずつ別トランザクションで書くと、同じリーフを何度も丸ごと書き直したうえ、
+    // 互いにロックを奪い合う（`coalesce` モジュールを参照）。
     app_state
-        .db
-        .write(async move |w| {
-            w.data_insert(table.id, table.value_indexing(), ids, &value)
-                .await
-        })
+        .writes
+        .insert(table.id, table.value_indexing(), ids, value)
         .await
 }

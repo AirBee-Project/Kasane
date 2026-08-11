@@ -22,7 +22,7 @@ impl PermissionTestApp {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let db = lmdb_backend::initialize_database(temp_dir.path().to_str().unwrap());
 
-        let app_state = AppState { db };
+        let app_state = AppState::new(db);
         // We DO NOT inject the root token automatically here.
         // The tests will need to explicitly send the Authorization header.
         let app = kasane(app_state.clone());

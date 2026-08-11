@@ -102,6 +102,21 @@ pub trait WriteRepository: CatalogRepository {
         data: &[u8],
     ) -> Result<(), AppError>;
 
+    /// 値ごとに分かれた書き込みを**まとめて**適用する。
+    ///
+    /// `entries` は `(空間 ID, 値)` の並び。同じ空間 ID が複数回現れたら**後勝ち**で、
+    /// 1 件ずつ順に [`data_insert`](Self::data_insert) を呼んだのと同じ結果になる。
+    ///
+    /// 1 件ずつ呼ぶのと決定的に違うのは、**シャードを 1 度しか読み書きしないこと**。
+    /// このツリーは 1 件の変更でもリーフを丸ごと書き直すので、同じリーフへ N 件を
+    /// 別々に書くと**リーフのサイズ × N** を書くことになる。まとめれば 1 回で済む。
+    async fn data_insert_many(
+        &mut self,
+        table_id: TableId,
+        index: Option<TableDataType>,
+        entries: Vec<(SpatialIdSet, Vec<u8>)>,
+    ) -> Result<(), AppError>;
+
     async fn data_upsert(
         &mut self,
         table_id: TableId,

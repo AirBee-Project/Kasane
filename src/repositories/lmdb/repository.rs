@@ -232,6 +232,20 @@ impl WriteRepository for KasaneDbWrite<'_> {
         self.data_insert_impl(table_id, index, ids, data)
     }
 
+    async fn data_insert_many(
+        &mut self,
+        table_id: TableId,
+        index: Option<TableDataType>,
+        entries: Vec<(SpatialIdSet, Vec<u8>)>,
+    ) -> Result<(), AppError> {
+        // LMDB は単一ライタで mmap 上の局所操作なので、まとめる旨みは小さい。
+        // 同じ書き込みトランザクション内なので原子性は TiKV 側と同じ。
+        for (ids, value) in entries {
+            self.data_insert_impl(table_id, index, ids, &value)?;
+        }
+        Ok(())
+    }
+
     async fn data_upsert(
         &mut self,
         table_id: TableId,

@@ -236,6 +236,15 @@ impl WriteRepository for TikvWrite<'_> {
         self.data_insert_impl(table_id, index, ids, data).await
     }
 
+    async fn data_insert_many(
+        &mut self,
+        table_id: TableId,
+        index: Option<TableDataType>,
+        entries: Vec<(SpatialIdSet, Vec<u8>)>,
+    ) -> Result<(), AppError> {
+        self.data_insert_many_impl(table_id, index, entries).await
+    }
+
     async fn data_upsert(
         &mut self,
         table_id: TableId,

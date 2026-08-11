@@ -10,7 +10,7 @@ use crate::models::database::table::JsonValueType;
 use crate::models::users::UserRole;
 
 /// 認証 (Authentication) や認可 (Authorization) に関する失敗。
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AuthError {
     /// `Authorization` ヘッダが存在しない。
     MissingToken,
@@ -102,7 +102,9 @@ impl fmt::Display for AuthError {
     }
 }
 
-#[derive(Debug)]
+/// `Clone` なのは、1 つの結果を複数の待ち手へ配るため
+/// （`services::database::table::data::coalesce` が同じコミット結果をバッチ全員へ返す）。
+#[derive(Debug, Clone)]
 pub enum AppError {
     NotFound(String),
     /// 認証・認可に関する失敗（[`AuthError`] を参照）。

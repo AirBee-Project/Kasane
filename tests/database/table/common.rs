@@ -16,7 +16,7 @@ impl TestApp {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let db = kasane::repositories::lmdb::initialize_database(temp_dir.path().to_str().unwrap());
 
-        let app_state = kasane::AppState { db };
+        let app_state = kasane::AppState::new(db);
         let token = kasane::services::auth::generate_jwt(&app_state, "root")
             .await
             .unwrap();

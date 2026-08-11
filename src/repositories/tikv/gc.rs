@@ -31,7 +31,7 @@ use crate::repositories::Storage;
 
 use super::keys;
 use super::kv::{self, Reader};
-use super::{TikvDb, TikvRead, TikvWrite};
+use super::{TikvDb, TikvRead, TikvWrite, to_app_error};
 
 /// 1 トランザクションで消すキー数の上限。
 ///
@@ -58,9 +58,30 @@ const DEFAULT_SWEEP_INTERVAL_SECS: u64 = 60;
 /// 待たせるのが正しい。
 const DEFAULT_CHUNK_DELAY_MS: u64 = 200;
 
+/// MVCC の古いバージョンを残す時間（既定）。
+///
+/// **実行中の読み取りより長くすること。** クエリは開始時にタイムスタンプを固定して
+/// その断面を読み続ける（`query_snapshot`）。safepoint がその断面を追い越すと、
+/// 読もうとしていたバージョンが消えて実行中のクエリが失敗する。
+///
+/// 書き込みトランザクションも同様で、コミットまでに safepoint を跨ぐと巻き戻される。
+/// 実測で `write` が最大 20 秒台まで伸びることがあるので、桁で余裕を取ってある
+/// （TiDB の既定も 10 分）。
+const DEFAULT_MVCC_RETENTION_SECS: u64 = 600;
+
+/// MVCC GC を回す間隔（既定）。
+///
+/// `gc` は第 1 段階で**キー空間全体を走査してロックを解決する**ので安くはない。
+/// 保持期間より十分短ければよく、頻繁に回す意味はない。
+const DEFAULT_MVCC_INTERVAL_SECS: u64 = 300;
+
 /// 回収の進め方。環境変数で調整できる。
 #[derive(Debug, Clone)]
 pub struct GcConfig {
+    /// MVCC GC を回す間隔。**ゼロなら回さない。**
+    pub mvcc_interval: Duration,
+    /// MVCC の古いバージョンを残す時間。
+    pub mvcc_retention: Duration,
     /// 掃除の間隔。**ゼロなら回収を行わない**（一括投入の間だけ止める用途）。
     pub interval: Duration,
     /// チャンクとチャンクの間に空ける時間。
@@ -72,6 +93,8 @@ pub struct GcConfig {
 impl GcConfig {
     /// 環境変数から組み立てる。
     ///
+    /// - `KASANE_TIKV_MVCC_GC_INTERVAL_SECS`（既定 300、`0` で MVCC GC を止める）
+    /// - `KASANE_TIKV_MVCC_GC_RETENTION_SECS`（既定 600）
     /// - `KASANE_TIKV_GC_INTERVAL_SECS`（既定 60、`0` で回収を止める）
     /// - `KASANE_TIKV_GC_CHUNK_DELAY_MS`（既定 200）
     /// - `KASANE_TIKV_GC_MAX_CHUNKS`（既定 16）
@@ -83,6 +106,14 @@ impl GcConfig {
                 .unwrap_or(default)
         }
         Self {
+            mvcc_interval: Duration::from_secs(num(
+                "KASANE_TIKV_MVCC_GC_INTERVAL_SECS",
+                DEFAULT_MVCC_INTERVAL_SECS,
+            )),
+            mvcc_retention: Duration::from_secs(num(
+                "KASANE_TIKV_MVCC_GC_RETENTION_SECS",
+                DEFAULT_MVCC_RETENTION_SECS,
+            )),
             interval: Duration::from_secs(num(
                 "KASANE_TIKV_GC_INTERVAL_SECS",
                 DEFAULT_SWEEP_INTERVAL_SECS,
@@ -98,9 +129,11 @@ impl GcConfig {
         }
     }
 
-    /// 待たずに一気に回収する設定（テスト用）。
+    /// 待たずに一気に回収する設定（テスト用）。MVCC GC は回さない。
     pub fn eager() -> Self {
         Self {
+            mvcc_interval: Duration::ZERO,
+            mvcc_retention: Duration::from_secs(DEFAULT_MVCC_RETENTION_SECS),
             interval: Duration::from_secs(DEFAULT_SWEEP_INTERVAL_SECS),
             chunk_delay: Duration::ZERO,
             max_chunks_per_table: 64,
@@ -184,6 +217,85 @@ impl TikvDb {
         }
 
         Ok(total)
+    }
+
+    /// MVCC の古いバージョンを回収できるようにする（safepoint を進める）。
+    ///
+    /// # なぜ自前で回す必要があるのか
+    ///
+    /// TiKV はキーを更新するたびに新しいバージョンを**追記**し、古いものは GC でしか
+    /// 消えない。そしてその GC は「PD が保持する safepoint」を基準に動く。
+    ///
+    /// TiDB を伴う構成では TiDB の GC worker が safepoint を進めるが、**Kasane のように
+    /// TiKV を直接使う構成では誰も進めない**。放っておくと safepoint はゼロのままで、
+    /// **書いた全バージョンが永久に残る**。
+    ///
+    /// 1 件の書き込みがリーフ 1 枚（数百 KB になりうる）を丸ごと書き直す構造なので、
+    /// 同じ領域を更新し続けると版が積み上がる。定常状態のデータ量が論理的な量と
+    /// かけ離れていく原因はここにある。
+    ///
+    /// # 何をするか
+    ///
+    /// `safepoint = 現在時刻 - retention` を PD へ通知する。TiKV はそれより古い
+    /// バージョンを（コンパクションの過程で）落としてよいと判断する。
+    /// 副作用として、safepoint より古い放置ロックも解決される。
+    ///
+    /// **retention は実行中の読み取りより長くすること**（`DEFAULT_MVCC_RETENTION_SECS`）。
+    async fn advance_gc_safepoint(&self, retention: Duration) -> Result<(), AppError> {
+        use tikv_client::TimestampExt;
+
+        let now = self.client.current_timestamp().await.map_err(to_app_error)?;
+
+        // タイムスタンプは上位ビットがミリ秒。保持期間ぶん手前へ戻した時刻を safepoint にする。
+        let retention_ms = retention.as_millis() as i64;
+        if now.physical <= retention_ms {
+            // クラスタが立ち上がって間もない。戻す先が無いので何もしない。
+            return Ok(());
+        }
+        let safepoint = tikv_client::Timestamp {
+            physical: now.physical - retention_ms,
+            logical: 0,
+            ..Default::default()
+        };
+
+        // 返り値は「要求どおりの safepoint になったか」。他が先に進めていれば false になるが、
+        // それは競合ではなく単に相手のほうが新しいというだけなので、失敗として扱わない。
+        let applied = self
+            .client
+            .gc(safepoint.clone())
+            .await
+            .map_err(to_app_error)?;
+        tracing::debug!(
+            safepoint = safepoint.version(),
+            applied,
+            "advanced the MVCC gc safepoint"
+        );
+        Ok(())
+    }
+
+    /// MVCC GC を定期的に回す。設定がゼロなら回さない。
+    ///
+    /// 回収待ちテーブルの掃除（[`spawn_sweeper`](Self::spawn_sweeper)）とは**別の仕組み**。
+    /// あちらは「消したテーブルの現行データ」を消す。こちらは「生きているキーの古い版」を
+    /// 消せるようにする。片方だけでは容量は下がらない。
+    pub fn spawn_gc(&self, config: GcConfig) -> Option<tokio::task::JoinHandle<()>> {
+        if config.mvcc_interval.is_zero() {
+            tracing::warn!(
+                "MVCC garbage collection is disabled (KASANE_TIKV_MVCC_GC_INTERVAL_SECS=0);                  every version of every key will be kept forever"
+            );
+            return None;
+        }
+
+        let db = self.clone();
+        Some(tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(config.mvcc_interval).await;
+                if let Err(e) = db.advance_gc_safepoint(config.mvcc_retention).await {
+                    // 進められなくても次の周回で取り返せる。落とす理由はない。
+                    tracing::warn!("failed to advance the MVCC gc safepoint: {e}");
+                }
+            }
+        }))
     }
 
     /// 定期掃除を開始し、その [`JoinHandle`](tokio::task::JoinHandle) を返す。

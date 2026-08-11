@@ -18,7 +18,7 @@ impl DbTestApp {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let db = lmdb_backend::initialize_database(temp_dir.path().to_str().unwrap());
 
-        let app_state = AppState { db };
+        let app_state = AppState::new(db);
         let token = kasane::services::auth::generate_jwt(&app_state, "root")
             .await
             .unwrap();

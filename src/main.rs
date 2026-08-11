@@ -67,7 +67,7 @@ async fn main() {
         .await
         .expect("failed to open the storage backend");
 
-    let app = kasane(AppState { db });
+    let app = kasane(AppState::new(db));
 
     let address = SocketAddr::from(([0, 0, 0, 0], args.port));
     let listener = tokio::net::TcpListener::bind(address).await.unwrap();

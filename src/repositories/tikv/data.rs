@@ -782,6 +782,29 @@ impl TikvWrite<'_> {
             .await
     }
 
+    /// 値ごとに分かれた書き込みをまとめて適用する。
+    ///
+    /// **木の降下・ロック・リーフの書き直しをそれぞれ 1 回で済ませる。** 要素ごとに
+    /// `data_insert_impl` を呼ぶと、要素の数だけ降下（深さぶんの往復）とロック取得が
+    /// 直列に積み上がり、同じリーフを何度も復元・直列化し直すことになる。
+    /// 全要素の空間 ID をまとめて振り分けてからリーフごとに適用すれば、コストは
+    /// **触れたリーフの数**だけで決まる。
+    #[tracing::instrument(skip_all, fields(table_id = %table_id, entries = entries.len()))]
+    pub(super) async fn data_insert_many_impl(
+        &mut self,
+        table_id: TableId,
+        index: Option<TableDataType>,
+        entries: Vec<(SpatialIdSet, Vec<u8>)>,
+    ) -> Result<(), AppError> {
+        let (batch, flex_ids) = BatchWrite::new(entries);
+        if flex_ids.is_empty() {
+            return Ok(());
+        }
+        let leaves = self.lock_target_leaves(table_id, &flex_ids).await?.leaves;
+        self.apply_leaves(table_id, index, leaves, OwnedLeafOp::InsertMany(batch))
+            .await
+    }
+
     #[tracing::instrument(skip_all, fields(table_id = %table_id))]
     pub(super) async fn data_upsert_impl(
         &mut self,
@@ -852,6 +875,37 @@ enum LeafOp<'a> {
     Upsert(&'a [u8]),
     /// 対象の空間 ID の値を消す。
     Remove,
+    /// 空間 ID ごとに別々の値を書く（一括書き込み）。
+    InsertMany(&'a BatchWrite),
+}
+
+/// 値ごとに分かれた一括書き込みを、リーフへ適用できる形に畳んだもの。
+///
+/// `owner` が `flex_id → values` の添字を持つので、リーフの走査中は**ハッシュ 1 回で
+/// 書くべき値が決まる**。要素ごとに空間 ID 集合を持ち回って毎回交差を取ると、
+/// 要素数 × リーフの FlexId 数になってしまう。
+pub(super) struct BatchWrite {
+    /// 同じ空間 ID が複数回指定された場合は**後勝ち**（後から挿入した添字が残る）。
+    owner: FxHashMap<FlexId, u32>,
+    values: Vec<Vec<u8>>,
+}
+
+impl BatchWrite {
+    /// `(空間 ID, 値)` の並びから畳む。書き込み対象の全 `FlexId` も返す。
+    fn new(entries: Vec<(SpatialIdSet, Vec<u8>)>) -> (Self, Vec<FlexId>) {
+        let mut owner: FxHashMap<FlexId, u32> = FxHashMap::default();
+        let mut values = Vec::with_capacity(entries.len());
+        for (ids, value) in entries {
+            let slot = values.len() as u32;
+            values.push(value);
+            for flex_id in ids.flex_ids() {
+                // 後勝ち。1 件ずつ順に書いたときと同じ結果にする。
+                owner.insert(flex_id, slot);
+            }
+        }
+        let targets = owner.keys().copied().collect();
+        (Self { owner, values }, targets)
+    }
 }
 
 /// [`LeafOp`] の所有版。blocking タスクへ移すために借用を持たない形にしてある。
@@ -859,6 +913,7 @@ enum OwnedLeafOp {
     Insert(Vec<u8>),
     Upsert(Vec<u8>),
     Remove,
+    InsertMany(BatchWrite),
 }
 
 impl OwnedLeafOp {
@@ -867,6 +922,7 @@ impl OwnedLeafOp {
             OwnedLeafOp::Insert(data) => LeafOp::Insert(data),
             OwnedLeafOp::Upsert(data) => LeafOp::Upsert(data),
             OwnedLeafOp::Remove => LeafOp::Remove,
+            OwnedLeafOp::InsertMany(batch) => LeafOp::InsertMany(batch),
         }
     }
 }
@@ -893,6 +949,14 @@ impl LeafOp<'_> {
             LeafOp::Remove => {
                 for flex_id in targets {
                     map.remove(flex_id);
+                }
+            }
+            LeafOp::InsertMany(batch) => {
+                for flex_id in targets {
+                    // 降下で振り分けられた ID は必ず台帳にある。無ければ他所の ID なので飛ばす。
+                    if let Some(&slot) = batch.owner.get(flex_id) {
+                        map.insert(*flex_id, batch.values[slot as usize].clone());
+                    }
                 }
             }
         }

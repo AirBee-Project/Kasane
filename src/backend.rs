@@ -74,6 +74,9 @@ pub async fn open(target: &str) -> Result<Db, AppError> {
     let db = TikvDb::connect(TikvConfig::from_endpoints(target)).await?;
     // 論理削除されたテーブルの実体を回収し続ける常駐処理。プロセスの寿命を持つので、
     // 接続を開くたびではなくここで 1 度だけ起こす（`repositories::tikv::gc` を参照）。
-    db.spawn_sweeper(crate::repositories::tikv::GcConfig::from_env());
+    let gc_config = crate::repositories::tikv::GcConfig::from_env();
+    // 消したテーブルの実体回収と、生きているキーの古い版の回収。別々の仕組みなので両方要る。
+    db.spawn_sweeper(gc_config.clone());
+    db.spawn_gc(gc_config);
     Ok(db)
 }

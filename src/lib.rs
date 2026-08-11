@@ -18,6 +18,17 @@ pub mod telemetry;
 #[derive(Clone)]
 pub struct AppState {
     pub db: backend::Db,
+    /// 同じテーブルへの同時書き込みを 1 トランザクションへ畳む
+    /// （`services::database::table::data::coalesce`）。
+    pub writes: services::database::table::data::coalesce::WriteCoalescer,
+}
+
+impl AppState {
+    /// ストレージから状態一式を組み立てる。
+    pub fn new(db: backend::Db) -> Self {
+        let writes = services::database::table::data::coalesce::WriteCoalescer::new(db.clone());
+        Self { db, writes }
+    }
 }
 
 pub fn kasane(app_state: AppState) -> axum::Router {
