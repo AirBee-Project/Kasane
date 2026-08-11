@@ -4,7 +4,7 @@ pub mod storage;
 pub mod write;
 
 pub use catalog::CatalogRepository;
-pub use read::ReadRepository;
+pub use read::{ReadRepository, ResolvedTable};
 pub use storage::Storage;
 pub use write::WriteRepository;
 

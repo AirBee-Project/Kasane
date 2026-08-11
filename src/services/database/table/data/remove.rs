@@ -29,6 +29,6 @@ pub async fn remove(
 
     app_state
         .db
-        .write(async move |w| w.data_remove(table.id, table.data_type, ids).await)
+        .write(async move |w| w.data_remove(table.id, table.value_indexing(), ids).await)
         .await
 }

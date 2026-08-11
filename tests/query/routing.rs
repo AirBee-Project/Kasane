@@ -22,7 +22,7 @@ fn range_routing_reaches_the_same_leaves_as_id_routing() {
         let mut w = KasaneDbWrite::new(wtxn, &db);
         let mut set = SpatialIdSet::new();
         set.insert(SingleId::new(20, 0, 790000 + i, 500000).unwrap());
-        w.data_insert_impl(table_id, TableDataType::Int, set, &(i as i32).to_be_bytes())
+        w.data_insert_impl(table_id, Some(TableDataType::Int), set, &(i as i32).to_be_bytes())
             .unwrap();
         w.commit().unwrap();
     }
@@ -71,7 +71,7 @@ fn table_source_read_subset_returns_all_flex_ids() {
         let mut w = KasaneDbWrite::new(wtxn, &db);
         let mut set = SpatialIdSet::new();
         set.insert(SingleId::new(20, 0, 790000 + i, 500000).unwrap());
-        w.data_insert_impl(table_id, TableDataType::Int, set, &(i as i32).to_be_bytes())
+        w.data_insert_impl(table_id, Some(TableDataType::Int), set, &(i as i32).to_be_bytes())
             .unwrap();
         w.commit().unwrap();
     }

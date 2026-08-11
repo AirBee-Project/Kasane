@@ -34,6 +34,6 @@ pub async fn insert(
 
     app_state
         .db
-        .write(async move |w| w.data_insert(table.id, table.data_type, ids, &value).await)
+        .write(async move |w| w.data_insert(table.id, table.value_indexing(), ids, &value).await)
         .await
 }

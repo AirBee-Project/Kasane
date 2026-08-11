@@ -319,7 +319,7 @@ impl<'a> KasaneDbWrite<'a> {
     pub fn data_insert_impl(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
@@ -327,7 +327,7 @@ impl<'a> KasaneDbWrite<'a> {
         for (region, flex_ids) in by_leaf {
             let map =
                 shard::load_leaf_map(&self.db.tables_data, &self.write_txn, table_id, &region)?;
-            self.apply_leaf(table_id, data_type, region, map, &flex_ids, |m| {
+            self.apply_leaf(table_id, index, region, map, &flex_ids, |m| {
                 for flex_id in &flex_ids {
                     m.insert(*flex_id, data.to_vec());
                 }
@@ -342,7 +342,7 @@ impl<'a> KasaneDbWrite<'a> {
     pub fn data_upsert_impl(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
@@ -351,7 +351,7 @@ impl<'a> KasaneDbWrite<'a> {
         for (region, flex_ids) in by_leaf {
             let map =
                 shard::load_leaf_map(&self.db.tables_data, &self.write_txn, table_id, &region)?;
-            self.apply_leaf(table_id, data_type, region, map, &flex_ids, |m| {
+            self.apply_leaf(table_id, index, region, map, &flex_ids, |m| {
                 let mut target_set = SpatialIdSet::new();
                 for flex_id in &flex_ids {
                     let occupied_set: SpatialIdSet = m.get(flex_id).map(|(f, _)| f).collect();
@@ -373,7 +373,7 @@ impl<'a> KasaneDbWrite<'a> {
     pub fn data_remove_impl(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         ids: SpatialIdSet,
     ) -> Result<(), AppError> {
         let by_leaf = self.group_by_leaf(table_id, ids.flex_ids())?;
@@ -381,7 +381,7 @@ impl<'a> KasaneDbWrite<'a> {
         for (region, flex_ids) in by_leaf {
             let map =
                 shard::load_leaf_map(&self.db.tables_data, &self.write_txn, table_id, &region)?;
-            self.apply_leaf(table_id, data_type, region, map, &flex_ids, |m| {
+            self.apply_leaf(table_id, index, region, map, &flex_ids, |m| {
                 for flex_id in &flex_ids {
                     m.remove(flex_id);
                 }
@@ -389,7 +389,7 @@ impl<'a> KasaneDbWrite<'a> {
             affected.push(region);
         }
         for region in affected {
-            self.try_merge_up(table_id, data_type, region)?;
+            self.try_merge_up(table_id, index, region)?;
         }
         Ok(())
     }
@@ -402,7 +402,7 @@ impl<'a> KasaneDbWrite<'a> {
     fn try_merge_up(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         region: FlexId,
     ) -> Result<(), AppError> {
         let mut region = region;
@@ -448,31 +448,37 @@ impl<'a> KasaneDbWrite<'a> {
             }
 
             // 値インデックス用に、変更前の全子リーフのキーを集める。
-            let mut old_keys = FxHashSet::default();
-            for m in &child_maps {
-                for (f, v) in m.iter() {
-                    old_keys.insert(value_index::make_key(
+            // 索引を維持しないテーブルでは、統合は木の形を変えるだけで
+            // `(FlexId, 値)` の対応は変わらないので、差分計算そのものが要らない。
+            let old_keys = index.map(|data_type| {
+                let mut keys = FxHashSet::default();
+                for m in &child_maps {
+                    for (f, v) in m.iter() {
+                        keys.insert(value_index::make_key(
+                            table_id,
+                            &value_index::order_preserving(data_type, v),
+                            &f,
+                        ));
+                    }
+                }
+                keys
+            });
+
+            // 子リーフ群を親領域へ畳み込む
+            let merged = SpatialIdMap::merge_shards(parent_region, child_maps)?;
+
+            if let (Some(data_type), Some(old_keys)) = (index, old_keys) {
+                let mut new_keys = FxHashSet::default();
+                for (f, v) in merged.iter() {
+                    new_keys.insert(value_index::make_key(
                         table_id,
                         &value_index::order_preserving(data_type, v),
                         &f,
                     ));
                 }
+                // 値インデックス差分更新
+                self.update_value_index(old_keys, new_keys)?;
             }
-
-            // 子リーフ群を親領域へ畳み込む
-            let merged = SpatialIdMap::merge_shards(parent_region, child_maps)?;
-
-            let mut new_keys = FxHashSet::default();
-            for (f, v) in merged.iter() {
-                new_keys.insert(value_index::make_key(
-                    table_id,
-                    &value_index::order_preserving(data_type, v),
-                    &f,
-                ));
-            }
-
-            // 値インデックス差分更新
-            self.update_value_index(old_keys, new_keys)?;
 
             // 親キーをリーフ（空なら削除）に置換し、子キーを削除。
             let parent_key = (table_id, parent_region);
@@ -502,7 +508,7 @@ impl<'a> KasaneDbWrite<'a> {
     fn apply_leaf<F>(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         region: FlexId,
         mut map: SpatialIdMap<Vec<u8>>,
         input: &[FlexId],
@@ -511,6 +517,14 @@ impl<'a> KasaneDbWrite<'a> {
     where
         F: FnOnce(&mut SpatialIdMap<Vec<u8>>),
     {
+        // 索引を維持しないテーブルでは、差分計算そのものを飛ばす。索引キーは格納
+        // `FlexId` 1 件につき 1 つ増えるので、ここを通るかどうかで 1 回の書き込みが
+        // 触るキー数が 3 桁変わる。
+        let Some(data_type) = index else {
+            modify(&mut map);
+            return self.store_shard(table_id, region, map);
+        };
+
         let scan: SpatialIdSet = input.iter().cloned().collect();
 
         // 変更前の重なりリーフからインデックスキーを計算

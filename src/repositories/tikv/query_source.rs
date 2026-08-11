@@ -101,18 +101,16 @@ where
         let flex_ids = self.handle.block_on(async move {
             // 固定タイムスタンプのスナップショット。読み取り専用なので
             // commit も rollback も要らず、drop するだけで閉じられる。
-            let snapshot = db.client.snapshot(snapshot_ts, super::read_options());
-            let reader = TikvRead::new(snapshot);
+            let reader = TikvRead::at(db.client.clone(), snapshot_ts);
 
-            let mut flex_ids = Vec::new();
-            for range in &bounds {
-                let got = reader
-                    .read_flex_ids_in_range(table_id, range)
-                    .await
-                    .map_err(|e| LogicError::SourceRead(e.to_string()))?;
-                flex_ids.extend(got);
-            }
-            Ok::<_, LogicError>(flex_ids)
+            // 境界は 1 本ずつではなく**まとめて**渡す。実行器はここへ全境界を一度に
+            // 寄こすので、1 本ごとに木を降りると往復が「境界の本数 × 木の深さ」になる。
+            // 境界の本数は対象空間 ID の広さに比例して増えるので、そこが要求の大きさに
+            // 対する直列な鎖になっていた。
+            reader
+                .read_flex_ids_in_ranges(table_id, &bounds)
+                .await
+                .map_err(|e| LogicError::SourceRead(e.to_string()))
         })?;
 
         // 復元できない値（型に合わない格納値）の FlexId は結果に含めない。

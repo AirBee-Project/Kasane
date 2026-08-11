@@ -70,6 +70,13 @@ impl ReadRepository for KasaneDbRead<'_> {
         self.table_info_impl(db_name, table_name)
     }
 
+    async fn resolve_tables(
+        &self,
+        refs: &[(String, String)],
+    ) -> Result<Vec<crate::repositories::ResolvedTable>, AppError> {
+        self.resolve_tables_impl(refs)
+    }
+
     async fn table_list(&self, db_name: &str) -> Result<Vec<Table>, AppError> {
         self.table_list_impl(db_name)
     }
@@ -169,6 +176,7 @@ impl WriteRepository for KasaneDbWrite<'_> {
         max_zoom_level: u8,
         constraints: Option<TableConstraints>,
         description: Option<String>,
+        value_index: bool,
     ) -> Result<Table, AppError> {
         self.table_create_impl(
             db_name,
@@ -177,6 +185,7 @@ impl WriteRepository for KasaneDbWrite<'_> {
             max_zoom_level,
             constraints,
             description,
+            value_index,
         )
     }
 
@@ -216,30 +225,30 @@ impl WriteRepository for KasaneDbWrite<'_> {
     async fn data_insert(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
-        self.data_insert_impl(table_id, data_type, ids, data)
+        self.data_insert_impl(table_id, index, ids, data)
     }
 
     async fn data_upsert(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
-        self.data_upsert_impl(table_id, data_type, ids, data)
+        self.data_upsert_impl(table_id, index, ids, data)
     }
 
     async fn data_remove(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         ids: SpatialIdSet,
     ) -> Result<(), AppError> {
-        self.data_remove_impl(table_id, data_type, ids)
+        self.data_remove_impl(table_id, index, ids)
     }
 
     async fn create_user(

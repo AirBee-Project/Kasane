@@ -70,7 +70,9 @@ services:
       - --config=/etc/tikv/tikv.toml
     volumes:
       - tikv-data:/data/tikv
-      - ./deployment/tikv.toml:/etc/tikv/tikv.toml:ro
+      # 既定は CI 用の極小構成。負荷をかけて詰まりを見るときは大きいほうへ差し替える:
+      #   KASANE_TIKV_CONFIG=./deployment/tikv-large.toml docker compose up -d --wait
+      - ${KASANE_TIKV_CONFIG:-./deployment/tikv.toml}:/etc/tikv/tikv.toml:ro
     # TiKV は nofile が閾値未満だと起動時チェックで FATAL になる。Docker の既定は
     # 環境によって異なり、GitHub Actions では 65536 と足りない。閾値自体も
     # deployment/tikv.toml で下げているが、こちらは TiKV の推奨に合わせた設定。

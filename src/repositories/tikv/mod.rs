@@ -102,7 +102,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use rand_core::RngCore;
-use tikv_client::{CheckLevel, Transaction, TransactionClient, TransactionOptions};
+use tikv_client::{CheckLevel, Snapshot, Transaction, TransactionClient, TransactionOptions};
 
 use crate::error::AppError;
 use crate::repositories::Storage;
@@ -118,7 +118,15 @@ const MAX_ATTEMPTS: usize = 20;
 /// 詰めて投げることになり、競合をさらに悪化させる。
 const RETRY_BACKOFF_BASE: std::time::Duration = std::time::Duration::from_millis(5);
 /// 待ち時間の上限。
-const RETRY_BACKOFF_MAX: std::time::Duration = std::time::Duration::from_millis(200);
+///
+/// **やり直しは書き込みクロージャを丸ごと実行し直す。** 大きな書き込みではその 1 回が
+/// 秒の単位になるので、上限が小さいと「重い試行を隙間なく投げ続ける」ことになり、
+/// 詰まっているクラスタをこちらから叩き続ける形になる。
+///
+/// 目安として、tikv-client がロックへ与える寿命は 20 秒（`MAX_TTL`）。そこを超えて
+/// 生き延びられないトランザクションは何度やっても通らないので、上限はその手前まで
+/// 伸ばしておき、混雑が収まる時間を与えるほうが早く収束する。
+const RETRY_BACKOFF_MAX: std::time::Duration = std::time::Duration::from_millis(2000);
 
 /// 待ち時間へ加える揺らぎの割合（±20%）。
 ///
@@ -140,9 +148,13 @@ async fn back_off(conflicts: &mut u32, reason: AppError, last_error: &mut Option
 }
 
 /// `attempt` 回目の競合に対する待ち時間。
+///
+/// 打ち切りは `RETRY_BACKOFF_MAX` 側で行う。指数の頭を抑えるのは桁溢れを防ぐためだけで、
+/// **上限より手前で頭打ちにならない**ように余裕を持たせてある（ここが上限より小さいと、
+/// 定数を上げても実際の待ち時間が伸びない）。
 fn retry_backoff(attempt: u32) -> std::time::Duration {
     let base = RETRY_BACKOFF_BASE
-        .saturating_mul(1u32 << attempt.min(8))
+        .saturating_mul(1u32 << attempt.min(16))
         .min(RETRY_BACKOFF_MAX);
     apply_jitter(base)
 }
@@ -324,25 +336,27 @@ async fn rollback(txn: Option<Transaction>) {
 
 /// 読み取りトランザクション。
 ///
-/// `R` は読み取り元のスナップショット。通常の読み取りは [`Transaction`]、
-/// クエリ実行器の入力源は開始タイムスタンプを固定した [`tikv_client::Snapshot`] を使う
-/// （`query_source.rs` を参照）。
-pub struct TikvRead<'a, R = Transaction> {
-    pub(crate) txn: tokio::sync::Mutex<R>,
+/// `R` は読み取り元。通常の読み取りとクエリ実行器の入力源は開始タイムスタンプを
+/// 固定した [`tikv_client::Snapshot`]、書き込みトランザクション上の読み取りは
+/// [`kv::LazyTxn`] を使う。
+pub struct TikvRead<'a, R = Snapshot> {
+    pub(crate) txn: kv::Readers<R>,
     /// ストレージのハンドルより長生きしないことを型で示すだけのマーカー。
     pub(crate) _db: PhantomData<&'a TikvDb>,
 }
 
-impl<R> TikvRead<'_, R> {
-    pub(crate) fn new(reader: R) -> Self {
+impl TikvRead<'_, Snapshot> {
+    /// `ts` の断面を読む読み取り元を作る。
+    ///
+    /// 読み取りにトランザクションを開かないのが要点。開くと開始で 1 往復、
+    /// 後始末の rollback でもう 1 往復かかるが、読むだけならどちらも要らない。
+    /// さらにタイムスタンプを手元に持てるので、同じ断面のスナップショットを
+    /// 追加で開いて**チャンクを並行に読める**（[`kv::Readers`]）。
+    pub(crate) fn at(client: Arc<TransactionClient>, ts: tikv_client::Timestamp) -> Self {
         Self {
-            txn: tokio::sync::Mutex::new(reader),
+            txn: kv::Readers::fanned_out(client, ts),
             _db: PhantomData,
         }
-    }
-
-    pub(crate) fn into_inner(self) -> R {
-        self.txn.into_inner()
     }
 }
 
@@ -351,7 +365,7 @@ impl<R> TikvRead<'_, R> {
 /// 中身の [`LazyTxn`] は**最初に実際へ触れるまで開かない**。ロック宣言だけで
 /// 巻き戻る 1 周目が、ネットワークに触れずに終わるようにするため。
 pub struct TikvWrite<'a> {
-    pub(crate) txn: tokio::sync::Mutex<LazyTxn>,
+    pub(crate) txn: kv::Readers<LazyTxn>,
     pub(crate) _db: PhantomData<&'a TikvDb>,
     /// この試行で保持しているロック。
     held: BTreeSet<Vec<u8>>,
@@ -422,7 +436,7 @@ impl TikvWrite<'_> {
 }
 
 impl Storage for TikvDb {
-    type Read<'a> = TikvRead<'a, Transaction>;
+    type Read<'a> = TikvRead<'a, Snapshot>;
     type Write<'a> = TikvWrite<'a>;
     /// 断面は開始タイムスタンプそのもの。各読み取りはこの時刻の
     /// [`tikv_client::Snapshot`] を開く（`query_source.rs`）。
@@ -441,15 +455,11 @@ impl Storage for TikvDb {
     {
         // 読み取りはロックを取らない。スナップショットから読むだけなので
         // 書き込みをブロックせず、書き込みにもブロックされない（LMDB と同じ）。
-        let txn = self
-            .client
-            .begin_with_options(read_options())
-            .await
-            .map_err(to_app_error)?;
-        let r = TikvRead::new(txn);
-        let out = f(&r).await;
-        let _ = r.into_inner().rollback().await;
-        out
+        //
+        // トランザクションではなくスナップショットを開く（[`TikvRead::at`] を参照）。
+        let ts = self.client.current_timestamp().await.map_err(to_app_error)?;
+        let r = TikvRead::at(self.client.clone(), ts);
+        f(&r).await
     }
 
     #[tracing::instrument(skip_all)]
@@ -489,7 +499,7 @@ impl Storage for TikvDb {
             //    start_ts が確定する。ロック取得より後になるので、前任者のコミットが
             //    必ず見える。
             let mut w = TikvWrite {
-                txn: tokio::sync::Mutex::new(LazyTxn::new(self.client.clone())),
+                txn: kv::Readers::new(LazyTxn::new(self.client.clone())),
                 _db: PhantomData,
                 held: locks.clone(),
                 missing: BTreeSet::new(),
@@ -504,7 +514,16 @@ impl Storage for TikvDb {
             let restart = w.needs_restart();
             let newly_required = std::mem::take(&mut w.missing);
             let was_stale = w.stale;
-            let lazy = w.txn.into_inner();
+            let mut lazy = w.txn.into_inner();
+
+            // 溜めた変更をここで初めて送る（[`LazyTxn::flush`]）。捨てる試行では
+            // 送らない――送らなければロックも MVCC のバージョンも作られずに済む。
+            let flushed = if restart || result.is_err() {
+                Ok(())
+            } else {
+                lazy.flush().await
+            };
+
             // ロックの取得はクロージャの内側で起きるので、競合はアプリケーションエラーの
             // 形で返ってくる。やり直せる失敗かどうかは作業トランザクションが覚えている。
             let conflicted = lazy.conflicted();
@@ -527,6 +546,17 @@ impl Storage for TikvDb {
                     back_off(&mut conflicts, reason, &mut last_error).await;
                 }
                 continue;
+            }
+
+            // 送信そのものが失敗したなら、コミットへは進まない。
+            if let Err(e) = flushed {
+                rollback(txn).await;
+                release(guard).await;
+                if is_retryable(&e) {
+                    back_off(&mut conflicts, to_app_error(e), &mut last_error).await;
+                    continue;
+                }
+                return Err(to_app_error(e));
             }
 
             let outcome = match result {
@@ -610,7 +640,7 @@ mod tests {
         }
 
         // 十分に伸びた段階では、毎回同じ値にならない。
-        let samples: std::collections::BTreeSet<_> = (0..32).map(|_| retry_backoff(8)).collect();
+        let samples: std::collections::BTreeSet<_> = (0..32).map(|_| retry_backoff(16)).collect();
         assert!(
             samples.len() > 1,
             "揺らぎが効いておらず、待ち時間が毎回同じになっている"

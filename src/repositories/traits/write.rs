@@ -62,6 +62,8 @@ pub trait WriteRepository: CatalogRepository {
         max_zoom_level: u8,
         constraints: Option<TableConstraints>,
         description: Option<String>,
+        // `value_index`: 値インデックスを維持するか。作成後は変更できない。
+        value_index: bool,
     ) -> Result<Table, AppError>;
 
     #[allow(clippy::too_many_arguments)]
@@ -87,10 +89,15 @@ pub trait WriteRepository: CatalogRepository {
 
     // --- データ ---
 
+    /// `index` は値インデックスへ反映する型。`None` なら索引を維持しない。
+    ///
+    /// 書き込み経路が型を必要とするのは索引キーの順序保存エンコードのためだけなので、
+    /// 「索引するか」と「どう索引するか」を 1 つの引数にまとめてある
+    /// （[`Table::value_indexing`](crate::models::database::table::Table::value_indexing)）。
     async fn data_insert(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError>;
@@ -98,7 +105,7 @@ pub trait WriteRepository: CatalogRepository {
     async fn data_upsert(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError>;
@@ -106,7 +113,7 @@ pub trait WriteRepository: CatalogRepository {
     async fn data_remove(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         ids: SpatialIdSet,
     ) -> Result<(), AppError>;
 

@@ -1,13 +1,15 @@
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+
 use super::keys::{self, LockScope};
-use super::kv::Reader;
+use super::kv::{Reader, Readers};
 use super::{TikvRead, TikvWrite, kv};
+use crate::repositories::ResolvedTable;
 use crate::error::AppError;
 use crate::models::database::table::{
     Table, TableConstraints, TableDataType, TableMetadata, UpdateTableConstraints,
 };
 use crate::models::database::{DatabaseInfoResponse, DatabaseMetadata};
 use crate::models::id::{DatabaseId, TableId};
-use tokio::sync::Mutex;
 
 fn encode_database(meta: &DatabaseMetadata) -> Result<Vec<u8>, AppError> {
     serde_json::to_vec(meta)
@@ -30,7 +32,7 @@ fn decode_table(bytes: &[u8]) -> Result<TableMetadata, AppError> {
 }
 
 pub(super) async fn database_meta<R: Reader>(
-    txn: &Mutex<R>,
+    txn: &Readers<R>,
     name: &str,
 ) -> Result<Option<DatabaseMetadata>, AppError> {
     if name.is_empty() {
@@ -43,14 +45,14 @@ pub(super) async fn database_meta<R: Reader>(
 }
 
 pub(super) async fn database_id<R: Reader>(
-    txn: &Mutex<R>,
+    txn: &Readers<R>,
     name: &str,
 ) -> Result<Option<DatabaseId>, AppError> {
     Ok(database_meta(txn, name).await?.map(|meta| meta.id))
 }
 
 pub(super) async fn table_meta<R: Reader>(
-    txn: &Mutex<R>,
+    txn: &Readers<R>,
     db_id: DatabaseId,
     table_name: &str,
 ) -> Result<Option<TableMetadata>, AppError> {
@@ -64,7 +66,7 @@ pub(super) async fn table_meta<R: Reader>(
 }
 
 pub(super) async fn table_id<R: Reader>(
-    txn: &Mutex<R>,
+    txn: &Readers<R>,
     db_id: DatabaseId,
     table_name: &str,
 ) -> Result<Option<TableId>, AppError> {
@@ -72,7 +74,7 @@ pub(super) async fn table_id<R: Reader>(
 }
 
 pub(super) async fn database_name<R: Reader>(
-    txn: &Mutex<R>,
+    txn: &Readers<R>,
     db_id: DatabaseId,
 ) -> Result<Option<String>, AppError> {
     match kv::get(txn, keys::database_id_index(db_id)).await? {
@@ -84,7 +86,7 @@ pub(super) async fn database_name<R: Reader>(
 }
 
 pub(super) async fn table_name<R: Reader>(
-    txn: &Mutex<R>,
+    txn: &Readers<R>,
     table_id: TableId,
 ) -> Result<Option<String>, AppError> {
     match kv::get(txn, keys::table_id_index(table_id)).await? {
@@ -96,7 +98,7 @@ pub(super) async fn table_name<R: Reader>(
 }
 
 pub(super) async fn table_names<R: Reader>(
-    txn: &Mutex<R>,
+    txn: &Readers<R>,
     db_id: DatabaseId,
 ) -> Result<Vec<String>, AppError> {
     let keys = kv::scan_prefix_keys(txn, &keys::tables_of(db_id)).await?;
@@ -106,7 +108,7 @@ pub(super) async fn table_names<R: Reader>(
 }
 
 pub(super) async fn table_info<R: Reader>(
-    txn: &Mutex<R>,
+    txn: &Readers<R>,
     db_name: &str,
     table_name: &str,
 ) -> Result<Option<Table>, AppError> {
@@ -123,8 +125,74 @@ pub(super) async fn table_info<R: Reader>(
         .map(|meta| Table::from_meta(table_name, meta)))
 }
 
+/// `(データベース名, テーブル名)` の並びをまとめて解決する。
+///
+/// 往復は**参照数によらず 2 回**。データベース名の解決なしにテーブルキーを組み立てられない
+/// ので段は分かれるが、同じ段の中では 1 回の `batch_get` に束ねられる。1 件ずつ
+/// `database_meta` → `table_meta` と辿ると、参照数の 2 倍の往復が直列に並ぶ。
+pub(super) async fn resolve_tables<R: Reader>(
+    txn: &Readers<R>,
+    refs: &[(String, String)],
+) -> Result<Vec<ResolvedTable>, AppError> {
+    if refs.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // 1 段目: データベース名 → ID。重複と空名を落としてから 1 回で引く。
+    let db_keys: BTreeMap<Vec<u8>, &str> = refs
+        .iter()
+        .map(|(db_name, _)| db_name.as_str())
+        .filter(|name| !name.is_empty())
+        .map(|name| (keys::database(name), name))
+        .collect();
+
+    let mut db_ids: HashMap<&str, DatabaseId> = HashMap::new();
+    for (key, bytes) in kv::batch_get(txn, db_keys.keys().cloned().collect()).await? {
+        if let Some(name) = db_keys.get(&key) {
+            db_ids.insert(name, decode_database(&bytes)?.id);
+        }
+    }
+
+    // 2 段目: 解決できたデータベース配下のテーブルを 1 回で引く。
+    let mut table_keys: BTreeSet<Vec<u8>> = BTreeSet::new();
+    for (db_name, table_name) in refs {
+        if table_name.is_empty() {
+            continue;
+        }
+        if let Some(db_id) = db_ids.get(db_name.as_str()) {
+            table_keys.insert(keys::table(*db_id, table_name));
+        }
+    }
+
+    let mut metas: HashMap<Vec<u8>, TableMetadata> = HashMap::new();
+    for (key, bytes) in kv::batch_get(txn, table_keys.into_iter().collect()).await? {
+        metas.insert(key, decode_table(&bytes)?);
+    }
+
+    // 入力と同じ並びで組み立てる。同じ参照が複数回現れても、引いたのは 1 度きり。
+    Ok(refs
+        .iter()
+        .map(|(db_name, table_name)| {
+            let Some(&db_id) = db_ids.get(db_name.as_str()) else {
+                return ResolvedTable {
+                    db_id: None,
+                    table: None,
+                };
+            };
+            let table = (!table_name.is_empty())
+                .then(|| metas.get(&keys::table(db_id, table_name)))
+                .flatten()
+                .map(|meta| Table::from_meta(table_name, meta.clone()));
+            ResolvedTable {
+                db_id: Some(db_id),
+                table,
+            }
+        })
+        .collect())
+}
+
 pub(super) async fn database_info<R: Reader>(
-    txn: &Mutex<R>,
+    txn: &Readers<R>,
     name: &str,
 ) -> Result<Option<DatabaseInfoResponse>, AppError> {
     Ok(database_meta(txn, name)
@@ -136,7 +204,7 @@ pub(super) async fn database_info<R: Reader>(
 }
 
 pub(super) async fn table_list_by_id<R: Reader>(
-    txn: &Mutex<R>,
+    txn: &Readers<R>,
     db_id: DatabaseId,
 ) -> Result<Vec<Table>, AppError> {
     let entries = kv::scan_prefix(txn, &keys::tables_of(db_id)).await?;
@@ -374,6 +442,7 @@ impl TikvWrite<'_> {
         max_zoom_level: u8,
         constraints: Option<TableConstraints>,
         description: Option<String>,
+        value_index: bool,
     ) -> Result<Table, AppError> {
         if db_name.is_empty() {
             return Err(AppError::DatabaseNotFound {
@@ -420,6 +489,7 @@ impl TikvWrite<'_> {
             max_zoom_level,
             constraints: actual_constraints.clone(),
             description: description.clone(),
+            value_index,
         };
         kv::put(
             &self.txn,
@@ -441,6 +511,7 @@ impl TikvWrite<'_> {
             max_zoom_level,
             constraints: actual_constraints,
             description,
+            value_index,
         })
     }
 
@@ -517,6 +588,7 @@ impl TikvWrite<'_> {
             max_zoom_level: table.max_zoom_level,
             constraints: table.constraints.clone(),
             description: table.description.clone(),
+            value_index: table.value_index,
         };
 
         if changed_name {
@@ -636,6 +708,7 @@ impl TikvWrite<'_> {
             max_zoom_level: src_meta.max_zoom_level,
             constraints: src_meta.constraints.clone(),
             description: src_meta.description.clone(),
+            value_index: src_meta.value_index,
         };
 
         kv::put(
@@ -674,6 +747,7 @@ impl TikvWrite<'_> {
             max_zoom_level: src_meta.max_zoom_level,
             constraints: src_meta.constraints,
             description: src_meta.description,
+            value_index: src_meta.value_index,
         })
     }
 

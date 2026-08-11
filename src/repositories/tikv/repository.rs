@@ -70,6 +70,13 @@ impl<R: Reader> ReadRepository for TikvRead<'_, R> {
         catalog::table_info(&self.txn, db_name, table_name).await
     }
 
+    async fn resolve_tables(
+        &self,
+        refs: &[(String, String)],
+    ) -> Result<Vec<crate::repositories::ResolvedTable>, AppError> {
+        catalog::resolve_tables(&self.txn, refs).await
+    }
+
     async fn table_list(&self, db_name: &str) -> Result<Vec<Table>, AppError> {
         self.table_list_impl(db_name).await
     }
@@ -170,6 +177,7 @@ impl WriteRepository for TikvWrite<'_> {
         max_zoom_level: u8,
         constraints: Option<TableConstraints>,
         description: Option<String>,
+        value_index: bool,
     ) -> Result<Table, AppError> {
         self.table_create_impl(
             db_name,
@@ -178,6 +186,7 @@ impl WriteRepository for TikvWrite<'_> {
             max_zoom_level,
             constraints,
             description,
+            value_index,
         )
         .await
     }
@@ -220,30 +229,30 @@ impl WriteRepository for TikvWrite<'_> {
     async fn data_insert(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
-        self.data_insert_impl(table_id, data_type, ids, data).await
+        self.data_insert_impl(table_id, index, ids, data).await
     }
 
     async fn data_upsert(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
-        self.data_upsert_impl(table_id, data_type, ids, data).await
+        self.data_upsert_impl(table_id, index, ids, data).await
     }
 
     async fn data_remove(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         ids: SpatialIdSet,
     ) -> Result<(), AppError> {
-        self.data_remove_impl(table_id, data_type, ids).await
+        self.data_remove_impl(table_id, index, ids).await
     }
 
     async fn create_user(

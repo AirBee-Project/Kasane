@@ -8,17 +8,33 @@
 //!
 //! - ノードの取得がネットワーク越しになるため、木の降下では**同じ深さのノードをまとめて**
 //!   取得する（`batch_get`）。1 ノードずつ引くと深さ × 往復のレイテンシがかかる。
-//! - mmap 上の `ArchivedSpatialIdMap` を直接読むことはできないので、常に受信バッファから
-//!   `SpatialIdMap` を復元する。ただし**受信バッファへのゼロコピー**は保たれる
-//!   （[`kv::ShardValue`] が検証済みペイロードへの借用を返す）。
 //! - 受信バッファは信用できないので、rkyv の非検証アクセスへ渡す前に
 //!   [`kv::ShardValue`] の完全性検証を通す（`kv.rs` のフレームの節を参照）。
 //! - 再帰は `Box::pin` で明示的に間接化する（async fn の再帰のため）。
+//!
+//! # 読み取りのゼロコピー
+//!
+//! 読み取り経路は受信バッファを [`ArchivedSpatialIdMap`] で**直接走査**する。LMDB 側が
+//! mmap 上でやっているのと同じことを、mmap の代わりに受信バッファに対して行うだけ。
+//!
+//! `SpatialIdMap::from_bytes` を通すと `Arc` ベースの作業木を丸ごと組み直すことになり、
+//! リーフ 1 枚（最大 [`MAX_FLEX_ID_PER_SHARD`] 件）につき数千回のノード確保と、葉ごとの
+//! 値バイト列の複製、保存していない導出値の畳み直しが走る。そのどれも読むだけなら要らない。
+//! 復元が要るのは**書き換える**ときだけなので、`from_bytes` は書き込み経路に残してある。
+//!
+//! # CPU をどこで回すか
+//!
+//! リーフの走査と集約は FlexId 数に比例する CPU 処理で、TiKV バックエンドではこれが
+//! 非同期ワーカー上で回る（LMDB はクロージャ全体が blocking タスク上なので問題にならない）。
+//! 大きな検索がワーカーを占有すると無関係なリクエストまで止まるため、ルーティング
+//! （ネットワーク）と解決（CPU）を分け、後者を blocking タスクへ出したうえで葉が多ければ
+//! rayon で分散する。
 
-use kasane_logic::{FlexId, RangeId, SpatialIdMap, SpatialIdSet};
+use kasane_logic::{ArchivedSpatialIdMap, FlexId, RangeId, SpatialIdMap, SpatialIdSet};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::BTreeSet;
-use tokio::sync::Mutex;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::keys;
 use crate::error::AppError;
@@ -30,25 +46,26 @@ use crate::repositories::encoding::shard_entry::{
 };
 use crate::repositories::encoding::value_index;
 
-use super::kv::{Reader, ShardValue};
+use super::kv::{Reader, Readers, ShardValue};
 use super::{TikvRead, TikvWrite, kv};
 
-// --- ノードの読み書き ---
+/// 値ごとに FlexId をまとめた中間表現。
+type ValueMap = FxHashMap<Vec<u8>, Vec<FlexId>>;
 
-async fn load_node<R: Reader>(
-    txn: &Mutex<R>,
-    table_id: TableId,
-    region: &FlexId,
-) -> Result<Option<ShardValue>, AppError> {
-    kv::get_shard(txn, keys::shard(table_id, region)).await
-}
+/// 葉の解決を rayon へ出す基準（触れる**リーフ数**）。
+///
+/// 基準を「クエリ FlexId 数」ではなく「実際に触れる葉の数」に置くのは LMDB 側と同じ理由で、
+/// 広域検索はクエリ FlexId が数個でも数千の葉に及ぶため。
+const LEAF_PARALLEL_THRESHOLD: usize = 32;
+
+// --- ノードの読み書き ---
 
 /// 複数領域のノードをまとめて取得する。存在しない領域は結果に含まれない。
 ///
 /// 呼び出し側はキーではなく領域で引きたいので、領域をキーにして返す
 /// （キーで返すと、引くたびにキーを組み立て直すことになる）。
 async fn load_nodes<R: Reader>(
-    txn: &Mutex<R>,
+    txn: &Readers<R>,
     table_id: TableId,
     regions: &[FlexId],
 ) -> Result<FxHashMap<FlexId, ShardValue>, AppError> {
@@ -64,6 +81,8 @@ async fn load_nodes<R: Reader>(
 }
 
 /// リーフのバイト列から [`SpatialIdMap`] を復元する。未作成なら空のマップ。
+///
+/// **書き換えるとき専用。** 読むだけなら [`archived_leaf`] を使う。
 fn decode_leaf(region: &FlexId, entry: Option<&[u8]>) -> Result<SpatialIdMap<Vec<u8>>, AppError> {
     let Some(entry) = entry else {
         return Ok(SpatialIdMap::new_in_shard(*region));
@@ -74,6 +93,19 @@ fn decode_leaf(region: &FlexId, entry: Option<&[u8]>) -> Result<SpatialIdMap<Vec
         // `from_bytes` 側でさらに検証されるので、古い形式が黙って誤読されることもない。
         Some(map_bytes) => unsafe { SpatialIdMap::<Vec<u8>>::from_bytes(map_bytes) }
             .map_err(|e| AppError::InternalError(format!("rkyv deserialize: {e}"))),
+        None => Err(AppError::InternalError(
+            "routed to a pointer node".to_string(),
+        )),
+    }
+}
+
+/// リーフのバイト列をゼロコピーで開く（読み取り専用）。
+fn archived_leaf(entry: &[u8]) -> Result<ArchivedSpatialIdMap<'_>, AppError> {
+    match ShardEntry::leaf_payload(entry)? {
+        // SAFETY: `decode_leaf` と同じ根拠（CRC 検証済みのバイト列）。形式バージョンは
+        // `access` 側でさらに検証される。
+        Some(map_bytes) => unsafe { ArchivedSpatialIdMap::access(map_bytes) }
+            .map_err(|e| AppError::InternalError(format!("leaf format: {e}"))),
         None => Err(AppError::InternalError(
             "routed to a pointer node".to_string(),
         )),
@@ -98,14 +130,34 @@ impl RoutedLeaf {
     }
 }
 
+/// ある領域の親と、その親が持つ全子領域。
+///
+/// 兄弟のリストは親 1 つにつき 1 本しかないので、子の数だけ複製せず共有する。
+type Parentage = (FlexId, Arc<Vec<FlexId>>);
+
+/// 子領域から親を引く対応表。
+type ParentMap = FxHashMap<FlexId, Parentage>;
+
+/// 降下でわかった木の形。
+pub(super) struct Routing {
+    /// 担当リーフ（未作成領域を含む）。
+    pub leaves: Vec<RoutedLeaf>,
+    /// 通り道で見た「子 → (親, 親の全子)」の対応。
+    ///
+    /// 統合（[`TikvWrite::try_merge_up`]）はこの対応を必要とするが、それは降下の途中で
+    /// すでに判っている。改めてルートから引き直すと、**影響リーフ数 × 木の深さ**ぶんの
+    /// 単発 get が直列に積み上がる（祖先は共通なのに毎回引き直すことになる）。
+    pub parents: ParentMap,
+}
+
 /// 複数の `flex_id` を木の降下でまとめて振り分ける。
 ///
 /// 書き込み経路でも使うため、まだノードが作られていない領域も担当リーフとして返す。
 async fn route_leaves_batched<R: Reader>(
-    txn: &Mutex<R>,
+    txn: &Readers<R>,
     table_id: TableId,
     ids: &[FlexId],
-) -> Result<Vec<RoutedLeaf>, AppError> {
+) -> Result<Routing, AppError> {
     // f 符号で上下半球に分け、各半球ルートから 1 回ずつ降りる。
     let mut lower = Vec::new();
     let mut upper = Vec::new();
@@ -118,9 +170,29 @@ async fn route_leaves_batched<R: Reader>(
     }
 
     let mut out: FxHashMap<FlexId, RoutedLeaf> = FxHashMap::default();
-    descend_batched(txn, table_id, FlexId::LOWER_MAX, lower, &mut out).await?;
-    descend_batched(txn, table_id, FlexId::UPPER_MAX, upper, &mut out).await?;
-    Ok(out.into_values().collect())
+    let mut parents = ParentMap::default();
+    descend_batched(
+        txn,
+        table_id,
+        FlexId::LOWER_MAX,
+        lower,
+        &mut out,
+        &mut parents,
+    )
+    .await?;
+    descend_batched(
+        txn,
+        table_id,
+        FlexId::UPPER_MAX,
+        upper,
+        &mut out,
+        &mut parents,
+    )
+    .await?;
+    Ok(Routing {
+        leaves: out.into_values().collect(),
+        parents,
+    })
 }
 
 /// `region` を根として `ids` を子へ振り分けながら降りる。
@@ -128,11 +200,12 @@ async fn route_leaves_batched<R: Reader>(
 /// 幅優先で「同じ深さのノードをまとめて取得」してから振り分けることで、
 /// ネットワーク往復を木の深さ分に抑える。
 async fn descend_batched<R: Reader>(
-    txn: &Mutex<R>,
+    txn: &Readers<R>,
     table_id: TableId,
     root: FlexId,
     ids: Vec<FlexId>,
     out: &mut FxHashMap<FlexId, RoutedLeaf>,
+    parents: &mut ParentMap,
 ) -> Result<(), AppError> {
     if ids.is_empty() {
         return Ok(());
@@ -167,14 +240,17 @@ async fn descend_batched<R: Reader>(
                         .extend(bucket);
                 }
                 Some(children) => {
-                    for child in children {
+                    // 降りない子も含めて対応を残す。統合はここで判った形をそのまま使う。
+                    let siblings = Arc::new(children);
+                    for child in siblings.iter() {
+                        parents.insert(*child, (region, siblings.clone()));
                         let sub: Vec<FlexId> = bucket
                             .iter()
                             .filter(|f| child.intersection(f).is_some())
                             .copied()
                             .collect();
                         if !sub.is_empty() {
-                            next.push((child, sub));
+                            next.push((*child, sub));
                         }
                     }
                 }
@@ -186,32 +262,68 @@ async fn descend_batched<R: Reader>(
     Ok(())
 }
 
-/// `range` と重なる**既存のリーフ領域**を集める（読み取り経路）。
-async fn route_leaves_for_range<R: Reader>(
-    txn: &Mutex<R>,
+/// 範囲群が到達したリーフ。
+pub(super) struct RoutedRange {
+    /// リーフのバイト列。
+    node: ShardValue,
+    /// このリーフへ到達した範囲の添字（呼び出し側が渡した `ranges` に対する）。
+    hits: Vec<u32>,
+}
+
+/// `ranges` のいずれかと重なる**既存のリーフ領域**を、木の降下 1 回で集める。
+///
+/// 範囲 1 本ごとにルートから降りると、往復は**範囲の本数 × 木の深さ**になる。
+/// クエリの評価境界は対象空間 ID セットの FlexId ごとに 1 本ずつ立つので、この本数は
+/// 要求の広さに比例して増える。[`descend_batched`] が FlexId に対してやっているのと
+/// 同じように、同じ深さのノードをまとめて取得しながら範囲を子へ振り分ければ、
+/// 往復は木の深さぶんに収まる。
+///
+/// 重なり合う範囲が同じリーフへ到達しても、リーフの取得は 1 回きりになる
+/// （以前は範囲の本数だけ同じバイト列を転送していた）。
+async fn route_leaves_for_ranges<R: Reader>(
+    txn: &Readers<R>,
     table_id: TableId,
-    range: &RangeId,
-) -> Result<Vec<(FlexId, ShardValue)>, AppError> {
+    ranges: &[RangeId],
+) -> Result<Vec<RoutedRange>, AppError> {
+    // (領域, そこへ到達した範囲の添字) を深さごとに処理する。
+    let mut level: Vec<(FlexId, Vec<u32>)> = Vec::new();
+    for root in [FlexId::LOWER_MAX, FlexId::UPPER_MAX] {
+        let hits: Vec<u32> = ranges
+            .iter()
+            .enumerate()
+            .filter(|(_, range)| root.intersects_range(range))
+            .map(|(i, _)| i as u32)
+            .collect();
+        if !hits.is_empty() {
+            level.push((root, hits));
+        }
+    }
+
     let mut out = Vec::new();
-    let mut level: Vec<FlexId> = [FlexId::LOWER_MAX, FlexId::UPPER_MAX]
-        .into_iter()
-        .filter(|root| root.intersects_range(range))
-        .collect();
-
     while !level.is_empty() {
-        let mut nodes = load_nodes(txn, table_id, &level).await?;
+        let regions: Vec<FlexId> = level.iter().map(|(region, _)| *region).collect();
+        let mut nodes = load_nodes(txn, table_id, &regions).await?;
 
-        let mut next: Vec<FlexId> = Vec::new();
-        for region in level {
+        let mut next: Vec<(FlexId, Vec<u32>)> = Vec::new();
+        for (region, hits) in level {
             // 未作成領域＝データ無し。読み取りでは辿る必要がない。
             let Some(value) = nodes.remove(&region) else {
                 continue;
             };
             match ShardEntry::child_pointers(value.entry())? {
                 // 読んだバイト列をそのまま返し、呼び出し側の再取得をなくす。
-                None => out.push((region, value)),
+                None => out.push(RoutedRange { node: value, hits }),
                 Some(children) => {
-                    next.extend(children.into_iter().filter(|c| c.intersects_range(range)));
+                    for child in children {
+                        let sub: Vec<u32> = hits
+                            .iter()
+                            .copied()
+                            .filter(|&i| child.intersects_range(&ranges[i as usize]))
+                            .collect();
+                        if !sub.is_empty() {
+                            next.push((child, sub));
+                        }
+                    }
                 }
             }
         }
@@ -221,43 +333,134 @@ async fn route_leaves_for_range<R: Reader>(
     Ok(out)
 }
 
-/// `region` を直接の子に持つ親ポインタノードを見つけ、`(親領域, 親の全子領域)` を返す。
-async fn find_parent_pointer<R: Reader>(
-    txn: &Mutex<R>,
-    table_id: TableId,
-    region: &FlexId,
-) -> Result<Option<(FlexId, Vec<FlexId>)>, AppError> {
-    let root = if region.f_index().is_negative() {
-        FlexId::LOWER_MAX
-    } else {
-        FlexId::UPPER_MAX
+// --- 葉の解決（CPU 側） ---
+
+/// 1 枚のリーフを走査し、そこへ振り分けられた各クエリを解決して `by_value` へ積む。
+///
+/// FlexId ごとに値バイト列でハッシュすると、値の種類が少数でも結果 FlexId の数だけ
+/// 長いバイト列をハッシュすることになる。そこでまず**この葉ローカルの辞書インデックス
+/// （`u32`）**でグルーピングし（整数ハッシュは軽い）、葉に現れた distinct 値の数だけ
+/// 実バイト列へ復元して全体マップへマージする。
+fn resolve_leaf(
+    leaf: &RoutedLeaf,
+    by_value: &mut ValueMap,
+    limit: Option<usize>,
+    counter: &AtomicUsize,
+) -> Result<(), AppError> {
+    // 未作成領域にはデータが無い。
+    let Some(node) = &leaf.node else {
+        return Ok(());
     };
-    // ルート自身に親はない。
-    if region == &root {
-        return Ok(None);
+    let arch = archived_leaf(node.entry())?;
+
+    let mut local: FxHashMap<u32, Vec<FlexId>> = FxHashMap::default();
+    // カウンタへの反映をまとめる粒度。1 件ごとに触ると原子操作が支配的になる。
+    let batch = limit.unwrap_or(0).clamp(1, 256);
+    let mut counted = 0usize;
+
+    for query in &leaf.queries {
+        if limit.is_some_and(|l| counter.load(Ordering::Relaxed) >= l) {
+            break;
+        }
+        arch.get_indexed(query, |got, packed| {
+            if let Some(limit) = limit {
+                if counter.load(Ordering::Relaxed) >= limit {
+                    return;
+                }
+                counted += 1;
+                if counted >= batch {
+                    counter.fetch_add(counted, Ordering::Relaxed);
+                    counted = 0;
+                }
+            }
+            local.entry(packed).or_default().push(got);
+        });
+    }
+    if counted > 0 {
+        counter.fetch_add(counted, Ordering::Relaxed);
     }
 
-    let mut cur = root;
-    loop {
-        let Some(value) = load_node(txn, table_id, &cur).await? else {
-            return Ok(None);
-        };
-        let Some(children) = ShardEntry::child_pointers(value.entry())? else {
-            return Ok(None);
-        };
-        // region が直接の子なら、cur が親。
-        if children.iter().any(|c| c == region) {
-            return Ok(Some((cur, children)));
-        }
-        // region を含む子へ降りる（region ⊆ child）。
-        match children
-            .into_iter()
-            .find(|c| c.intersection(region) == Some(*region))
-        {
-            Some(child) => cur = child,
-            None => return Ok(None),
+    // 葉の distinct 値だけ実バイト列へ復元して全体マップへマージする。
+    for (packed, mut flex_ids) in local {
+        let value = arch.value_bytes(packed);
+        match by_value.get_mut(value) {
+            Some(existing) => existing.append(&mut flex_ids),
+            None => {
+                by_value.insert(value.to_vec(), flex_ids);
+            }
         }
     }
+    Ok(())
+}
+
+/// 葉をまとめて解決する。葉が多ければ rayon で分散する。
+///
+/// 葉は互いに独立（同一 FlexId は 1 つの葉にしか属さない）なので、部分マップを作って
+/// 最後に値でマージするだけで正しく合流できる。
+fn resolve_leaves(
+    leaves: &[RoutedLeaf],
+    limit: Option<usize>,
+    held: usize,
+) -> Result<ValueMap, AppError> {
+    let counter = AtomicUsize::new(held);
+
+    let resolve_chunk = |chunk: &[RoutedLeaf]| -> Result<ValueMap, AppError> {
+        let mut out = ValueMap::default();
+        for leaf in chunk {
+            if limit.is_some_and(|l| counter.load(Ordering::Relaxed) >= l) {
+                break;
+            }
+            resolve_leaf(leaf, &mut out, limit, &counter)?;
+        }
+        Ok(out)
+    };
+
+    if leaves.len() < LEAF_PARALLEL_THRESHOLD {
+        return resolve_chunk(leaves);
+    }
+
+    use rayon::prelude::*;
+    // 葉ごとに 1 タスクにすると、小さな葉ばかりのときに分配のほうが高くつく。
+    let chunk = leaves
+        .len()
+        .div_ceil(rayon::current_num_threads().max(1))
+        .max(1);
+    let partials: Vec<ValueMap> = leaves
+        .par_chunks(chunk)
+        .map(&resolve_chunk)
+        .collect::<Result<Vec<_>, AppError>>()?;
+
+    let mut out = ValueMap::default();
+    for partial in partials {
+        for (value, mut flex_ids) in partial {
+            match out.get_mut(&value) {
+                Some(existing) => existing.append(&mut flex_ids),
+                None => {
+                    out.insert(value, flex_ids);
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// [`resolve_leaves`] を blocking タスクで回す。
+///
+/// TiKV バックエンドの読み取りは非同期ワーカー上で走るので、大きな結果の CPU 処理を
+/// そのまま置くとワーカーを占有し、無関係なリクエストまで止まる（モジュール冒頭を参照）。
+async fn resolve_leaves_off_worker(
+    leaves: Vec<RoutedLeaf>,
+    limit: Option<usize>,
+    held: usize,
+) -> Result<ValueMap, AppError> {
+    if leaves.is_empty() {
+        return Ok(ValueMap::default());
+    }
+    // blocking タスクは呼び出し元のスパンを引き継がないので、明示的に渡す。
+    let span = tracing::Span::current();
+    tokio::task::spawn_blocking(move || span.in_scope(|| resolve_leaves(&leaves, limit, held)))
+        .await
+        .map_err(|e| AppError::InternalError(format!("leaf resolution task: {e}")))?
 }
 
 // --- 読み取り ---
@@ -270,7 +473,7 @@ impl<R: Reader> TikvRead<'_, R> {
         ids: SpatialIdSet,
         limit: Option<usize>,
     ) -> Result<ValueGroups, AppError> {
-        let mut by_value: FxHashMap<Vec<u8>, Vec<FlexId>> = FxHashMap::default();
+        let mut by_value = ValueMap::default();
         let mut held = 0usize;
 
         // 全件をまとめてルーティングせず、チャンクに区切って `limit` へ達した時点で
@@ -280,7 +483,7 @@ impl<R: Reader> TikvRead<'_, R> {
         const ROUTING_BATCH_SIZE: usize = 8192;
         let mut iter = ids.flex_ids();
 
-        'outer: loop {
+        loop {
             if limit.is_some_and(|l| held >= l) {
                 break;
             }
@@ -289,24 +492,19 @@ impl<R: Reader> TikvRead<'_, R> {
                 break;
             }
 
-            for leaf in route_leaves_batched(&self.txn, table_id, &batch).await? {
-                let map = leaf.leaf_map()?;
-                if map.is_empty() {
-                    continue;
-                }
-                for query in &leaf.queries {
-                    for (got, value) in map.get(query) {
-                        // 値の複製は distinct な値の分だけで済ませる（ FlexId 数ではなく）。
-                        match by_value.get_mut(value) {
-                            Some(ids) => ids.push(got),
-                            None => {
-                                by_value.insert(value.clone(), vec![got]);
-                            }
-                        }
-                        held += 1;
-                        if limit.is_some_and(|l| held >= l) {
-                            break 'outer;
-                        }
+            // ルーティング（ネットワーク）と解決（CPU）を分ける。前者はここで、
+            // 後者は blocking タスクの上で葉ごとに並列に回す。
+            let routed = route_leaves_batched(&self.txn, table_id, &batch)
+                .await?
+                .leaves;
+            let partial = resolve_leaves_off_worker(routed, limit, held).await?;
+
+            for (value, mut flex_ids) in partial {
+                held += flex_ids.len();
+                match by_value.get_mut(&value) {
+                    Some(existing) => existing.append(&mut flex_ids),
+                    None => {
+                        by_value.insert(value, flex_ids);
                     }
                 }
             }
@@ -381,23 +579,61 @@ impl<R: Reader> TikvRead<'_, R> {
         Ok(out)
     }
 
-    /// クエリ実行器の入力として、指定範囲の FlexId を読み出す。
-    #[tracing::instrument(skip_all, fields(table_id = %table_id))]
-    pub(super) async fn read_flex_ids_in_range(
+    /// クエリ実行器の入力として、指定範囲群の FlexId をまとめて読み出す。
+    ///
+    /// 範囲を 1 本ずつ渡されないのが要点（[`route_leaves_for_ranges`] を参照）。
+    #[tracing::instrument(skip_all, fields(table_id = %table_id, ranges = ranges.len()))]
+    pub(super) async fn read_flex_ids_in_ranges(
         &self,
         table_id: TableId,
-        range: &RangeId,
+        ranges: &[RangeId],
     ) -> Result<Vec<(FlexId, Vec<u8>)>, AppError> {
-        let leaves = route_leaves_for_range(&self.txn, table_id, range).await?;
+        if ranges.is_empty() {
+            return Ok(Vec::new());
+        }
+        let leaves = route_leaves_for_ranges(&self.txn, table_id, ranges).await?;
+        decode_range_leaves(&leaves, ranges)
+    }
+}
+
+/// 範囲に重なる `(FlexId, 値)` を葉から取り出す。葉が多ければ rayon で分散する。
+///
+/// ここは `Source::read_subset` の内側（＝クエリ実行器を回している blocking タスクの上）
+/// から呼ばれるので、さらに blocking タスクへ出さずその場で並列化する。
+///
+/// 同じ `(FlexId, 値)` が複数の範囲から重複して出うるが、呼び出し側の union が
+/// そのまま吸収する（`query_source.rs` の注記を参照）。
+fn decode_range_leaves(
+    leaves: &[RoutedRange],
+    ranges: &[RangeId],
+) -> Result<Vec<(FlexId, Vec<u8>)>, AppError> {
+    let decode = |leaf: &RoutedRange| -> Result<Vec<(FlexId, Vec<u8>)>, AppError> {
+        let arch = archived_leaf(leaf.node.entry())?;
         let mut out = Vec::new();
-        for (region, value) in leaves {
-            let map = decode_leaf(&region, Some(value.entry()))?;
-            for (id, value) in map.get(range) {
-                out.push((id, value.clone()));
-            }
+        for &i in &leaf.hits {
+            out.extend(
+                arch.get_range(&ranges[i as usize])
+                    .into_iter()
+                    .map(|(id, value)| (id, value.to_vec())),
+            );
         }
         Ok(out)
+    };
+
+    if leaves.len() < LEAF_PARALLEL_THRESHOLD {
+        let mut out = Vec::new();
+        for leaf in leaves {
+            out.extend(decode(leaf)?);
+        }
+        return Ok(out);
     }
+
+    use rayon::prelude::*;
+    let parts: Vec<Vec<(FlexId, Vec<u8>)>> = leaves
+        .par_iter()
+        .map(&decode)
+        .collect::<Result<Vec<_>, AppError>>()?;
+    Ok(parts.into_iter().flatten().collect())
 }
 
 // --- 書き込み ---
@@ -438,12 +674,12 @@ impl TikvWrite<'_> {
         &mut self,
         table_id: TableId,
         flex_ids: &[FlexId],
-    ) -> Result<Vec<RoutedLeaf>, AppError> {
+    ) -> Result<Routing, AppError> {
         let mut routed = route_leaves_batched(&self.txn, table_id, flex_ids).await?;
-        let regions: BTreeSet<FlexId> = routed.iter().map(|leaf| leaf.region).collect();
+        let regions: BTreeSet<FlexId> = routed.leaves.iter().map(|leaf| leaf.region).collect();
         let mut locked = kv::lock_shards(&self.txn, table_id, regions).await?;
 
-        for leaf in &mut routed {
+        for leaf in &mut routed.leaves {
             let entry = locked.remove(&leaf.region).ok_or_else(|| {
                 AppError::InternalError("locked shard map is missing a routed region".to_string())
             })?;
@@ -471,15 +707,15 @@ impl TikvWrite<'_> {
     pub(super) async fn data_insert_impl(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
         let flex_ids: Vec<FlexId> = ids.flex_ids().collect();
-        for leaf in self.lock_target_leaves(table_id, &flex_ids).await? {
+        for leaf in self.lock_target_leaves(table_id, &flex_ids).await?.leaves {
             let map = leaf.leaf_map()?;
             let targets = leaf.queries;
-            self.apply_leaf(table_id, data_type, leaf.region, map, &targets, |m| {
+            self.apply_leaf(table_id, index, leaf.region, map, &targets, |m| {
                 for flex_id in &targets {
                     m.insert(*flex_id, data.to_vec());
                 }
@@ -493,16 +729,16 @@ impl TikvWrite<'_> {
     pub(super) async fn data_upsert_impl(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
         let flex_ids: Vec<FlexId> = ids.flex_ids().collect();
         let data_vec = data.to_vec();
-        for leaf in self.lock_target_leaves(table_id, &flex_ids).await? {
+        for leaf in self.lock_target_leaves(table_id, &flex_ids).await?.leaves {
             let map = leaf.leaf_map()?;
             let targets = leaf.queries;
-            self.apply_leaf(table_id, data_type, leaf.region, map, &targets, |m| {
+            self.apply_leaf(table_id, index, leaf.region, map, &targets, |m| {
                 let mut target_set = SpatialIdSet::new();
                 for flex_id in &targets {
                     let occupied: SpatialIdSet = m.get(flex_id).map(|(f, _)| f).collect();
@@ -522,16 +758,18 @@ impl TikvWrite<'_> {
     pub(super) async fn data_remove_impl(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         ids: SpatialIdSet,
     ) -> Result<(), AppError> {
         let flex_ids: Vec<FlexId> = ids.flex_ids().collect();
+        let routing = self.lock_target_leaves(table_id, &flex_ids).await?;
+
         let mut affected: Vec<FlexId> = Vec::new();
-        for leaf in self.lock_target_leaves(table_id, &flex_ids).await? {
+        for leaf in routing.leaves {
             let map = leaf.leaf_map()?;
             let targets = leaf.queries;
             let region = leaf.region;
-            self.apply_leaf(table_id, data_type, region, map, &targets, |m| {
+            self.apply_leaf(table_id, index, region, map, &targets, |m| {
                 for flex_id in &targets {
                     m.remove(flex_id);
                 }
@@ -539,17 +777,26 @@ impl TikvWrite<'_> {
             .await?;
             affected.push(region);
         }
+
+        // 同じ親を持つ兄弟がそれぞれ上へ辿ると、先の統合で消えた領域を後から調べに
+        // 行くことになる。決着のついた領域を共有して 1 度で終わらせる。
+        let mut settled = FxHashSet::default();
         for region in affected {
-            self.try_merge_up(table_id, data_type, region).await?;
+            self.try_merge_up(table_id, index, region, &routing.parents, &mut settled)
+                .await?;
         }
         Ok(())
     }
 
     /// 1 つのリーフへの変更を適用し、値インデックスを差分更新してから保存する。
+    ///
+    /// `index` が `None`（索引を維持しないテーブル）なら、索引の差分計算そのものを飛ばす。
+    /// 索引キーは格納 `FlexId` 1 件につき 1 つ増えるので、ここを通るかどうかで
+    /// 1 回の書き込みが触るキー数が 3 桁変わる。
     async fn apply_leaf<F>(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         region: FlexId,
         mut map: SpatialIdMap<Vec<u8>>,
         input: &[FlexId],
@@ -558,6 +805,11 @@ impl TikvWrite<'_> {
     where
         F: FnOnce(&mut SpatialIdMap<Vec<u8>>),
     {
+        let Some(data_type) = index else {
+            modify(&mut map);
+            return self.store_shard(table_id, region, map).await;
+        };
+
         let scan: SpatialIdSet = input.iter().cloned().collect();
 
         // 変更前の重なりリーフからインデックスキーを計算。
@@ -713,19 +965,32 @@ impl TikvWrite<'_> {
     /// 統合は親と**その全子**を書き換えるので、判断の前にその集合をまとめてロックする。
     /// 空の子領域もロックの対象に含める（キーが無くてもロックは取れる）。そうしないと、
     /// 統合で消える予定の空領域へ他者が書き込めてしまう。
+    ///
+    /// 親子関係は降下で判ったもの（`parents`）をそのまま使い、ルートから引き直さない。
+    /// 引き直しても同じ `start_ts` を読むので答えは変わらず、下の検証が「降下時と同じか」
+    /// を確かめる以上、根拠として過不足がない。
+    ///
+    /// `settled` は決着のついた領域（畳まれて消えた、あるいは畳めないと判った）を
+    /// 呼び出し間で共有する。これが無いと、兄弟ごとに同じ親を調べ直したり、
+    /// 自分で消した領域を調べに行って `mark_stale` で無駄にやり直したりする。
     async fn try_merge_up(
         &mut self,
         table_id: TableId,
-        data_type: TableDataType,
+        index: Option<TableDataType>,
         region: FlexId,
+        parents: &ParentMap,
+        settled: &mut FxHashSet<FlexId>,
     ) -> Result<(), AppError> {
         let mut region = region;
         loop {
-            let Some((parent_region, descended_children)) =
-                find_parent_pointer(&self.txn, table_id, &region).await?
-            else {
+            if settled.contains(&region) {
+                break;
+            }
+            // 対応が無いのはルートに達したとき（ルート自身に親はない）。
+            let Some((parent_region, descended_children)) = parents.get(&region) else {
                 break;
             };
+            let parent_region = *parent_region;
 
             // 親と全子をロックし、ロック時点の内容を得る。
             let mut targets: BTreeSet<FlexId> = descended_children.iter().copied().collect();
@@ -736,7 +1001,7 @@ impl TikvWrite<'_> {
             // 違っていれば降下が古かったので、新しいスナップショットでやり直す。
             let child_regions = match locked.get(&parent_region) {
                 Some(Some(value)) => match ShardEntry::child_pointers(value.entry())? {
-                    Some(children) if children == descended_children => children,
+                    Some(children) if children == **descended_children => children,
                     _ => return Err(self.mark_stale().into()),
                 },
                 _ => return Err(self.mark_stale().into()),
@@ -766,6 +1031,8 @@ impl TikvWrite<'_> {
                 }
             }
             if !mergeable {
+                // この親はもう畳めない。兄弟が同じ判定を繰り返しても答えは変わらない。
+                settled.extend(child_regions);
                 break;
             }
 
@@ -780,21 +1047,27 @@ impl TikvWrite<'_> {
                 }
             }
 
-            let mut old_keys = FxHashSet::default();
-            for m in &child_maps {
-                for (f, v) in m.iter() {
-                    old_keys.insert(index_key(table_id, data_type, v, &f));
+            // 索引を維持しないテーブルでは、統合は木の形を変えるだけ。`(FlexId, 値)` の
+            // 対応は親へ移っても変わらないので、索引の差分計算そのものが要らない。
+            let old_keys = index.map(|data_type| {
+                let mut keys = FxHashSet::default();
+                for m in &child_maps {
+                    for (f, v) in m.iter() {
+                        keys.insert(index_key(table_id, data_type, v, &f));
+                    }
                 }
-            }
+                keys
+            });
 
             let merged = SpatialIdMap::merge_shards(parent_region, child_maps)?;
 
-            let mut new_keys = FxHashSet::default();
-            for (f, v) in merged.iter() {
-                new_keys.insert(index_key(table_id, data_type, v, &f));
+            if let (Some(data_type), Some(old_keys)) = (index, old_keys) {
+                let mut new_keys = FxHashSet::default();
+                for (f, v) in merged.iter() {
+                    new_keys.insert(index_key(table_id, data_type, v, &f));
+                }
+                self.update_value_index(old_keys, new_keys).await?;
             }
-
-            self.update_value_index(old_keys, new_keys).await?;
 
             // 親キーをリーフ（空なら削除）に置換し、子キーを削除する。
             if merged.is_empty() {
@@ -805,6 +1078,9 @@ impl TikvWrite<'_> {
             for cr in &child_regions {
                 kv::delete_shard(&self.txn, table_id, cr).await?;
             }
+
+            // 子はもう存在しない。兄弟がここから上を辿り直さないよう印を付ける。
+            settled.extend(child_regions);
 
             // 親が新たなリーフになった → さらに上へ伝播。
             region = parent_region;
@@ -827,19 +1103,24 @@ impl TikvWrite<'_> {
     ) -> Result<(), AppError> {
         let entries = kv::scan_shard_prefix(&self.txn, &keys::shards_of(table_id)).await?;
         for (_, value) in entries {
-            let ShardEntry::Leaf(map_bytes) = ShardEntry::decode(value.entry())? else {
+            // ポインタノードには値が無い。
+            if ShardEntry::leaf_payload(value.entry())?.is_none() {
                 continue;
-            };
-            // SAFETY: `decode_leaf` と同じ根拠（CRC 検証済みのバイト列）。
-            let map = unsafe { SpatialIdMap::<Vec<u8>>::from_bytes(&map_bytes) }
-                .map_err(|e| AppError::InternalError(format!("rkyv deserialize: {e}")))?;
-            for (_, stored) in map.iter() {
-                let restored = crate::services::helpers::value::restore_value(
-                    data_type,
-                    constraints,
-                    stored.as_slice(),
-                )?;
-                crate::services::helpers::value::interpret_value(data_type, constraints, restored)?;
+            }
+            let arch = archived_leaf(value.entry())?;
+            // 全域を覆う範囲で舐める。検証したいのは格納値そのものなので、
+            // 葉を作業木へ組み直す必要はない。
+            for range in [FlexId::LOWER_MAX, FlexId::UPPER_MAX].map(RangeId::from) {
+                for (_, stored) in arch.get_range(&range) {
+                    let restored = crate::services::helpers::value::restore_value(
+                        data_type, constraints, stored,
+                    )?;
+                    crate::services::helpers::value::interpret_value(
+                        data_type,
+                        constraints,
+                        restored,
+                    )?;
+                }
             }
         }
         Ok(())

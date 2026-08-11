@@ -87,7 +87,7 @@ fn compaction_roundtrip_and_index_cleanup() {
     // 16x16 = 256 FlexId を単一値 7 で挿入 → 内部で粗い FlexId へ compaction される。
     {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
-        w.data_insert_impl(table_id, dt, rect(0, 15, 0, 15), &enc(7))
+        w.data_insert_impl(table_id, Some(dt), rect(0, 15, 0, 15), &enc(7))
             .unwrap();
         w.commit().unwrap();
     }
@@ -114,7 +114,7 @@ fn compaction_roundtrip_and_index_cleanup() {
     // 左半分(x 0..7)を値 9 で上書き → compaction 境界を跨ぐ差分更新。
     {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
-        w.data_insert_impl(table_id, dt, rect(0, 7, 0, 15), &enc(9))
+        w.data_insert_impl(table_id, Some(dt), rect(0, 7, 0, 15), &enc(9))
             .unwrap();
         w.commit().unwrap();
     }
@@ -139,7 +139,7 @@ fn compaction_roundtrip_and_index_cleanup() {
     // 右半分(x 8..15, 値 7)を削除 → 値 7 のインデックスは完全に消える。
     {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
-        w.data_remove_impl(table_id, dt, rect(8, 15, 0, 15))
+        w.data_remove_impl(table_id, Some(dt), rect(8, 15, 0, 15))
             .unwrap();
         w.commit().unwrap();
     }
@@ -156,7 +156,7 @@ fn compaction_roundtrip_and_index_cleanup() {
     // 残りも削除 → 完全に空。
     {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
-        w.data_remove_impl(table_id, dt, rect(0, 7, 0, 15)).unwrap();
+        w.data_remove_impl(table_id, Some(dt), rect(0, 7, 0, 15)).unwrap();
         w.commit().unwrap();
     }
     assert!(filter_flex_ids(&db, table_id, 9).is_empty());

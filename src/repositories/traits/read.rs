@@ -10,6 +10,18 @@ use crate::models::users::User;
 
 use super::{CatalogRepository, ValueGroups};
 
+/// 名前から解決した `(データベース, テーブル)`。
+///
+/// **どちらも「無い」ことをエラーにしない**のが要点。認可の判定は名前の解決結果を
+/// 必要とするが、判定より先に「存在しない」を返してしまうと、権限の無い利用者へ
+/// 名前の存在有無を教えることになる。呼び出し側が認可 → 存在確認の順に処理できるよう、
+/// ここでは解決できたかどうかだけを返す。
+#[derive(Debug, Clone)]
+pub struct ResolvedTable {
+    pub db_id: Option<DatabaseId>,
+    pub table: Option<Table>,
+}
+
 /// 読み取りトランザクション上で行える操作。
 // `async fn` の戻り値の Future には呼び出し側から `Send` 境界を付けられない。
 // このアプリではバックエンドが feature で 1 つに確定し、Send 性は具体型経由で
@@ -24,6 +36,20 @@ pub trait ReadRepository: CatalogRepository {
     async fn database_list(&self) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError>;
 
     async fn table_info(&self, db_name: &str, table_name: &str) -> Result<Option<Table>, AppError>;
+
+    /// `(データベース名, テーブル名)` の並びを**まとめて**解決する。返りは入力と同じ並び。
+    ///
+    /// 認可とサービス処理は同じキーを必要とする（前者は `(db_id, table_id)`、後者は
+    /// テーブルのメタデータ）。別々に引くと同じキーを 2 度読むことになり、しかもその
+    /// 2 度は別のトランザクションになるので、往復が丸ごと 1 組ぶん増える。
+    ///
+    /// 名前の解決はバックエンドによっては 1 件ずつがネットワーク往復なので、
+    /// **複数件を 1 度に渡せる形**にしてある（TiKV 実装はデータベースとテーブルを
+    /// それぞれ 1 回の `batch_get` にまとめる）。
+    async fn resolve_tables(
+        &self,
+        refs: &[(String, String)],
+    ) -> Result<Vec<ResolvedTable>, AppError>;
 
     async fn table_list(&self, db_name: &str) -> Result<Vec<Table>, AppError>;
 

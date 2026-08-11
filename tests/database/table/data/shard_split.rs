@@ -30,7 +30,7 @@ fn dynamic_shard_splits_and_reads_back() {
         for i in 0..n {
             ids.insert(SingleId::new(20, 0, i * 4, 0).unwrap());
         }
-        w.data_insert_impl(table_id, TableDataType::Text, ids, b"v")
+        w.data_insert_impl(table_id, Some(TableDataType::Text), ids, b"v")
             .unwrap();
         w.commit().unwrap();
     }

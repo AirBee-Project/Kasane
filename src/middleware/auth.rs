@@ -170,6 +170,48 @@ pub async fn check_tables(
     Ok(())
 }
 
+/// **解決済みの** ID からスコープを組み立てて権限を判定する。カタログを引かない。
+///
+/// [`check_table`] / [`check_tables`] は認可のためだけに読み取りトランザクションを開き、
+/// データベース名とテーブル名を引く。ところがサービス層はそのすぐ後に**同じキー**を引いて
+/// テーブルのメタデータを得る。名前の解決が 1 件ずつネットワーク往復になるバックエンドでは、
+/// この重複がそのまま往復数の重複になる。
+///
+/// 解決を 1 回に寄せて、その結果でここが判定すれば、認可のための往復は 0 になる。
+/// 呼び出し側は [`ReadRepository::resolve_tables`](crate::repositories::ReadRepository::resolve_tables)
+/// の結果をそのまま渡せばよい。
+///
+/// # 呼ぶ順序
+///
+/// **「存在しない」を返すより先に呼ぶこと。** 逆にすると、権限の無い利用者へ 404 で
+/// 名前の存在有無を教えることになる。データベースが解決できなかった場合
+/// （`db_id` が `None`）にここが 403 を返すのも同じ理由。
+pub fn authorize_resolved(
+    user: &User,
+    db_id: Option<DatabaseId>,
+    table_id: Option<crate::models::id::TableId>,
+    db_name: &str,
+    table_name: Option<&str>,
+    required: UserRole,
+) -> Result<(), AppError> {
+    if user.has_global_role(required) {
+        return Ok(());
+    }
+
+    // テーブルが解決できなければデータベーススコープへ落とす（`resolve_scope` と同じ規則）。
+    // そのデータベースに十分な権限を持つ利用者は通過し、下位の層が 404 を返せる。
+    let scope = db_id.map(|db_id| match table_id {
+        Some(table_id) => Scope::Table(db_id, table_id),
+        None => Scope::Database(db_id),
+    });
+
+    if scope.is_some_and(|scope| user.can(scope, required)) {
+        Ok(())
+    } else {
+        Err(denied(db_name, table_name, required))
+    }
+}
+
 fn denied(db_name: &str, table_name: Option<&str>, required: UserRole) -> AppError {
     AuthError::InsufficientPrivilege {
         db_name: db_name.to_string(),

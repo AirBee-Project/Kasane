@@ -20,6 +20,7 @@ use crate::{
             data::{GetDataQuery, GetDataResponse, OutputFormat},
         },
         query::{ExecuteQueryRequest, FilterCondition, MappingEntry, QueryNode},
+        users::{User, UserRole},
     },
     repositories::{ReadRepository, Storage},
     services::helpers::{data_response, spatial_ids::to_spatial_id_set},
@@ -33,42 +34,61 @@ type ResolvedTables = HashMap<(String, String), Table>;
 /// このクエリが読む断面。全ソースで共有する（[`Storage::query_snapshot`] を参照）。
 type QuerySnapshot = <crate::backend::Db as Storage>::QuerySnapshot;
 
-/// AST が参照する全テーブルを解決する。
+/// AST が参照する全テーブルを解決し、同時に読み取り権限を検査する。
+///
+/// 解決と認可を 1 回の読み取りにまとめてあるのが要点。認可（`check_tables`）が
+/// `(db_id, table_id)` を引き、その直後にここが同じキーからメタデータを引く――という
+/// 二重取得をなくすため。TiKV のように名前の解決が 1 件ずつ往復になるバックエンドでは、
+/// 参照テーブル数に比例した往復が丸ごと 1 組ぶん消える。
 async fn resolve_tables(
     app_state: &AppState,
+    user: &User,
     node: &QueryNode,
 ) -> Result<ResolvedTables, AppError> {
-    let refs = node.sources();
-    if refs.is_empty() {
+    let sources = node.sources();
+    if sources.is_empty() {
         return Err(AppError::ConstraintViolation {
             reason: "query must reference at least one source table".to_string(),
         });
     }
 
-    let refs: Vec<(String, String)> = refs
+    // 同じテーブルを複数箇所で参照するクエリはよくある。重複を落としてから引く。
+    let mut refs: Vec<(String, String)> = sources
         .iter()
         .map(|(db_name, table_name)| (db_name.to_string(), table_name.to_string()))
         .collect();
+    refs.sort_unstable();
+    refs.dedup();
 
-    app_state
+    let requested = refs.clone();
+    let resolved = app_state
         .db
-        .read(async move |r| {
-            let mut tables: ResolvedTables = HashMap::new();
-            for key in &refs {
-                if tables.contains_key(key) {
-                    continue;
-                }
-                let (db_name, table_name) = key;
-                let table = r.table_info(db_name, table_name).await?.ok_or_else(|| {
-                    AppError::TableNotFound {
-                        name: format!("{db_name}.{table_name}"),
-                    }
-                })?;
-                tables.insert(key.clone(), table);
-            }
-            Ok(tables)
+        .read(async move |r| r.resolve_tables(&refs).await)
+        .await?;
+
+    // 認可は**存在の判定より先**に全件分行う。順序を逆にすると、権限の無い利用者へ
+    // 404 で名前の存在有無を教えることになる（`authorize_resolved` の注記を参照）。
+    for ((db_name, table_name), entry) in requested.iter().zip(&resolved) {
+        crate::middleware::auth::authorize_resolved(
+            user,
+            entry.db_id,
+            entry.table.as_ref().map(|t| t.id),
+            db_name,
+            Some(table_name),
+            UserRole::Read,
+        )?;
+    }
+
+    requested
+        .into_iter()
+        .zip(resolved)
+        .map(|((db_name, table_name), entry)| {
+            let table = entry.table.ok_or_else(|| AppError::TableNotFound {
+                name: format!("{db_name}.{table_name}"),
+            })?;
+            Ok(((db_name, table_name), table))
         })
-        .await
+        .collect()
 }
 
 /// テーブルの格納値をクエリの値型 `V` へ復元するデコーダを組み立てる。
@@ -381,12 +401,14 @@ fn build_map_values<U: Value, V: Value>(
 #[tracing::instrument(skip_all)]
 pub async fn execute(
     app_state: &AppState,
+    user: &User,
     request: ExecuteQueryRequest,
     query_params: &GetDataQuery,
 ) -> Result<GetDataResponse, AppError> {
     // テーブルの解決はトランザクション境界を跨ぐのでここで済ませ、
     // そのあとの評価（同期のクエリ実行器）だけをブロッキングタスクへ渡す。
-    let tables = resolve_tables(app_state, &request.query).await?;
+    // 読み取り権限の検査もこの中で行う（`resolve_tables` の注記を参照）。
+    let tables = resolve_tables(app_state, user, &request.query).await?;
 
     // このクエリが読む断面をここで 1 つに固定し、全ソースへ配る。
     // ソースごと・領域ごとに取り直すと、途中の書き込みを一部だけ見た結果が混ざる。

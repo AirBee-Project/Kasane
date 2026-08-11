@@ -43,7 +43,7 @@ async fn make_table(db: &TikvDb, db_name: &str) -> Table {
     let db_name = db_name.to_string();
     db.write(async move |w| {
         w.database_create(&db_name, None).await?;
-        w.table_create(&db_name, "t", TableDataType::Int, 25, None, None)
+        w.table_create(&db_name, "t", TableDataType::Int, 25, None, None, true)
             .await
     })
     .await
@@ -68,7 +68,7 @@ async fn insert_flex_ids(
             for &x in &chunk {
                 let mut ids = SpatialIdSet::new();
                 ids.insert(SingleId::new(20, f, x, y).unwrap());
-                w.data_insert(table_id, TableDataType::Int, ids, &(x as i64).to_be_bytes())
+                w.data_insert(table_id, Some(TableDataType::Int), ids, &(x as i64).to_be_bytes())
                     .await?;
             }
             Ok(())
@@ -100,7 +100,7 @@ async fn insert_from_both(
                 db.write(async move |w| {
                     w.data_insert(
                         table_id,
-                        TableDataType::Int,
+                        Some(TableDataType::Int),
                         ids.clone(),
                         &(x as i64).to_be_bytes(),
                     )
@@ -221,7 +221,7 @@ async fn table_and_data_roundtrip() {
         let ids = ids.clone();
         let value = value.clone();
         db.write(async move |w| {
-            w.data_insert(table.id, TableDataType::Int, ids.clone(), &value)
+            w.data_insert(table.id, Some(TableDataType::Int), ids.clone(), &value)
                 .await
         })
         .await
@@ -257,7 +257,7 @@ async fn table_and_data_roundtrip() {
     {
         let ids = ids.clone();
         db.write(async move |w| {
-            w.data_remove(table.id, TableDataType::Int, ids.clone())
+            w.data_remove(table.id, Some(TableDataType::Int), ids.clone())
                 .await
         })
         .await
@@ -328,7 +328,7 @@ async fn text_range_filter_keeps_values_that_prefix_the_upper_bound() {
         let name = name.clone();
         db.write(async move |w| {
             w.database_create(&name, None).await?;
-            w.table_create(&name, "t", TableDataType::Text, 25, None, None)
+            w.table_create(&name, "t", TableDataType::Text, 25, None, None, true)
                 .await
         })
         .await
@@ -349,7 +349,7 @@ async fn text_range_filter_keeps_values_that_prefix_the_upper_bound() {
         let mut ids = SpatialIdSet::new();
         ids.insert(SingleId::new(20, 0, x, 0).unwrap());
         db.write(async move |w| {
-            w.data_insert(table.id, TableDataType::Text, ids.clone(), &value)
+            w.data_insert(table.id, Some(TableDataType::Text), ids.clone(), &value)
                 .await
         })
         .await
@@ -554,7 +554,7 @@ async fn the_count_index_tracks_the_shard_entries() {
             for &i in &chunk {
                 let mut ids = SpatialIdSet::new();
                 ids.insert(SingleId::new(20, 0, i, 0).unwrap());
-                w.data_remove(table.id, TableDataType::Int, ids).await?;
+                w.data_remove(table.id, Some(TableDataType::Int), ids).await?;
             }
             Ok(())
         })
@@ -615,7 +615,7 @@ async fn concurrent_writes_do_not_lose_updates() {
             db.write(async move |w| {
                 w.data_insert(
                     table.id,
-                    TableDataType::Int,
+                    Some(TableDataType::Int),
                     ids.clone(),
                     &(i as i64).to_be_bytes(),
                 )
@@ -669,7 +669,7 @@ async fn separate_instances_stay_consistent() {
                 db.write(async move |w| {
                     w.data_insert(
                         table.id,
-                        TableDataType::Int,
+                        Some(TableDataType::Int),
                         ids.clone(),
                         &(x as i64).to_be_bytes(),
                     )
@@ -789,7 +789,7 @@ async fn the_write_closure_is_re_run_until_its_locks_are_held() {
         let name = name.clone();
         db.write(async move |w| {
             w.database_create(&name, None).await?;
-            w.table_create(&name, "t", TableDataType::Int, 25, None, None)
+            w.table_create(&name, "t", TableDataType::Int, 25, None, None, true)
                 .await
         })
         .await
@@ -847,7 +847,7 @@ async fn a_failed_closure_leaves_nothing_behind() {
         .write(async move |w| {
             w.data_insert(
                 table.id,
-                TableDataType::Int,
+                Some(TableDataType::Int),
                 ids.clone(),
                 &1i64.to_be_bytes(),
             )

@@ -7,7 +7,6 @@
 //! 参照先が消えたルールは「解決できないものとして隠し、書き換えのついでに掃除する」
 //! という既存の失効許容設計になっているため、その時点のスナップショットで十分。
 
-use tokio::sync::Mutex;
 
 use super::keys::{self, LockScope};
 use crate::error::AppError;
@@ -16,11 +15,11 @@ use crate::models::users::{
 };
 use crate::repositories::CatalogRepository;
 
-use super::kv::Reader;
+use super::kv::{Reader, Readers};
 use super::{TikvRead, TikvWrite, kv};
 
 pub(super) async fn user_meta<R: Reader>(
-    txn: &Mutex<R>,
+    txn: &Readers<R>,
     username: &str,
 ) -> Result<Option<UserMetadata>, AppError> {
     match kv::get(txn, keys::user(username)).await? {
@@ -32,7 +31,7 @@ pub(super) async fn user_meta<R: Reader>(
 }
 
 async fn put_user_meta(
-    txn: &Mutex<kv::LazyTxn>,
+    txn: &Readers<kv::LazyTxn>,
     username: &str,
     meta: &UserMetadata,
 ) -> Result<(), AppError> {

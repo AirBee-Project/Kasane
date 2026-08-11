@@ -45,7 +45,7 @@ fn siblings_merge_after_mass_remove() {
         for i in 0..n {
             ids.insert(SingleId::new(20, 0, i * 4, 0).unwrap());
         }
-        w.data_insert_impl(table_id, dt, ids, b"v").unwrap();
+        w.data_insert_impl(table_id, Some(dt), ids, b"v").unwrap();
         w.commit().unwrap();
     }
     let (key_count, has_pointer) = shard_stats(&db, table_id);
@@ -63,7 +63,7 @@ fn siblings_merge_after_mass_remove() {
         for i in 0..keep_from {
             ids.insert(SingleId::new(20, 0, i * 4, 0).unwrap());
         }
-        w.data_remove_impl(table_id, dt, ids).unwrap();
+        w.data_remove_impl(table_id, Some(dt), ids).unwrap();
         w.commit().unwrap();
     }
 

@@ -21,7 +21,7 @@ fn insert_into_empty_region_after_split_is_not_lost() {
         for i in 0..5000u32 {
             ids.insert(SingleId::new(20, 0, i * 4, 0).unwrap());
         }
-        w.data_insert_impl(table_id, dt, ids, b"v").unwrap();
+        w.data_insert_impl(table_id, Some(dt), ids, b"v").unwrap();
         w.commit().unwrap();
     }
 
@@ -32,7 +32,7 @@ fn insert_into_empty_region_after_split_is_not_lost() {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
         let mut ids = SpatialIdSet::new();
         ids.insert(target.clone());
-        w.data_insert_impl(table_id, dt, ids, b"w").unwrap();
+        w.data_insert_impl(table_id, Some(dt), ids, b"w").unwrap();
         w.commit().unwrap();
     }
 

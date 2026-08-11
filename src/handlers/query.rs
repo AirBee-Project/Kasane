@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use axum::{
     Extension, Json,
     extract::{Query, State},
@@ -11,7 +9,6 @@ use crate::middleware::auth::AuthUser;
 use crate::models::{
     database::table::data::{GetDataQuery, GetDataResponse, OutputFormat},
     query::ExecuteQueryRequest,
-    users::UserRole,
 };
 use crate::services::query as query_service;
 
@@ -47,16 +44,10 @@ pub async fn execute_query(
     // クエリ式が参照する全テーブルに Read 権限が必要。
     // データベース単位ではなくテーブル単位で検査するので、テーブルスコープの権限しか
     // 持たないユーザーでも、そのテーブルだけを参照するクエリなら実行できる。
-    // 重複を除いてから一括で検査する（参照テーブル数に比例してトランザクションを開かない）。
-    let sources: Vec<(&str, &str)> = payload
-        .query
-        .sources()
-        .into_iter()
-        .collect::<HashSet<_>>()
-        .into_iter()
-        .collect();
-    crate::middleware::auth::check_tables(&app_state, &auth_user, &sources, UserRole::Read).await?;
-
-    let result = query_service::execute(&app_state, payload, &query_params).await?;
+    //
+    // 検査そのものはサービス層が参照テーブルを解決するのと同じ読み取りの中で行う
+    // （`services::query::resolve_tables`）。ここで別途 `check_tables` を呼ぶと、
+    // 同じカタログを 2 度引くことになる。
+    let result = query_service::execute(&app_state, &auth_user, payload, &query_params).await?;
     Ok(Json(result))
 }

@@ -40,6 +40,7 @@ pub async fn create(
                 req.max_zoom_level,
                 req.constraints,
                 req.description,
+                req.value_index,
             )
             .await
         })

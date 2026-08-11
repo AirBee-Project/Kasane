@@ -322,6 +322,45 @@ impl<'a> KasaneDbWrite<'a> {
 }
 
 impl<'a> KasaneDbRead<'a> {
+    /// `(データベース名, テーブル名)` の並びをまとめて解決する。返りは入力と同じ並び。
+    ///
+    /// 参照はすべて mmap 上の点参照なので、TiKV 側のような束ね方（`batch_get`）に意味は
+    /// なく、順に引くだけでよい。**呼び出し側の形を両バックエンドで揃えるため**に
+    /// 同じ入口を用意している。
+    #[tracing::instrument(skip_all, fields(refs = refs.len()))]
+    pub fn resolve_tables_impl(
+        &self,
+        refs: &[(String, String)],
+    ) -> Result<Vec<crate::repositories::ResolvedTable>, AppError> {
+        refs.iter()
+            .map(|(db_name, table_name)| {
+                let db_meta = if db_name.is_empty() {
+                    None
+                } else {
+                    self.db.databases.get(&self.read_txn, db_name)?
+                };
+                let Some(db_meta) = db_meta else {
+                    return Ok(crate::repositories::ResolvedTable {
+                        db_id: None,
+                        table: None,
+                    });
+                };
+                let table = if table_name.is_empty() {
+                    None
+                } else {
+                    self.db
+                        .tables
+                        .get(&self.read_txn, &(db_meta.id, table_name.as_str()))?
+                        .map(|meta| Table::from_meta(table_name, meta))
+                };
+                Ok(crate::repositories::ResolvedTable {
+                    db_id: Some(db_meta.id),
+                    table,
+                })
+            })
+            .collect()
+    }
+
     /// Tableの情報を取得する
     #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
     pub fn table_info_impl(
@@ -387,6 +426,7 @@ impl<'a> KasaneDbRead<'a> {
                 max_zoom_level: m.max_zoom_level,
                 constraints: m.constraints,
                 description: m.description,
+                value_index: m.value_index,
             });
         }
         Ok(tables)
@@ -445,6 +485,7 @@ impl<'a> KasaneDbWrite<'a> {
 
     /// Tableを作成する
     #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
+    #[allow(clippy::too_many_arguments)]
     pub fn table_create_impl(
         &mut self,
         db_name: &str,
@@ -453,6 +494,7 @@ impl<'a> KasaneDbWrite<'a> {
         max_zoom_level: u8,
         constraints: Option<TableConstraints>,
         description: Option<String>,
+        value_index: bool,
     ) -> Result<Table, AppError> {
         if db_name.is_empty() {
             return Err(AppError::DatabaseNotFound {
@@ -506,6 +548,7 @@ impl<'a> KasaneDbWrite<'a> {
             max_zoom_level,
             constraints: actual_constraints.clone(),
             description: description.clone(),
+            value_index,
         };
 
         let db = self.db.tables;
@@ -521,6 +564,7 @@ impl<'a> KasaneDbWrite<'a> {
             max_zoom_level,
             constraints: actual_constraints,
             description,
+            value_index,
         })
     }
 
@@ -602,6 +646,7 @@ impl<'a> KasaneDbWrite<'a> {
             max_zoom_level: table.max_zoom_level,
             constraints: table.constraints.clone(),
             description: table.description.clone(),
+            value_index: table.value_index,
         };
 
         let db = self.db.tables;
@@ -789,6 +834,7 @@ impl<'a> KasaneDbWrite<'a> {
             max_zoom_level: src_table_meta.max_zoom_level,
             constraints: src_table_meta.constraints.clone(),
             description: src_table_meta.description.clone(),
+            value_index: src_table_meta.value_index,
         };
 
         // 7. 新しいテーブルメタデータと ID インデックスを書き込み
@@ -841,6 +887,7 @@ impl<'a> KasaneDbWrite<'a> {
             max_zoom_level: src_table_meta.max_zoom_level,
             constraints: src_table_meta.constraints,
             description: src_table_meta.description,
+            value_index: src_table_meta.value_index,
         })
     }
 }

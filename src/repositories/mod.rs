@@ -14,7 +14,9 @@
 pub mod encoding;
 pub mod traits;
 
-pub use traits::{CatalogRepository, ReadRepository, Storage, ValueGroups, WriteRepository};
+pub use traits::{
+    CatalogRepository, ReadRepository, ResolvedTable, Storage, ValueGroups, WriteRepository,
+};
 
 #[cfg(feature = "backend-lmdb")]
 pub mod lmdb;

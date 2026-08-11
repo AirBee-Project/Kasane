@@ -40,7 +40,7 @@ fn value_filter_eq_and_range_after_split() {
         for i in 0..n {
             let mut set = SpatialIdSet::new();
             set.insert(SingleId::new(20, 0, (i as u32) * 4, 0).unwrap());
-            w.data_insert_impl(table_id, dt, set, &enc(i)).unwrap();
+            w.data_insert_impl(table_id, Some(dt), set, &enc(i)).unwrap();
         }
         w.commit().unwrap();
     }
@@ -70,7 +70,7 @@ fn value_filter_reflects_overwrite_and_remove() {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
         let mut set = SpatialIdSet::new();
         set.insert(id.clone());
-        w.data_insert_impl(table_id, dt, set, &enc(value)).unwrap();
+        w.data_insert_impl(table_id, Some(dt), set, &enc(value)).unwrap();
         w.commit().unwrap();
     };
 
@@ -100,7 +100,7 @@ fn value_filter_reflects_overwrite_and_remove() {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
         let mut set = SpatialIdSet::new();
         set.insert(id.clone());
-        w.data_remove_impl(table_id, dt, set).unwrap();
+        w.data_remove_impl(table_id, Some(dt), set).unwrap();
         w.commit().unwrap();
     }
     {
@@ -142,7 +142,7 @@ fn text_range_filter_keeps_values_that_prefix_the_upper_bound() {
         for (value, x) in rows {
             let mut set = SpatialIdSet::new();
             set.insert(SingleId::new(20, 0, x, 0).unwrap());
-            w.data_insert_impl(table_id, dt, set, value.as_bytes())
+            w.data_insert_impl(table_id, Some(dt), set, value.as_bytes())
                 .unwrap();
         }
         w.commit().unwrap();
@@ -171,4 +171,56 @@ fn text_range_filter_keeps_values_that_prefix_the_upper_bound() {
     // 下限が上限より大きい（空範囲）。
     let got = r.data_filter_range_impl(table_id, dt, b"z", b"a").unwrap();
     assert!(xs(&got).is_empty(), "空範囲が何かを返している");
+}
+
+/// 値インデックスを維持しないテーブル（`index = None`）では索引キーが一切作られず、
+/// それでいてシャード本体の読み書きは変わらないこと。
+///
+/// 索引キーは格納 `FlexId` 1 件につき 1 つ増えるので、1 回の書き込みが触るキー数――
+/// ひいては悲観トランザクションが取るロック数――のほとんどをこれが占める。
+/// 既定で無効になっていることが崩れると、そこが黙って元に戻る。
+#[test]
+fn writes_without_indexing_leave_the_value_index_empty() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let db = initialize_database(tmp.path().to_str().unwrap());
+    let indexed = TableId(uuid::Uuid::now_v7());
+    let plain = TableId(uuid::Uuid::now_v7());
+    let dt = TableDataType::Int;
+
+    let ids = |i: u32| {
+        let mut set = SpatialIdSet::new();
+        set.insert(SingleId::new(20, 0, i, 0).unwrap());
+        set
+    };
+
+    {
+        let wtxn = db.env.write_txn().unwrap();
+        let mut w = KasaneDbWrite::new(wtxn, &db);
+        for i in 0..64u32 {
+            // 同じ内容を、索引ありとなしの 2 つのテーブルへ書く。
+            w.data_insert_impl(indexed, Some(dt), ids(i), &enc(i as i32))
+                .unwrap();
+            w.data_insert_impl(plain, None, ids(i), &enc(i as i32))
+                .unwrap();
+        }
+        w.commit().unwrap();
+    }
+
+    let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
+
+    // 索引ありのテーブルは今までどおり引ける。
+    let eq = r.data_filter_eq_impl(indexed, dt, &enc(7)).unwrap();
+    assert_eq!(xs(&eq), HashSet::from([7u32]));
+
+    // 索引なしのテーブルには索引キーが 1 つも無い。
+    let eq = r.data_filter_eq_impl(plain, dt, &enc(7)).unwrap();
+    assert!(
+        eq.is_empty(),
+        "索引を維持しないテーブルに索引キーが作られている"
+    );
+
+    // それでも本体は普通に読める（索引の有無はデータの見え方を変えない）。
+    let groups = r.data_get_impl(plain, ids(7), None).unwrap();
+    let values: Vec<&Vec<u8>> = groups.iter().map(|(value, _)| value).collect();
+    assert_eq!(values, vec![&enc(7)], "本体の読み出しが索引の有無に依存している");
 }
