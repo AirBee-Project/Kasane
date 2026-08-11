@@ -1,6 +1,6 @@
 # 負荷試験用の単一ノード TiKV 設定。
 #
-#   KASANE_TIKV_CONFIG=./deployment/tikv-large.toml docker compose up -d --wait
+#   KASANE_TIKV_CONFIG=tikv-large.toml docker compose up -d --wait
 #
 # 既定の `tikv.toml` は CI 用に**あらゆるスレッドプールを 1 に固定**してある。
 # 数百 MB を書き込むような負荷をかけると、そこが直列の詰まりになって

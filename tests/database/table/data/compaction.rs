@@ -156,7 +156,8 @@ fn compaction_roundtrip_and_index_cleanup() {
     // 残りも削除 → 完全に空。
     {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
-        w.data_remove_impl(table_id, Some(dt), rect(0, 7, 0, 15)).unwrap();
+        w.data_remove_impl(table_id, Some(dt), rect(0, 7, 0, 15))
+            .unwrap();
         w.commit().unwrap();
     }
     assert!(filter_flex_ids(&db, table_id, 9).is_empty());

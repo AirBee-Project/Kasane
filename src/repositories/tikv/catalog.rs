@@ -3,13 +3,13 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use super::keys::{self, LockScope};
 use super::kv::{Reader, Readers};
 use super::{TikvRead, TikvWrite, kv};
-use crate::repositories::ResolvedTable;
 use crate::error::AppError;
 use crate::models::database::table::{
     Table, TableConstraints, TableDataType, TableMetadata, UpdateTableConstraints,
 };
 use crate::models::database::{DatabaseInfoResponse, DatabaseMetadata};
 use crate::models::id::{DatabaseId, TableId};
+use crate::repositories::ResolvedTable;
 
 fn encode_database(meta: &DatabaseMetadata) -> Result<Vec<u8>, AppError> {
     serde_json::to_vec(meta)

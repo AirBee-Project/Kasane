@@ -171,8 +171,7 @@ struct Fanout {
 
 impl Fanout {
     fn open(&self) -> Snapshot {
-        self.client
-            .snapshot(self.ts.clone(), super::read_options())
+        self.client.snapshot(self.ts.clone(), super::read_options())
     }
 }
 
@@ -952,7 +951,9 @@ pub(super) async fn delete_prefix_chunk(
                 .filter(|(_, value)| value.is_none())
                 .map(|(key, _)| key)
                 .collect();
-            raw.into_iter().filter(|key| !deleted.contains(key)).collect()
+            raw.into_iter()
+                .filter(|key| !deleted.contains(key))
+                .collect()
         }
     };
     let removed = batch.len();

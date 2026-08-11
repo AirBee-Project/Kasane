@@ -33,6 +33,9 @@ pub async fn upsert(
 
     app_state
         .db
-        .write(async move |w| w.data_upsert(table.id, table.value_indexing(), ids, &value).await)
+        .write(async move |w| {
+            w.data_upsert(table.id, table.value_indexing(), ids, &value)
+                .await
+        })
         .await
 }

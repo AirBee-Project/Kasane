@@ -7,7 +7,6 @@
 //! 参照先が消えたルールは「解決できないものとして隠し、書き換えのついでに掃除する」
 //! という既存の失効許容設計になっているため、その時点のスナップショットで十分。
 
-
 use super::keys::{self, LockScope};
 use crate::error::AppError;
 use crate::models::users::{

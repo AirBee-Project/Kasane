@@ -457,7 +457,11 @@ impl Storage for TikvDb {
         // 書き込みをブロックせず、書き込みにもブロックされない（LMDB と同じ）。
         //
         // トランザクションではなくスナップショットを開く（[`TikvRead::at`] を参照）。
-        let ts = self.client.current_timestamp().await.map_err(to_app_error)?;
+        let ts = self
+            .client
+            .current_timestamp()
+            .await
+            .map_err(to_app_error)?;
         let r = TikvRead::at(self.client.clone(), ts);
         f(&r).await
     }

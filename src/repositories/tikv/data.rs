@@ -1113,7 +1113,9 @@ impl TikvWrite<'_> {
             for range in [FlexId::LOWER_MAX, FlexId::UPPER_MAX].map(RangeId::from) {
                 for (_, stored) in arch.get_range(&range) {
                     let restored = crate::services::helpers::value::restore_value(
-                        data_type, constraints, stored,
+                        data_type,
+                        constraints,
+                        stored,
                     )?;
                     crate::services::helpers::value::interpret_value(
                         data_type,

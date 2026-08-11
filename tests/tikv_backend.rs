@@ -68,8 +68,13 @@ async fn insert_flex_ids(
             for &x in &chunk {
                 let mut ids = SpatialIdSet::new();
                 ids.insert(SingleId::new(20, f, x, y).unwrap());
-                w.data_insert(table_id, Some(TableDataType::Int), ids, &(x as i64).to_be_bytes())
-                    .await?;
+                w.data_insert(
+                    table_id,
+                    Some(TableDataType::Int),
+                    ids,
+                    &(x as i64).to_be_bytes(),
+                )
+                .await?;
             }
             Ok(())
         })
@@ -554,7 +559,8 @@ async fn the_count_index_tracks_the_shard_entries() {
             for &i in &chunk {
                 let mut ids = SpatialIdSet::new();
                 ids.insert(SingleId::new(20, 0, i, 0).unwrap());
-                w.data_remove(table.id, Some(TableDataType::Int), ids).await?;
+                w.data_remove(table.id, Some(TableDataType::Int), ids)
+                    .await?;
             }
             Ok(())
         })

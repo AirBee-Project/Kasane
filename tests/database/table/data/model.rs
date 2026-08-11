@@ -166,7 +166,8 @@ fn randomized_model_matches_oracle() {
                 set.insert(SingleId::new(Z, F, x, y).unwrap());
                 let v = next_val;
                 next_val += 1;
-                w.data_insert_impl(table_id, Some(dt), set, &enc(v)).unwrap();
+                w.data_insert_impl(table_id, Some(dt), set, &enc(v))
+                    .unwrap();
                 oracle.insert((x, y), v);
             }
         }
@@ -195,7 +196,8 @@ fn randomized_model_matches_oracle() {
                 if rng.below(100) < insert_pct {
                     let v = next_val;
                     next_val += 1;
-                    w.data_insert_impl(table_id, Some(dt), set, &enc(v)).unwrap();
+                    w.data_insert_impl(table_id, Some(dt), set, &enc(v))
+                        .unwrap();
                     oracle.insert((x, y), v);
                 } else {
                     w.data_remove_impl(table_id, Some(dt), set).unwrap();

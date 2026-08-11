@@ -3,7 +3,7 @@
 # **CI が回ればよい大きさに絞ってある。** スレッドプールはすべて 1〜2 で、負荷をかけると
 # そこが直列の詰まりになる。手元で書き込み負荷を見るときは大きいほうへ差し替えること:
 #
-#   KASANE_TIKV_CONFIG=./deployment/tikv-large.toml docker compose up -d --wait
+#   KASANE_TIKV_CONFIG=tikv-large.toml docker compose up -d --wait
 
 [server]
 grpc-concurrency = 1

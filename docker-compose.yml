@@ -66,13 +66,17 @@ services:
       - --advertise-status-addr=127.0.0.1:20180
       - --data-dir=/data/tikv
       - --pd-endpoints=127.0.0.1:2379
-      # スレッド数とメモリをコア数から決めさせない（deployment/tikv.toml を参照）。
-      - --config=/etc/tikv/tikv.toml
+      # スレッド数とメモリをコア数から決めさせない（deployment/ の設定ファイルを参照）。
+      # 既定は CI 用の極小構成。負荷をかけて詰まりを見るときは大きいほうへ差し替える:
+      #   KASANE_TIKV_CONFIG=tikv-large.toml docker compose up -d --wait
+      # 指定するのは **deployment/ の中のファイル名**（パスではない）。
+      - --config=/etc/tikv/${KASANE_TIKV_CONFIG:-tikv.toml}
     volumes:
       - tikv-data:/data/tikv
-      # 既定は CI 用の極小構成。負荷をかけて詰まりを見るときは大きいほうへ差し替える:
-      #   KASANE_TIKV_CONFIG=./deployment/tikv-large.toml docker compose up -d --wait
-      - ${KASANE_TIKV_CONFIG:-./deployment/tikv.toml}:/etc/tikv/tikv.toml:ro
+      # deployment/ をまるごと載せる。設定ファイルを 1 つだけ載せて名前を固定すると、
+      # 「どちらを使うか」がホスト側のパスとコンテナ側のパスに分かれてしまい、
+      # --config を書き換えても効かない（あるいはその逆）という食い違いが起きる。
+      - ./deployment:/etc/tikv:ro
     # TiKV は nofile が閾値未満だと起動時チェックで FATAL になる。Docker の既定は
     # 環境によって異なり、GitHub Actions では 65536 と足りない。閾値自体も
     # deployment/tikv.toml で下げているが、こちらは TiKV の推奨に合わせた設定。

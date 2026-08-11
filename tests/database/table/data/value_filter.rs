@@ -40,7 +40,8 @@ fn value_filter_eq_and_range_after_split() {
         for i in 0..n {
             let mut set = SpatialIdSet::new();
             set.insert(SingleId::new(20, 0, (i as u32) * 4, 0).unwrap());
-            w.data_insert_impl(table_id, Some(dt), set, &enc(i)).unwrap();
+            w.data_insert_impl(table_id, Some(dt), set, &enc(i))
+                .unwrap();
         }
         w.commit().unwrap();
     }
@@ -70,7 +71,8 @@ fn value_filter_reflects_overwrite_and_remove() {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
         let mut set = SpatialIdSet::new();
         set.insert(id.clone());
-        w.data_insert_impl(table_id, Some(dt), set, &enc(value)).unwrap();
+        w.data_insert_impl(table_id, Some(dt), set, &enc(value))
+            .unwrap();
         w.commit().unwrap();
     };
 
@@ -222,5 +224,9 @@ fn writes_without_indexing_leave_the_value_index_empty() {
     // それでも本体は普通に読める（索引の有無はデータの見え方を変えない）。
     let groups = r.data_get_impl(plain, ids(7), None).unwrap();
     let values: Vec<&Vec<u8>> = groups.iter().map(|(value, _)| value).collect();
-    assert_eq!(values, vec![&enc(7)], "本体の読み出しが索引の有無に依存している");
+    assert_eq!(
+        values,
+        vec![&enc(7)],
+        "本体の読み出しが索引の有無に依存している"
+    );
 }
