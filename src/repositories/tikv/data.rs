@@ -64,20 +64,22 @@ const LEAF_PARALLEL_THRESHOLD: usize = 32;
 ///
 /// 呼び出し側はキーではなく領域で引きたいので、領域をキーにして返す
 /// （キーで返すと、引くたびにキーを組み立て直すことになる）。
+///
+/// 戻ってきたキーからは [`keys::region_from_shard_key`] で領域を復元する。
+/// キー → 領域の対応表を作る手もあるが、そうすると領域の数だけ
+/// 「キーの複製」と「バイト列のハッシュ」が乗る。この関数は木の降下で**1 段につき
+/// 1 回**呼ばれ、1 回で扱う領域数はテーブルが大きいほど増えるので、そこは削っておく。
 async fn load_nodes<R: Reader>(
     txn: &Readers<R>,
     table_id: TableId,
     regions: &[FlexId],
 ) -> Result<FxHashMap<FlexId, ShardValue>, AppError> {
-    let by_key: FxHashMap<Vec<u8>, FlexId> = regions
-        .iter()
-        .map(|r| (keys::shard(table_id, r), *r))
-        .collect();
-    let pairs = kv::batch_get_shards(txn, by_key.keys().cloned().collect()).await?;
-    Ok(pairs
+    let keys: Vec<Vec<u8>> = regions.iter().map(|r| keys::shard(table_id, r)).collect();
+    kv::batch_get_shards(txn, keys)
+        .await?
         .into_iter()
-        .filter_map(|(key, value)| by_key.get(&key).map(|region| (*region, value)))
-        .collect())
+        .map(|(key, value)| Ok((keys::region_from_shard_key(&key)?, value)))
+        .collect()
 }
 
 /// リーフのバイト列から [`SpatialIdMap`] を復元する。未作成なら空のマップ。
@@ -579,42 +581,52 @@ impl<R: Reader> TikvRead<'_, R> {
         Ok(out)
     }
 
-    /// クエリ実行器の入力として、指定範囲群の FlexId をまとめて読み出す。
+    /// クエリ実行器の入力として、指定範囲群の値をまとめて読み出す。
     ///
     /// 範囲を 1 本ずつ渡されないのが要点（[`route_leaves_for_ranges`] を参照）。
+    ///
+    /// **復元は葉を走査しながらその場で行う。** 格納バイト列を `Vec<u8>` として一旦
+    /// 取り出すと、結果 1 行につきヒープ確保が 1 回起きる。呼び出し側はそれを直後に
+    /// `V` へ復元して捨てるので、確保も複製も丸ごと無駄になる。件数はクエリの広さに
+    /// 比例するため、この 1 行分が積み上がると効く（LMDB 側は借用のまま復元していて、
+    /// もともとこの確保が無い）。
     #[tracing::instrument(skip_all, fields(table_id = %table_id, ranges = ranges.len()))]
-    pub(super) async fn read_flex_ids_in_ranges(
+    pub(super) async fn read_values_in_ranges<V: Send>(
         &self,
         table_id: TableId,
         ranges: &[RangeId],
-    ) -> Result<Vec<(FlexId, Vec<u8>)>, AppError> {
+        decode: &(dyn Fn(&[u8]) -> Option<V> + Send + Sync),
+    ) -> Result<Vec<(FlexId, V)>, AppError> {
         if ranges.is_empty() {
             return Ok(Vec::new());
         }
         let leaves = route_leaves_for_ranges(&self.txn, table_id, ranges).await?;
-        decode_range_leaves(&leaves, ranges)
+        decode_range_leaves(&leaves, ranges, decode)
     }
 }
 
-/// 範囲に重なる `(FlexId, 値)` を葉から取り出す。葉が多ければ rayon で分散する。
+/// 範囲に重なる `(FlexId, 値)` を葉から取り出し、その場で `V` へ復元する。
+/// 葉が多ければ rayon で分散する。
 ///
 /// ここは `Source::read_subset` の内側（＝クエリ実行器を回している blocking タスクの上）
 /// から呼ばれるので、さらに blocking タスクへ出さずその場で並列化する。
 ///
 /// 同じ `(FlexId, 値)` が複数の範囲から重複して出うるが、呼び出し側の union が
-/// そのまま吸収する（`query_source.rs` の注記を参照）。
-fn decode_range_leaves(
+/// そのまま吸収する（`query_source.rs` の注記を参照）。復元できない値（型に合わない
+/// 格納値）はここで落とす。
+fn decode_range_leaves<V: Send>(
     leaves: &[RoutedRange],
     ranges: &[RangeId],
-) -> Result<Vec<(FlexId, Vec<u8>)>, AppError> {
-    let decode = |leaf: &RoutedRange| -> Result<Vec<(FlexId, Vec<u8>)>, AppError> {
+    decode: &(dyn Fn(&[u8]) -> Option<V> + Send + Sync),
+) -> Result<Vec<(FlexId, V)>, AppError> {
+    let decode_leaf = |leaf: &RoutedRange| -> Result<Vec<(FlexId, V)>, AppError> {
         let arch = archived_leaf(leaf.node.entry())?;
         let mut out = Vec::new();
         for &i in &leaf.hits {
             out.extend(
                 arch.get_range(&ranges[i as usize])
                     .into_iter()
-                    .map(|(id, value)| (id, value.to_vec())),
+                    .filter_map(|(id, value)| decode(value).map(|value| (id, value))),
             );
         }
         Ok(out)
@@ -623,15 +635,15 @@ fn decode_range_leaves(
     if leaves.len() < LEAF_PARALLEL_THRESHOLD {
         let mut out = Vec::new();
         for leaf in leaves {
-            out.extend(decode(leaf)?);
+            out.extend(decode_leaf(leaf)?);
         }
         return Ok(out);
     }
 
     use rayon::prelude::*;
-    let parts: Vec<Vec<(FlexId, Vec<u8>)>> = leaves
+    let parts: Vec<Vec<(FlexId, V)>> = leaves
         .par_iter()
-        .map(&decode)
+        .map(&decode_leaf)
         .collect::<Result<Vec<_>, AppError>>()?;
     Ok(parts.into_iter().flatten().collect())
 }

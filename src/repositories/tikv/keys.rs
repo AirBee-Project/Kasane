@@ -163,6 +163,26 @@ pub fn shard(table_id: TableId, region: &FlexId) -> Vec<u8> {
     with_ns(Ns::TablesData, &rest)
 }
 
+/// [`shard`] で作ったキーから領域を復元する。
+///
+/// シャードキーは長さが固定（タグ 1 + `table_id` 16 + `flex_id`）なので、末尾を
+/// 切り出して decode するだけで戻せる。**キー → 領域の対応表を作らずに済ませる**ための
+/// 入口で、木の降下では 1 段ごとに領域の数だけ引くため、対応表を作ると
+/// 「キーの複製 + バイト列のハッシュ」がその数だけ乗る（`data.rs` の `load_nodes`）。
+pub fn region_from_shard_key(key: &[u8]) -> Result<FlexId, AppError> {
+    let start = 1 + UUID_LEN;
+    let end = start + FlexId::ENCODED_LEN;
+    if key.len() != end {
+        return Err(AppError::InternalError(format!(
+            "shard key has an unexpected length (expected {end}, found {})",
+            key.len()
+        )));
+    }
+    let mut bytes = [0u8; FlexId::ENCODED_LEN];
+    bytes.copy_from_slice(&key[start..end]);
+    FlexId::decode(&bytes).map_err(|e| AppError::InternalError(format!("flex_id decode: {e}")))
+}
+
 /// あるテーブルの全シャードを覆うプレフィックス。
 pub fn shards_of(table_id: TableId) -> Vec<u8> {
     with_ns(Ns::TablesData, &table_id.into_bytes())

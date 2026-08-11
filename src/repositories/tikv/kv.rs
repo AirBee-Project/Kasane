@@ -597,9 +597,18 @@ pub(super) async fn batch_get<R: Reader>(
     }
 
     let mut txn = txn.lock().await;
+    // 1 塊で収まる通常の場合はそのまま渡す（`chunks(..).to_vec()` だと、収まる場合まで
+    // キー列を丸ごと複製することになる）。
+    if keys.len() <= BATCH_KEYS {
+        return txn.read_many(keys).await.map_err(to_app_error);
+    }
+
+    let mut rest = keys;
     let mut out = Vec::new();
-    for chunk in keys.chunks(BATCH_KEYS) {
-        out.extend(txn.read_many(chunk.to_vec()).await.map_err(to_app_error)?);
+    while !rest.is_empty() {
+        let tail = rest.split_off(rest.len().min(BATCH_KEYS));
+        out.extend(txn.read_many(rest).await.map_err(to_app_error)?);
+        rest = tail;
     }
     Ok(out)
 }

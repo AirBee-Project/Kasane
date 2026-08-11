@@ -97,6 +97,7 @@ where
         let table_id = self.table_id;
         let bounds = bounds.to_vec();
         let snapshot_ts = self.snapshot_ts.clone();
+        let decode = self.decode.clone();
 
         let flex_ids = self.handle.block_on(async move {
             // 固定タイムスタンプのスナップショット。読み取り専用なので
@@ -107,19 +108,19 @@ where
             // 寄こすので、1 本ごとに木を降りると往復が「境界の本数 × 木の深さ」になる。
             // 境界の本数は対象空間 ID の広さに比例して増えるので、そこが要求の大きさに
             // 対する直列な鎖になっていた。
+            //
+            // 復元関数も一緒に渡す。格納バイト列を `Vec<u8>` で受け取ってからここで
+            // 復元すると、結果 1 行につきヒープ確保が 1 回起き、しかもその `Vec` は
+            // 復元した直後に捨てられる。葉を走査しながらその場で復元すれば起きない。
             reader
-                .read_flex_ids_in_ranges(table_id, &bounds)
+                .read_values_in_ranges(table_id, &bounds, decode.as_ref())
                 .await
                 .map_err(|e| LogicError::SourceRead(e.to_string()))
         })?;
 
-        // 復元できない値（型に合わない格納値）の FlexId は結果に含めない。
         // 重なり合う bounds から同じ FlexId を複数回読んでも、いずれも同じ
         // `(FlexId, 値)` なので union がそのまま吸収する。
-        Ok(flex_ids
-            .into_iter()
-            .filter_map(|(id, raw)| (self.decode)(&raw).map(|v| (id, v)))
-            .collect())
+        Ok(flex_ids.into_iter().collect())
     }
 
     fn read_all(self: Box<Self>) -> Result<WorkingTree<V>, LogicError> {
