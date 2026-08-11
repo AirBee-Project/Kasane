@@ -15,11 +15,30 @@ pub(super) const DEFAULT_PD_ENDPOINTS: &str = "127.0.0.1:2379";
 /// 初期投入する管理者ユーザーの名前
 const ROOT_USERNAME: &str = "root";
 
+/// 1 回の TiKV RPC に与える時間。
+///
+/// tikv-client の既定は **2 秒**（`DEFAULT_REQUEST_TIMEOUT`）で、これは
+/// `kv_batch_get` / `kv_prewrite` / `kv_pessimistic_lock` を含む**すべての**ストア RPC の
+/// 期限として設定される（`store/request.rs` の `set_timeout`）。
+///
+/// 2 秒は短すぎる。混み合ったノードでは 1024 キーの `batch_get` も、数千キーの
+/// prewrite も普通に超える。超えた瞬間 tonic がストリームを RST で打ち切るので、
+/// TiKV 側には `RemoteStopped`、こちら側には h2 の
+/// `locally-reset streams reached limit` が並ぶ。**遅いだけで済んだはずの要求が
+/// 失敗に化け、やり直しでさらに混雑を増やす。**
+///
+/// 同じクライアントがロックへ与える寿命は 20 秒（`MAX_TTL`）で、そこを超えて
+/// 生き延びられないトランザクションはどのみち通らない。RPC の期限はその近辺まで
+/// 伸ばしておき、詰まりの検出は HTTP/2 の keep-alive に任せる。
+const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 30;
+
 /// TiKV への接続設定。
 #[derive(Debug, Clone)]
 pub struct TikvConfig {
     pub pd_endpoints: Vec<String>,
     pub security: Option<TikvSecurity>,
+    /// 1 回の RPC に与える時間（[`DEFAULT_REQUEST_TIMEOUT_SECS`] を参照）。
+    pub request_timeout: std::time::Duration,
 }
 
 #[derive(Debug, Clone)]
@@ -46,8 +65,21 @@ impl TikvConfig {
                 .filter(|s| !s.is_empty())
                 .collect(),
             security: TikvSecurity::from_env(),
+            request_timeout: request_timeout_from_env(),
         }
     }
+}
+
+/// `KASANE_TIKV_REQUEST_TIMEOUT_SECS` があればそれを、無ければ既定値を使う。
+///
+/// 数値として読めない値は既定へ落とす（起動を止めるほどのことではない）。
+fn request_timeout_from_env() -> std::time::Duration {
+    let secs = std::env::var("KASANE_TIKV_REQUEST_TIMEOUT_SECS")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<u64>().ok())
+        .filter(|secs| *secs > 0)
+        .unwrap_or(DEFAULT_REQUEST_TIMEOUT_SECS);
+    std::time::Duration::from_secs(secs)
 }
 
 impl TikvSecurity {
@@ -76,7 +108,8 @@ impl TikvDb {
     /// クラスタへ接続し、既定ユーザーを用意して返す。
     #[tracing::instrument(skip_all, fields(pd_endpoints = ?config.pd_endpoints))]
     pub async fn connect(config: TikvConfig) -> Result<Self, AppError> {
-        let mut client_config = Config::default();
+        // 既定の 2 秒は短すぎる（`DEFAULT_REQUEST_TIMEOUT_SECS` の注記を参照）。
+        let mut client_config = Config::default().with_timeout(config.request_timeout);
         match &config.security {
             Some(sec) => {
                 client_config = client_config.with_security(

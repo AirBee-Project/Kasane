@@ -17,36 +17,53 @@
 //!
 //! # 読み書きの噛み合わせ方
 //!
+//! 排他の付け方は経路によって違う。**片方だけ見て他方を真似すると壊れる**ので、
+//! なぜ違うのかをここに書いておく。
+//!
+//! ## データ経路：`batch_get_for_update`（悲観）
+//!
 //! TiKV の悲観ロックは取得時に取り直した `for_update_ts` で取られるのに対し、
 //! `txn.get()` はトランザクション開始時の `start_ts` スナップショットを読む。
-//! そのため「1 つのトランザクション内でロックしてから `get` する」と、ロック取得前に
-//! コミットされた他者の変更を見落として lost update になる。
-//!
-//! この食い違いへの対処は 2 通りあり、対象によって使い分けている。
-//!
-//! ## データ経路：`batch_get_for_update`
-//!
-//! シャードの読み書きはキー単位で完結するので、**ロックと最新値の取得を 1 リクエストで
-//! 行う** `batch_get_for_update` を使う（[`kv::lock_shards`]）。返る値は
-//! `for_update_ts` 時点のものなので、そもそも食い違いが発生しない。
+//! そのため「ロックしてから `get` する」と、ロック取得前にコミットされた他者の変更を
+//! 見落として lost update になる。シャードの読み書きはキー単位で完結するので、
+//! **ロックと最新値の取得を 1 リクエストで行う** `batch_get_for_update` を使う
+//! （[`kv::lock_shards`]）。返る値は `for_update_ts` 時点のものなので食い違いが起きない。
 //!
 //! テーブル全体を排他しないため、**別のリーフへの書き込みは並列に流れる**。
 //! 複数の Kasane インスタンスが同じクラスタへ書き込む構成でも同じ。
 //! なぜリーフ単位のロックで足りるのかは `data.rs` の書き込みの節を参照。
 //!
-//! ## カタログ経路：ロック専用トランザクション
+//! ここを楽観トランザクションへ寄せたことがある。不変条件は楽観でも通用し、往復も
+//! 転送量も減るのだが、**競合の濃いワークロードで書き込みが落ちた**ので戻した。
+//! 経緯と実測は `data.rs` に残してある。
+//!
+//! ## カタログ経路：ロック専用トランザクション（**悲観のまま**）
 //!
 //! データベース配下のテーブル一覧のように、**範囲スキャンから変更を導く**操作は
-//! キー単位のロックではファントムを防げない。そこで LMDB の `env.write_txn()` と
-//! 同じ順序――**ライタミューテックス取得 → スナップショット確定**――を
-//! 2 つのトランザクションに分けて再現する。
+//! 楽観の競合検査では守れない。検査するのは「自分が書くキー」だけなので、
+//! ファントムが素通りする。
 //!
-//! 1. ロック専用トランザクションで必要なロックキーを取得する
+//! > A: `database_remove("db")` … 配下を走査して t1, t2 と db を消す
+//! > B: `table_create("db", "t3")` … db の存在を確認して t3 を作る
+//!
+//! 両者が書くキーは重ならないため、楽観では**どちらも成功して t3 が取り残される**。
+//! 読んだ範囲に対する排他が要るので、ここは TiKV 側の実ロックを使う。
+//!
+//! そこで LMDB の `env.write_txn()` と同じ順序――**ライタミューテックス取得 →
+//! スナップショット確定**――を 2 つのトランザクションに分けて再現する。
+//!
+//! 1. ロック専用トランザクション（[`lock_options`]、**悲観**）でロックキーを取得する
 //! 2. **その後に**作業トランザクションを開始する（start_ts が前任者のコミットより後になる）
 //! 3. 作業をコミットする
 //! 4. ロック専用トランザクションを rollback して解放する
 //!
 //! ロック側は常に rollback で終わるので、ロックキーには MVCC のバージョンが作られない。
+//!
+//! **[`lock_options`] を [`write_options`] と同じにしてはならない。** 楽観の
+//! `lock_keys` はローカルバッファへ印を付けるだけで RPC を出さず、検査はコミット時に
+//! 行われる。ロック側は必ず rollback するので、その検査は永久に行われない――
+//! つまり**排他が黙って消える**。コンパイルは通り、競合を能動的に起こさないテストも
+//! 通ってしまう。壊れ方は「複数インスタンスでだけ整合性が崩れる」形になる。
 //!
 //! こちらを使うのはカタログとユーザーの操作だけで、いずれも頻度が低い。
 //!
@@ -194,9 +211,31 @@ fn read_options() -> TransactionOptions {
     TransactionOptions::new_optimistic().drop_check(CheckLevel::Warn)
 }
 
-/// 書き込み（と明示ロック）トランザクションの設定。
-fn write_options() -> TransactionOptions {
+/// 明示ロック専用トランザクションの設定。**必ず悲観**。
+///
+/// [`write_options`] と統合してはならない。楽観の `lock_keys` は RPC を出さず
+/// ローカルバッファへ印を付けるだけで、検査はコミット時に行われる。このトランザクションは
+/// 必ず rollback で終わるので、検査は永久に行われず**排他が黙って消える**
+/// （モジュール冒頭のカタログ経路の節を参照）。
+fn lock_options() -> TransactionOptions {
     TransactionOptions::new_pessimistic().drop_check(CheckLevel::Warn)
+}
+
+/// 作業（書き込み）トランザクションの設定。
+///
+/// **悲観**。一度は楽観へ寄せたが、競合の濃いワークロードで書き込みが落ちたため戻した
+/// （理由と実測は `data.rs` の書き込みの節）。[`lock_options`] と分けたままにしてあるのは、
+/// 将来また作業側だけを楽観へ寄せられるようにするため――そのときロック側まで
+/// 巻き込まないことが要点で、テストがそれを固定している。
+///
+/// `one_pc` は 1 回の prewrite でコミットまで済ませる最適化。効くのは変更が
+/// **1 リージョンに収まる**ときだけで、跨ぐ場合は tikv-client が自動的に 2PC へ落とす。
+/// 収まったのに TiKV が断った場合は [`tikv_client::Error::OnePcFailure`] になる――
+/// **フォールバックは実装されていない**ので、呼び出し側が 2PC でやり直す
+/// （[`Storage::write`] を参照）。
+fn write_options(one_pc: bool) -> TransactionOptions {
+    let options = TransactionOptions::new_pessimistic().drop_check(CheckLevel::Warn);
+    if one_pc { options.try_one_pc() } else { options }
 }
 
 /// 破棄されるトランザクションを、バックグラウンドで rollback する。
@@ -260,6 +299,17 @@ fn is_retryable(err: &tikv_client::Error) -> bool {
                 || key_error.deadlock.is_some()
                 || !key_error.retryable.is_empty()
         }
+        // 他者のロックが載ったキーへ prewrite しようとして、解決を待ちきれなかった。
+        //
+        // **これは「今その相手が握っている」という意味でしかない。** tikv-client は
+        // `KeyIsLocked` を受けると `resolve_lock` で解決を試み、相手がまだ生きている
+        // うちは短い backoff（2ms〜500ms を 10 回）で粘るが、それを使い切ると
+        // この失敗になる。競合が濃いときほど当たる。
+        //
+        // 楽観トランザクションではロックに当たるのが prewrite なので、競合の signal が
+        // ここへ出る。悲観だった頃は `pessimistic_lock` の段で `conflict` として
+        // 上の分岐に落ちていたため、この変換を書き忘れると**混雑時だけ 500 になる**。
+        Error::ResolveLockError(_) => true,
         Error::MultipleKeyErrors(errors) | Error::ExtractedErrors(errors) => {
             errors.iter().any(is_retryable)
         }
@@ -268,6 +318,16 @@ fn is_retryable(err: &tikv_client::Error) -> bool {
         // なりうる。ここでは拾わず、呼び出し元へそのまま伝える。
         _ => false,
     }
+}
+
+/// 1PC を断られたか。
+///
+/// tikv-client は 1 リージョンに収まった変更に対して TiKV が 1PC を拒んだとき、
+/// **2PC へフォールバックせず**この失敗を返す。やり直せば通るが、同じ条件なら
+/// また断られるので、**次の試行では 1PC を諦める**必要がある（[`is_retryable`] と
+/// 分けてあるのはそのため）。
+fn is_one_pc_failure(err: &tikv_client::Error) -> bool {
+    matches!(err, tikv_client::Error::OnePcFailure)
 }
 
 /// TiKV バックエンドのハンドル。複製してもクラスタへの接続は共有される。
@@ -297,7 +357,8 @@ impl LockGuard {
         client: &TransactionClient,
         keys: &BTreeSet<Vec<u8>>,
     ) -> Result<Self, tikv_client::Error> {
-        let mut txn = client.begin_with_options(write_options()).await?;
+        // **悲観**で開くこと（[`lock_options`] の注記を参照）。
+        let mut txn = client.begin_with_options(lock_options()).await?;
         if let Err(e) = txn.lock_keys(keys.iter().cloned()).await {
             let _ = txn.rollback().await;
             return Err(e);
@@ -324,6 +385,36 @@ impl Drop for LockGuard {
 async fn release(guard: Option<LockGuard>) {
     if let Some(guard) = guard {
         guard.release().await;
+    }
+}
+
+/// コミットし、**失敗したらロックを返してから**そのエラーを返す。
+///
+/// [`tikv_client::Transaction::commit`] は失敗しても自分では巻き戻さない。エラーを返して
+/// 終わるだけで、prewrite が途中まで書いたロックはそのまま残る。ここで返しにいかないと、
+/// ロックは TTL（3 秒〜最大 20 秒）が切れるまで居座る。
+///
+/// これは競合時に**雪だるま式に悪化する**。A の prewrite が競合で失敗してロックを残す →
+/// B がそのロックに当たり、まだ生きているので `resolve_lock` が待たされ、backoff を
+/// 使い切って失敗する → B もロックを残す → … と、詰まりが次の要求へ連鎖していく。
+/// やり直す前にここで返しておけば、次の試行は自分が残した障害物に当たらない。
+///
+/// **`UndeterminedError` のときだけは巻き戻さない。** これは「主キーのコミットが
+/// 成功したかどうか判らない」という意味で、実際には成功しているかもしれない。
+/// 巻き戻すとコミット済みのトランザクションを取り消しかねないので、そのまま伝える。
+async fn commit_or_release(txn: &mut Transaction) -> Result<(), tikv_client::Error> {
+    match txn.commit().await {
+        Ok(_) => Ok(()),
+        Err(tikv_client::Error::UndeterminedError(inner)) => {
+            Err(tikv_client::Error::UndeterminedError(inner))
+        }
+        Err(e) => {
+            if let Err(rollback_error) = txn.rollback().await {
+                // 巻き戻せなくても元の失敗を優先して伝える。ロックは TTL で消える。
+                tracing::warn!("failed to release locks after a failed commit: {rollback_error}");
+            }
+            Err(e)
+        }
     }
 }
 
@@ -480,6 +571,10 @@ impl Storage for TikvDb {
         // 競合でのやり直しだけを数える。ロック不足での巻き戻しは待つ理由がない
         // （相手を待っているのではなく、必要な範囲が判っただけなので）。
         let mut conflicts: u32 = 0;
+        // 1PC を試すか。断られたら諦めて 2PC でやり直す（[`is_one_pc_failure`]）。
+        // 試行をまたいで持ち回るのが要点で、そうしないと断られ続ける構成で
+        // 毎回 1 回ぶん無駄な prewrite を投げ、上限まで失敗し続ける。
+        let mut one_pc = true;
 
         for _ in 0..MAX_ATTEMPTS {
             // 1. ロックを取得する。初回は集合が空なので、そもそもトランザクションを
@@ -503,7 +598,7 @@ impl Storage for TikvDb {
             //    start_ts が確定する。ロック取得より後になるので、前任者のコミットが
             //    必ず見える。
             let mut w = TikvWrite {
-                txn: kv::Readers::new(LazyTxn::new(self.client.clone())),
+                txn: kv::Readers::new(LazyTxn::new(self.client.clone(), one_pc)),
                 _db: PhantomData,
                 held: locks.clone(),
                 missing: BTreeSet::new(),
@@ -565,7 +660,7 @@ impl Storage for TikvDb {
 
             let outcome = match result {
                 Ok(value) => match txn {
-                    Some(mut txn) => txn.commit().await.map(|_| value),
+                    Some(mut txn) => commit_or_release(&mut txn).await.map(|_| value),
                     // 何も書かずに終わった（読み取りだけ、あるいは即座に確定した）。
                     None => Ok(value),
                 },
@@ -587,6 +682,13 @@ impl Storage for TikvDb {
 
             match outcome {
                 Ok(value) => return Ok(value),
+                // 1PC を断られただけ。競合ではないので待たず、2PC で即やり直す。
+                Err(e) if is_one_pc_failure(&e) => {
+                    tracing::debug!("TiKV declined one-phase commit; retrying with two-phase");
+                    one_pc = false;
+                    last_error = Some(to_app_error(e));
+                    continue;
+                }
                 Err(e) if is_retryable(&e) => {
                     back_off(&mut conflicts, to_app_error(e), &mut last_error).await;
                     continue;
@@ -660,6 +762,71 @@ mod tests {
                 "揺らぎが想定範囲を外れている: {millis}ms"
             );
         }
+    }
+
+    /// 競合由来の失敗がやり直し対象に分類されること。
+    ///
+    /// 楽観トランザクションでは他者のロックに当たるのが prewrite なので、競合の signal は
+    /// [`tikv_client::Error::ResolveLockError`] として出る。ここが漏れていると、
+    /// **混雑したときだけ 500 が返る**（空いていれば当たらないので気づけない）。
+    #[test]
+    fn contention_failures_are_classified_as_retryable() {
+        use tikv_client::Error;
+
+        // 他者がロックを握っていて解決を待ちきれなかった。待てば通る。
+        assert!(
+            is_retryable(&Error::ResolveLockError(Vec::new())),
+            "ロック解決の失敗がやり直し対象から漏れている"
+        );
+        // 入れ子（リージョンを跨いだ prewrite などでまとめられた場合）でも拾う。
+        assert!(is_retryable(&Error::ExtractedErrors(vec![
+            Error::ResolveLockError(Vec::new()),
+        ])));
+
+        // コミットの成否が不明なものはやり直してはならない（二重適用になりうる）。
+        assert!(!is_retryable(&Error::UndeterminedError(Box::new(
+            Error::ResolveLockError(Vec::new())
+        ))));
+
+        // 1PC 拒否は競合ではないので、こちらの分類には入れない
+        // （待たずに 2PC でやり直す。`is_one_pc_failure` を参照）。
+        assert!(!is_retryable(&Error::OnePcFailure));
+        assert!(is_one_pc_failure(&Error::OnePcFailure));
+    }
+
+    /// ロック専用トランザクションが**悲観のまま**であること。
+    ///
+    /// これが楽観になると `lock_keys` は RPC を出さずローカルバッファへ印を付けるだけになり、
+    /// 検査はコミット時に回る。[`LockGuard`] は必ず rollback で終わるので検査は永久に
+    /// 行われず、**カタログ操作の排他が黙って消える**。
+    ///
+    /// 消えても単体テストは通ってしまう（競合を能動的に起こさないため）。壊れ方は
+    /// 「複数インスタンスでだけ、範囲スキャンから導く操作がファントムを起こす」形なので、
+    /// 気づくのは本番になる。だからここで型として固定しておく。
+    ///
+    /// 作業側（[`write_options`]）は性能の都合で楽観へ振れうる。そのときに
+    /// ロック側まで巻き込まないことが、この検査の目的である。
+    #[test]
+    fn lock_transactions_stay_pessimistic() {
+        // 悲観／楽観の別は `TransactionOptions` の外から読めないので、
+        // 既知の構成と突き合わせて判定する。
+        let pessimistic = TransactionOptions::new_pessimistic().drop_check(CheckLevel::Warn);
+        assert_eq!(lock_options(), pessimistic, "ロック専用は悲観であること");
+
+        // 作業側は今も悲観だが、**それに依存して同一視してはならない**。
+        // 作業側だけを楽観へ寄せる変更が入っても、ロック側は悲観のままである必要がある。
+        let optimistic = TransactionOptions::new_optimistic().drop_check(CheckLevel::Warn);
+        assert_ne!(
+            lock_options(),
+            optimistic,
+            "ロック専用が楽観になっている。lock_keys が RPC を出さなくなり排他が消える"
+        );
+
+        assert_ne!(
+            write_options(true),
+            write_options(false),
+            "try_one_pc が反映されていない"
+        );
     }
 
     #[test]

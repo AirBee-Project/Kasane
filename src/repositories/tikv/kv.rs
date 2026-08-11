@@ -156,8 +156,8 @@ impl_reader!(Snapshot);
 /// 同じ断面を読むので、どのチャンクをどれで読んでも結果は変わらない。
 ///
 /// 書き込みトランザクション上の読み取りには追加スナップショットを持たせない。
-/// そちらは自分の書き込みやロックと噛み合っている必要があり、別の実体から読むと
-/// その関係が崩れるため（[`LazyTxn::lock_and_read`] を参照）。
+/// そちらは**まだ送っていない自分の変更**を重ねて返す必要があり（[`LazyTxn`] の
+/// `Reader` 実装）、別の実体から読むとその重ね合わせが効かないため。
 pub struct Readers<R> {
     primary: Mutex<R>,
     fanout: Option<Fanout>,
@@ -218,21 +218,22 @@ impl Readers<Snapshot> {
 pub struct LazyTxn {
     client: Arc<TransactionClient>,
     txn: Option<Transaction>,
+    /// 1PC を試すか（`super::write_options` を参照）。断られた場合のやり直しは
+    /// `Storage::write` が判断するので、ここは受け取った設定を持ち回るだけ。
+    one_pc: bool,
     /// まだ TiKV へ送っていない変更（`None` は削除）。
     ///
     /// **書き込みは全部ここへ溜め、コミットの直前に 1 回だけ流す**
-    /// （[`flush`](Self::flush)）。悲観トランザクションの `put` / `delete` /
-    /// `batch_mutate` は毎回その内側で悲観ロックを取り、そのたびに PD から
-    /// `for_update_ts` を取り直す。つまり **1 回の書き込み呼び出し = 2 往復**で、
-    /// 触れたリーフの数だけ直列に積み上がっていた。1 回にまとめれば、書き込みの
-    /// 往復数はリーフ数に依存しなくなる。
+    /// （[`flush`](Self::flush)）。呼び出しのたびに `batch_mutate` を投げると、
+    /// 触れたリーフの数だけリクエストが直列に積み上がる。1 回にまとめれば、
+    /// 書き込みの往復数はリーフ数に依存しなくなる。
     ///
-    /// [`BTreeMap`] なのは偶然ではない。反復順（＝キーのバイト昇順）がそのまま
-    /// ロック取得順になるので、デッドロック回避の全順序が保たれる。同じキーへの
-    /// 重複書き込みも最後の 1 つに畳まれる。
+    /// [`BTreeMap`] なのは偶然ではない。反復順（＝キーのバイト昇順）で送るので
+    /// キーが連続し、リージョン跨ぎのアクセスが減る。同じキーへの重複書き込みも
+    /// 最後の 1 つに畳まれる。
     ///
-    /// この台帳は [`lock_and_read`](Self::lock_and_read) の「自分の書き込みを見せる」
-    /// 用途も兼ねる。溜めている間は TiKV 側のバッファが空なので、二重に持つことはない。
+    /// この台帳は**読み取りに自分の書き込みを見せる**用途も兼ねる（[`LazyTxn`] の
+    /// `Reader` 実装）。溜めている間は TiKV 側のバッファが空なので、二重に持つことはない。
     pending: BTreeMap<Vec<u8>, Option<Vec<u8>>>,
     /// 競合由来の失敗を受け取ったか。
     ///
@@ -244,10 +245,11 @@ pub struct LazyTxn {
 }
 
 impl LazyTxn {
-    pub(super) fn new(client: Arc<TransactionClient>) -> Self {
+    pub(super) fn new(client: Arc<TransactionClient>, one_pc: bool) -> Self {
         Self {
             client,
             txn: None,
+            one_pc,
             pending: BTreeMap::new(),
             conflicted: false,
         }
@@ -274,7 +276,7 @@ impl LazyTxn {
         if self.txn.is_none() {
             self.txn = Some(
                 self.client
-                    .begin_with_options(super::write_options())
+                    .begin_with_options(super::write_options(self.one_pc))
                     .await?,
             );
         }
@@ -606,6 +608,17 @@ pub(super) async fn batch_get<R: Reader>(
 ///
 /// どのスナップショットも同じタイムスタンプを読むので、どのチャンクがどれに
 /// 割り当たっても結果は変わらない。
+///
+/// # 失敗しても飛んでいる RPC を打ち切らない
+///
+/// [`JoinSet`](tokio::task::JoinSet) は**drop すると中のタスクを abort する**。1 本の
+/// チャンクが失敗した時点で `?` を返すと、まだ応答待ちの兄弟（最大 [`MAX_FANOUT`] - 1 本）が
+/// その場で捨てられ、gRPC ストリームが RST で打ち切られる。TiKV 側にはそれが
+/// `RemoteStopped`、こちら側には h2 の `locally-reset streams reached limit` として現れる。
+///
+/// 厄介なのは、これが**混んでいるときほど増える**こと。失敗 1 回につき数本を巻き添えに
+/// するので、詰まりかけたクラスタへこちらからキャンセルを浴びせて悪化させる。
+/// そこで失敗は覚えておくだけにして、飛んでいるぶんは最後まで見届けてから返す。
 async fn batch_get_fanned_out(
     fanout: &Fanout,
     keys: Vec<Vec<u8>>,
@@ -615,9 +628,12 @@ async fn batch_get_fanned_out(
     let mut chunks = keys.chunks(BATCH_KEYS).map(<[Vec<u8>]>::to_vec);
     let mut running: tokio::task::JoinSet<ChunkResult> = tokio::task::JoinSet::new();
     let mut out = Vec::new();
+    let mut failure: Option<AppError> = None;
 
     loop {
-        while running.len() < MAX_FANOUT
+        // 失敗が判ったら新しいチャンクは投げない。ただし投げ終えたぶんは待つ。
+        while failure.is_none()
+            && running.len() < MAX_FANOUT
             && let Some(chunk) = chunks.next()
         {
             let mut snapshot = fanout.open();
@@ -629,16 +645,28 @@ async fn batch_get_fanned_out(
                     .collect())
             });
         }
+
         let Some(joined) = running.join_next().await else {
             break;
         };
-        let pairs = joined
-            .map_err(|e| AppError::InternalError(format!("batch get task: {e}")))?
-            .map_err(to_app_error)?;
-        out.extend(pairs);
+
+        match joined
+            .map_err(|e| AppError::InternalError(format!("batch get task: {e}")))
+            .and_then(|result| result.map_err(to_app_error))
+        {
+            // 既に失敗が確定しているなら、読めた分は捨てる（返すのはエラーなので）。
+            Ok(pairs) if failure.is_none() => out.extend(pairs),
+            Ok(_) => {}
+            Err(e) => {
+                failure.get_or_insert(e);
+            }
+        }
     }
 
-    Ok(out)
+    match failure {
+        Some(e) => Err(e),
+        None => Ok(out),
+    }
 }
 
 fn range_from(start: Vec<u8>, end: Option<Vec<u8>>) -> BoundRange {
@@ -889,8 +917,11 @@ pub(super) async fn delete_shard(
 /// ロックされるので、「空の領域を他者が埋める」「親へ畳んで消す」といった操作も
 /// この呼び出しで排他される。
 ///
-/// キーは [`BTreeSet`](std::collections::BTreeSet) に集めてから渡すこと。反復順
-/// （＝バイト昇順）がそのままデッドロック回避の全順序になる。
+/// キーは [`BTreeMap`] に集めてから渡すので、反復順（＝バイト昇順）がそのまま
+/// デッドロック回避の全順序になる。
+///
+/// 読み取りは [`LazyTxn::lock_and_read`] を通るので、**このトランザクションで
+/// 既に書いた内容が重なった状態**で返る。
 pub(super) async fn lock_shards(
     txn: &Readers<LazyTxn>,
     table_id: TableId,
