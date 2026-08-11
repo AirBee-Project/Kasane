@@ -235,7 +235,11 @@ fn lock_options() -> TransactionOptions {
 /// （[`Storage::write`] を参照）。
 fn write_options(one_pc: bool) -> TransactionOptions {
     let options = TransactionOptions::new_pessimistic().drop_check(CheckLevel::Warn);
-    if one_pc { options.try_one_pc() } else { options }
+    if one_pc {
+        options.try_one_pc()
+    } else {
+        options
+    }
 }
 
 /// 破棄されるトランザクションを、バックグラウンドで rollback する。
