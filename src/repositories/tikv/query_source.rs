@@ -21,7 +21,7 @@
 //! そこで取得したハンドルを持ち回れば、どのスレッドから呼ばれても成立する。
 
 use kasane_logic::{Error as LogicError, RangeId, SafeValue, Source, WorkingTree};
-use tikv_client::{Timestamp, TransactionOptions};
+use tikv_client::Timestamp;
 use tokio::runtime::Handle;
 
 use crate::models::id::TableId;
@@ -101,10 +101,7 @@ where
         let flex_ids = self.handle.block_on(async move {
             // 固定タイムスタンプのスナップショット。読み取り専用なので
             // commit も rollback も要らず、drop するだけで閉じられる。
-            let snapshot = db.client.snapshot(
-                snapshot_ts,
-                TransactionOptions::new_optimistic().read_only(),
-            );
+            let snapshot = db.client.snapshot(snapshot_ts, super::read_options());
             let reader = TikvRead::new(snapshot);
 
             let mut flex_ids = Vec::new();

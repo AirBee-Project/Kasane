@@ -102,7 +102,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use rand_core::RngCore;
-use tikv_client::{Transaction, TransactionClient};
+use tikv_client::{CheckLevel, Transaction, TransactionClient, TransactionOptions};
 
 use crate::error::AppError;
 use crate::repositories::Storage;
@@ -164,6 +164,45 @@ fn apply_jitter(base: std::time::Duration) -> std::time::Duration {
 
 fn to_app_error(err: tikv_client::Error) -> AppError {
     AppError::StorageError(err.to_string())
+}
+
+// --- トランザクションの開き方 ---
+//
+// tikv-client の既定は [`CheckLevel::Panic`] で、コミットも rollback もされないまま
+// [`Transaction`] が drop されると panic する。HTTP ハンドラの Future はクライアント
+// 切断で途中破棄されうるため、この経路は通常運用で踏まれる。リリースビルドは
+// `panic = "abort"` なので、踏めばプロセスごと落ちる。
+//
+// そこでこのバックエンドは `begin_optimistic` / `begin_pessimistic` を直接使わず、
+// 必ず下の 2 つを通して開く。破棄の後始末は [`rollback_in_background`] が引き受け、
+// それでも取り残されたものだけが警告として残るようにしてある。
+
+/// 読み取りトランザクションの設定。
+fn read_options() -> TransactionOptions {
+    TransactionOptions::new_optimistic().drop_check(CheckLevel::Warn)
+}
+
+/// 書き込み（と明示ロック）トランザクションの設定。
+fn write_options() -> TransactionOptions {
+    TransactionOptions::new_pessimistic().drop_check(CheckLevel::Warn)
+}
+
+/// 破棄されるトランザクションを、バックグラウンドで rollback する。
+///
+/// 悲観ロックを握ったまま消えると、ロックの TTL が切れるまで同じシャードへの
+/// 書き込みが止まる。切断のたびにそれが起きると、詰まりが次の要求へ連鎖するので、
+/// Future が途中で捨てられた場合でもロックだけは返しにいく。
+///
+/// ランタイムが既に無い（プロセス終了時など）なら諦めてそのまま捨てる。
+fn rollback_in_background(mut txn: Transaction) {
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) => {
+            handle.spawn(async move {
+                let _ = txn.rollback().await;
+            });
+        }
+        Err(_) => drop(txn),
+    }
 }
 
 /// ロックが足りないので、この試行を捨ててやり直すことを示すマーカー。
@@ -228,8 +267,11 @@ pub struct TikvDb {
 }
 
 /// 保持中のロック。解放は必ず rollback で行う。
+///
+/// 中身が [`Option`] なのは、[`release`](Self::release) を通らずに破棄された場合でも
+/// [`Drop`] がロックを返しにいけるようにするため。
 struct LockGuard {
-    txn: Transaction,
+    txn: Option<Transaction>,
 }
 
 impl LockGuard {
@@ -243,16 +285,26 @@ impl LockGuard {
         client: &TransactionClient,
         keys: &BTreeSet<Vec<u8>>,
     ) -> Result<Self, tikv_client::Error> {
-        let mut txn = client.begin_pessimistic().await?;
+        let mut txn = client.begin_with_options(write_options()).await?;
         if let Err(e) = txn.lock_keys(keys.iter().cloned()).await {
             let _ = txn.rollback().await;
             return Err(e);
         }
-        Ok(Self { txn })
+        Ok(Self { txn: Some(txn) })
     }
 
     async fn release(mut self) {
-        let _ = self.txn.rollback().await;
+        if let Some(mut txn) = self.txn.take() {
+            let _ = txn.rollback().await;
+        }
+    }
+}
+
+impl Drop for LockGuard {
+    fn drop(&mut self) {
+        if let Some(txn) = self.txn.take() {
+            rollback_in_background(txn);
+        }
     }
 }
 
@@ -389,7 +441,11 @@ impl Storage for TikvDb {
     {
         // 読み取りはロックを取らない。スナップショットから読むだけなので
         // 書き込みをブロックせず、書き込みにもブロックされない（LMDB と同じ）。
-        let txn = self.client.begin_optimistic().await.map_err(to_app_error)?;
+        let txn = self
+            .client
+            .begin_with_options(read_options())
+            .await
+            .map_err(to_app_error)?;
         let r = TikvRead::new(txn);
         let out = f(&r).await;
         let _ = r.into_inner().rollback().await;

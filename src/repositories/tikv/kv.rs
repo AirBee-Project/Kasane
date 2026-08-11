@@ -194,14 +194,20 @@ impl LazyTxn {
 
     async fn open(&mut self) -> Result<&mut Transaction, tikv_client::Error> {
         if self.txn.is_none() {
-            self.txn = Some(self.client.begin_pessimistic().await?);
+            self.txn = Some(
+                self.client
+                    .begin_with_options(super::write_options())
+                    .await?,
+            );
         }
         Ok(self.txn.as_mut().expect("直前に開いた"))
     }
 
     /// 開いていたトランザクションを取り出す。一度も触れていなければ `None`。
-    pub(super) fn into_opened(self) -> Option<Transaction> {
-        self.txn
+    ///
+    /// 取り出した後は [`Drop`] の対象が無くなるので、後始末は呼び出し側の責任になる。
+    pub(super) fn into_opened(mut self) -> Option<Transaction> {
+        self.txn.take()
     }
 
     async fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), tikv_client::Error> {
@@ -279,6 +285,16 @@ impl LazyTxn {
             }
         }
         Ok(locked)
+    }
+}
+
+impl Drop for LazyTxn {
+    /// クロージャの実行が途中で捨てられても、握った悲観ロックは返す
+    /// （`super::rollback_in_background` の注記を参照）。
+    fn drop(&mut self) {
+        if let Some(txn) = self.txn.take() {
+            super::rollback_in_background(txn);
+        }
     }
 }
 
