@@ -9,11 +9,9 @@ use crate::{
 
 /// 時間成分の不正はすべて [`AppError::InvalidSpatialId`] に畳む。
 ///
-/// `Interval::new` や `with_time` は [`kasane_logic::Error`] を返し、そのまま `?` で
-/// 上げると `logic_error` になる。一方このモジュール自身が出す「暦の単位ではない」
-/// 「`i` と `t` が片方だけ」は `invalid_spatial_id` である。同じ「時間指定が不正」
-/// という1つのユーザーミスに2つのコードが割り当たると、クライアント側で一様に
-/// 扱えないため、ここで `invalid_spatial_id` へ統一する。
+/// そのまま `?` で上げると `logic_error` になるが、このモジュール自身が出す不正は
+/// `invalid_spatial_id`。同じユーザーミスに 2 つのコードが割り当たるとクライアントが
+/// 一様に扱えない。
 fn invalid_time(error: kasane_logic::Error) -> AppError {
     AppError::InvalidSpatialId {
         reason: error.to_string(),
@@ -28,8 +26,7 @@ fn invalid_time_reason(reason: impl Into<String>) -> AppError {
 
 /// `{i}`（時間間隔）と `{t}`（時間インデックス）で時間を指定できる ID。
 ///
-/// `SingleId` と `RangeId` は `{t}` の形だけが違う（単一値 / 区間）ので、
-/// [`apply_interval_time`] をこの1つのトレイト越しに共有する。
+/// `SingleId` と `RangeId` は `{t}` の形だけが違うので、[`apply_interval_time`] を共有する。
 trait WithIntervalTime: Sized {
     /// `{t}` の表現。`SingleId` は `u64`、`RangeId` は `[u64; 2]`。
     type Index;
@@ -61,8 +58,6 @@ impl WithIntervalTime for RangeId {
     }
 }
 
-/// `{i}` / `{t}` を検証して ID へ適用する。
-///
 /// `i` と `t` は「両方指定」か「両方省略」のいずれかで、省略時は全時間を表す。
 /// `i` は暦の単位（[`AllowedIntervals::calendar`]）のみ受け付ける。
 fn apply_interval_time<Id: WithIntervalTime>(
@@ -92,10 +87,8 @@ fn apply_interval_time<Id: WithIntervalTime>(
     }
 }
 
-/// `FlexId` の時間（ズームレベル + インデックスの2分岐Segment）を適用する。
-///
 /// `FlexId` は木のノードアドレスなので `{i}` ではなくズームレベルで時間を指定する。
-/// そのため暦の単位の検証は行わない（[`apply_interval_time`] と非対称なのはこのため）。
+/// 暦の単位の検証を行わない点が [`apply_interval_time`] と非対称。
 fn apply_segment_time(
     id: FlexId,
     t_zoomlevel: Option<u8>,
@@ -196,9 +189,7 @@ pub fn process_spatial_ids(
                 };
 
                 let id = SingleId::new(single_id.z, single_id.f, single_id.x, single_id.y)?;
-                // 時間を先に載せてから `spatial_parent_at_zoom` を通す。`SingleId` /
-                // `RangeId` の同メソッドは `{i}` / `{t}` をそのまま引き継ぐ（`FlexId` 版は
-                // `FlexId::new` 経由で時間を落とすので、下の FlexId 分岐だけ順序が逆）。
+                // `SingleId` / `RangeId` の縮小は時間を引き継ぐので、先に載せてよい。
                 let id = apply_interval_time(id, single_id.i, single_id.t)?;
 
                 if zoom == single_id.z {
@@ -247,8 +238,7 @@ pub fn process_spatial_ids(
                 let (new_xz, new_xi) = scale_down(flex_id.x_zoomlevel, xz, flex_id.x_index as i64);
                 let (new_yz, new_yi) = scale_down(flex_id.y_zoomlevel, yz, flex_id.y_index as i64);
 
-                // 空間側を縮めてから時間を載せる（`FlexId::new` は時間を全時間へ戻すため、
-                // 逆順にすると指定された時間が黙って落ちる）。
+                // `FlexId::new` は時間を全時間へ戻すので、逆順にすると指定時間が落ちる。
                 let id = FlexId::new(
                     new_fz,
                     new_fi as i32,

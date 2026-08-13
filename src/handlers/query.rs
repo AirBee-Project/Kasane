@@ -41,13 +41,7 @@ pub async fn execute_query(
     Query(query_params): Query<GetDataQuery>,
     Json(payload): Json<ExecuteQueryRequest>,
 ) -> Result<Json<GetDataResponse>, AppError> {
-    // クエリ式が参照する全テーブルに Read 権限が必要。
-    // データベース単位ではなくテーブル単位で検査するので、テーブルスコープの権限しか
-    // 持たないユーザーでも、そのテーブルだけを参照するクエリなら実行できる。
-    //
-    // 検査そのものはサービス層が参照テーブルを解決するのと同じ読み取りの中で行う
-    // （`services::query::resolve_tables`）。ここで別途 `check_tables` を呼ぶと、
-    // 同じカタログを 2 度引くことになる。
+    // 認可はサービス層の解決と同じ読み取りで行う。別途呼ぶとカタログを 2 度引く。
     let result = query_service::execute(&app_state, &auth_user, payload, &query_params).await?;
     Ok(Json(result))
 }

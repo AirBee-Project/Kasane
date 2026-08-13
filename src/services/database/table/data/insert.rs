@@ -15,9 +15,7 @@ pub async fn insert(
     value: serde_json::Value,
     zoom_level_policy: &ZoomLevelPolicy,
 ) -> Result<(), AppError> {
-    // 失敗し得るユーザ入力検証（テーブル存在・値の解釈・ズーム解決）は、
-    // 書き込みバッチへ投入する前に済ませておく。こうすることで、ある不正リクエストが
-    // 同一バッチ内の無関係な正常リクエストを巻き添えにする問題を防ぐ。
+    // 不正リクエストが同一バッチ内の正常なリクエストを巻き添えにしないため。
     let owned_db = db_name.to_string();
     let owned_table = table_name.to_string();
     let table = app_state
@@ -32,9 +30,7 @@ pub async fn insert(
 
     let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
 
-    // 同じテーブルへの同時書き込みは 1 トランザクションへ畳む。
-    // 1 件ずつ別トランザクションで書くと、同じリーフを何度も丸ごと書き直したうえ、
-    // 互いにロックを奪い合う（`coalesce` モジュールを参照）。
+    // 1 件ずつ別トランザクションで書くと、同じリーフを何度も書き直しロックを奪い合う。
     app_state
         .writes
         .insert(table.id, table.value_indexing(), ids, value)

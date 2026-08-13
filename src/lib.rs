@@ -12,19 +12,14 @@ pub mod services;
 pub mod telemetry;
 
 /// リクエスト間で共有する状態。
-///
-/// 保持するのはビルド時に選択されたストレージ 1 つだけで、その中身は
-/// [`Storage`](crate::repositories::Storage) 越しにしか触れない。
 #[derive(Clone)]
 pub struct AppState {
     pub db: backend::Db,
-    /// 同じテーブルへの同時書き込みを 1 トランザクションへ畳む
-    /// （`services::database::table::data::coalesce`）。
+    /// 同じテーブルへの同時書き込みを 1 トランザクションへ畳む。
     pub writes: services::database::table::data::coalesce::WriteCoalescer,
 }
 
 impl AppState {
-    /// ストレージから状態一式を組み立てる。
     pub fn new(db: backend::Db) -> Self {
         let writes = services::database::table::data::coalesce::WriteCoalescer::new(db.clone());
         Self { db, writes }

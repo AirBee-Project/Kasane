@@ -38,10 +38,9 @@ impl User {
         self.global_role().is_some_and(|role| role >= required)
     }
 
-    /// サーバーの管理者（ユーザーの作成・削除・権限付与ができる）か。
+    /// 制御面（ユーザーの作成・削除・権限付与）の権限。
     ///
-    /// データ面の「全データベースに対する Manage」（`Global { role: Manage }`）とは別物で、
-    /// 制御面の権限は `Global { role: Admin }` だけが持つ。
+    /// データ面の `Global { role: Manage }` とは別物で、`Global { role: Admin }` だけが持つ。
     pub fn is_global_admin(&self) -> bool {
         self.has_global_role(UserRole::Admin)
     }
@@ -59,8 +58,7 @@ impl User {
                     Scope::Database(target) | Scope::Table(target, _) | Scope::AnyIn(target),
                 ) if *db_id == target => Some(UserRole::from(*role)),
 
-                // テーブル単位のルールは、対象がそのテーブル自身であるか、
-                // 「配下のどれかに触れれば足りる」判定のときだけ効く。
+                // テーブル単位のルールが効くのは、対象がそのテーブル自身か `AnyIn` のとき。
                 (StoredPrivilege::Table { table_id, role, .. }, Scope::Table(_, target))
                     if *table_id == target =>
                 {
@@ -79,9 +77,8 @@ impl User {
 
     /// 対象スコープに対して `required` 以上の権限を持つか。
     ///
-    /// [`Scope::AnyIn`] は「配下のどれかに届く」という閲覧向けの緩い判定なので、
-    /// [`UserRole::Read`] より上の要求を満たすことはない。テーブル 1 つへの Manage が
-    /// データベース全体への Manage に化けるのを防ぐため。
+    /// [`Scope::AnyIn`] が [`UserRole::Read`] より上を満たさないのは、テーブル 1 つへの
+    /// Manage がデータベース全体への Manage に化けるのを防ぐため。
     pub fn can(&self, scope: Scope, required: UserRole) -> bool {
         if matches!(scope, Scope::AnyIn(_)) && required > UserRole::Read {
             return false;

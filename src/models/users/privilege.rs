@@ -7,16 +7,14 @@ use crate::models::id::{DatabaseId, TableId};
 /// 認可判定の対象。どのルールが効くかはスコープごとに違う。
 #[derive(Debug, Clone, Copy)]
 pub enum Scope {
-    /// データベース全体に対する操作（改名・DB 単位の設定変更・新規テーブル作成など）。
-    /// テーブル単位のルールでは満たせない。
+    /// データベース全体に対する操作。テーブル単位のルールでは満たせない。
     Database(DatabaseId),
     /// 特定のテーブル 1 つに対する操作。
     Table(DatabaseId, TableId),
-    /// データベース配下のどれかにアクセスできれば足りる操作（存在確認・一覧）。
-    /// テーブル単位のルールしか持たないユーザーでも通す。
+    /// 配下のどれかに届けば足りる操作（存在確認・一覧）。
     ///
-    /// 「配下のどれか」で足りるのは閲覧のためだけなので、このスコープは
-    /// [`UserRole::Read`] より上を満たすことはない（[`User::can`](crate::models::users::User::can) 参照）。
+    /// テーブル単位のルールしか持たないユーザーでも通る代わりに、
+    /// [`UserRole::Read`] より上を満たすことはない（[`User::can`](super::User::can)）。
     AnyIn(DatabaseId),
 }
 

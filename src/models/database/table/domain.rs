@@ -17,16 +17,11 @@ pub struct Table {
 impl Table {
     /// 書き込みが値インデックスへ反映すべき型。無効なら `None`。
     ///
-    /// 書き込み経路が `data_type` を必要とするのは索引キーの順序保存エンコードのためだけ
-    /// なので、「索引するか」と「どう索引するか」を 1 つの値にまとめてある。
-    /// こうしておくと、索引が無効なテーブルへ誤って型を渡してしまう余地がない。
+    /// 1 つの値にまとめてあるので、索引が無効なテーブルへ誤って型を渡す余地がない。
     pub fn value_indexing(&self) -> Option<TableDataType> {
         self.value_index.then_some(self.data_type)
     }
-    /// 保存されているメタデータと、キー側にある名前から組み立てる。
-    ///
-    /// 名前はメタデータには含まれない（キーの一部）ので、読み出したどの経路でも
-    /// この 2 つを突き合わせる必要がある。
+    /// 名前はメタデータに含まれない（キーの一部）ので、読み出し側で突き合わせる。
     pub fn from_meta(name: &str, meta: super::TableMetadata) -> Self {
         Self {
             id: meta.id,

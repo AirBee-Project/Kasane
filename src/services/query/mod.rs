@@ -1,8 +1,4 @@
-//! `/query` の実行。
-//!
-//! Kasane 側の DSL（[`QueryNode`]）を Kasane-Logic の AST（`Query`）へ翻訳し、最適化と実行は
-//! Kasane-Logic に委ねる。入力源はバックエンドごとの `Source` 実装で、対象領域に必要な範囲
-//! だけを遅延評価で読む。
+//! `/query` の実行。翻訳だけを担い、最適化と実行は Kasane-Logic に委ねる。
 
 pub mod value;
 
@@ -37,10 +33,8 @@ type QuerySnapshot = <crate::backend::Db as Storage>::QuerySnapshot;
 
 /// AST が参照する全テーブルを解決し、同時に読み取り権限を検査する。
 ///
-/// 解決と認可を 1 回の読み取りにまとめてあるのが要点。認可（`check_tables`）が
-/// `(db_id, table_id)` を引き、その直後にここが同じキーからメタデータを引く――という
-/// 二重取得をなくすため。TiKV のように名前の解決が 1 件ずつ往復になるバックエンドでは、
-/// 参照テーブル数に比例した往復が丸ごと 1 組ぶん消える。
+/// 1 回の読み取りにまとめるのは、認可とメタデータ取得が同じキーを引く二重取得をなくすため。
+/// 名前の解決が 1 件ずつ往復になるバックエンドでは、参照テーブル数ぶんの往復が丸ごと消える。
 async fn resolve_tables(
     app_state: &AppState,
     user: &User,
@@ -67,8 +61,7 @@ async fn resolve_tables(
         .read(async move |r| r.resolve_tables(&refs).await)
         .await?;
 
-    // 認可は**存在の判定より先**に全件分行う。順序を逆にすると、権限の無い利用者へ
-    // 404 で名前の存在有無を教えることになる（`authorize_resolved` の注記を参照）。
+    // 逆順にすると、権限の無い利用者へ 404 で名前の存在有無を教えることになる。
     for ((db_name, table_name), entry) in requested.iter().zip(&resolved) {
         crate::middleware::auth::authorize_resolved(
             user,
@@ -92,10 +85,7 @@ async fn resolve_tables(
         .collect()
 }
 
-/// テーブルの格納値をクエリの値型 `V` へ復元するデコーダを組み立てる。
-///
-/// そのテーブルの `data_type` は `V` として読めなければならない
-/// （`Text` と `Enum` はどちらも文字列として読める）。
+/// そのテーブルの `data_type` は `V` として読める必要がある（`Text` と `Enum` は同じ）。
 fn build_decoder<V: Value>(table: &Table) -> Result<DecodeFn<V>, AppError> {
     if !V::accepts(table.data_type) {
         return Err(value::incompatible_source(table, V::type_name()));
@@ -106,9 +96,8 @@ fn build_decoder<V: Value>(table: &Table) -> Result<DecodeFn<V>, AppError> {
 impl QueryNode {
     /// クエリ結果の値型を推論（または明示指定から決定）する。
     ///
-    /// 全ソースの `data_type` が一致していればそれを採用する。一致しない場合は、
-    /// 同じ値型として読める組合せ（`Text` と `Enum`）であっても推論はしないので、
-    /// `value_type` の明示を要求する。
+    /// 全ソースの `data_type` が一致していればそれを採用する。同じ値型として読める組合せ
+    /// （`Text` と `Enum`）でも推論はせず、`value_type` の明示を要求する。
     fn resolve_value_type(
         &self,
         tables: &ResolvedTables,
@@ -322,10 +311,7 @@ impl QueryNode {
                 mapping,
                 default,
             } => {
-                // `output_type` は宣言だけで終わらせず、実際に組み立てる値型 `V` と
-                // 一致することを検証する。多くの場合 `V` はリクエストの `value_type`
-                // など、この式より外側で決まった型がそのまま流れてくるため、
-                // `output_type` が実際には無視される余地がある。
+                // 検証しないと `output_type` が黙って無視されうる。
                 if !V::accepts(*output_type) {
                     return Err(AppError::ConstraintViolation {
                         reason: format!(
@@ -352,10 +338,7 @@ impl QueryNode {
     }
 }
 
-/// `MapValues` を、入力側 `U` から出力側 `V` への写像として組み立てる。
-///
-/// 対応表は JSON リテラルなので、ここで一度だけ `U`/`V` へ解釈しておき、
-/// FlexId ごとの評価では引き当てるだけにする。
+/// 対応表を一度だけ `U`/`V` へ解釈しておき、FlexId ごとの評価では引き当てるだけにする。
 fn build_map_values<U: Value, V: Value>(
     input: &QueryNode,
     app_state: &AppState,
@@ -402,13 +385,10 @@ pub async fn execute(
     request: ExecuteQueryRequest,
     query_params: &GetDataQuery,
 ) -> Result<GetDataResponse, AppError> {
-    // テーブルの解決はトランザクション境界を跨ぐのでここで済ませ、
-    // そのあとの評価（同期のクエリ実行器）だけをブロッキングタスクへ渡す。
-    // 読み取り権限の検査もこの中で行う（`resolve_tables` の注記を参照）。
+    // 解決はトランザクション境界を跨ぐのでここで済ませ、評価だけを blocking へ渡す。
     let tables = resolve_tables(app_state, user, &request.query).await?;
 
-    // このクエリが読む断面をここで 1 つに固定し、全ソースへ配る。
-    // ソースごと・領域ごとに取り直すと、途中の書き込みを一部だけ見た結果が混ざる。
+    // 領域ごとに取り直すと、途中の書き込みを一部だけ見た結果が混ざる。
     let snapshot = app_state.db.query_snapshot().await?;
 
     let app_state = app_state.clone();
@@ -424,7 +404,6 @@ pub async fn execute(
                 .resolve_value_type(&tables, request.value_type)?;
 
             // 作業木は単一の値型で組まれるため、ここで値型ごとに単型化する。
-            // Enum は格納こそ ID だが、クエリ上は選択肢の文字列（String）として扱う。
             for_value_type!(
                 value_type, run, &app_state, &request, &tables, &snapshot, format, limit
             )
@@ -444,10 +423,7 @@ fn run<V: Value>(
 ) -> Result<GetDataResponse, AppError> {
     let targets = to_spatial_id_set(&request.spatial_ids)?;
 
-    // 要求された空間IDそのものを評価境界にする。
-    //
-    // 外接矩形1つにまとめる手もあるが、`bounding_box()` は全 FlexId を覆う保証が無く
-    // 取りこぼしが起きる。個々の領域を渡せば正確で、無関係な領域を読まずに済む。
+    // 外接矩形 1 つにまとめると `bounding_box()` が全 FlexId を覆わず取りこぼす。
     let bounds: Vec<RangeId> = targets.iter().map(|id| RangeId::from(&id)).collect();
     if bounds.is_empty() {
         // 対象領域が空。クエリを走らせるまでもない。
@@ -468,9 +444,7 @@ fn run<V: Value>(
     // --- フェーズ 2: クエリ最適化 ---
     let optimized = tracing::info_span!("query.optimize").in_scope(|| ast.optimize());
 
-    // --- フェーズ 3: 評価実行（最も重い処理）---
-    // 対象領域をまとめて1回だけ評価し、結果を要求空間IDで絞る。
-    // 空間ID1件ずつ `get()` を回すとクエリが件数分再実行されてしまう。
+    // まとめて 1 回だけ評価する。空間 ID 1 件ずつだとクエリが件数分再実行される。
     let flex_ids = tracing::info_span!("query.run_within", target_regions = bounds.len())
         .in_scope(|| optimized.run_within(bounds).map_err(AppError::LogicError))?
         .into_iter()
@@ -480,14 +454,10 @@ fn run<V: Value>(
     data_response::build(by_value, format, limit, |v| Ok(v.to_json()))
 }
 
-/// FlexId 列を値ごとにグループ化する（レスポンスは値辞書 + 空間ID群の形）。
+/// FlexId 列を値ごとにグループ化する。
 ///
-/// `limit` が指定されている場合、保持する FlexId を `limit` 件までに抑える。
-/// 本来は値の昇順に並べて上位 `limit` 件を返すべきだが、高速化のため順序を問わず
-/// `limit` 件に達した時点で短絡評価（打ち切り）を行う。
-///
-/// `singleId` 形式では 1 つの `FlexId` が複数 FlexId へ展開されるので、`limit` 件の
-/// `FlexId` を残せば出力は必ず `limit` 件以上に届く（不足しない）。
+/// `limit` は値の昇順で上位を返すのが本来だが、高速化のため順序を問わず打ち切る。
+/// `singleId` 形式では 1 つの `FlexId` が複数へ展開されるので、出力が不足することはない。
 fn group_by_value<V: Value>(
     flex_ids: impl Iterator<Item = (kasane_logic::FlexId, V)>,
     limit: Option<usize>,

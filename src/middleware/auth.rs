@@ -11,8 +11,8 @@ use crate::{
 
 /// 認証済みユーザーをリクエスト拡張で運ぶための包み。
 ///
-/// 権限判定そのものは [`User`] のメソッド（`can` / `has_global_role` など）にあり、
-/// `Deref` 越しにそのまま使える。認可のドメインロジックが HTTP 層に漏れないようにするため。
+/// 権限判定は [`User`] 側にあり `Deref` 越しに使う。認可のドメインロジックを HTTP 層へ
+/// 漏らさないため。
 #[derive(Clone)]
 pub struct AuthUser {
     pub user: User,
@@ -64,8 +64,7 @@ pub async fn require_auth(
     Ok(next.run(req).await)
 }
 
-/// `Global` スコープで `required` 以上のロールを要求する。
-/// データベースの作成・削除のように、特定のデータベースに紐づかない操作で使う。
+/// 特定のデータベースに紐づかない操作（データベースの作成・削除など）で使う。
 #[tracing::instrument(skip_all)]
 pub fn check_global_role(user: &User, required: UserRole) -> Result<(), AppError> {
     if user.has_global_role(required) {
@@ -102,7 +101,6 @@ pub async fn check_database(
     check(app_state, user, db_name, None, required, Scope::Database).await
 }
 
-/// データベースの存在確認・一覧のための認可。
 /// テーブル単位のルールしか持たないユーザーも、自分のテーブルへ辿り着けるように通す。
 #[tracing::instrument(skip_all, fields(db_name = %db_name))]
 pub async fn check_database_visible(
@@ -133,8 +131,7 @@ pub async fn check_table(
     .await
 }
 
-/// 複数テーブルに対する操作の認可。読み取りトランザクションを 1 つだけ開いて
-/// すべての名前を解決するので、参照テーブル数に比例してトランザクションが増えない。
+/// 名前の解決を 1 トランザクションに寄せるので、参照テーブル数で往復が増えない。
 #[tracing::instrument(skip_all)]
 pub async fn check_tables(
     app_state: &AppState,
@@ -172,20 +169,12 @@ pub async fn check_tables(
 
 /// **解決済みの** ID からスコープを組み立てて権限を判定する。カタログを引かない。
 ///
-/// [`check_table`] / [`check_tables`] は認可のためだけに読み取りトランザクションを開き、
-/// データベース名とテーブル名を引く。ところがサービス層はそのすぐ後に**同じキー**を引いて
-/// テーブルのメタデータを得る。名前の解決が 1 件ずつネットワーク往復になるバックエンドでは、
-/// この重複がそのまま往復数の重複になる。
+/// [`check_table`] / [`check_tables`] は認可のためだけに名前を引くが、サービス層はその直後に
+/// 同じキーを引く。解決を [`ReadRepository::resolve_tables`] へ 1 回に寄せてその結果で判定
+/// すれば、認可のための往復は 0 になる。
 ///
-/// 解決を 1 回に寄せて、その結果でここが判定すれば、認可のための往復は 0 になる。
-/// 呼び出し側は [`ReadRepository::resolve_tables`]
-/// の結果をそのまま渡せばよい。
-///
-/// # 呼ぶ順序
-///
-/// **「存在しない」を返すより先に呼ぶこと。** 逆にすると、権限の無い利用者へ 404 で
-/// 名前の存在有無を教えることになる。データベースが解決できなかった場合
-/// （`db_id` が `None`）にここが 403 を返すのも同じ理由。
+/// **「存在しない」を返すより先に呼ぶこと。** 逆にすると、権限の無い利用者へ 404 で名前の
+/// 存在有無を教えることになる。`db_id` が `None` のときに 403 を返すのも同じ理由。
 pub fn authorize_resolved(
     user: &User,
     db_id: Option<DatabaseId>,
@@ -198,8 +187,7 @@ pub fn authorize_resolved(
         return Ok(());
     }
 
-    // テーブルが解決できなければデータベーススコープへ落とす（`resolve_scope` と同じ規則）。
-    // そのデータベースに十分な権限を持つ利用者は通過し、下位の層が 404 を返せる。
+    // 解決できなければ DB スコープへ落とす（下位の層が 404 を返せるように）。
     let scope = db_id.map(|db_id| match table_id {
         Some(table_id) => Scope::Table(db_id, table_id),
         None => Scope::Database(db_id),
@@ -221,16 +209,13 @@ fn denied(db_name: &str, table_name: Option<&str>, required: UserRole) -> AppErr
     .into()
 }
 
-/// 名前から判定対象のスコープを組み立てる。単一テーブル・複数テーブルどちらの検査でも
-/// 同じ規則を使うため、ここに 1 箇所だけ置いている。
+/// 名前から判定対象のスコープを組み立てる。
 ///
-/// テーブル名が与えられていても解決できなかった場合は `db_scope` へフォールバックする。
-/// これにより、そのデータベースに十分な権限を持つ利用者は認可を通過し、下位のサービス層が
-/// 「テーブルが存在しない」として正しく 404 を返せる。権限のない利用者は
-/// `db_scope` でも判定に落ちるので、存在有無を推測する手がかりにはならない。
+/// テーブル名が解決できなければ `db_scope` へフォールバックする。そのデータベースに十分な
+/// 権限を持つ利用者は認可を通過して下位の層が 404 を返せるし、権限のない利用者は `db_scope`
+/// でも落ちるので存在有無の手がかりにならない。
 ///
-/// データベース自体が解決できないときは `None`。呼び出し側は 404 ではなく 403 を返す
-/// （権限のない利用者に名前の存在有無を教えないため）。
+/// データベース自体が解決できないときは `None`（呼び出し側は 404 ではなく 403 を返す）。
 async fn resolve_scope<R: CatalogRepository>(
     repo: &R,
     db_name: &str,
@@ -250,7 +235,6 @@ async fn resolve_scope<R: CatalogRepository>(
     }))
 }
 
-/// 名前 → ID を解決してスコープを組み立て、実効ロールを判定する。
 /// `Global` ルールだけで足りる場合はカタログを引かずに決着させる。
 async fn check(
     app_state: &AppState,

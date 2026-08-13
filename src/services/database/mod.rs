@@ -21,11 +21,10 @@ pub async fn info(app_state: &AppState, name: &str) -> Result<DatabaseInfoRespon
     }
 }
 
-/// データベース一覧を取得する。
+/// 配下のどれかに Read 以上で到達できるデータベースだけを返す。
 ///
-/// 配下のどれかに Read 以上で到達できるデータベースだけを返す。テーブル単位の権限しか
-/// 持たないユーザーにも、そのテーブルを含むデータベースは見える（見えないと自分の
-/// テーブルへ辿り着く手段が無くなるため）。
+/// テーブル単位の権限しか持たないユーザーにもそのテーブルを含むデータベースが見えるのは、
+/// 見えないと自分のテーブルへ辿り着く手段が無くなるため。
 #[tracing::instrument(skip_all)]
 pub async fn list(
     app_state: &AppState,
@@ -65,10 +64,7 @@ pub async fn create(
         .await
 }
 
-/// データベースを配下のテーブルごと削除する。
-///
-/// 列挙と削除の分割は [`WriteRepository::database_remove`] 側で 1 つの書き込み
-/// トランザクションに閉じてある。
+/// 列挙と削除は [`WriteRepository::database_remove`] 側で 1 トランザクションに閉じてある。
 #[tracing::instrument(skip_all, fields(db_name = %name))]
 pub async fn remove(app_state: &AppState, name: &str) -> Result<(), AppError> {
     let name = name.to_string();
@@ -106,10 +102,7 @@ pub async fn update(
         .await
 }
 
-/// データベースを複製する。
-///
-/// この操作は `global` スコープの Manage 以上を要求する。そのロールは複製先を含む
-/// すべてのデータベースに届くので、呼び出し元へ個別に権限を付け直す必要はない。
+/// `global` の Manage 以上を要求する。そのロールは複製先にも届くので権限の付け直しは不要。
 #[tracing::instrument(skip_all, fields(db_name = %name, copy_name = %copy_name))]
 pub async fn copy(
     app_state: &AppState,

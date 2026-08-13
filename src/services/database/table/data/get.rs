@@ -29,18 +29,11 @@ pub async fn get(
     let query_limit = query.limit;
     let user = auth_user.user.clone();
 
-    // トランザクションの内側で行うのは読み出しまで。
-    //
-    // レスポンス組み立て（値の復元と JSON 化）は FlexId 数に比例する CPU バウンド処理で、
-    // ここに置くとバックエンドによって走る場所が変わってしまう。LMDB はクロージャ全体を
-    // blocking タスク上で回すので問題ないが、TiKV は非同期ワーカー上で回すため、
-    // 大きな結果ではワーカーを占有する。トランザクションの外へ出して明示的に
-    // blocking タスクへ渡せば、どちらのバックエンドでも同じ扱いになる。
+    // レスポンス組み立ては CPU 処理なので、外へ出して明示的に blocking タスクへ渡す。
     let (table, groups) = app_state
         .db
         .read(async move |db| {
-            // 認可もこのトランザクションの中で済ませる。認可のためだけに別の読み取りを
-            // 開くと、同じデータベース名・テーブル名をもう一度引くことになる。
+            // 認可のためだけに別の読み取りを開くと、同じ名前をもう一度引くことになる。
             let refs = [(db_name.clone(), table_name.clone())];
             let resolved = db.resolve_tables(&refs).await?.pop().ok_or_else(|| {
                 AppError::InternalError("resolve_tables dropped its only request".to_string())

@@ -44,8 +44,7 @@ pub async fn login(
         match &stored_hash {
             Some(hash) => verify_password(&password, hash),
             None => {
-                // ユーザーが存在しなくても実在時と同等の計算コストをかけ、
-                // 応答時間差によるユーザー列挙を防ぐ。
+                // 実在時と同等の計算コストをかけ、応答時間差でのユーザー列挙を防ぐ。
                 dummy_verify_password(&password);
                 Ok(false)
             }

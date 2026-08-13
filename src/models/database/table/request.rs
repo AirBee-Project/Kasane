@@ -30,8 +30,7 @@ fn default_validate_existing_data() -> bool {
     true
 }
 
-// 書き込みトランザクションのクロージャはやり直しで複数回呼ばれうるため、
-// リクエスト由来の値は複製できる必要がある。
+// 書き込みクロージャはやり直しで複数回呼ばれうるので、`Clone` が要る。
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 #[serde(tag = "type")]
 pub enum UpdateTableConstraints {

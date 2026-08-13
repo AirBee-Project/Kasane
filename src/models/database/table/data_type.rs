@@ -20,13 +20,11 @@ pub enum TableDataType {
 impl TableDataType {
     /// 格納バイト列の長さが、この型では常に一定か。
     ///
-    /// 値インデックスのキーは `table_id ‖ 値 ‖ flex_id` と値を可変長のまま連結するので、
-    /// 型の幅が一定なときだけキー長も一定になり、範囲スキャンの境界がそのまま
-    /// 正確な境界として使える。`Text` だけが可変長で、そこでは境界の外側にも
-    /// 該当キーが出うる（`repositories::traits::ReadRepository::data_filter_range` を参照）。
+    /// 値インデックスのキーは値を可変長のまま連結するので、型の幅が一定なときだけ範囲
+    /// スキャンの境界がそのまま正確な境界になる。可変長は `Text` だけ。
     pub fn has_fixed_width_value(self) -> bool {
         match self {
-            // i64 = 8 バイト / 真偽値 = 1 バイト / Enum は選択肢 ID（u16）/ Presence は値なし。
+            // i64 = 8 / 真偽値 = 1 / Enum は選択肢 ID（u16）/ Presence は値なし。
             Self::Int | Self::Boolean | Self::Enum | Self::Presence => true,
             Self::Text => false,
         }
@@ -96,8 +94,8 @@ impl From<TableDataType> for JsonValueType {
 impl TableConstraints {
     /// `Enum` の選択肢に未割り当ての ID を振る。
     ///
-    /// 割り当て規則は**保存される値そのもの**（ FlexId には ID が入る）なので、バックエンドごとに
-    /// 持たせるとストレージ間で値の意味がずれる。制約の定義と同じ場所に 1 つだけ置く。
+    /// 割り当て規則は**保存される値そのもの**なので、バックエンドごとに持たせるとストレージ間で
+    /// 値の意味がずれる。
     pub fn with_enum_ids(
         data_type: TableDataType,
         constraints: Option<Self>,
@@ -130,10 +128,10 @@ impl TableConstraints {
         }
     }
 
-    /// 部分更新を現在の制約へ畳み込む。
+    /// 既存値を残したまま指定されたフィールドだけを差し替える。
     ///
-    /// 既存値を残したまま指定されたフィールドだけを差し替える。`Enum` は選択肢の
-    /// 増減を反映したうえで [`with_enum_ids`](Self::with_enum_ids) と同じ規則で ID を振る。
+    /// `Enum` は選択肢の増減を反映したうえで [`with_enum_ids`](Self::with_enum_ids) と同じ
+    /// 規則で ID を振る。
     pub fn merged_with(
         data_type: TableDataType,
         current: Option<&Self>,

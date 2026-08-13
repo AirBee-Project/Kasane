@@ -3,47 +3,34 @@ use uuid::Uuid;
 
 use crate::models::id::{DatabaseId, TableId};
 
-/// LMDB の `users` テーブルに保存されるユーザーの内部表現。
+/// 保存されるユーザーの内部表現。
 ///
-/// 過去バージョン（`is_global_admin` フィールドを持つ形式）とは非互換。
-/// `deny_unknown_fields` を付けているため、旧形式のレコードは黙って
-/// デフォルト値に落ちるのではなくパースエラーとして表面化する。
+/// `deny_unknown_fields` を付けているので、非互換なレコードは黙ってデフォルト値へ落ちず
+/// パースエラーとして表面化する。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UserMetadata {
     pub id: Uuid,
     pub password_hash: String,
-    /// トークンの世代番号。
+    /// トークンの世代番号。JWT に埋めた値と一致しないトークンは無効。
     ///
-    /// パスワード変更のように発行済みトークンを即座に失効させたい操作のたびに
-    /// インクリメントする。JWT に埋め込んだ値と一致しないトークンは無効として扱う。
-    ///
-    /// 権限の変更ではインクリメントしない。認証ミドルウェアが毎リクエスト
-    /// ユーザーを読み直しており、権限変更は次のリクエストから即座に反映されるため。
+    /// 発行済みトークンを即座に失効させたい操作（パスワード変更など）で進める。権限変更で
+    /// 進めないのは、認証ミドルウェアが毎リクエストユーザーを読み直しているため。
     pub token_version: u64,
-    /// 保存されている権限ルール。データベース名・テーブル名ではなく ID を保持する。
-    ///
-    /// 1 つの対象につき高々 1 件。件数は [`MAX_PRIVILEGE_RULES`] で頭打ちにしている。
+    /// 1 つの対象につき高々 1 件。件数は [`MAX_PRIVILEGE_RULES`] で頭打ち。
     pub privileges: Vec<StoredPrivilege>,
 }
 
 /// 1 ユーザーが保持できる権限ルールの上限。
 ///
-/// 認証ミドルウェアが毎リクエストこの配列を含む JSON を読んでパースするため、
-/// 際限なく増えるとリクエスト全体のレイテンシに響く。付与は対象ごとの追加なので、
-/// 明示的な上限が無いと運用次第でいくらでも伸びうる。
+/// 認証ミドルウェアが毎リクエストこの配列を含む JSON をパースするので、際限なく増えると
+/// リクエスト全体のレイテンシに響く。
 pub const MAX_PRIVILEGE_RULES: usize = 1000;
 
-/// 保存形式の権限ルール。
+/// 保存形式の権限ルール。名前ではなく UUID で保持する。
 ///
-/// データベース名・テーブル名は改名・削除・再作成で意味が変わるため、
-/// 権限は必ず UUID（[`DatabaseId`] / [`TableId`]）で保持する。これにより
-///
-/// - 改名しても権限はオブジェクトに追従する
-/// - 削除して同名で作り直しても新しい UUID になるので、旧権限は決して一致しない
-///
-/// API 上の表現は名前ベースの [`PrivilegeRule`](crate::models::users::PrivilegeRule) で、
-/// 付与時に名前 → ID、取得時に ID → 名前へ解決する。
+/// 名前は改名・削除・再作成で意味が変わる。UUID なら改名しても権限が追従し、同名で作り直しても
+/// 新しい UUID になるので旧権限は決して一致しない。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "scope", rename_all = "snake_case")]
 pub enum StoredPrivilege {
@@ -67,8 +54,7 @@ impl StoredPrivilege {
         }
     }
 
-    /// このルールが適用される対象。ロールを含まないので、付与の upsert と
-    /// 剥奪の照合をどちらもこのキーで行える。
+    /// ロールを含まないので、付与の upsert と剥奪の照合を同じキーで行える。
     pub fn target(&self) -> StoredTarget {
         match *self {
             Self::Global { .. } => StoredTarget::Global,
@@ -78,9 +64,9 @@ impl StoredPrivilege {
     }
 }
 
-/// 解決済みの適用対象。1 ユーザーの権限ルールはこのキーで一意になる。
+/// 1 ユーザーの権限ルールはこのキーで一意になる。
 ///
-/// テーブルは `TableId` だけで一意に定まるため、`DatabaseId` は含めない。
+/// テーブルは `TableId` だけで一意に定まるので `DatabaseId` は含めない。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StoredTarget {
     Global,

@@ -18,11 +18,9 @@ pub enum AuthError {
     MalformedHeader,
     /// JWT の署名検証・期限などに失敗した。
     InvalidToken,
-    /// 署名は妥当だが、対応するユーザーが存在しない、または `uid`/`ver` の
-    /// 不一致でトークンが失効している。外部にはどちらか区別せず「無効」とだけ返す。
+    /// ユーザーが存在しないのか `uid`/`ver` 不一致なのかは、外部へ区別を返さない。
     TokenRevoked,
-    /// ログイン時のユーザー名・パスワードが一致しない。
-    /// （ユーザーの存在有無を区別せず同一メッセージを返し、ユーザー列挙を防ぐ）
+    /// ユーザーの存在有無を区別せず同一メッセージを返し、ユーザー列挙を防ぐ。
     InvalidCredentials,
     /// GlobalAdmin 権限が必要な操作を、非管理者が要求した。
     RequiresGlobalAdmin,
@@ -102,8 +100,7 @@ impl fmt::Display for AuthError {
     }
 }
 
-/// `Clone` なのは、1 つの結果を複数の待ち手へ配るため
-/// （`services::database::table::data::coalesce` が同じコミット結果をバッチ全員へ返す）。
+/// `Clone` なのは、1 つのコミット結果をバッチ全員へ配るため（`coalesce` を参照）。
 #[derive(Debug, Clone)]
 pub enum AppError {
     NotFound(String),
@@ -145,10 +142,7 @@ pub enum AppError {
     InvalidStoredValue {
         reason: String,
     },
-    /// ストレージバックエンド由来の失敗。
-    ///
-    /// バックエンド（LMDB / TiKV）を feature で差し替えられるよう、具体的なエラー型は
-    /// ここに持ち込まずメッセージへ落とす。変換は各バックエンド実装側の `From` が担う。
+    /// feature で差し替えられるよう、具体的なエラー型は持ち込まずメッセージへ落とす。
     StorageError(String),
     InvalidName {
         reason: String,

@@ -57,9 +57,7 @@ pub async fn table_copy(
     )
     .await?;
 
-    // 2. コピー先データベースへの Manage 権限。
-    //    作られるのは request.copy_table_name という新しいテーブルなので、
-    //    コピー元テーブルに対するテーブルスコープの権限では通してはならない。
+    // 作られるのは新しいテーブルなので、コピー元へのテーブルスコープでは通さない。
     crate::middleware::auth::check_database(&app_state, &auth_user, dest_db_name, UserRole::Manage)
         .await?;
 

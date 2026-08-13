@@ -41,9 +41,7 @@ pub async fn table_create(
     Extension(auth_user): Extension<AuthUser>,
     Json(request): Json<CreateTableRequest>,
 ) -> Result<Response, AppError> {
-    // 新しいテーブルの作成はデータベース全体への変更なので、データベースレベルの
-    // Manage を要求する。テーブルスコープのルールは「既にあるテーブルの管理」しか許さない
-    // （まだ存在しないテーブル名へのルールで作成させると、スコープの封じ込めが破れる）。
+    // まだ存在しないテーブル名へのルールで作成させると、スコープの封じ込めが破れる。
     crate::middleware::auth::check_database(&app_state, &auth_user, &db_name, UserRole::Manage)
         .await?;
 
