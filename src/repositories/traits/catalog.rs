@@ -1,5 +1,4 @@
-//! カタログ（データベース・テーブル・ユーザーの定義）の参照と、
-//! その上に載る権限ルールの変換。
+//! カタログへの点参照と、その上に載る権限ルールの変換。
 
 use crate::error::AppError;
 use crate::models::id::{DatabaseId, TableId};
@@ -8,18 +7,13 @@ use crate::models::users::{
     UserMetadata,
 };
 
-/// 読み取り・書き込みどちらのトランザクションからも必要になる、カタログへの点参照。
+/// カタログへの点参照と、その上に載る権限ルールの名前 ⇄ ID 変換。
 ///
-/// 実装が用意するのは点参照だけで、その上に載る権限ルールの名前 ⇄ ID 変換は既定実装として
-/// ここに 1 箇所だけ置く（認可の規則をバックエンドごとに複製しないため）。
-// `async fn` の戻り値の Future には呼び出し側から `Send` 境界を付けられない。
-// このアプリではバックエンドが feature で 1 つに確定し、Send 性は具体型経由で
-// 漏れ出すため、trait 側で境界を要求する必要がない（`storage.rs` の設計メモを参照）。
-// 署名の読みやすさを優先して `async fn` を使う。
+/// 実装が用意するのは点参照だけ。変換を既定実装に置くのは、認可の規則をバックエンド
+/// ごとに複製しないため。
+// `async fn` の Future に `Send` を課さない理由は [`Storage`](super::Storage) を参照。
 #[allow(async_fn_in_trait)]
 pub trait CatalogRepository {
-    // --- 実装が用意する点参照 ---
-
     async fn database_id(&self, name: &str) -> Result<Option<DatabaseId>, AppError>;
 
     async fn table_id(
@@ -28,18 +22,13 @@ pub trait CatalogRepository {
         table_name: &str,
     ) -> Result<Option<TableId>, AppError>;
 
-    /// `DatabaseId` からデータベース名を引く。
     async fn database_name(&self, db_id: DatabaseId) -> Result<Option<String>, AppError>;
 
-    /// `TableId` からテーブル名を引く。
     async fn table_name(&self, table_id: TableId) -> Result<Option<String>, AppError>;
 
     async fn user_meta(&self, username: &str) -> Result<Option<UserMetadata>, AppError>;
 
-    /// データベース配下のテーブル名を列挙する。
     async fn table_names(&self, db_id: DatabaseId) -> Result<Vec<String>, AppError>;
-
-    // --- 上に載る共通ロジック ---
 
     async fn require_database_id(&self, name: &str) -> Result<DatabaseId, AppError> {
         self.database_id(name)
@@ -57,15 +46,13 @@ pub trait CatalogRepository {
 
     /// API 表現（名前ベース）の権限ルール列を保存形式（ID ベース）へ解決する。
     ///
-    /// - 存在しないデータベース／テーブルを指すルールは 404 で拒否する
-    /// - 同じ対象を指すルールが複数あればロールが一致する場合のみ 1 件に畳み、
-    ///   食い違う場合は 400 で拒否する（実効ロールが暗黙に max になるのを避ける）
+    /// 同じ対象を指すルールはロールが一致するときだけ畳む。食い違う場合に拒否するのは、
+    /// 実効ロールが暗黙に max になるのを避けるため。
     async fn resolve_privileges(
         &self,
         rules: &[PrivilegeRule],
     ) -> Result<Vec<StoredPrivilege>, AppError> {
-        // 名前解決の前に件数で弾く。解決はルールごとにカタログを引くので、
-        // どうせ上限で拒否する入力に対して先に走らせない。
+        // 解決はルールごとにカタログを引くので、上限で拒否する入力には走らせない。
         if rules.len() > MAX_PRIVILEGE_RULES {
             return Err(AppError::InvalidPrivilege {
                 reason: format!("a user cannot hold more than {MAX_PRIVILEGE_RULES} privileges"),
@@ -113,7 +100,6 @@ pub trait CatalogRepository {
         Ok(resolved)
     }
 
-    /// 1 件のルールを解決する。
     async fn resolve_privilege(&self, rule: &PrivilegeRule) -> Result<StoredPrivilege, AppError> {
         Ok(self
             .resolve_privileges(std::slice::from_ref(rule))
@@ -122,7 +108,7 @@ pub trait CatalogRepository {
             .expect("resolving one rule yields one rule"))
     }
 
-    /// 適用対象を解決する。剥奪はロールを問わないので、対象キーだけを返す。
+    /// 剥奪はロールを問わないので、対象キーだけを返す。
     async fn resolve_target(&self, target: &PrivilegeTarget) -> Result<StoredTarget, AppError> {
         Ok(match target {
             PrivilegeTarget::Global => StoredTarget::Global,
@@ -143,10 +129,7 @@ pub trait CatalogRepository {
         })
     }
 
-    /// 参照先が既に消えているルールを取り除く。
-    ///
-    /// そうしたルールは認可判定で決して一致せず、取得時にも隠されるため無害だが、
-    /// 残したままだと「付与 → 対象削除」を繰り返すぶんだけ配列が伸びていく。
+    /// 参照先が消えたルールを取り除く。残すと「付与 → 対象削除」の繰り返しで配列が伸びる。
     async fn prune_dangling(&self, privileges: &mut Vec<StoredPrivilege>) -> Result<(), AppError> {
         let mut alive = Vec::with_capacity(privileges.len());
         for rule in privileges.iter() {
@@ -165,9 +148,8 @@ pub trait CatalogRepository {
 
     /// 保存形式（ID ベース）を API 表現（名前ベース）へ描画する。
     ///
-    /// 既に削除されたデータベース／テーブルを指すルールは名前へ解決できないため
-    /// 取り除く。そうしたルールは認可判定でも決して一致しないので、隠すことで
-    /// 「見えている権限 = 実際に効く権限」を保つ。
+    /// 名前へ解決できないルールを落とすのは、「見えている権限 = 実際に効く権限」を
+    /// 保つため（認可判定でもそれらは一致しない）。
     async fn render_privileges(
         &self,
         stored: &[StoredPrivilege],

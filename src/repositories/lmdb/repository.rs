@@ -1,8 +1,5 @@
-//! [`KasaneDbRead`] / [`KasaneDbWrite`] を抽象 API の trait 群へ適合させる層。
-//!
-//! 実処理は `catalog` / `users` / `data` の各モジュールにあり、ここはその委譲だけを行う。
-//! trait の実装は 1 つのブロックにまとめる必要があるため、操作の定義（モジュール分割）と
-//! trait への適合（この 1 箇所）を分けている（TiKV 実装も同じ構成）。
+//! 抽象 trait への適合。trait の実装は 1 ブロックにまとめる必要があるので、操作の定義
+//! （モジュール分割）と適合（ここ）を分けている。
 
 use kasane_logic::{FlexId, SpatialIdSet};
 
@@ -17,9 +14,7 @@ use crate::repositories::{CatalogRepository, ReadRepository, ValueGroups, WriteR
 
 use super::{KasaneDbRead, KasaneDbWrite, catalog, users};
 
-/// 点参照 6 つを、トランザクションを保持するフィールド名を指定して実装する。
-///
-/// `RwTxn` は `RoTxn` へ Deref するので、実体は読み書きで同じ自由関数を呼ぶ。
+/// `RwTxn` は `RoTxn` へ Deref するので、読み書きで同じ自由関数を呼べる。
 macro_rules! impl_catalog_repository {
     ($target:ty, $txn:ident) => {
         impl CatalogRepository for $target {
@@ -230,13 +225,7 @@ impl WriteRepository for KasaneDbWrite<'_> {
         index: Option<TableDataType>,
         entries: Vec<(SpatialIdSet, Vec<u8>)>,
     ) -> Result<(), AppError> {
-        // 素直に 1 件ずつ流す。同じ書き込みトランザクション内なので原子性は
-        // TiKV 側と同じで、ライタロックとコミットも 1 回で済む。
-        //
-        // ただし **リーフの読み直しと書き直しは 1 件ごとに起きる**。同じリーフへ
-        // N 件入れると、そのリーフの rkyv 復号・再直列化・put を N 回払う。
-        // TiKV 側の `BatchWrite` と同じく、リーフごとにまとめて 1 回にできる
-        // 余地がここにある（今は未実装）。
+        // 同じリーフへ N 件入れると復号・再直列化を N 回払う（畳み込みは未実装）。
         for (ids, value) in entries {
             self.data_insert_impl(table_id, index, ids, &value)?;
         }

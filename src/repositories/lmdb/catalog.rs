@@ -1,9 +1,5 @@
-//! データベースとテーブルのカタログ操作。
-//!
-//! 抽象 API は [`ReadRepository`](crate::repositories::ReadRepository) /
-//! [`WriteRepository`](crate::repositories::WriteRepository) 側にあり、ここのメソッドは
-//! `repository.rs` から委譲される。同名にすると inherent 側が常に優先されて trait メソッドを
-//! 呼べなくなるため、`_impl` を付けて区別している（TiKV 実装も同じ規約）。
+//! `_impl` を付けるのは、trait メソッドと同名にすると inherent 側が常に優先されて
+//! trait メソッドを呼べなくなるため（TiKV 実装も同じ規約）。
 
 use heed::BytesDecode;
 use uuid::Uuid;
@@ -16,10 +12,7 @@ use crate::models::id::{DatabaseId, TableId};
 use super::keys::DbIdAndName;
 use super::{AppDb, KasaneDbRead, KasaneDbWrite};
 
-/// メタデータへの点参照。
-///
-/// `RwTxn` は `RoTxn` へ Deref するので、読み取り・書き込みどちらのトランザクションからも
-/// 同じ関数を呼べる（TiKV 実装が `&Mutex<Transaction>` を受け取るのと同じ形）。
+/// `RwTxn` は `RoTxn` へ Deref するので、読み書きどちらからも同じ関数を呼べる。
 pub(super) fn database_id(
     db: &AppDb,
     txn: &heed::RoTxn<heed::WithoutTls>,
@@ -46,7 +39,6 @@ pub(super) fn table_id(
         .map(|meta| meta.id))
 }
 
-/// `DatabaseId` からデータベース名を引く（`database_id_index` への点参照）。
 pub(super) fn database_name(
     db: &AppDb,
     txn: &heed::RoTxn<heed::WithoutTls>,
@@ -55,7 +47,6 @@ pub(super) fn database_name(
     Ok(db.database_id_index.get(txn, &db_id)?.map(str::to_string))
 }
 
-/// `TableId` からテーブル名を引く（`table_id_index` への点参照）。
 pub(super) fn table_name(
     db: &AppDb,
     txn: &heed::RoTxn<heed::WithoutTls>,
@@ -64,9 +55,7 @@ pub(super) fn table_name(
     Ok(db.table_id_index.get(txn, &table_id)?.map(str::to_string))
 }
 
-/// データベース配下のテーブル名を列挙する。
-///
-/// 全走査に依存する逆引きは持たず、`tables` のプレフィックススキャンで済ませている。
+/// 全走査に依存する逆引きは持たず、`tables` のプレフィックススキャンで済ませる。
 pub(super) fn table_names(
     db: &AppDb,
     txn: &heed::RoTxn<heed::WithoutTls>,
@@ -87,14 +76,7 @@ pub(super) fn table_names(
     Ok(names)
 }
 
-/// LMDB 上での実装本体。
-///
-/// 抽象 API は [`ReadRepository`](crate::repositories::ReadRepository) 側にあり、
-/// ここのメソッドはそこから委譲される。同名にすると inherent 側が常に優先されて
-/// trait メソッドを呼べなくなるため、`_impl` を付けて区別している
-/// （TiKV 実装も同じ規約）。
 impl<'a> KasaneDbRead<'a> {
-    /// Databaseの情報を取得する
     #[tracing::instrument(skip_all)]
     pub fn database_info_impl(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
         if name.is_empty() {
@@ -111,10 +93,7 @@ impl<'a> KasaneDbRead<'a> {
         }
     }
 
-    /// Databaseの一覧を [`DatabaseId`] つきで取得する。
-    ///
-    /// 呼び出し側は権限の絞り込みに ID を使うため、同じメタデータを引き直さずに
-    /// 済むよう ID を添えて返す。
+    /// 呼び出し側が権限の絞り込みに使うので、ID を添えて返す。
     #[tracing::instrument(skip_all)]
     pub fn database_list_impl(&self) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
         let db = self.db.databases;
@@ -134,7 +113,6 @@ impl<'a> KasaneDbRead<'a> {
 }
 
 impl<'a> KasaneDbWrite<'a> {
-    /// Databaseの情報を取得する
     #[tracing::instrument(skip_all)]
     pub fn database_info_impl(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
         let db = self.db.databases;
@@ -148,7 +126,6 @@ impl<'a> KasaneDbWrite<'a> {
         }
     }
 
-    /// Databaseを作成する
     #[tracing::instrument(skip_all)]
     pub fn database_create_impl(
         &mut self,
@@ -179,7 +156,6 @@ impl<'a> KasaneDbWrite<'a> {
         })
     }
 
-    /// Databaseを削除する
     #[tracing::instrument(skip_all)]
     pub fn database_remove_impl(&mut self, name: &str) -> Result<(), AppError> {
         if name.is_empty() {
@@ -193,17 +169,12 @@ impl<'a> KasaneDbWrite<'a> {
             });
         };
 
-        // 配下テーブルの列挙と削除は、この 1 つの書き込みトランザクション内で行う。
-        // 列挙だけを別の読み取りトランザクションで済ませると、その隙間に作られた
-        // テーブルが削除対象から漏れ、親を失って到達不能なまま残ってしまう。
+        // 別のトランザクションで列挙すると、隙間に作られたテーブルが削除対象から漏れる。
         for table_name in table_names(self.db, &self.write_txn, meta.id)? {
             self.table_remove_impl(name, &table_name)?;
         }
 
-        // ユーザーが持つ権限はデータベース ID で保存されており、削除したデータベースの
-        // ID が再利用されることはない。よって残った権限ルールが後から作られた同名の
-        // データベースに効くことはなく、ここで掃除する必要はない
-        // （逆引きインデックスから消えるので、表示上は解決できないルールとして隠れる）。
+        // 権限は ID で保存され ID は再利用されないので、掃除しなくても誤爆しない。
         self.db.databases.delete(&mut self.write_txn, name)?;
         self.db
             .database_id_index
@@ -212,7 +183,6 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(())
     }
 
-    /// Databaseの名前や説明を変更する
     #[tracing::instrument(skip_all)]
     pub fn database_update_impl(
         &mut self,
@@ -223,11 +193,9 @@ impl<'a> KasaneDbWrite<'a> {
         let final_new_name = new_name.as_deref().unwrap_or(name);
 
         if name != final_new_name {
-            // new_nameの妥当性を検証
             crate::services::helpers::name_valid::name_valid(final_new_name)?;
         }
 
-        // 変更元の存在確認
         let mut meta = {
             let db = self.db.databases;
             if let Some(meta) = db.get(&self.write_txn, name)? {
@@ -240,7 +208,6 @@ impl<'a> KasaneDbWrite<'a> {
         };
 
         if name != final_new_name {
-            // コピー先が既に存在するか確認
             let db = self.db.databases;
             if db.get(&self.write_txn, final_new_name)?.is_some() {
                 return Err(AppError::DatabaseAlreadyExists {
@@ -249,14 +216,12 @@ impl<'a> KasaneDbWrite<'a> {
             }
         }
 
-        // 説明の更新
         if let Some(desc) = description {
             meta.description = desc;
         }
 
         let db = self.db.databases;
         if name != final_new_name {
-            // lmdbから古いエントリを削除し、新しいエントリを追加
             db.delete(&mut self.write_txn, name)?;
             self.db
                 .database_id_index
@@ -266,17 +231,14 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(())
     }
 
-    /// Databaseをコピーする。
     #[tracing::instrument(skip_all)]
     pub fn database_copy_impl(
         &mut self,
         src_db_name: &str,
         copy_name: &str,
     ) -> Result<DatabaseInfoResponse, AppError> {
-        // コピー先データベース名の妥当性検証
         crate::services::helpers::name_valid::name_valid(copy_name)?;
 
-        // 1. コピー元データベースの存在確認
         let src_db_meta = {
             let db = self.db.databases;
             db.get(&self.write_txn, src_db_name)?
@@ -285,14 +247,12 @@ impl<'a> KasaneDbWrite<'a> {
                 })?
         };
 
-        // 2. コピー先データベースがすでに存在するかチェック
         if self.database_info_impl(copy_name)?.is_some() {
             return Err(AppError::DatabaseAlreadyExists {
                 name: copy_name.to_string(),
             });
         }
 
-        // 3. コピー先データベースを作成
         let copy_db_id = crate::models::id::DatabaseId(Uuid::now_v7());
         let copy_meta = DatabaseMetadata {
             id: copy_db_id,
@@ -306,10 +266,8 @@ impl<'a> KasaneDbWrite<'a> {
             .database_id_index
             .put(&mut self.write_txn, &copy_db_id, copy_name)?;
 
-        // 4. コピー元データベース内の全テーブル名を取得
         let table_names = table_names(self.db, &self.write_txn, src_db_meta.id)?;
 
-        // 5. 各テーブルをコピー
         for table_name in table_names {
             self.table_copy_impl(src_db_name, &table_name, copy_name, &table_name)?;
         }
@@ -322,11 +280,7 @@ impl<'a> KasaneDbWrite<'a> {
 }
 
 impl<'a> KasaneDbRead<'a> {
-    /// `(データベース名, テーブル名)` の並びをまとめて解決する。返りは入力と同じ並び。
-    ///
-    /// 参照はすべて mmap 上の点参照なので、TiKV 側のような束ね方（`batch_get`）に意味は
-    /// なく、順に引くだけでよい。**呼び出し側の形を両バックエンドで揃えるため**に
-    /// 同じ入口を用意している。
+    /// すべて mmap 上の点参照なので束ねる意味はなく、入口を揃えるためだけにある。
     #[tracing::instrument(skip_all, fields(refs = refs.len()))]
     pub fn resolve_tables_impl(
         &self,
@@ -361,7 +315,6 @@ impl<'a> KasaneDbRead<'a> {
             .collect()
     }
 
-    /// Tableの情報を取得する
     #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
     pub fn table_info_impl(
         &self,
@@ -390,7 +343,6 @@ impl<'a> KasaneDbRead<'a> {
         }
     }
 
-    /// Tableの一覧を取得する
     #[tracing::instrument(skip_all, fields(db_name = %db_name))]
     pub fn table_list_impl(&self, db_name: &str) -> Result<Vec<Table>, AppError> {
         let db_id = database_id(self.db, &self.read_txn, db_name)?.ok_or_else(|| {
@@ -401,8 +353,7 @@ impl<'a> KasaneDbRead<'a> {
         self.table_list_by_id_impl(db_id)
     }
 
-    /// Tableの一覧を [`DatabaseId`](crate::models::id::DatabaseId) から取得する。
-    /// 既に ID を解決済みの呼び出し側が、名前からの引き直しを避けるために使う。
+    /// ID を解決済みの呼び出し側が、名前からの引き直しを避けるために使う。
     #[tracing::instrument(skip_all)]
     pub fn table_list_by_id_impl(
         &self,
@@ -432,7 +383,6 @@ impl<'a> KasaneDbRead<'a> {
         Ok(tables)
     }
 
-    /// テーブルが保持する [`FlexId`](kasane_logic::FlexId) の総数を返す。
     #[tracing::instrument(skip_all)]
     pub fn table_count_impl(&self, table_id: crate::models::id::TableId) -> Result<u64, AppError> {
         use super::shard::ShardEntry;
@@ -454,7 +404,6 @@ impl<'a> KasaneDbRead<'a> {
 }
 
 impl<'a> KasaneDbWrite<'a> {
-    /// Tableの情報を取得する
     #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
     pub fn table_info_impl(
         &self,
@@ -483,7 +432,6 @@ impl<'a> KasaneDbWrite<'a> {
         }
     }
 
-    /// Tableを作成する
     #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
     #[allow(clippy::too_many_arguments)]
     pub fn table_create_impl(
@@ -568,7 +516,6 @@ impl<'a> KasaneDbWrite<'a> {
         })
     }
 
-    /// Tableの名前や制約を変更する。
     #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
     pub fn table_update_impl(
         &mut self,
@@ -703,7 +650,6 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(())
     }
 
-    /// Tableを削除する。
     #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
     pub fn table_remove_impl(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError> {
         let table = match self.table_info_impl(db_name, table_name)? {
@@ -723,8 +669,7 @@ impl<'a> KasaneDbWrite<'a> {
                 })?
         };
 
-        // 1. シャードデータを全削除（tables_data の table_id プレフィックス）。
-        //    反復中に削除できないため、キーを集めてから削除する。
+        // 反復中に削除できないので、キーを集めてから削除する。
         let tables_data = self
             .db
             .tables_data
@@ -742,7 +687,6 @@ impl<'a> KasaneDbWrite<'a> {
             tables_data.delete(&mut self.write_txn, &k)?;
         }
 
-        // 1b. 値インデックスも table_id プレフィックスで全削除。
         let value_index = self.db.value_index;
         let vi_keys: Vec<Vec<u8>> = {
             let mut ks = Vec::new();
@@ -756,7 +700,6 @@ impl<'a> KasaneDbWrite<'a> {
             value_index.delete(&mut self.write_txn, &k)?;
         }
 
-        // 2. テーブルメタデータと ID インデックスを削除。
         self.db
             .tables
             .delete(&mut self.write_txn, &(db_meta.id, table_name))?;
@@ -767,7 +710,6 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(())
     }
 
-    /// Tableをコピーする。
     #[tracing::instrument(skip_all)]
     pub fn table_copy_impl(
         &mut self,
@@ -776,7 +718,6 @@ impl<'a> KasaneDbWrite<'a> {
         copy_db_name: &str,
         copy_table_name: &str,
     ) -> Result<Table, AppError> {
-        // 1. コピー元データベースの存在確認
         let src_db_meta = {
             let db = self.db.databases;
             db.get(&self.write_txn, src_db_name)?
@@ -785,7 +726,6 @@ impl<'a> KasaneDbWrite<'a> {
                 })?
         };
 
-        // 2. コピー元テーブルの存在確認
         let src_table_meta = {
             let db = self.db.tables;
             db.get(&self.write_txn, &(src_db_meta.id, src_table_name))?
@@ -794,7 +734,6 @@ impl<'a> KasaneDbWrite<'a> {
                 })?
         };
 
-        // 3. コピー先データベースの存在確認
         let copy_db_meta = {
             let db = self.db.databases;
             db.get(&self.write_txn, copy_db_name)?
@@ -803,7 +742,6 @@ impl<'a> KasaneDbWrite<'a> {
                 })?
         };
 
-        // 4. コピー先テーブルの重複確認
         let db_tables = self.db.tables;
         if db_tables
             .get(&self.write_txn, &(copy_db_meta.id, copy_table_name))?
@@ -814,10 +752,8 @@ impl<'a> KasaneDbWrite<'a> {
             });
         }
 
-        // コピー先テーブル名の妥当性検証
         crate::services::helpers::name_valid::name_valid(copy_table_name)?;
 
-        // 5. 新しい TableId を生成
         let db_index = self.db.table_id_index;
         let mut copy_table_id = crate::models::id::TableId(uuid::Uuid::now_v7());
         loop {
@@ -827,7 +763,6 @@ impl<'a> KasaneDbWrite<'a> {
             copy_table_id = crate::models::id::TableId(uuid::Uuid::now_v7());
         }
 
-        // 6. 新しい TableMetadata を構成
         let copy_table_meta = TableMetadata {
             id: copy_table_id,
             data_type: src_table_meta.data_type,
@@ -837,7 +772,6 @@ impl<'a> KasaneDbWrite<'a> {
             value_index: src_table_meta.value_index,
         };
 
-        // 7. 新しいテーブルメタデータと ID インデックスを書き込み
         db_tables.put(
             &mut self.write_txn,
             &(copy_db_meta.id, copy_table_name),
@@ -845,7 +779,6 @@ impl<'a> KasaneDbWrite<'a> {
         )?;
         db_index.put(&mut self.write_txn, &copy_table_id, copy_table_name)?;
 
-        // 8. tables_data のデータを全コピー
         let tables_data = self
             .db
             .tables_data
@@ -865,7 +798,6 @@ impl<'a> KasaneDbWrite<'a> {
             tables_data.put(&mut self.write_txn, &k, &v)?;
         }
 
-        // 9. value_index のデータを全コピー
         let value_index = self.db.value_index;
         let mut index_to_insert = Vec::new();
         for iter in value_index.prefix_iter(&self.write_txn, src_prefix.as_slice())? {

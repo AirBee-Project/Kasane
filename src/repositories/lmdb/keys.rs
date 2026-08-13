@@ -1,9 +1,5 @@
-//! LMDB のキー表現。
-//!
-//! heed は「キー型 → バイト列」の変換を [`BytesEncode`](heed::BytesEncode) /
-//! [`BytesDecode`](heed::BytesDecode) で受け取るので、複合キーはここで組み立てる。
-//! バイトの並べ方自体は TiKV 側（`tikv::keys`）と揃えてあり、どちらのバックエンドでも
-//! 同じ順序でキーが並ぶ。
+//! 複合キーの [`BytesEncode`](heed::BytesEncode) / [`BytesDecode`](heed::BytesDecode) 実装。
+//! バイトの並べ方は TiKV 実装と揃えてあり、どちらでも同じ順序でキーが並ぶ。
 
 use std::borrow::Cow;
 

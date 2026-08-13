@@ -1,7 +1,5 @@
-//! 単一キースペースを持つバックエンド（TiKV）向けのキーレイアウト。
-//!
-//! LMDB は名前付きの子データベースへ分けて保存できるが、TiKV のキースペースは
-//! フラットな 1 本しかない。そこで**先頭 1 バイトの名前空間タグ**で論理テーブルを分ける。
+//! TiKV のキースペースはフラットな 1 本しかないので、**先頭 1 バイトの名前空間タグ**で
+//! 論理テーブルを分ける。
 //!
 //! ```text
 //!   0x00 ‖ "initialized"                 -> クラスタ初期化済みマーカー
@@ -17,10 +15,8 @@
 //!   0x7F ‖ scope ‖ id                    -> ロック専用キー（値を書かない）
 //! ```
 //!
-//! タグを先頭に置くことで、ある名前空間の全キーは連続した 1 つの範囲に収まり、
-//! プレフィックススキャンがそのまま使える。またキー内のバイト順序は LMDB のときと
-//! 変わらないため、[`value_index`](super::value_index) の順序保存エンコーディングは
-//! そのまま通用する。
+//! タグが先頭にあると、ある名前空間の全キーが連続した 1 つの範囲に収まる。キー内のバイト
+//! 順序は LMDB と変わらないので、順序保存エンコーディングはそのまま通用する。
 
 use kasane_logic::FlexId;
 
@@ -33,7 +29,6 @@ use crate::repositories::encoding::UUID_LEN;
 /// バイト辞書順の操作そのものは両バックエンドで同じなので、実体は共通モジュールにある。
 pub use crate::repositories::encoding::prefix_end;
 
-/// 論理テーブルを区別する名前空間タグ。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Ns {
@@ -46,16 +41,15 @@ pub enum Ns {
     Users = 0x05,
     TablesData = 0x06,
     ValueIndex = 0x07,
-    /// シャードが保持する `FlexId` 件数だけを切り出した索引（`kv.rs` の保存の節を参照）。
+    /// 件数だけを切り出した索引（`kv.rs` の保存の節を参照）。
     ShardCount = 0x08,
-    /// 論理削除されたテーブルの回収待ち行列（`gc.rs` を参照）。
+    /// 回収待ち行列（`gc.rs` を参照）。
     Garbage = 0x09,
-    /// ロック取得専用。実データは書かない（[`super::super`] のロック階層を参照）。
+    /// ロック取得専用。実データは書かない。
     Lock = 0x7F,
 }
 
 impl Ns {
-    /// この名前空間だけを覆うプレフィックス。
     pub fn prefix(self) -> Vec<u8> {
         vec![self as u8]
     }
@@ -68,11 +62,9 @@ fn with_ns(ns: Ns, rest: &[u8]) -> Vec<u8> {
     key
 }
 
-/// `0x00 ‖ "initialized"`
+/// 既定ユーザーの投入は**この印の有無**で判定する。
 ///
-/// このクラスタが Kasane 用に初期化済みであることを示す印。既定ユーザーの投入は
-/// **この印の有無**で判定する（`root` の有無で判定すると、消した管理者が
-/// 次の起動で既定パスワードのまま復活してしまう）。
+/// `root` の有無で判定すると、消した管理者が次の起動で既定パスワードのまま復活してしまう。
 pub fn cluster_initialized() -> Vec<u8> {
     with_ns(Ns::Meta, b"initialized")
 }
@@ -95,12 +87,10 @@ pub fn table(db_id: DatabaseId, table_name: &str) -> Vec<u8> {
     with_ns(Ns::Tables, &rest)
 }
 
-/// あるデータベース配下の全テーブルを覆うプレフィックス。
 pub fn tables_of(db_id: DatabaseId) -> Vec<u8> {
     with_ns(Ns::Tables, &db_id.into_bytes())
 }
 
-/// [`tables_of`] で引いたキーからテーブル名を取り出す。
 pub fn table_name_from_key(key: &[u8]) -> Result<&str, AppError> {
     let head = 1 + UUID_LEN;
     if key.len() < head {
@@ -120,19 +110,14 @@ pub fn user(username: &str) -> Vec<u8> {
     with_ns(Ns::Users, username.as_bytes())
 }
 
-/// [`Ns::Users`] のキーからユーザー名を取り出す。
 pub fn username_from_key(key: &[u8]) -> Result<&str, AppError> {
     name_after_tag(key, "username")
 }
 
-/// [`Ns::Databases`] のキーからデータベース名を取り出す。
 pub fn database_name_from_key(key: &[u8]) -> Result<&str, AppError> {
     name_after_tag(key, "database name")
 }
 
-/// 名前空間タグ 1 バイトを剥がして、残りを名前として読む。
-///
-/// スキャンで引いたキーは必ずタグを持つが、その前提を暗黙にせず確認する。
 /// 添字だけで剥がすと、想定外の短いキーが来たときに panic になる。
 fn name_after_tag<'k>(key: &'k [u8], what: &str) -> Result<&'k str, AppError> {
     let body = key
@@ -143,10 +128,8 @@ fn name_after_tag<'k>(key: &'k [u8], what: &str) -> Result<&'k str, AppError> {
         .map_err(|e| AppError::InternalError(format!("{what} is not valid utf-8: {e}")))
 }
 
-/// キー内の識別子（名前空間タグ直後の [`UUID_LEN`] バイト）を差し替える。
-///
-/// シャードと値インデックスのキーはどちらも `タグ ‖ table_id ‖ …` なので、
-/// テーブルの複製ではこの部分だけを付け替えれば残りをそのまま流用できる。
+/// シャードと値インデックスのキーはどちらも `タグ ‖ table_id ‖ …` なので、テーブルの複製では
+/// この部分だけを付け替えれば残りをそのまま流用できる。
 pub fn replace_leading_id(key: &mut [u8], id: TableId) -> Result<(), AppError> {
     let slot = key.get_mut(1..1 + UUID_LEN).ok_or_else(|| {
         AppError::InternalError("key is too short to carry a table id".to_string())
@@ -155,7 +138,7 @@ pub fn replace_leading_id(key: &mut [u8], id: TableId) -> Result<(), AppError> {
     Ok(())
 }
 
-/// `ns ‖ table_id ‖ flex_id`。シャード本体と件数はレイアウトが同じで、タグだけが違う。
+/// シャード本体と件数はレイアウトが同じで、タグだけが違う。
 fn region_key(ns: Ns, table_id: TableId, region: &FlexId) -> Vec<u8> {
     let mut key = Vec::with_capacity(1 + UUID_LEN + FlexId::ENCODED_LEN);
     key.push(ns as u8);
@@ -169,12 +152,7 @@ pub fn shard(table_id: TableId, region: &FlexId) -> Vec<u8> {
     region_key(Ns::TablesData, table_id, region)
 }
 
-/// [`shard`] で作ったキーから領域を復元する。
-///
-/// シャードキーは長さが固定（タグ 1 + `table_id` 16 + `flex_id`）なので、末尾を
-/// 切り出して decode するだけで戻せる。**キー → 領域の対応表を作らずに済ませる**ための
-/// 入口で、木の降下では 1 段ごとに領域の数だけ引くため、対応表を作ると
-/// 「キーの複製 + バイト列のハッシュ」がその数だけ乗る（`tree/node.rs` の `load_nodes`）。
+/// キー → 領域の対応表を作らずに済ませるための入口（`tree/node.rs` の `load_nodes`）。
 pub fn region_from_shard_key(key: &[u8]) -> Result<FlexId, AppError> {
     let expected = 1 + UUID_LEN + FlexId::ENCODED_LEN;
     let bytes: &[u8; FlexId::ENCODED_LEN] = key
@@ -189,19 +167,15 @@ pub fn region_from_shard_key(key: &[u8]) -> Result<FlexId, AppError> {
     FlexId::decode(bytes).map_err(|e| AppError::InternalError(format!("flex_id decode: {e}")))
 }
 
-/// あるテーブルの全シャードを覆うプレフィックス。
 pub fn shards_of(table_id: TableId) -> Vec<u8> {
     with_ns(Ns::TablesData, &table_id.into_bytes())
 }
 
-/// `0x08 ‖ table_id ‖ flex_id`
-///
-/// 本体（[`shard`]）と同じ並びにしてあるので、テーブル単位のプレフィックスも対応する。
+/// `0x08 ‖ table_id ‖ flex_id`。本体（[`shard`]）と同じ並びなのでプレフィックスも対応する。
 pub fn shard_count(table_id: TableId, region: &FlexId) -> Vec<u8> {
     region_key(Ns::ShardCount, table_id, region)
 }
 
-/// あるテーブルの全シャード件数を覆うプレフィックス。
 pub fn shard_counts_of(table_id: TableId) -> Vec<u8> {
     with_ns(Ns::ShardCount, &table_id.into_bytes())
 }
@@ -214,7 +188,7 @@ pub fn value_index(table_id: TableId, vkey: &[u8], flex_id: &FlexId) -> Vec<u8> 
     )
 }
 
-/// 値インデックスの等価スキャン用プレフィックス（`0x07 ‖ table_id ‖ vkey`）。
+/// `0x07 ‖ table_id ‖ vkey`
 pub fn value_index_prefix(table_id: TableId, vkey: &[u8]) -> Vec<u8> {
     with_ns(
         Ns::ValueIndex,
@@ -222,22 +196,15 @@ pub fn value_index_prefix(table_id: TableId, vkey: &[u8]) -> Vec<u8> {
     )
 }
 
-/// あるテーブルの値インデックス全体を覆うプレフィックス。
 pub fn value_index_of(table_id: TableId) -> Vec<u8> {
     with_ns(Ns::ValueIndex, &table_id.into_bytes())
 }
 
-/// `0x09 ‖ table_id`
-///
-/// 論理削除されたテーブルの回収待ち行列。テーブル削除はカタログ項目を消して
-/// ここへ積むだけで完了し、シャード実体の削除は [`gc`](super::gc) が後から行う。
-/// こうすることで、削除がテーブル全体の排他を必要とせず、1 トランザクションの
-/// サイズ上限にも縛られない。
+/// `0x09 ‖ table_id`。論理削除されたテーブルの回収待ち行列（[`gc`](super::gc)）。
 pub fn garbage(table_id: TableId) -> Vec<u8> {
     with_ns(Ns::Garbage, &table_id.into_bytes())
 }
 
-/// [`garbage`] のキーから [`TableId`] を復元する。
 pub fn table_id_from_garbage_key(key: &[u8]) -> Result<TableId, AppError> {
     let bytes: [u8; UUID_LEN] = key
         .get(1..1 + UUID_LEN)
@@ -248,9 +215,10 @@ pub fn table_id_from_garbage_key(key: &[u8]) -> Result<TableId, AppError> {
     Ok(TableId(uuid::Uuid::from_bytes(bytes)))
 }
 
-/// あるテーブルのデータ実体を覆うプレフィックス群（カタログ項目は含まない）。
+/// テーブルのデータ実体（カタログ項目は含まない）。
 ///
-/// 回収も複製も「この 3 つを対象にする」で足りるよう、1 箇所にまとめてある。
+/// 回収も複製も同じ集合を使うので、名前空間が増えたときに片方だけ追随することがないよう
+/// 1 箇所にまとめてある。
 pub fn table_data_prefixes(table_id: TableId) -> [Vec<u8>; 3] {
     [
         shards_of(table_id),
@@ -259,37 +227,27 @@ pub fn table_data_prefixes(table_id: TableId) -> [Vec<u8>; 3] {
     ]
 }
 
-/// ロック階層のスコープ。粒度ごとに別のキーを取ることで、無関係な書き込み同士が
-/// ロックを奪い合わないようにする。
+/// ロック階層のスコープ。
 ///
-/// ここに残るのは**範囲スキャンから変更を導く操作**、つまりキー単位の競合検査では
-/// ファントムを防げないものだけ。シャードの読み書きはキー単位で完結するので、
-/// 明示ロックを取らず、楽観トランザクションの prewrite に競合検査を任せる
-/// （`super::mod` の「データ経路」の節）。
+/// ここに並ぶのは**範囲スキャンから変更を導く操作**、つまりキー単位の競合検査ではファントムを
+/// 防げないものだけ（シャードの読み書きは明示ロックを取らない）。
 ///
-/// **判別値の並び順に意味がある。** ロックキーは `0x7F ‖ scope ‖ id` で、取得は
-/// 常にキーのバイト昇順で行われるため（`super::mod` のデッドロックの節）、この
-/// 判別値の大小がそのままロック階層の取得順になる。粗い粒度から順に並べること。
+/// **判別値の並び順に意味がある。** 取得は常にキーのバイト昇順なので、この大小がそのまま
+/// ロック階層の取得順になる。粗い粒度から順に並べること。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum LockScope {
-    /// データベースのテーブル集合を触る操作（テーブルの作成・削除・複製、DB 削除）。
-    ///
-    /// テーブル一覧は範囲スキャンで得るので、その集合を変える操作と読む操作が
-    /// 同じデータベース名のロックを取ることでファントムを防ぐ。
+    /// テーブル一覧は範囲スキャンで得るので、その集合を変える操作と読む操作が同じ名前の
+    /// ロックを取ることでファントムを防ぐ。
     Database = 0x01,
-    /// 1 ユーザーの権限・資格情報。範囲スキャンを伴わないので独立した単位でよい。
+    /// 範囲スキャンを伴わないので独立した単位でよい。
     User = 0x03,
 }
 
-/// `0x7F ‖ scope ‖ id`
+/// `0x7F ‖ scope ‖ id`。`id` は対象の識別子そのもの。
 ///
-/// `id` は排他したい対象の識別子そのもの（テーブルなら `TableId` のバイト列、
-/// データベースやユーザーなら名前のバイト列）。名前をハッシュへ潰さないので、
-/// 別の名前が同じロックキーへ衝突することがない。
-///
-/// このキーには**値を書かない**。悲観ロックの取得対象にするだけで、
-/// 解放は常に rollback で行うため MVCC のバージョンは作られない。
+/// 名前をハッシュへ潰さないので、別の名前が同じロックキーへ衝突することがない。このキーには
+/// **値を書かない**――解放は常に rollback なので MVCC のバージョンも作られない。
 pub fn lock(scope: LockScope, id: &[u8]) -> Vec<u8> {
     let mut rest = Vec::with_capacity(1 + id.len());
     rest.push(scope as u8);
@@ -297,11 +255,8 @@ pub fn lock(scope: LockScope, id: &[u8]) -> Vec<u8> {
     with_ns(Ns::Lock, &rest)
 }
 
-/// 値インデックスの範囲検索で走査すべきキー範囲（名前空間タグ付き）。
-///
-/// 境界の求め方と、なぜ厳密にならないのかは
-/// [`value_index::range_scan_bounds`](crate::repositories::encoding::value_index::range_scan_bounds)
-/// を参照。ここはそこへ名前空間タグを被せるだけ。
+/// 名前空間タグを被せるだけ。境界の求め方は
+/// [`value_index::range_scan_bounds`](crate::repositories::encoding::value_index::range_scan_bounds)。
 pub fn value_index_scan_bounds(
     table_id: TableId,
     lo_vkey: &[u8],
@@ -333,7 +288,6 @@ mod tests {
 
     #[test]
     fn namespaces_do_not_overlap() {
-        // 別々の名前空間のキーは、先頭タグだけで必ず区別できる。
         let keys = [
             cluster_initialized(),
             database("x"),
@@ -371,7 +325,6 @@ mod tests {
 
     #[test]
     fn shard_keys_sort_within_their_table() {
-        // 同一テーブルのシャードは連続し、別テーブルのものは範囲外に出る。
         let prefix = shards_of(table_id(3));
         let end = prefix_end(&prefix).unwrap();
 
@@ -387,7 +340,7 @@ mod tests {
     fn value_index_keeps_value_ordering() {
         use crate::models::database::table::TableDataType;
 
-        // 順序保存エンコーディングが名前空間タグを付けても壊れないこと（負→正の順）。
+        // 順序保存エンコーディングが名前空間タグを付けても壊れないこと。
         let t = table_id(1);
         let region = FlexId::UPPER_MAX;
         let enc = |v: i64| {
@@ -407,7 +360,6 @@ mod tests {
 
     #[test]
     fn short_keys_are_rejected_instead_of_panicking() {
-        // スキャン由来なら必ず十分な長さがあるが、その前提が崩れても panic させない。
         assert!(table_name_from_key(&[Ns::Tables as u8]).is_err());
         assert!(username_from_key(&[]).is_err());
         assert!(database_name_from_key(&[]).is_err());
@@ -432,7 +384,7 @@ mod tests {
 
     #[test]
     fn lock_scopes_are_ordered_from_coarse_to_fine() {
-        // この並びが崩れると、BTreeSet 経由の取得順がロック階層と食い違う。
+        // 崩れると BTreeSet 経由の取得順がロック階層と食い違う。
         assert!(LockScope::Database < LockScope::User);
     }
 }

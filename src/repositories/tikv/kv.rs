@@ -2,13 +2,6 @@
 //!
 //! 読み取りは [`TikvRead`](super::TikvRead) と [`TikvWrite`](super::TikvWrite) の
 //! どちらからも必要なので、読み取り元だけを受け取る自由関数として置いている。
-//!
-//! # なぜ読み取りが [`Reader`] で抽象化されているか
-//!
-//! 書き込みトランザクション上の読み取りは [`tikv_client::Transaction`]、通常の読み取りと
-//! クエリ実行器の入力源（`query_source.rs`）は**開始タイムスタンプを固定した**
-//! [`tikv_client::Snapshot`] を使う。両者は読み取り系のシグネチャが同一なので、
-//! ここで 1 つの trait にまとめ、下の自由関数を両方で使い回す。
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
@@ -30,32 +23,21 @@ const SCAN_BATCH: u32 = 512;
 
 /// 1 リクエストへ載せるキー数の上限。
 ///
-/// `batch_get` / `batch_get_for_update` / `batch_mutate` は渡されたキーを
-/// TiKV のリージョンごとに束ねる。同じテーブルのシャードキーは連続しているため、
-/// 大量のキーがひとつのリージョンに集まりやすく、そのまま渡すと gRPC の
-/// メッセージサイズ上限に触れたり、応答をまとめて保持する分だけメモリが跳ねる。
+/// 同じテーブルのシャードキーは連続していてひとつのリージョンに集まりやすく、そのまま渡すと
+/// gRPC のメッセージサイズ上限に触れる。呼び出し側で数を見積もるのは難しい（木の形と対象
+/// 領域の広さで変わる）ので、ここで一律に区切る。
 ///
-/// 呼び出し側で数を見積もるのは難しい（木の形と対象領域の広さで変わり、
-/// `route_leaves_for_range` のように上限を持たない経路もある）ので、
-/// **ここで一律に区切る**。分割してもキーの昇順は保たれるので、
-/// ロック取得順に依存するデッドロック回避の前提は崩れない。
+/// 分割してもキーの昇順は保たれるので、デッドロック回避の前提は崩れない。
 const BATCH_KEYS: usize = 1024;
 
-/// 並行に開く追加スナップショットの上限（[`Readers::fanned_out`]）。
-///
 /// 1 チャンクが既にリージョン単位で内部並行化されているので、ここを大きくしても
-/// 増えるのは同時に飛ぶリクエスト数と手元に載る応答の量だけになる。
+/// 増えるのは同時に飛ぶリクエスト数と手元に載る応答の量だけ。
 const MAX_FANOUT: usize = 8;
 
-// --- 読み取りの抽象 ---
-
-/// スナップショット読み取りができるもの（[`Transaction`] と [`Snapshot`]）。
+/// スナップショット読み取りができるもの（[`Transaction`] / [`Snapshot`] / [`LazyTxn`]）。
 ///
-/// 下の自由関数がこの trait 越しに動くので、呼び出し側は「どちらのスナップショットか」
-/// を意識せずに同じ読み取り経路を通れる。
-///
-/// `pub` なのは [`TikvRead`](super::TikvRead) の型引数の境界に現れるためだけで、
-/// バックエンドの内部事情。`kv` モジュール自体が非公開なので外からは名指しできない。
+/// `pub` なのは [`TikvRead`](super::TikvRead) の型引数の境界に現れるためだけ。
+/// `kv` モジュール自体が非公開なので外からは名指しできない。
 // `async fn` の Future に `Send` を課さないのは `traits/storage.rs` と同じ理由。
 #[allow(async_fn_in_trait)]
 pub trait Reader {
@@ -78,23 +60,18 @@ pub trait Reader {
         limit: u32,
     ) -> Result<Vec<Vec<u8>>, tikv_client::Error>;
 
-    /// `start`（含む）〜`end`（排他、`None` なら終端まで）に入る**まだ送っていない変更**を
-    /// キー昇順で返す（`None` は削除）。
+    /// `start`（含む）〜`end`（排他、`None` なら終端まで）の**まだ送っていない変更**を
+    /// キー昇順で返す（`None` は削除）。溜める仕組みを持たない読み取り元では常に空。
     ///
-    /// 点読み（[`read_one`](Self::read_one) / [`read_many`](Self::read_many)）は自分の変更を
-    /// 自分で重ねられるが、範囲読みはそうはいかない。[`scan_prefix`] のような「読み切る」
-    /// 関数は**取得件数が上限に満たないこと**を終端の判定に使っているので、その途中で
-    /// 件数を増減させると読み切る前に止まったり同じ場所を読み直したりする。そこで
-    /// 読み切ったあとに重ねられるよう、変更の側をここから取り出せるようにしてある。
-    ///
-    /// 溜める仕組みを持たない読み取り元（[`Transaction`] / [`Snapshot`]）では常に空。
+    /// 点読みと違い、範囲読みは自分の変更をその場で重ねられない。読み切る関数は
+    /// 取得件数が上限に満たないことを終端の判定に使うので、途中で件数を増減させると
+    /// 読み切る前に止まったり同じ場所を読み直したりする。
     fn staged_range(&self, _start: &[u8], _end: Option<&[u8]>) -> Vec<(Vec<u8>, Option<Vec<u8>>)> {
         Vec::new()
     }
 }
 
-/// [`Transaction`] と [`Snapshot`] は読み取り系のシグネチャが完全に一致するので、
-/// 実装は 1 つの雛形から生成する。
+/// [`Transaction`] と [`Snapshot`] は読み取り系のシグネチャが完全に一致する。
 macro_rules! impl_reader {
     ($target:ty) => {
         impl Reader for $target {
@@ -142,28 +119,19 @@ macro_rules! impl_reader {
 impl_reader!(Transaction);
 impl_reader!(Snapshot);
 
-// --- 読み取り元 ---
-
-/// 読み取り／書き込みの実体と、並行読みのための追加スナップショットの作り方。
+/// 読み取り／書き込みの実体と、並行読みのための追加スナップショット。
 ///
-/// [`Reader`] は `&mut self` を要求する（トランザクションもスナップショットも内部に
-/// 可変状態を持つ）ので、1 つの実体では**チャンクを逐次にしか読めない**。木の同じ深さで
-/// [`BATCH_KEYS`] を超えるキーを引く場面はテーブルが大きいほど普通に起きるため、
-/// そこが往復の直列鎖になる。
+/// [`Reader`] は `&mut self` を要求するので、1 つの実体ではチャンクを逐次にしか読めず、そこが
+/// 往復の直列鎖になる。断面がタイムスタンプで決まる読み取り（[`fanned_out`](Self::fanned_out)）
+/// なら、同じ断面のスナップショットをいくつでも開ける。
 ///
-/// 断面がタイムスタンプで決まる読み取り（[`fanned_out`](Self::fanned_out)）なら、
-/// **同じタイムスタンプのスナップショットをいくつでも開ける**。追加のスナップショットは
-/// 同じ断面を読むので、どのチャンクをどれで読んでも結果は変わらない。
-///
-/// 書き込みトランザクション上の読み取りには追加スナップショットを持たせない。
-/// そちらは**まだ送っていない自分の変更**を重ねて返す必要があり（[`LazyTxn`] の
-/// `Reader` 実装）、別の実体から読むとその重ね合わせが効かないため。
+/// 書き込みトランザクション上の読み取りには持たせない。そちらは**まだ送っていない自分の変更**
+/// を重ねて返す必要があり、別の実体から読むとその重ね合わせが効かない。
 pub struct Readers<R> {
     primary: Mutex<R>,
     fanout: Option<Fanout>,
 }
 
-/// 同じ断面のスナップショットを追加で開くための材料。
 struct Fanout {
     client: Arc<TransactionClient>,
     ts: Timestamp,
@@ -176,7 +144,7 @@ impl Fanout {
 }
 
 impl<R> Readers<R> {
-    /// 実体 1 つだけの読み取り元（並行読みはしない）。
+    /// 並行読みをしない読み取り元。
     pub(super) fn new(reader: R) -> Self {
         Self {
             primary: Mutex::new(reader),
@@ -194,7 +162,6 @@ impl<R> Readers<R> {
 }
 
 impl Readers<Snapshot> {
-    /// `ts` の断面を読むスナップショットと、同じ断面を追加で開く手段を持つ読み取り元。
     pub(super) fn fanned_out(client: Arc<TransactionClient>, ts: Timestamp) -> Self {
         let primary = client.snapshot(ts.clone(), super::read_options());
         Self {
@@ -204,43 +171,25 @@ impl Readers<Snapshot> {
     }
 }
 
-// --- 作業トランザクション（遅延生成） ---
-
 /// 書き込み側のトランザクション。**最初に実際へ触れるまで開かない。**
 ///
-/// 書き込みクロージャの 1 周目は、必要なロックを宣言した時点で巻き戻される
-/// （`super::mod` の「必要なロックをどう知るか」）。その周回でトランザクションを
-/// 開いてしまうと、何もせずに捨てるためだけに PD からタイムスタンプを取ることになる。
-/// 遅延生成にすると、1 周目はネットワークに一切触れずに終わる。
-///
-/// 開くのが遅れることは正しさを損なわない。むしろ「ロックを取ってから
-/// `start_ts` を確定させる」という不変条件を、より遅い側へ寄せて強めている。
+/// ロックを宣言しただけで巻き戻る 1 周目が、何もせずに捨てるためだけに PD からタイムスタンプ
+/// を取ることを避ける。開くのが遅れても「ロックを取ってから `start_ts` を確定させる」という
+/// 不変条件は損なわれない（むしろ強まる）。
 pub struct LazyTxn {
     client: Arc<TransactionClient>,
     txn: Option<Transaction>,
-    /// 1PC を試すか（`super::write_options` を参照）。断られた場合のやり直しは
-    /// `Storage::write` が判断するので、ここは受け取った設定を持ち回るだけ。
     one_pc: bool,
-    /// まだ TiKV へ送っていない変更（`None` は削除）。
+    /// まだ TiKV へ送っていない変更（`None` は削除）。コミット直前に 1 回だけ流す。
     ///
-    /// **書き込みは全部ここへ溜め、コミットの直前に 1 回だけ流す**
-    /// （[`flush`](Self::flush)）。呼び出しのたびに `batch_mutate` を投げると、
-    /// 触れたリーフの数だけリクエストが直列に積み上がる。1 回にまとめれば、
-    /// 書き込みの往復数はリーフ数に依存しなくなる。
+    /// 呼び出しのたびに `batch_mutate` を投げると、触れたリーフの数だけリクエストが
+    /// 直列に積み上がる。[`BTreeMap`] なのは、反復順（キーのバイト昇順）で送れば
+    /// リージョン跨ぎのアクセスが減り、同じキーへの重複書き込みも畳まれるため。
     ///
-    /// [`BTreeMap`] なのは偶然ではない。反復順（＝キーのバイト昇順）で送るので
-    /// キーが連続し、リージョン跨ぎのアクセスが減る。同じキーへの重複書き込みも
-    /// 最後の 1 つに畳まれる。
-    ///
-    /// この台帳は**読み取りに自分の書き込みを見せる**用途も兼ねる（[`LazyTxn`] の
-    /// `Reader` 実装）。溜めている間は TiKV 側のバッファが空なので、二重に持つことはない。
+    /// **読み取りに自分の書き込みを見せる**用途も兼ねる（[`LazyTxn`] の `Reader` 実装）。
     pending: BTreeMap<Vec<u8>, Option<Vec<u8>>>,
-    /// 競合由来の失敗を受け取ったか。
-    ///
-    /// ロックの取得はこのトランザクションの**内側**で起きるので、競合は
-    /// `Storage::write` から見ると「クロージャが返したアプリケーションエラー」に
-    /// 見えてしまう。それではやり直しの判断ができないため、ここに記録して
-    /// `Storage::write` が拾えるようにする。
+    /// ロックの取得はこのトランザクションの**内側**で起きるので、競合は `Storage::write`
+    /// から見ると「クロージャが返したアプリケーションエラー」になる。判断できるよう記録する。
     conflicted: bool,
 }
 
@@ -255,15 +204,10 @@ impl LazyTxn {
         }
     }
 
-    /// tikv のエラーを記録しつつそのまま返す。
+    /// **このトランザクションが出す失敗は読み書きを問わずここを通すこと。**
     ///
-    /// 競合由来なら印を付けておき、`Storage::write` に新しいトランザクションで
-    /// やり直させる。
-    ///
-    /// **このトランザクションが出す失敗は読み書きを問わずここを通すこと。** 通し忘れると
-    /// その失敗は `Storage::write` から「ただのアプリケーションエラー」に見え、
-    /// やり直されずに 500 として出ていく。読み取り側（[`Reader`] 実装）も同様で、
-    /// 木の降下が他者のロックに当たる経路があるため対象になる。
+    /// 通し忘れると `Storage::write` から「ただのアプリケーションエラー」に見え、やり直されずに
+    /// 500 になる。木の降下も他者のロックに当たるので、読み取り側も対象。
     fn note(&mut self, err: tikv_client::Error) -> tikv_client::Error {
         if super::is_retryable(&err) {
             self.conflicted = true;
@@ -271,7 +215,6 @@ impl LazyTxn {
         err
     }
 
-    /// 競合でやり直せる失敗を受け取ったか。
     pub(super) fn conflicted(&self) -> bool {
         self.conflicted
     }
@@ -287,14 +230,11 @@ impl LazyTxn {
         Ok(self.txn.as_mut().expect("直前に開いた"))
     }
 
-    /// 開いていたトランザクションを取り出す。一度も触れていなければ `None`。
-    ///
     /// 取り出した後は [`Drop`] の対象が無くなるので、後始末は呼び出し側の責任になる。
     pub(super) fn into_opened(mut self) -> Option<Transaction> {
         self.txn.take()
     }
 
-    /// 変更を台帳へ積む。**ここではネットワークに触れない**（[`pending`](Self::pending)）。
     fn stage(&mut self, mutations: impl IntoIterator<Item = Mutation>) {
         for m in mutations {
             let value = (m.op != Op::Del as i32).then_some(m.value);
@@ -304,19 +244,14 @@ impl LazyTxn {
 
     /// 溜めた変更をまとめて送り、悲観ロックを取る。**コミットの直前に 1 度だけ呼ぶ。**
     ///
-    /// 全キーを 1 回の `batch_mutate` へ載せるので、ロック取得は
-    /// 「TSO 1 回 + PessimisticLock 1 回」で済む（リージョン単位の分割は
-    /// tikv-client が内部で並行に行う）。[`BATCH_KEYS`] で区切っても、
-    /// [`BTreeMap`] 由来の昇順は保たれる。
-    ///
-    /// 捨てる試行では呼ばない。溜めたまま drop すれば、ロックも MVCC のバージョンも
-    /// 一切作られないまま消える。
+    /// 全キーを 1 回の `batch_mutate` へ載せるので、ロック取得は「TSO 1 回 + PessimisticLock
+    /// 1 回」で済む。捨てる試行では呼ばない――溜めたまま drop すれば、ロックも MVCC の
+    /// バージョンも一切作られないまま消える。
     pub(super) async fn flush(&mut self) -> Result<(), tikv_client::Error> {
         if self.pending.is_empty() {
             return Ok(());
         }
-        // 台帳は空にする。ここから先の持ち主は TiKV 側のバッファなので、
-        // 両方が同じバイト列を抱える瞬間を作らない。
+        // ここから先の持ち主は TiKV 側のバッファ。両方が同じバイト列を抱える瞬間を作らない。
         let staged = std::mem::take(&mut self.pending);
         let mut mutations: Vec<Mutation> = staged
             .into_iter()
@@ -337,31 +272,20 @@ impl LazyTxn {
 
     /// キーをロックし、**そのロック時点の**値を返す。
     ///
-    /// 通常の `get` はトランザクション開始時（`start_ts`）のスナップショットを読むため、
-    /// 「ロックしてから読む」と、ロック取得までの間に他者がコミットした変更を見落とす。
-    /// `batch_get_for_update` はロックと値の取得を 1 リクエストで行い、値は取り直した
-    /// `for_update_ts` 時点のものになるので、read-modify-write が安全に組める。
+    /// 「ロックしてから `get`」だと、`get` が `start_ts` を読むためロック取得までの間に他者が
+    /// コミットした変更を見落とす。`batch_get_for_update` は取り直した `for_update_ts` の値を
+    /// 返すので read-modify-write が安全に組める。
     ///
-    /// 存在しないキーも**ロックされる**（結果には現れない）。空の領域を他者が
-    /// 埋めたり親へ畳んだりするのを防ぐのに、この性質を使っている。
+    /// 存在しないキーも**ロックされる**（結果には現れない）。空の領域を他者が埋めたり親へ
+    /// 畳んだりするのを防ぐのに、この性質を使っている。
     ///
-    /// # 自分自身の書き込みを見せる
-    ///
-    /// このトランザクションの変更は [`pending`](Self::pending) に溜まっていて、
-    /// コミットの直前まで TiKV へ送られない。したがってロック応答には自分の変更が
-    /// 一切映らず、1 回の書き込みクロージャで同じリーフを 2 度触る操作
-    /// （まとめて `data_insert` する、削除後に `try_merge_up` で読み直す等）が
-    /// 自分の書き込みを失う。そこで手元の台帳を優先させる。
-    ///
-    /// （送った後であっても `batch_get_for_update` は TiKV 側のローカルバッファを
-    /// 見ない――`get` は見るが、こちらはロック応答の値をそのまま返す――ので、
-    /// どちらにせよこの重ね合わせは必要になる。）
+    /// 応答には自分の未送信の変更が映らないので手元の台帳を優先させる。これがないと、1 回の
+    /// クロージャで同じリーフを 2 度触る操作が自分の書き込みを失う。
     async fn lock_and_read(
         &mut self,
         mut keys: Vec<Vec<u8>>,
     ) -> Result<HashMap<Vec<u8>, Vec<u8>>, tikv_client::Error> {
-        // キーは昇順で渡ってくる。分割しても順序は保たれるので、ロック取得順に
-        // 依存するデッドロック回避の前提は崩れない。
+        // キーは昇順で渡ってくる。分割しても順序は保たれる。
         let mut locked: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
         let all_keys = keys.clone();
         while !keys.is_empty() {
@@ -372,7 +296,6 @@ impl LazyTxn {
             keys = rest;
         }
 
-        // 自分が書いていないキーはロック応答のまま、書いたキーは手元の値で置き換える。
         for key in all_keys {
             match self.pending.get(&key) {
                 Some(Some(value)) => {
@@ -389,8 +312,6 @@ impl LazyTxn {
 }
 
 impl Drop for LazyTxn {
-    /// クロージャの実行が途中で捨てられても、握った悲観ロックは返す
-    /// （`super::rollback_in_background` の注記を参照）。
     fn drop(&mut self) {
         if let Some(txn) = self.txn.take() {
             super::rollback_in_background(txn);
@@ -398,20 +319,10 @@ impl Drop for LazyTxn {
     }
 }
 
-/// 読み取りは**自分の未送信の変更を先に見る**。そして**失敗は必ず
-/// [`note`](LazyTxn::note) を通す**。
+/// 読み取りは**未送信の変更を先に見る**。そして**失敗は必ず [`note`](LazyTxn::note) を通す**。
 ///
-/// 後者は競合の取りこぼしを防ぐためにある。木の降下も含めて、書き込みトランザクション上の
-/// 読み取りは他者のロックに当たりうる。当たると tikv-client は `resolve_lock` で解決を
-/// 試み、相手がまだ生きていれば backoff（合計 1.5 秒ほど）を使い切って
-/// `ResolveLockError` を返す。**これは「今その相手が握っている」だけなのでやり直せば通る**
-/// が、`note` を通さないと `Storage::write` は競合だと気づけず、1 回で 500 を返してしまう。
-/// 混雑したときにだけ出るので、取りこぼしても空いていれば気づけない。
-///
-/// 変更はコミット直前まで手元に溜まる（[`LazyTxn::pending`]）ので、TiKV へ聞いても
-/// 自分の書き込みは映っていない。1 つの書き込みクロージャが「書いてから読む」ことは
-/// 普通にある（データベースを作ってすぐその中にテーブルを作る、など）ため、ここで
-/// 重ねないと直前に自分が書いたものが見えなくなる。
+/// 前者は「書いてから読む」（データベースを作ってすぐその中にテーブルを作る等）を成立させる
+/// ため。後者は競合の取りこぼしを防ぐためで、木の降下も他者のロックに当たりうる。
 impl Reader for LazyTxn {
     async fn read_one(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>, tikv_client::Error> {
         if let Some(staged) = self.pending.get(&key) {
@@ -431,7 +342,7 @@ impl Reader for LazyTxn {
         for key in keys {
             match self.pending.get(&key) {
                 Some(Some(value)) => staged.push((key, value.clone())),
-                // 自分で消したキーは「存在しない」＝結果に現れない。
+                // 自分で消したキーは結果に現れない。
                 Some(None) => {}
                 None => ask.push(key),
             }
@@ -491,13 +402,8 @@ pub(super) async fn get<R: Reader>(
     txn.read_one(key).await.map_err(AppError::from)
 }
 
-// --- 変更の登録 ---
-//
-// 書き込みは [`LazyTxn::pending`] へ積むだけなので**失敗しない**。実際の送信は
-// [`LazyTxn::flush`] がコミット直前に 1 回だけ行う。台帳は [`BTreeMap`] なので、
-// ここへ積む順序は送信順に影響しない（送信は常にキー昇順）。
+// 積むだけなので**失敗しない**。台帳は [`BTreeMap`] なので積む順序は送信順に影響しない。
 
-/// 変更をまとめて登録する。
 pub(super) async fn stage(txn: &Readers<LazyTxn>, mutations: impl IntoIterator<Item = Mutation>) {
     txn.lock().await.stage(mutations);
 }
@@ -527,7 +433,6 @@ pub(super) async fn delete_many(txn: &Readers<LazyTxn>, keys: impl IntoIterator<
     stage(txn, keys.into_iter().map(delete_mutation)).await;
 }
 
-/// `key -> value` の書き込みを表す [`Mutation`]。
 pub(super) fn put_mutation(key: Vec<u8>, value: Vec<u8>) -> Mutation {
     Mutation {
         op: Op::Put as i32,
@@ -537,7 +442,6 @@ pub(super) fn put_mutation(key: Vec<u8>, value: Vec<u8>) -> Mutation {
     }
 }
 
-/// `key` の削除を表す [`Mutation`]。
 pub(super) fn delete_mutation(key: Vec<u8>) -> Mutation {
     Mutation {
         op: Op::Del as i32,
@@ -547,11 +451,9 @@ pub(super) fn delete_mutation(key: Vec<u8>) -> Mutation {
     }
 }
 
-/// 複数キーをまとめて引く。存在しないキーは結果に現れない。
+/// 存在しないキーは結果に現れない。
 ///
-/// [`BATCH_KEYS`] で区切った各チャンクは互いに独立なので、追加スナップショットを
-/// 開ける読み取り元（[`Readers::fanned_out`]）では**並行に**投げる。1 つの実体しか
-/// 持たない読み取り元（書き込みトランザクション上の読み取り）では逐次に落ちる。
+/// チャンクは互いに独立なので、追加スナップショットを開ける読み取り元では並行に投げる。
 pub(super) async fn batch_get<R: Reader>(
     txn: &Readers<R>,
     keys: Vec<Vec<u8>>,
@@ -559,7 +461,6 @@ pub(super) async fn batch_get<R: Reader>(
     if keys.is_empty() {
         return Ok(Vec::new());
     }
-    // 1 チャンクで収まるなら、スナップショットを増やす意味がない。
     if keys.len() > BATCH_KEYS
         && let Some(fanout) = &txn.fanout
     {
@@ -567,8 +468,7 @@ pub(super) async fn batch_get<R: Reader>(
     }
 
     let mut txn = txn.lock().await;
-    // 1 塊で収まる通常の場合はそのまま渡す（`chunks(..).to_vec()` だと、収まる場合まで
-    // キー列を丸ごと複製することになる）。
+    // 収まる場合はそのまま渡す（`chunks(..).to_vec()` だとキー列を丸ごと複製する）。
     if keys.len() <= BATCH_KEYS {
         return txn.read_many(keys).await.map_err(AppError::from);
     }
@@ -585,19 +485,10 @@ pub(super) async fn batch_get<R: Reader>(
 
 /// チャンクごとに独立したスナップショットを開き、[`MAX_FANOUT`] 本まで並行に読む。
 ///
-/// どのスナップショットも同じタイムスタンプを読むので、どのチャンクがどれに
-/// 割り当たっても結果は変わらない。
-///
-/// # 失敗しても飛んでいる RPC を打ち切らない
-///
-/// [`JoinSet`](tokio::task::JoinSet) は**drop すると中のタスクを abort する**。1 本の
-/// チャンクが失敗した時点で `?` を返すと、まだ応答待ちの兄弟（最大 [`MAX_FANOUT`] - 1 本）が
-/// その場で捨てられ、gRPC ストリームが RST で打ち切られる。TiKV 側にはそれが
-/// `RemoteStopped`、こちら側には h2 の `locally-reset streams reached limit` として現れる。
-///
-/// 厄介なのは、これが**混んでいるときほど増える**こと。失敗 1 回につき数本を巻き添えに
-/// するので、詰まりかけたクラスタへこちらからキャンセルを浴びせて悪化させる。
-/// そこで失敗は覚えておくだけにして、飛んでいるぶんは最後まで見届けてから返す。
+/// **失敗しても飛んでいる RPC を打ち切らない。** [`JoinSet`](tokio::task::JoinSet) は drop すると
+/// 中のタスクを abort するので、1 本の失敗で `?` を返すと応答待ちの兄弟が捨てられ gRPC
+/// ストリームが RST で切れる。これは混んでいるときほど増えるので、詰まりかけたクラスタへ
+/// こちらからキャンセルを浴びせる形になる。
 async fn batch_get_fanned_out(
     fanout: &Fanout,
     keys: Vec<Vec<u8>>,
@@ -633,7 +524,6 @@ async fn batch_get_fanned_out(
             .map_err(|e| AppError::InternalError(format!("batch get task: {e}")))
             .and_then(|result| result.map_err(AppError::from))
         {
-            // 既に失敗が確定しているなら、読めた分は捨てる（返すのはエラーなので）。
             Ok(pairs) if failure.is_none() => out.extend(pairs),
             Ok(_) => {}
             Err(e) => {
@@ -648,7 +538,6 @@ async fn batch_get_fanned_out(
     }
 }
 
-/// `start`（含む）〜`end`（排他、`None` なら終端まで）を覆う範囲。
 fn range_from(start: Vec<u8>, end: Option<&[u8]>) -> BoundRange {
     match end {
         Some(end) => BoundRange::from(start..end.to_vec()),
@@ -656,18 +545,14 @@ fn range_from(start: Vec<u8>, end: Option<&[u8]>) -> BoundRange {
     }
 }
 
-/// 読み切ったか、次のバッチをどこから読むか。
+/// 読み切ったなら `None`、続きがあるなら次のバッチの開始位置。
 ///
-/// TiKV は 1 リクエストの件数に上限があるので、スキャンは [`SCAN_BATCH`] 件ずつに
-/// 分けて読み進める。その継続判断はどのスキャンでも同じなので、ここに 1 つだけ置く。
-///
-/// **判定は生の取得件数で行う。** 未送信の変更を重ねるのは読み切ったあとで、
-/// 途中で件数を増減させると読み切る前に止まったり同じ場所を読み直したりする。
+/// **判定は生の取得件数で行う。** 未送信の変更を重ねるのは読み切ったあとで、途中で件数を
+/// 増減させると読み切る前に止まったり同じ場所を読み直したりする。
 fn next_cursor(last_key: &[u8], fetched: usize) -> Option<Vec<u8>> {
     if fetched < SCAN_BATCH as usize {
         return None;
     }
-    // 次のバッチは最後に読んだキーの直後から。
     let mut cursor = last_key.to_vec();
     cursor.push(0);
     Some(cursor)
@@ -697,7 +582,7 @@ pub(super) async fn scan_prefix<R: Reader>(
     if staged.is_empty() {
         return Ok(out);
     }
-    // 未送信の変更を重ねる。キー順で返す約束は保つ。
+    // キー順で返す約束は保つ。
     let mut merged: BTreeMap<Vec<u8>, Vec<u8>> = out.into_iter().collect();
     for (key, value) in staged {
         match value {
@@ -732,7 +617,7 @@ pub(super) async fn scan_keys_range<R: Reader>(
     if staged.is_empty() {
         return Ok(out);
     }
-    // 未送信の変更を重ねる。キー順で返す約束は保つ。
+    // キー順で返す約束は保つ。
     let mut merged: BTreeSet<Vec<u8>> = out.into_iter().collect();
     for (key, value) in staged {
         if value.is_some() {
@@ -763,37 +648,23 @@ pub(super) async fn scan_inclusive_keys<R: Reader>(
     scan_keys_range(txn, start, Some(end_inclusive)).await
 }
 
-// --- シャード値のフレーム ---
-//
-// シャードのペイロードは `SpatialIdMap` の rkyv バイト列で、読み出しは
-// `access_unchecked`（構造を検証しないゼロコピーアクセス）を通る。その安全条件は
-// 「自分が書いたバイト列そのものであること」で、ローカルの mmap ならファイル権限が
-// それを担保していた。TiKV ではバイト列がネットワーク越しに届き、クラスタは
-// 複数インスタンス・複数バージョンで共有されうるため、前提が成り立たない。
-//
-// そこで TiKV に保存するシャード値だけを CRC32 で包み、`unsafe` へ渡す前に検証する。
-// 検証はペイロードを 1 度なめるだけで、コピーは発生しない（[`ShardValue::entry`] は
-// 受信バッファへの借用を返す）ので、ゼロコピーはそのまま保たれる。
-//
-// LMDB 側は共通形式（`encoding::shard_entry`）のまま。両バックエンドで同じなのは
-// **ペイロードの形式**であり、この枠はその外側の TiKV 固有の保存表現にあたる。
-
-/// フレームのヘッダ長 = CRC32（u32 LE, 4）。
+/// CRC32（u32 LE）。
 const FRAME_HEADER_LEN: usize = 4;
 
 /// CRC 検証を通ったシャード値。
 ///
-/// 受信したバッファをそのまま保持し、[`entry`](Self::entry) が検証済みペイロードへの
-/// 借用を返す。ペイロードを別バッファへ写さないので、この先の rkyv アクセスは
-/// 受信バッファを直接読む。
+/// シャード値だけを CRC32 で包むのは、ペイロードの読み出しが `access_unchecked`（構造を
+/// 検証しないゼロコピーアクセス）を通るため。その安全条件は「自分が書いたバイト列そのもの」
+/// だが、TiKV ではバイト列がネットワーク越しに届き、クラスタは複数インスタンス・複数
+/// バージョンで共有されうるのでこの前提が成り立たない。
+///
+/// 検証はペイロードを 1 度なめるだけでコピーは発生しない（[`entry`](Self::entry) は受信
+/// バッファへの借用を返す）ので、ゼロコピーはそのまま保たれる。LMDB 側にこの枠は無い。
 pub(super) struct ShardValue {
     framed: Vec<u8>,
 }
 
-/// 保存されていたバイト列を検証して受け取る。
-///
-/// CRC が合わない場合は「壊れている」ものとして拒否する。ここを通過したバイト列だけが
-/// `access_unchecked` へ渡る。
+/// ここを通過したバイト列だけが `access_unchecked` へ渡る。
 impl TryFrom<Vec<u8>> for ShardValue {
     type Error = AppError;
 
@@ -811,7 +682,8 @@ impl TryFrom<Vec<u8>> for ShardValue {
         let actual = crc32fast::hash(&framed[FRAME_HEADER_LEN..]);
         if actual != expected {
             return Err(AppError::StorageError(format!(
-                "shard value failed its integrity check (crc32 expected {expected:#010x}, found {actual:#010x})"
+                "shard value failed its integrity check \
+                 (crc32 expected {expected:#010x}, found {actual:#010x})"
             )));
         }
         Ok(Self { framed })
@@ -825,7 +697,6 @@ impl ShardValue {
     }
 }
 
-/// シャードエントリを保存用のフレームへ包む。
 fn frame(entry: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(FRAME_HEADER_LEN + entry.len());
     out.extend_from_slice(&crc32fast::hash(entry).to_le_bytes());
@@ -833,33 +704,16 @@ fn frame(entry: &[u8]) -> Vec<u8> {
     out
 }
 
-// --- シャードの保存 ---
-//
-// シャードは 2 本のキーで表される。
-//
-// ```text
-//   0x06 ‖ table_id ‖ flex_id -> crc32 ‖ ShardEntry     （本体）
-//   0x08 ‖ table_id ‖ flex_id -> 保持件数（u32 LE）      （リーフのみ）
-// ```
-//
-// 件数はエントリのヘッダにも入っているが、そちらを読むにはリーフの本体
-// （`SpatialIdMap` の rkyv バイト列）ごと転送することになる。`table_count` は
-// 件数を合算するだけなので、テーブル全体を転送するのは割に合わない。件数だけを
-// 別キーへ切り出すと、集計はシャード数 × 4 バイトで済む。
-//
-// LMDB 側にこのキーは無い。あちらは mmap 上をストリームで舐められるので、
-// 本体を持ってくる代償が無いため。`keys.rs` はもともとバックエンド固有なので、
-// この差はレイアウトの差として閉じている。
-//
-// 2 本のキーが食い違わないよう、書き込みと削除は必ずこの節の関数を通す。
-
-/// シャードの保存を表す変更を組み立てる。**ネットワークには触れない。**
+/// シャードの保存を表す変更（本体と件数）を組み立てる。**ネットワークには触れない。**
 ///
-/// 本体と件数の 2 本を必ず一組で返すのが要点で、片方だけ書いて食い違わせないための入口。
+/// シャードは本体（`0x06`）と保持件数（`0x08`）の 2 本のキーで表される。件数はエントリの
+/// ヘッダにも入っているが、そちらを読むにはリーフ本体ごと転送することになり、合算するだけの
+/// `table_count` には割に合わない。別キーなら集計はシャード数 × 4 バイトで済む。
+/// LMDB 側にこのキーは無い（mmap 上をストリームで舐められるので代償が無い）。
 ///
-/// 送信と分けてあるのは、書き込み経路の重い計算（rkyv の復元・直列化）を非同期ワーカーの
-/// 外へ出すため。変更を値として組み立てられれば、その計算ごと blocking タスクへ移せる
-/// （`tree/leaf.rs` の設計メモを参照）。
+/// 2 本を必ず一組で返すのが要点で、片方だけ書いて食い違わせないための入口になっている。
+/// 送信と分けてあるのは、重い計算（rkyv の復元・直列化）ごと blocking タスクへ移せるように
+/// するため（[`super::tree`] を参照）。
 pub(super) fn shard_mutations(
     table_id: TableId,
     region: &FlexId,
@@ -877,7 +731,6 @@ pub(super) fn shard_mutations(
     ])
 }
 
-/// シャードの削除を表す変更（本体と件数の両方）。
 pub(super) fn shard_deletions(table_id: TableId, region: &FlexId) -> [Mutation; 2] {
     [
         delete_mutation(keys::shard(table_id, region)),
@@ -885,8 +738,6 @@ pub(super) fn shard_deletions(table_id: TableId, region: &FlexId) -> [Mutation; 
     ]
 }
 
-/// 値インデックスの差分を表す変更を組み立てる。
-///
 /// 変更前後で同じキーは触らない（消してから書き直すと MVCC のバージョンが無駄に増える）。
 pub(super) fn value_index_mutations(
     old_keys: &FxHashSet<Vec<u8>>,
@@ -901,23 +752,19 @@ pub(super) fn value_index_mutations(
     );
 }
 
-/// シャード領域をまとめてロックし、**ロック時点の**内容を返す。
+/// シャード領域をまとめてロックし、**ロック時点の**内容を返す（未作成領域は `None`）。
 ///
-/// 返る地図には要求した全領域が入る（未作成領域は `None`）。存在しないキーも
-/// ロックされるので、「空の領域を他者が埋める」「親へ畳んで消す」といった操作も
-/// この呼び出しで排他される。
+/// データ経路はシャードのキー単位で完結するので、テーブル全体は排他しない。別リーフへの
+/// 書き込みは別インスタンスからでも並列に流れる。存在しないキーもロックされるため、
+/// 「空の領域を他者が埋める」「親へ畳んで消す」も排他できる。
 ///
-/// キーは [`BTreeMap`] に集めてから渡すので、反復順（＝バイト昇順）がそのまま
-/// デッドロック回避の全順序になる。
-///
-/// 読み取りは [`LazyTxn::lock_and_read`] を通るので、**このトランザクションで
-/// 既に書いた内容が重なった状態**で返る。
+/// キーを [`BTreeMap`] に集めるのは、反復順がそのままデッドロック回避の全順序になるため。
+/// **このトランザクションで既に書いた内容が重なった状態**で返る。
 pub(super) async fn lock_shards(
     txn: &Readers<LazyTxn>,
     table_id: TableId,
     regions: impl IntoIterator<Item = FlexId>,
 ) -> Result<BTreeMap<FlexId, Option<ShardValue>>, AppError> {
-    // 領域 → キーの対応を作り、ロックは昇順のキー列で要求する。
     let by_key: BTreeMap<Vec<u8>, FlexId> = regions
         .into_iter()
         .map(|r| (keys::shard(table_id, &r), r))
@@ -931,7 +778,6 @@ pub(super) async fn lock_shards(
         txn.lock_and_read(by_key.keys().cloned().collect()).await?
     };
 
-    // 存在したものを埋め、残りは未作成として `None` にする。
     let mut out = BTreeMap::new();
     for (key, region) in by_key {
         let value = match found.remove(&key) {
@@ -943,10 +789,9 @@ pub(super) async fn lock_shards(
     Ok(out)
 }
 
-/// プレフィックスに一致するキーを、上限件数まで削除する。
+/// プレフィックスに一致するキーを上限件数まで削除し、削除した件数を返す（0 なら消し切り）。
 ///
-/// 1 トランザクションに全部を詰めると TiKV のトランザクションサイズ上限に当たるので、
-/// 呼び出し側が繰り返し呼べるよう「削除した件数」を返す。0 なら消し切っている。
+/// 1 トランザクションに全部を詰めると TiKV のサイズ上限に当たるので、繰り返し呼べる形にする。
 pub(super) async fn delete_prefix_chunk(
     txn: &Readers<LazyTxn>,
     prefix: &[u8],
@@ -958,8 +803,7 @@ pub(super) async fn delete_prefix_chunk(
         let raw = txn
             .read_range_keys(range_from(prefix.to_vec(), end.as_deref()), limit)
             .await?;
-        // 同じトランザクションで既に消したキーは数えない。数えてしまうと
-        // 「まだ残っている」と読めてしまい、呼び出し側の繰り返しが止まらなくなる。
+        // 既に消したキーを数えると「まだ残っている」と読めて繰り返しが止まらなくなる。
         let staged = txn.staged_range(prefix, end.as_deref());
         if staged.is_empty() {
             raw
@@ -979,7 +823,7 @@ pub(super) async fn delete_prefix_chunk(
     Ok(removed)
 }
 
-/// テーブルが保持する [`FlexId`] の総数を、件数キーだけを読んで合算する。
+/// 件数キーだけを読んで合算する。
 pub(super) async fn table_flex_id_count<R: Reader>(
     txn: &Readers<R>,
     table_id: TableId,

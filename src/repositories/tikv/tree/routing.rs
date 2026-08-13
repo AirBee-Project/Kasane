@@ -1,7 +1,5 @@
 //! 木の降下。「どの flex_id / 範囲がどのリーフの担当か」を決める。
-//!
-//! ネットワークに触れるのはこの層と [`node`](super::node) だけで、
-//! 上の [`resolve`](super::resolve) / [`leaf`](super::leaf) は純粋な計算になっている。
+//! ネットワークに触れるのはこの層と [`node`](super::node) だけ。
 
 use kasane_logic::{FlexId, RangeId};
 use rustc_hash::FxHashMap;
@@ -10,37 +8,25 @@ use std::sync::Arc;
 use super::node::load_nodes;
 use super::{AppError, Reader, Readers, ShardEntry, ShardValue, TableId};
 
-// --- ルーティング ---
-
-/// 振り分け先のリーフ。降下の途中で読んだノードのバイト列を持ち回るので、
-/// 呼び出し側が同じキーを引き直さずに済む。
+/// 降下の途中で読んだバイト列を持ち回るので、呼び出し側が同じキーを引き直さずに済む。
 pub(super) struct RoutedLeaf {
     pub region: FlexId,
-    /// 到達した `flex_id` 群。
+    /// ここへ到達した `flex_id` 群。
     pub queries: Vec<FlexId>,
-    /// リーフのバイト列。未作成領域なら `None`。
+    /// 未作成領域なら `None`。
     pub node: Option<ShardValue>,
 }
 
-/// 子領域から `(親, 親が持つ全子領域)` を引く対応表。
-///
-/// 兄弟のリストは親 1 つにつき 1 本しかないので、子の数だけ複製せず [`Arc`] で共有する。
+/// 兄弟のリストは親 1 つにつき 1 本なので、子の数だけ複製せず [`Arc`] で共有する。
 pub(super) type ParentMap = FxHashMap<FlexId, (FlexId, Arc<Vec<FlexId>>)>;
 
-/// 降下でわかった木の形。
 pub(super) struct Routing {
     /// 担当リーフ（未作成領域を含む）。
     pub leaves: Vec<RoutedLeaf>,
-    /// 通り道で見た「子 → (親, 親の全子)」の対応。
-    ///
-    /// 統合（[`TikvWrite::try_merge_up`]）はこの対応を必要とするが、それは降下の途中で
-    /// すでに判っている。改めてルートから引き直すと、**影響リーフ数 × 木の深さ**ぶんの
-    /// 単発 get が直列に積み上がる（祖先は共通なのに毎回引き直すことになる）。
+    /// 統合が必要とする対応。ルートから引き直すと単発 get が直列に積み上がる。
     pub parents: ParentMap,
 }
 
-/// 複数の `flex_id` を木の降下でまとめて振り分ける。
-///
 /// 書き込み経路でも使うため、まだノードが作られていない領域も担当リーフとして返す。
 pub(super) async fn route_leaves_batched<R: Reader>(
     txn: &Readers<R>,
@@ -84,10 +70,7 @@ pub(super) async fn route_leaves_batched<R: Reader>(
     })
 }
 
-/// `region` を根として `ids` を子へ振り分けながら降りる。
-///
-/// 幅優先で「同じ深さのノードをまとめて取得」してから振り分けることで、
-/// ネットワーク往復を木の深さ分に抑える。
+/// 幅優先で同じ深さのノードをまとめて取得することで、往復を木の深さ分に抑える。
 async fn descend_batched<R: Reader>(
     txn: &Readers<R>,
     table_id: TableId,
@@ -100,7 +83,6 @@ async fn descend_batched<R: Reader>(
         return Ok(());
     }
 
-    // (領域, そこへ到達した flex_id 群) を深さごとに処理する。
     let mut level: Vec<(FlexId, Vec<FlexId>)> = vec![(root, ids)];
 
     while !level.is_empty() {
@@ -118,7 +100,7 @@ async fn descend_batched<R: Reader>(
 
             match children {
                 None => {
-                    // リーフのバイト列はここで確定するので持たせておく（再取得しない）。
+                    // バイト列はここで確定するので持たせておく（再取得しない）。
                     out.entry(region)
                         .or_insert_with(|| RoutedLeaf {
                             region,
@@ -151,30 +133,21 @@ async fn descend_batched<R: Reader>(
     Ok(())
 }
 
-/// 範囲群が到達したリーフ。
 pub(super) struct RoutedRange {
-    /// リーフのバイト列。
     pub node: ShardValue,
-    /// このリーフへ到達した範囲の添字（呼び出し側が渡した `ranges` に対する）。
+    /// 呼び出し側が渡した `ranges` に対する添字。
     pub hits: Vec<u32>,
 }
 
 /// `ranges` のいずれかと重なる**既存のリーフ領域**を、木の降下 1 回で集める。
 ///
-/// 範囲 1 本ごとにルートから降りると、往復は**範囲の本数 × 木の深さ**になる。
-/// クエリの評価境界は対象空間 ID セットの FlexId ごとに 1 本ずつ立つので、この本数は
-/// 要求の広さに比例して増える。[`descend_batched`] が FlexId に対してやっているのと
-/// 同じように、同じ深さのノードをまとめて取得しながら範囲を子へ振り分ければ、
-/// 往復は木の深さぶんに収まる。
-///
-/// 重なり合う範囲が同じリーフへ到達しても、リーフの取得は 1 回きりになる
-/// （以前は範囲の本数だけ同じバイト列を転送していた）。
+/// 範囲 1 本ごとにルートから降りると往復が**範囲の本数 × 木の深さ**になる。評価境界は対象
+/// 空間 ID の FlexId ごとに 1 本ずつ立つので、この本数は要求の広さに比例して増える。
 pub(super) async fn route_leaves_for_ranges<R: Reader>(
     txn: &Readers<R>,
     table_id: TableId,
     ranges: &[RangeId],
 ) -> Result<Vec<RoutedRange>, AppError> {
-    // (領域, そこへ到達した範囲の添字) を深さごとに処理する。
     let mut level: Vec<(FlexId, Vec<u32>)> = Vec::new();
     for root in [FlexId::LOWER_MAX, FlexId::UPPER_MAX] {
         let hits: Vec<u32> = ranges
@@ -200,7 +173,6 @@ pub(super) async fn route_leaves_for_ranges<R: Reader>(
                 continue;
             };
             match ShardEntry::child_pointers(value.entry())? {
-                // 読んだバイト列をそのまま返し、呼び出し側の再取得をなくす。
                 None => out.push(RoutedRange { node: value, hits }),
                 Some(children) => {
                     for child in children {

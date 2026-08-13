@@ -1,3 +1,5 @@
+//! シャードツリーの探索とノードのロード。
+
 use heed::types::Bytes;
 use heed::{Database, RoTxn, WithoutTls};
 use kasane_logic::{ArchivedSpatialIdMap, FlexId, SpatialIdMap};
@@ -6,16 +8,11 @@ use super::keys::TableIdAndFlexId;
 use crate::error::AppError;
 use crate::models::id::TableId;
 
-// ノードのバイト表現はバックエンド非依存なので共有モジュールを使う。
-// ここに残るのは heed のトランザクションを必要とする探索・ロード処理だけ。
 pub use crate::repositories::encoding::shard_entry::{
     MAX_FLEX_ID_PER_SHARD, MERGE_FLEX_ID_THRESHOLD, ShardEntry,
 };
 
-// --- ルーティング・ロード（read / write 共用の自由関数） ---
-
-/// 複数の `flex_id` を**一度の木降下**でまとめてルーティングし、
-/// `担当リーフ領域 -> そこへ到達した flex_id 群` を返す。
+/// 複数の `flex_id` を一度の木降下で `担当リーフ領域 -> 到達した flex_id 群` へ振り分ける。
 pub fn route_leaves_batched<'a>(
     tables_data: &Database<TableIdAndFlexId, Bytes>,
     txn: &RoTxn<WithoutTls>,
@@ -53,10 +50,7 @@ pub fn route_leaves_batched<'a>(
     Ok(out)
 }
 
-/// `range` と重なる**既存のリーフ領域**を、ポインタ木を1回降りて集める。
-///
-/// [`route_leaves_batched`] が FlexId 群を担当リーフへ振り分ける（書き込み用に未作成キーも返す）のに対し、
-/// こちらは範囲クエリ用の読み取り経路であり、**データが存在するリーフだけ**を返す。
+/// [`route_leaves_batched`] と違い未作成領域は返さない（読み取り専用の経路なので）。
 pub fn route_leaves_for_range(
     tables_data: &Database<TableIdAndFlexId, Bytes>,
     txn: &RoTxn<WithoutTls>,
@@ -72,7 +66,6 @@ pub fn route_leaves_for_range(
     Ok(out)
 }
 
-/// `region` を根として、`range` と交差する子だけを辿り、到達したリーフ領域を `out` に積む。
 fn descend_range(
     tables_data: &Database<TableIdAndFlexId, Bytes>,
     txn: &RoTxn<WithoutTls>,
@@ -86,7 +79,6 @@ fn descend_range(
         return Ok(());
     };
     match ShardEntry::child_pointers(bytes)? {
-        // リーフに到達。
         None => out.push(region),
         Some(children) => {
             for child in children {
@@ -99,8 +91,6 @@ fn descend_range(
     Ok(())
 }
 
-/// `region` を根として `ids` を子へ振り分けながら降り、リーフ（または未作成キー）へ到達した
-/// flex_id 群を `out` に積む。
 fn descend_batched<'a>(
     tables_data: &Database<TableIdAndFlexId, Bytes>,
     txn: &RoTxn<WithoutTls>,
@@ -113,7 +103,7 @@ fn descend_batched<'a>(
         return Ok(());
     }
     match tables_data.get(txn, &(table_id, region))? {
-        // 未作成リーフ or 実データリーフ → ここへ到達した全 flex_id が担当。
+        // 未作成領域と実データリーフのどちらも、到達した全 flex_id がここの担当。
         None => {
             out.entry(region)
                 .or_default()
@@ -140,8 +130,7 @@ fn descend_batched<'a>(
     Ok(())
 }
 
-/// `region`を直接の子に持つ**親ポインタノード**を見つけ、`(親領域, 親の全子領域)` を返す。
-/// `region`が `0/0/0/0` or `0/-1/0/0`などのルートや、ポインタ配下でないなら `None`。
+/// `region` がルート、またはポインタ配下でないなら `None`。
 pub fn find_parent_pointer(
     tables_data: &Database<TableIdAndFlexId, Bytes>,
     txn: &RoTxn<WithoutTls>,
@@ -163,7 +152,6 @@ pub fn find_parent_pointer(
         match tables_data.get(txn, &(table_id, cur))? {
             Some(bytes) => match ShardEntry::child_pointers(bytes)? {
                 Some(children) => {
-                    // region が直接の子なら、cur が親。
                     if children.iter().any(|c| c == region) {
                         return Ok(Some((cur, children)));
                     }
@@ -183,8 +171,7 @@ pub fn find_parent_pointer(
     }
 }
 
-/// リーフ領域 `region` を **ZeroCopy archived リーダ**として開く（`Arc`を再構築しない）。
-/// 未作成なら `Ok(None)`、ポインタノードに当たったら `Err`。読み取り専用。
+/// リーフをゼロコピーで開く（`Arc` の作業木を組み直さない）。読み取り専用。
 pub fn load_leaf_archived<'txn>(
     tables_data: &Database<TableIdAndFlexId, Bytes>,
     txn: &'txn RoTxn<WithoutTls>,
@@ -193,9 +180,7 @@ pub fn load_leaf_archived<'txn>(
 ) -> Result<Option<ArchivedSpatialIdMap<'txn>>, AppError> {
     match tables_data.get(txn, &(table_id, *region))? {
         Some(entry) => match ShardEntry::leaf_payload(entry)? {
-            // 自分自身の to_bytes が書いた正当なバイト列。
-            // 形式バージョンだけは検証されるので、古い形式のデータは黙って誤読されず
-            // ここでエラーになる。
+            // SAFETY: 自分の `to_bytes` が書いた mmap 上のバイト列。形式は access が検証する。
             Some(map_bytes) => Ok(Some(
                 unsafe { ArchivedSpatialIdMap::access(map_bytes) }
                     .map_err(|e| AppError::InternalError(format!("leaf format: {e}")))?,
@@ -208,7 +193,7 @@ pub fn load_leaf_archived<'txn>(
     }
 }
 
-/// リーフ領域 `region` の [`SpatialIdMap`] をロードする。未作成なら空の[`SpatialIdMap`]を作成する。
+/// 書き換え用に [`SpatialIdMap`] を復元する。読むだけなら [`load_leaf_archived`]。
 pub fn load_leaf_map(
     tables_data: &Database<TableIdAndFlexId, Bytes>,
     txn: &RoTxn<WithoutTls>,

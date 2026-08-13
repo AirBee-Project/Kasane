@@ -1,3 +1,5 @@
+//! データベースとテーブルのカタログ操作。
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use super::keys::{self, LockScope};
@@ -11,10 +13,7 @@ use crate::models::database::{DatabaseInfoResponse, DatabaseMetadata};
 use crate::models::id::{DatabaseId, TableId};
 use crate::repositories::ResolvedTable;
 
-/// メタデータ（データベース・テーブル・ユーザー）は JSON で保存する。
-///
-/// LMDB 側は heed の [`SerdeJson`](heed::types::SerdeJson) が同じ役割を担うので、
-/// 対応するのはこの 2 つだけ。何を扱っているかは失敗時の文言のためだけに受け取る。
+/// `what` は失敗時の文言のためだけに受け取る。
 pub(super) fn encode<T: serde::Serialize>(what: &str, meta: &T) -> Result<Vec<u8>, AppError> {
     serde_json::to_vec(meta)
         .map_err(|e| AppError::InternalError(format!("failed to encode {what} metadata: {e}")))
@@ -122,11 +121,8 @@ pub(super) async fn table_info<R: Reader>(
         .map(|meta| Table::from_meta(table_name, meta)))
 }
 
-/// `(データベース名, テーブル名)` の並びをまとめて解決する。
-///
 /// 往復は**参照数によらず 2 回**。データベース名の解決なしにテーブルキーを組み立てられない
-/// ので段は分かれるが、同じ段の中では 1 回の `batch_get` に束ねられる。1 件ずつ
-/// `database_meta` → `table_meta` と辿ると、参照数の 2 倍の往復が直列に並ぶ。
+/// ので段は分かれるが、同じ段の中では 1 回の `batch_get` に束ねられる。
 pub(super) async fn resolve_tables<R: Reader>(
     txn: &Readers<R>,
     refs: &[(String, String)],
@@ -287,7 +283,6 @@ impl TikvWrite<'_> {
         })
     }
 
-    /// データベースを配下のテーブルごと削除する。
     #[tracing::instrument(skip_all, fields(db_name = %name))]
     pub(super) async fn database_remove_impl(&mut self, name: &str) -> Result<(), AppError> {
         if name.is_empty() {
@@ -304,8 +299,7 @@ impl TikvWrite<'_> {
             });
         };
 
-        // 配下テーブルを列挙する。データベーススコープを保持しているので、
-        // この一覧が途中で増えることはない（`table_create` も同じロックを取る）。
+        // データベーススコープを保持しているので、この一覧が途中で増えることはない。
         let tables = table_list_by_id(&self.txn, meta.id).await?;
         for table in tables {
             self.retire_table(meta.id, &table.name, table.id).await;
@@ -331,8 +325,7 @@ impl TikvWrite<'_> {
             crate::services::helpers::name_valid::name_valid(final_new_name)?;
         }
 
-        // 旧名と新名の両方を排他する（片方だけでは、逆向きの同時改名で両者が
-        // 相手の名前へ書き込みうる）。取得順は保持集合が決めるので、ここでは並べない。
+        // 片方だけでは、逆向きの同時改名で両者が相手の名前へ書き込みうる。
         self.require_locks([
             (LockScope::Database, name.as_bytes()),
             (LockScope::Database, final_new_name.as_bytes()),
@@ -397,7 +390,6 @@ impl TikvWrite<'_> {
             });
         }
 
-        // コピー元テーブルのシャードはスナップショットから読む（`copy_table_into`）。
         let src_tables = table_list_by_id(&self.txn, src_meta.id).await?;
 
         let copy_db_id = DatabaseId(uuid::Uuid::now_v7());
@@ -452,7 +444,6 @@ impl TikvWrite<'_> {
             ));
         }
 
-        // データベースのテーブル集合を変更するのでデータベーススコープを取る。
         self.require_lock(LockScope::Database, db_name.as_bytes())?;
 
         let db_meta =
@@ -523,9 +514,7 @@ impl TikvWrite<'_> {
         description: Option<Option<String>>,
         validate_existing_data: bool,
     ) -> Result<Table, AppError> {
-        // 改名はデータベースのテーブル集合の変更なので、その名前を排他する。
-        // 既存データ検証はスナップショット走査で、テーブル単位の排他は取らない
-        // （`validate_existing_data` の注記を参照）。
+        // 改名はテーブル集合の変更なので排他する（既存データ検証のほうは排他しない）。
         self.require_lock(LockScope::Database, db_name.as_bytes())?;
 
         let db_meta =
@@ -613,8 +602,7 @@ impl TikvWrite<'_> {
         db_name: &str,
         table_name: &str,
     ) -> Result<(), AppError> {
-        // 変えるのはデータベースのテーブル集合だけ。シャード実体は論理削除して
-        // 回収に回すので、テーブル全体を排他する必要はない（`retire_table` を参照）。
+        // シャード実体は論理削除して回収に回すので、テーブル全体の排他は要らない。
         self.require_lock(LockScope::Database, db_name.as_bytes())?;
 
         let db_meta =
@@ -653,7 +641,7 @@ impl TikvWrite<'_> {
             .ok_or_else(|| AppError::DatabaseNotFound {
                 name: src_db_name.to_string(),
             })?;
-        // 存在確認だけ。実体の読み出しは `copy_table_into` がスナップショットから行う。
+        // 存在確認だけ。実体の読み出しは `copy_table_into` が行う。
         table_meta(&self.txn, src_db.id, src_table_name)
             .await?
             .ok_or_else(|| AppError::TableNotFound {
@@ -679,13 +667,11 @@ impl TikvWrite<'_> {
             .await
     }
 
-    /// テーブル 1 つを複製する。
-    ///
     /// コピー元のシャードは**スナップショットから読む**（ロックを取らない）。
-    /// したがって得られるのは「このトランザクションの開始時点における一貫したコピー」で、
-    /// コピー中に走った書き込みは含まれない。テーブル全体を排他して「コピー中は
-    /// 書き込みを止める」意味論も考えられるが、複数インスタンスが同じクラスタへ
-    /// 書き込む前提ではそちらの代償が大きすぎる。
+    ///
+    /// 得られるのはトランザクション開始時点の一貫したコピーで、コピー中に走った書き込みは
+    /// 含まれない。テーブル全体を排他する意味論もありうるが、複数インスタンス前提では代償が
+    /// 大きすぎる。
     async fn copy_table_into(
         &mut self,
         src_db_id: DatabaseId,
@@ -722,11 +708,7 @@ impl TikvWrite<'_> {
         )
         .await;
 
-        // テーブルのデータ実体を、キー先頭の table_id だけ差し替えて複製する。
-        // 対象は `keys::table_data_prefixes` が一括で決める。ここで自前に並べると、
-        // 名前空間が増えたときに回収側だけが追随して複製が取りこぼす。
-        // 値はそのまま持ち回る（シャード値のフレームはキーに依存しないので、
-        // 検証済みのバイト列を再フレームせずそのまま置ける）。
+        // 一括で決めさせるのは、名前空間が増えたとき複製だけが追随し損ねるのを防ぐため。
         for prefix in keys::table_data_prefixes(src_meta.id) {
             let entries = kv::scan_prefix(&self.txn, &prefix).await?;
             let mut copied = Vec::with_capacity(entries.len());
@@ -749,21 +731,10 @@ impl TikvWrite<'_> {
         })
     }
 
-    /// テーブルを**論理削除**する。
+    /// テーブルを**論理削除**する。実体の削除は [`gc`](super::gc) が後から行う。
     ///
-    /// カタログ項目を消して回収待ち行列へ積むだけで、シャード実体には触れない。
-    /// 実体の削除は [`gc`](super::gc) が後から分割して行う。こうする理由は 2 つある。
-    ///
-    /// - **テーブル全体の排他が要らなくなる。** データ書き込みはリーフ単位でしか
-    ///   ロックを取らないので（`tree/write.rs`）、実体をここで消そうとすると並行中の
-    ///   書き込みと衝突しないことを保証できない。カタログから辿れなくしてしまえば、
-    ///   取り残されたキーは誰にも見えず、回収するだけでよい。
-    /// - **1 トランザクションのサイズ上限に縛られない。** 大きなテーブルの全キーを
-    ///   1 つのトランザクションへ詰めると TiKV の上限に当たる。回収は冪等なので
-    ///   分割コミットしてよく、原子性を失わない。
-    ///
-    /// `TableId` は UUIDv7 なので再利用されない。回収前に飛び込んだ書き込みが
-    /// 残骸を作っても、次の掃除で回収される。
+    /// `TableId` は UUIDv7 なので、回収前に飛び込んだ書き込みが残骸を作っても次の掃除で回収
+    /// される。
     async fn retire_table(&mut self, db_id: DatabaseId, table_name: &str, table_id: TableId) {
         kv::delete_many(
             &self.txn,

@@ -1,8 +1,4 @@
-//! ユーザーと権限の永続化。
-//!
-//! 権限ルールの名前 ⇄ ID 変換そのものは
-//! [`CatalogRepository`](crate::repositories::CatalogRepository) の既定実装が 1 箇所だけ持つ。
-//! ここにあるのは LMDB への読み書きだけ。
+//! 名前 ⇄ ID 変換は [`CatalogRepository`] の既定実装が持つ。
 
 use crate::error::AppError;
 use crate::models::users::{
@@ -12,7 +8,6 @@ use crate::repositories::CatalogRepository;
 
 use super::{AppDb, KasaneDbRead, KasaneDbWrite};
 
-/// ユーザーのメタデータへの点参照。
 pub(super) fn user_meta(
     db: &AppDb,
     txn: &heed::RoTxn<heed::WithoutTls>,
@@ -50,8 +45,8 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(())
     }
 
-    /// ユーザーを作成する。`privileges` は名前ベースのまま渡し、同じトランザクション内で
-    /// ID へ解決する（存在しないデータベース／テーブルはここで弾かれる）。
+    /// `privileges` を名前のまま受け取り同じトランザクション内で解決するので、存在しない
+    /// データベース／テーブルはここで弾かれる。
     #[tracing::instrument(skip_all, fields(username = %username))]
     pub async fn create_user_impl(
         &mut self,
@@ -75,7 +70,7 @@ impl<'a> KasaneDbWrite<'a> {
         self.put_user_meta(username, &meta)
     }
 
-    /// パスワードを差し替え、`token_version` を進めて発行済みトークンを失効させる。
+    /// `token_version` を進めて発行済みトークンを失効させる。
     #[tracing::instrument(skip_all, fields(username = %username))]
     pub async fn set_password_impl(
         &mut self,
@@ -88,10 +83,7 @@ impl<'a> KasaneDbWrite<'a> {
         self.put_user_meta(username, &meta)
     }
 
-    /// 1 つの対象に対する権限を設定する（無ければ追加、あれば置き換え）。
-    ///
-    /// 触るのはその対象 1 件だけなので、別の対象に対する同時の付与・剥奪と干渉しない。
-    /// 読み出しから書き込みまでこの 1 つの書き込みトランザクション内で完結する。
+    /// 触るのは 1 件だけなので、別の対象への同時の付与・剥奪とは干渉しない。
     #[tracing::instrument(skip_all, fields(username = %username))]
     pub async fn grant_privilege_impl(
         &mut self,
@@ -113,8 +105,7 @@ impl<'a> KasaneDbWrite<'a> {
         self.put_user_meta(username, &meta)
     }
 
-    /// 1 つの対象に対する権限を剥奪する。ロールは問わず対象ごと落とす。
-    /// 該当するルールが無ければ `NotFound`。
+    /// ロールは問わず対象ごと落とす。該当が無ければ `NotFound`。
     #[tracing::instrument(skip_all, fields(username = %username))]
     pub async fn revoke_privilege_impl(
         &mut self,

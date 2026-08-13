@@ -1,7 +1,4 @@
-//! LMDB 固有の初期化設定。
-//!
-//! 環境のチューニング値・サブデータベースの作成・既定ユーザーの投入といった
-//! 「起動時に一度だけ行うこと」をここに集める。定常運用の読み書きは `mod.rs` 以下が担う。
+//! 起動時に一度だけ行う設定をここに集める。
 
 use heed::{Env, EnvFlags, EnvOpenOptions};
 use uuid::Uuid;
@@ -18,7 +15,6 @@ const DEFAULT_MAX_READERS: u32 = 1024;
 /// 開くサブデータベース数の上限。`AppDb` のフィールド数より十分大きく取る。
 const MAX_DBS: u32 = 15;
 
-/// 環境変数を真偽値として読む（`1` または `true` を真とみなす）。
 fn env_bool(name: &str) -> bool {
     std::env::var(name).is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
 }
@@ -31,10 +27,7 @@ fn env_parsed<T: std::str::FromStr>(name: &str, default: T) -> T {
         .unwrap_or(default)
 }
 
-/// 環境変数から LMDB のフラグを組み立てる。既定はすべて無効（＝LMDB の標準動作）。
-///
-/// 同期を緩めるフラグはクラッシュ時の耐久性と引き換えの設定なので、
-/// 明示的に有効化されたときだけ立てる。
+/// 同期を緩めるフラグはクラッシュ時の耐久性と引き換えなので、既定では立てない。
 fn env_flags() -> EnvFlags {
     let mut flags = EnvFlags::empty();
     if env_bool("KASANE_LMDB_NO_READAHEAD") {
@@ -53,7 +46,6 @@ fn env_flags() -> EnvFlags {
     flags
 }
 
-/// 指定パスに LMDB 環境を開く。
 fn open_env(path: &str) -> Env<heed::WithoutTls> {
     let flags = env_flags();
     unsafe {
@@ -71,7 +63,6 @@ fn open_env(path: &str) -> Env<heed::WithoutTls> {
     }
 }
 
-/// データベースを開き、必要なサブデータベースと既定ユーザーを用意して返す。
 #[tracing::instrument]
 pub fn initialize_database(path: &str) -> AppDb {
     tracing::info!("Initializing database at: {}", path);
@@ -123,10 +114,8 @@ pub fn initialize_database(path: &str) -> AppDb {
     }
 }
 
-/// 初期投入する管理者ユーザーの名前。
 const ROOT_USERNAME: &str = "root";
 
-/// 初期投入する root ユーザーのメタデータ。パスワードは `ROOT_PASSWORD` から取る。
 fn root_user_metadata() -> UserMetadata {
     let password = std::env::var("ROOT_PASSWORD")
         .ok()

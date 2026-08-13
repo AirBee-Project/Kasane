@@ -1,3 +1,5 @@
+//! バックエンド非依存の抽象 API。
+
 pub mod catalog;
 pub mod read;
 pub mod storage;

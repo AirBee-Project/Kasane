@@ -1,8 +1,8 @@
 //! `/query` の実行。
 //!
-//! Kasane 側の DSL（[`QueryNode`]）を Kasane-Logic の AST（`Query`）へ翻訳し、
-//! 最適化と実行は Kasane-Logic に委ねる。入力源はテーブルごとの
-//! [`TableSource`] で、対象領域に必要な範囲だけを LMDB から読む（遅延評価）。
+//! Kasane 側の DSL（[`QueryNode`]）を Kasane-Logic の AST（`Query`）へ翻訳し、最適化と実行は
+//! Kasane-Logic に委ねる。入力源はバックエンドごとの `Source` 実装で、対象領域に必要な範囲
+//! だけを遅延評価で読む。
 
 pub mod value;
 

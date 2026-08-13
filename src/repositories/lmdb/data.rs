@@ -1,8 +1,4 @@
-//! FlexTree（シャードツリー）のデータ操作。
-//!
-//! ノードのバイト表現は [`shard_entry`](crate::repositories::encoding::shard_entry) に
-//! 共通化してあり、TiKV 実装と同じ形式でシャードを読み書きする。違うのはノードの
-//! 取得手段（mmap 上のゼロコピー参照か、ネットワーク越しの取得か）だけ。
+//! ツリーの形と分割・統合の規則は TiKV 実装と同一で、違うのは取得手段だけ。
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -22,19 +18,16 @@ use super::{KasaneDbRead, KasaneDbWrite};
 
 type ValueMap = FxHashMap<Vec<u8>, Vec<FlexId>>;
 
-/// `data_get` を葉単位で Rayon 並列化する基準（触れる**リーフ数**）。
+/// rayon へ出す基準（触れる**リーフ数**）。
 ///
-/// 並列化の基準は「クエリ FlexId 数」ではなく「実際に触れる葉の数」に置く。
-/// 広域検索はクエリ FlexId が少数（数個）でも数千の葉・数百万 FlexId に及ぶため、
-/// クエリ数で判定すると単一スレッドに落ちてしまう（実測: 540万 FlexId で 363ms）。
+/// クエリ FlexId 数で判定すると、広域検索（FlexId が数個でも数千の葉に及ぶ）が単一
+/// スレッドへ落ちる。
 const DATA_GET_LEAF_PARALLEL_THRESHOLD: usize = 32;
 
 impl<'a> KasaneDbRead<'a> {
-    /// 指定された範囲の空間IDを値ごとにグループ化して返す。
+    /// 指定範囲の空間 ID を値ごとにグループ化して返す。
     ///
-    /// ルーティング（ポインタ木の降下）は 1 回だけ行い、担当リーフへ振り分けたあと、
-    /// **リーフ単位**で解決を並列化する。各リーフは互いに独立（同一 FlexId は 1 つの葉にしか
-    /// 属さない）なので、部分マップを作って最後に値でマージするだけで正しく合流できる。
+    /// リーフ単位で並列化できるのは、同一 FlexId が 1 つの葉にしか属さないため。
     #[tracing::instrument(skip_all)]
     pub fn data_get_impl(
         &self,
@@ -46,8 +39,7 @@ impl<'a> KasaneDbRead<'a> {
         let counter = std::sync::atomic::AtomicUsize::new(0);
         let mut global_by_value = ValueMap::default();
 
-        // 悪意のあるユーザーによる数百万件の `flex_ids` の全件ルーティング（DoS攻撃）を防ぐため、
-        // チャンク単位で遅延評価し、limit に達したら残りのルーティングを打ち切る。
+        // 数百万件の全件ルーティングを踏ませないよう、打ち切れる粒度に区切る。
         const ROUTING_BATCH_SIZE: usize = 65536;
 
         loop {
@@ -69,7 +61,6 @@ impl<'a> KasaneDbRead<'a> {
                 break;
             }
 
-            // ルーティングはバッチ単位で行い、大量件数時の CPU 浪費を防ぐ。
             let by_leaf = shard::route_leaves_batched(
                 &self.db.tables_data,
                 &self.read_txn,
@@ -101,8 +92,7 @@ impl<'a> KasaneDbRead<'a> {
                 let tables_data = self.db.tables_data;
                 let env = &self.db.env;
 
-                // 葉を（スレッド数で割った）チャンクに分け、チャンクごとに 1 つの読み取り txn を
-                // 開いて担当リーフを解決する。txn 開設コストを葉数分ではなくスレッド数分に抑える。
+                // チャンクごとに 1 txn。葉ごとに開くと開設コストが葉数に比例する。
                 let entries: Vec<(FlexId, Vec<FlexId>)> = by_leaf.into_iter().collect();
                 let chunk_size = entries
                     .len()
@@ -151,13 +141,10 @@ impl<'a> KasaneDbRead<'a> {
         Ok(global_by_value.into_iter().collect())
     }
 
-    /// 1 つのリーフ領域を読み、そこへ振り分けられた各クエリ FlexId を解決して
-    /// `by_value`（値→FlexId 群）へ蓄積する。
+    /// 1 枚のリーフを走査し、`by_value`（値 → FlexId 群）へ積む。
     ///
-    /// FlexId ごとに値バイト列でハッシュすると、値の種類が少数でも巨大な結果（数百万 FlexId ）で
-    /// 同じバイト列を何百万回もハッシュすることになる。そこでまず**この葉ローカルの辞書
-    /// インデックス（u32）**でグルーピングし（整数ハッシュは軽い）、葉に現れた distinct 値の
-    /// 数だけ実バイト列へ復元して全体マップへマージする。
+    /// 葉ローカルの辞書インデックス（`u32`）で先にグルーピングするのは、値バイト列で直接
+    /// ハッシュすると結果 FlexId の数だけ長いバイト列をハッシュすることになるため。
     #[allow(clippy::too_many_arguments)]
     fn resolve_leaf(
         tables_data: &heed::Database<super::keys::TableIdAndFlexId, heed::types::Bytes>,
@@ -176,7 +163,6 @@ impl<'a> KasaneDbRead<'a> {
         let mut local_count = 0;
         let batch_size = limit.unwrap_or(0).clamp(1, 256);
 
-        // 葉ローカルの辞書 index で集約（中間 Vec を作らず整数キーでハッシュ）。
         let mut local: FxHashMap<u32, Vec<FlexId>> = FxHashMap::default();
         for query_flex in queries {
             if let (Some(limit), Some(counter)) = (limit, counter)
@@ -205,7 +191,7 @@ impl<'a> KasaneDbRead<'a> {
             counter.fetch_add(local_count, std::sync::atomic::Ordering::Relaxed);
         }
 
-        // 葉の distinct 値だけ実バイト列へ復元して全体マップへマージ。
+        // 葉に現れた distinct 値の数だけ実バイト列へ復元する。
         for (packed, mut flex_ids) in local {
             let value = arch.value_bytes(packed);
             if let Some(existing) = by_value.get_mut(value) {
@@ -219,11 +205,7 @@ impl<'a> KasaneDbRead<'a> {
 }
 
 impl<'a> KasaneDbRead<'a> {
-    /// 値が `value` と等しい FlexId の [`FlexId`] を集める。
-    ///
-    /// ストレージのカーソルを呼び出し側へ渡さないよう、結果は確定した `Vec` で返す
-    /// （バックエンドによっては結果がネットワーク越しに届くため、遅延イテレータを
-    /// トランザクション境界の外へ持ち出せない）。
+    /// 結果を `Vec` で返すのは、遅延イテレータを外へ持ち出せない TiKV と署名を揃えるため。
     #[tracing::instrument(skip_all)]
     pub fn data_filter_eq_impl(
         &self,
@@ -250,13 +232,10 @@ impl<'a> KasaneDbRead<'a> {
         Ok(out)
     }
 
-    /// 値が `lo`〜`hi`（両端含む）に入る FlexId の [`FlexId`] を集める。
+    /// 値が `lo`〜`hi`（両端含む）に入る FlexId を引く。
     ///
-    /// インデックスキーは `table_id ‖ vkey ‖ flexid` と値を可変長のまま連結しているため、
-    /// 可変長型では**バイト範囲だけでは絞りきれない**。`vkey` が `hi` の真の接頭辞に
-    /// なっている行は、続く flexid のバイト次第で `hi ‖ 0xFF…` を超えた位置に並びうる
-    /// （例: `hi = "bz"` に対する値 `"b"` は、flexid が `0x7A` より大きいと範囲外に出る）。
-    /// そこで型の幅で読む範囲を決め、取り出した `vkey` で最終的に絞る。
+    /// 可変長型はバイト範囲だけで絞りきれないので、型の幅で読む範囲を決めてから取り出した
+    /// `vkey` で厳密に絞る（[`value_index::range_scan_bounds`]）。
     #[tracing::instrument(skip_all)]
     pub fn data_filter_range_impl(
         &self,
@@ -293,8 +272,7 @@ impl<'a> KasaneDbRead<'a> {
                 keep(key, &mut out)?;
             }
         } else {
-            // 可変長では該当キーがバイト順で連続しないため、過不足なしにはできない。
-            // 「必ず覆う最小の範囲」まで絞り、あとは `keep` の厳密判定に任せる。
+            // 覆う最小の範囲まで絞り、あとは `keep` の厳密判定に任せる。
             let (start, end) = value_index::range_scan_bounds(table_id, &lo_vkey, &hi_vkey);
             let bounds = (
                 std::ops::Bound::Included(start.as_slice()),
@@ -313,8 +291,6 @@ impl<'a> KasaneDbRead<'a> {
 }
 
 impl<'a> KasaneDbWrite<'a> {
-    /// 指定された空間IDセット（`ids`）すべてに対して `data` を書き込む。
-    /// 既に値が存在するIDについては、新しい値で上書きする。
     #[tracing::instrument(skip_all)]
     pub fn data_insert_impl(
         &mut self,
@@ -336,8 +312,7 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(())
     }
 
-    /// 指定された空間IDセット（`ids`）のうち、まだ値が存在しないIDに対してのみ `data` を書き込む。
-    /// 既存の値は上書きされずにそのまま保持される。
+    /// まだ値が無い空間 ID にだけ書く（既存値は保持）。
     #[tracing::instrument(skip_all)]
     pub fn data_upsert_impl(
         &mut self,
@@ -367,8 +342,6 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(())
     }
 
-    /// 指定された空間IDセット（`ids`）に紐づく値をすべて削除する。
-    /// 削除後にデータ量が少なくなった場合、リーフ（シャード）の結合（マージ）を試みる。
     #[tracing::instrument(skip_all)]
     pub fn data_remove_impl(
         &mut self,
@@ -394,11 +367,7 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(())
     }
 
-    /// 削除処理の後に呼ばれ、データ量が減ったリーフ（シャード）を親ノードへと統合（マージ）する。
-    ///
-    /// 指定された `region` から親ノードへ遡り、その親に属するすべての子リーフのデータ件数の合計が
-    /// 閾値（`MERGE_FLEX_ID_THRESHOLD`）以下であれば、それらを1つのリーフにまとめる。
-    /// 統合が起きた場合はさらにその上の親へと再帰的にマージを試み、可能な限りツリーを圧縮する。
+    /// 削除でデータ量が減ったリーフを親へ統合し、可能な限り木を圧縮する。
     fn try_merge_up(
         &mut self,
         table_id: TableId,
@@ -409,12 +378,11 @@ impl<'a> KasaneDbWrite<'a> {
         while let Some((parent_region, child_regions)) =
             shard::find_parent_pointer(&self.db.tables_data, &self.write_txn, table_id, &region)?
         {
-            // パス圧縮により子は可変数（2 以上）。子を走査し、いずれかがポインタノードなら
-            // このレベルは統合しない。全リーフ（＋空マーカ）で合算が閾値以下なら1リーフへ畳み込む。
+            // 子のいずれかがポインタノードなら、このレベルは統合しない。
             let mut combined = 0usize;
             let mut mergeable = true;
             for cr in &child_regions {
-                // 空領域のKeyはそもそも存在しないのでスキップ
+                // 空領域のキーはそもそも存在しない。
                 let Some(bytes) = self.db.tables_data.get(&self.write_txn, &(table_id, *cr))?
                 else {
                     continue;
@@ -437,7 +405,7 @@ impl<'a> KasaneDbWrite<'a> {
                 break;
             }
 
-            // マージ可能確定後、子マップを実際にデシリアライズする
+            // 統合できると決まってから復元する（復元は重い）。
             let mut child_maps: Vec<SpatialIdMap<Vec<u8>>> = Vec::new();
             for cr in &child_regions {
                 let map =
@@ -447,9 +415,7 @@ impl<'a> KasaneDbWrite<'a> {
                 }
             }
 
-            // 値インデックス用に、変更前の全子リーフのキーを集める。
-            // 索引を維持しないテーブルでは、統合は木の形を変えるだけで
-            // `(FlexId, 値)` の対応は変わらないので、差分計算そのものが要らない。
+            // 統合は木の形を変えるだけで `(FlexId, 値)` の対応は変わらない。
             let old_keys = index.map(|data_type| {
                 let mut keys = FxHashSet::default();
                 for m in &child_maps {
@@ -464,7 +430,6 @@ impl<'a> KasaneDbWrite<'a> {
                 keys
             });
 
-            // 子リーフ群を親領域へ畳み込む
             let merged = SpatialIdMap::merge_shards(parent_region, child_maps)?;
 
             if let (Some(data_type), Some(old_keys)) = (index, old_keys) {
@@ -476,11 +441,9 @@ impl<'a> KasaneDbWrite<'a> {
                         &f,
                     ));
                 }
-                // 値インデックス差分更新
                 self.update_value_index(old_keys, new_keys)?;
             }
 
-            // 親キーをリーフ（空なら削除）に置換し、子キーを削除。
             let parent_key = (table_id, parent_region);
             if merged.is_empty() {
                 self.db
@@ -495,16 +458,12 @@ impl<'a> KasaneDbWrite<'a> {
                     .delete(&mut self.write_txn, &(table_id, *cr))?;
             }
 
-            // 親が新たなリーフになった → さらに上へ伝播。
+            // 親が新たなリーフになったので、さらに上へ伝播する。
             region = parent_region;
         }
         Ok(())
     }
 
-    /// 1つのリーフに対するデータ変更（追加・削除など）を適用し、インデックスとストレージに保存する共通処理。
-    ///
-    /// 変更前の値と変更後の値を比較して、値インデックス（`value_index`）の差分更新を効率的に行ったうえで、
-    /// シャードの分割判定や保存処理（`store_shard`）へ引き継ぐ。
     fn apply_leaf<F>(
         &mut self,
         table_id: TableId,
@@ -517,9 +476,7 @@ impl<'a> KasaneDbWrite<'a> {
     where
         F: FnOnce(&mut SpatialIdMap<Vec<u8>>),
     {
-        // 索引を維持しないテーブルでは、差分計算そのものを飛ばす。索引キーは格納
-        // `FlexId` 1 件につき 1 つ増えるので、ここを通るかどうかで 1 回の書き込みが
-        // 触るキー数が 3 桁変わる。
+        // 索引キーは格納 `FlexId` 1 件につき 1 つ増えるので、ここで 3 桁変わる。
         let Some(data_type) = index else {
             modify(&mut map);
             return self.store_shard(table_id, region, map);
@@ -527,7 +484,6 @@ impl<'a> KasaneDbWrite<'a> {
 
         let scan: SpatialIdSet = input.iter().cloned().collect();
 
-        // 変更前の重なりリーフからインデックスキーを計算
         let mut old_keys = FxHashSet::default();
         let mut pre_modify_scan = scan.clone();
         for f_scan in scan.iter() {
@@ -543,7 +499,6 @@ impl<'a> KasaneDbWrite<'a> {
 
         modify(&mut map);
 
-        // 変更後の重なりリーフからインデックスキーを計算
         let mut new_keys = FxHashSet::default();
         for f_scan in pre_modify_scan.iter() {
             for (f, v) in map.get_overlapping(&f_scan) {
@@ -557,18 +512,12 @@ impl<'a> KasaneDbWrite<'a> {
 
         self.update_value_index(old_keys, new_keys)?;
 
-        // 保存（過大なら2分割、空なら削除）。
         self.store_shard(table_id, region, map)?;
 
         Ok(())
     }
 
-    /// 値インデックス（`value_index`）の差分更新を行う。
-    ///
-    /// 変更前（`old_keys`）と変更後（`new_keys`）のキーセットを比較し、不要になったキーの削除と、
-    /// 新たに増えたキーの追加を行う。
-    /// LMDB（B-tree）の特性上、ランダムな順序でアクセスするよりもソート済みの順序でアクセスした方が
-    /// キャッシュ効率が高いため、削除・追加ともにキーを昇順にソートしてから適用する。
+    /// 昇順に並べてから適用するのは、B-tree ではランダム順よりキャッシュ効率が高いため。
     fn update_value_index(
         &mut self,
         old_keys: FxHashSet<Vec<u8>>,
@@ -588,8 +537,6 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(())
     }
 
-    /// 入力された複数の空間ID（`FlexId`）を、現在データベース内に存在するリーフ領域（シャード）ごとにグループ化する。
-    /// ポインタツリーのルートから一度の降下で効率的に分類（ルーティング）を行う。
     fn group_by_leaf(
         &self,
         table_id: TableId,
@@ -599,17 +546,7 @@ impl<'a> KasaneDbWrite<'a> {
         shard::route_leaves_batched(&self.db.tables_data, &self.write_txn, table_id, ids.iter())
     }
 
-    /// 変更されたリーフ（シャード）をデータベースに保存する。
-    /// データ件数が閾値（`MAX_FLEX_ID_PER_SHARD`）を超えている場合は、シャードを分割（Split）する。
-    ///
-    /// **分割時の工夫（パス圧縮）:**
-    /// 空間ツリーは理論上 F(階層) → X → Y の順で交互に分割されるが、データが偏っていて
-    /// 「片側が空になる分割（退化分割）」が発生する場合は、無駄な中間ポインタノードを作らずに
-    /// 子ノードを上位へ直接繋ぐ（巻き上げ）。
-    /// これにより、実際にデータが分かれる軸でのみポインタノードが作られ、ツリーの階層が浅く保たれる。
-    /// 空になったシャード（データ件数0）はデータベースから削除される。
-    ///
-    /// 前提として、本関数が呼ばれる時点では `region` は必ずリーフノード（または新規作成ノード）である。
+    /// 呼ばれる時点で `region` は必ずリーフ（または未作成領域）である。
     fn store_shard(
         &mut self,
         table_id: TableId,
@@ -638,15 +575,12 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(())
     }
 
-    /// データが閾値を超えた `map` を2つに分割し、分割されたそれぞれの子リーフを再帰的に評価・処理する。
-    /// 処理された子リーフの領域IDは、親のポインタノードが持つべき「子領域のリスト（`out`）」に追加される。
     fn cover_split(
         &mut self,
         table_id: TableId,
         map: &SpatialIdMap<Vec<u8>>,
         out: &mut Vec<FlexId>,
     ) -> Result<(), AppError> {
-        // should_split が真 ⇒ シャード領域があり split_shard は Some。
         let ((lo_r, lo), (hi_r, hi)) = map
             .split_shard()
             .ok_or_else(|| AppError::InternalError("split on shardless map".to_string()))?;
@@ -655,12 +589,8 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(())
     }
 
-    /// 分割された子シャードを評価し、保存するかさらに分割するかを決定する処理（パス圧縮の本体）。
-    /// 以下の条件で再帰的に処理を行う。
-    /// 1. **空の場合**: データベースから削除し、領域IDのみを親のリスト（`out`）に積む。
-    /// 2. **閾値内の場合**: そのままリーフとして保存し、領域IDを親のリスト（`out`）に積む。
-    /// 3. **閾値超過で、片側が空になる場合（退化分割）**: 中間ノードを作らずにさらに分割し、孫ノードを直接現在の親リスト（`out`）に積む。
-    /// 4. **閾値超過で、両側にデータがある場合（実分割）**: 新たなポインタノードとして保存し、その領域IDを親リスト（`out`）に積む。
+    /// パス圧縮の本体。片側が空になる分割（退化分割）で中間ポインタを作らないので、
+    /// 実際にデータが分かれる軸でだけポインタノードができて木が浅く保たれる。
     fn emit_child(
         &mut self,
         table_id: TableId,
@@ -681,16 +611,15 @@ impl<'a> KasaneDbWrite<'a> {
             out.push(cr);
             return Ok(());
         }
-        // 過大：1段だけ覗いて、圧縮（退化）か枝分かれ（実分割）かを決める。
+        // 1 段だけ覗いて、退化分割か実分割かを決める。
         let ((clo_r, clo), (chi_r, chi)) = cm
             .split_shard()
             .ok_or_else(|| AppError::InternalError("split on shardless map".to_string()))?;
         if clo.is_empty() || chi.is_empty() {
-            // 退化分割：cr にポインタノードを作らず孫を out へ巻き上げる（チェーン圧縮）。
+            // 退化分割：中間ポインタを作らず孫を巻き上げる。
             self.emit_child(table_id, clo_r, clo, out)?;
             self.emit_child(table_id, chi_r, chi, out)?;
         } else {
-            // 実分割：cr を独立ポインタノードにする。
             let mut grand = Vec::new();
             self.emit_child(table_id, clo_r, clo, &mut grand)?;
             self.emit_child(table_id, chi_r, chi, &mut grand)?;
@@ -704,7 +633,7 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(())
     }
 
-    /// リーフノードのデータをシリアライズし、先頭にデータ件数をヘッダとして付与してデータベースに保存する。
+    /// 件数ヘッダ付きで保存する。
     fn put_leaf(
         &mut self,
         table_id: TableId,

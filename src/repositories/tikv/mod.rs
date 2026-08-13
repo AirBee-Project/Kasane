@@ -1,105 +1,7 @@
 //! TiKV バックエンド。
 //!
-//! ファイル構成は LMDB 実装（`super::lmdb`）と対になっている。
-//!
-//! | ファイル | 役割 |
-//! |---|---|
-//! | `mod.rs` | ストレージ本体と、トランザクション境界（[`Storage`] 実装） |
-//! | `init.rs` | このバックエンド固有の初期化設定 |
-//! | `gc.rs` | 論理削除されたテーブルの実体を回収する（このバックエンド固有） |
-//! | `keys.rs` | キーのバイト表現 |
-//! | `kv.rs` | このバックエンド固有の低レベルアクセス（LMDB 側は `shard.rs`） |
-//! | `catalog.rs` | データベース・テーブルのカタログ操作 |
-//! | `tree/` | FlexTree のデータ操作（LMDB 側は `data.rs` 1 枚） |
-//! | `users.rs` | ユーザーと権限 |
-//! | `query_source.rs` | クエリ実行器への入力源 |
-//! | `repository.rs` | 抽象 trait への適合 |
-//!
-//! # 読み書きの噛み合わせ方
-//!
-//! 排他の付け方は経路によって違う。**片方だけ見て他方を真似すると壊れる**ので、
-//! なぜ違うのかをここに書いておく。
-//!
-//! ## データ経路：`batch_get_for_update`（悲観）
-//!
-//! TiKV の悲観ロックは取得時に取り直した `for_update_ts` で取られるのに対し、
-//! `txn.get()` はトランザクション開始時の `start_ts` スナップショットを読む。
-//! そのため「ロックしてから `get` する」と、ロック取得前にコミットされた他者の変更を
-//! 見落として lost update になる。シャードの読み書きはキー単位で完結するので、
-//! **ロックと最新値の取得を 1 リクエストで行う** `batch_get_for_update` を使う
-//! （[`kv::lock_shards`]）。返る値は `for_update_ts` 時点のものなので食い違いが起きない。
-//!
-//! テーブル全体を排他しないため、**別のリーフへの書き込みは並列に流れる**。
-//! 複数の Kasane インスタンスが同じクラスタへ書き込む構成でも同じ。
-//! なぜリーフ単位のロックで足りるのかは `tree/write.rs` の冒頭を参照。
-//!
-//! ここを楽観トランザクションへ寄せたことがある。不変条件は楽観でも通用し、往復も
-//! 転送量も減るのだが、**競合の濃いワークロードで書き込みが落ちた**ので戻した。
-//! 経緯と実測は `tree/write.rs` に残してある。
-//!
-//! ## カタログ経路：ロック専用トランザクション（**悲観のまま**）
-//!
-//! データベース配下のテーブル一覧のように、**範囲スキャンから変更を導く**操作は
-//! 楽観の競合検査では守れない。検査するのは「自分が書くキー」だけなので、
-//! ファントムが素通りする。
-//!
-//! > A: `database_remove("db")` … 配下を走査して t1, t2 と db を消す
-//! > B: `table_create("db", "t3")` … db の存在を確認して t3 を作る
-//!
-//! 両者が書くキーは重ならないため、楽観では**どちらも成功して t3 が取り残される**。
-//! 読んだ範囲に対する排他が要るので、ここは TiKV 側の実ロックを使う。
-//!
-//! そこで LMDB の `env.write_txn()` と同じ順序――**ライタミューテックス取得 →
-//! スナップショット確定**――を 2 つのトランザクションに分けて再現する。
-//!
-//! 1. ロック専用トランザクション（[`lock_options`]、**悲観**）でロックキーを取得する
-//! 2. **その後に**作業トランザクションを開始する（start_ts が前任者のコミットより後になる）
-//! 3. 作業をコミットする
-//! 4. ロック専用トランザクションを rollback して解放する
-//!
-//! ロック側は常に rollback で終わるので、ロックキーには MVCC のバージョンが作られない。
-//!
-//! **[`lock_options`] を [`write_options`] と同じにしてはならない。** 楽観の
-//! `lock_keys` はローカルバッファへ印を付けるだけで RPC を出さず、検査はコミット時に
-//! 行われる。ロック側は必ず rollback するので、その検査は永久に行われない――
-//! つまり**排他が黙って消える**。コンパイルは通り、競合を能動的に起こさないテストも
-//! 通ってしまう。壊れ方は「複数インスタンスでだけ整合性が崩れる」形になる。
-//!
-//! こちらを使うのはカタログとユーザーの操作だけで、いずれも頻度が低い。
-//!
-//! # 必要なロックをどう知るか
-//!
-//! `database_remove` のように「ロックを取って初めて対象が判る」操作があるため、
-//! 呼び出し前にロック集合を列挙することはできない。書き込みクロージャは競合時の
-//! やり直しに備えて元々**複数回呼ばれてよい**設計なので、これを利用する：
-//!
-//! - 各操作は触る範囲を [`TikvWrite::require_lock`] で宣言する
-//! - まだ保持していないロックが宣言されたら、その場で巻き戻して
-//!   **集めたロックを揃えた状態でやり直す**
-//!
-//! `Storage::write` のシグネチャは変わらず、サービス層はロックの存在を知らないままでいられる。
-//!
-//! ロック集合が空の周回ではロック用トランザクションを開かない（空の `lock_keys` は
-//! 何もしないのに、開くだけで PD からタイムスタンプを取ることになる）。作業
-//! トランザクションも実際にデータへ触れるまで開かない（[`kv::LazyTxn`]）。
-//! そのため**ロックを 1 つも宣言しないデータ経路はトランザクション 1 本**で完結し、
-//! カタログ経路もロック用と作業用の 2 本で済む。
-//!
-//! # デッドロックしない理由
-//!
-//! 明示ロック（カタログ経路）は、保持中／不足中のどちらも [`BTreeSet<Vec<u8>>`] で
-//! 持つので、取得は常に**ロックキーのバイト昇順**になる。キーは `0x7F ‖ scope ‖ id`
-//! （`keys.rs`）で、[`LockScope`] の判別値が粗い粒度から順に振られているため、
-//! この昇順がそのままロック階層の順序になる。全操作が同じ全順序で取るので、
-//! 待ちグラフに循環ができない。
-//!
-//! データ経路の [`kv::lock_shards`] も、キーを `BTreeMap` に集めてから昇順で要求する
-//! （1 リクエストに載りきらない場合の分割でも順序は保たれる）。
-//!
-//! 順序は集合の型が決めるので、呼び出し側が並べ替える必要はない。ただし
-//! [`tikv_client::Transaction::lock_keys`] はリージョンごとにリクエストを束ねるため、
-//! 1 回の呼び出しの**内部**での取得順までは保証されない。そこで最後の砦として、
-//! TiKV 側が検出したデッドロックは [`is_retryable`] が拾ってやり直す。
+//! 排他の付け方は経路で違う。データ経路はシャードのキー単位（`kv::lock_shards`）、
+//! カタログ経路は明示ロック（`lock_options` と `TikvWrite::require_lock`）。
 
 mod catalog;
 mod gc;
@@ -130,36 +32,22 @@ use kv::LazyTxn;
 /// 競合・ロック待ちでやり直す上限。
 const MAX_ATTEMPTS: usize = 20;
 
-/// 競合でやり直すときの最初の待ち時間。以降は試行ごとに倍にする。
-///
-/// 待たずに `continue` すると、混み合っている相手へ PD 往復を伴う再挑戦を
-/// 詰めて投げることになり、競合をさらに悪化させる。
+/// 待たずに `continue` すると、混み合っている相手へ再挑戦を詰めて投げることになる。
 const RETRY_BACKOFF_BASE: std::time::Duration = std::time::Duration::from_millis(5);
-/// 待ち時間の上限。
+
+/// 上限が小さいと、重い試行（クロージャ全体のやり直し）を隙間なく投げ続けることになる。
 ///
-/// **やり直しは書き込みクロージャを丸ごと実行し直す。** 大きな書き込みではその 1 回が
-/// 秒の単位になるので、上限が小さいと「重い試行を隙間なく投げ続ける」ことになり、
-/// 詰まっているクラスタをこちらから叩き続ける形になる。
-///
-/// 目安として、tikv-client がロックへ与える寿命は 20 秒（`MAX_TTL`）。そこを超えて
-/// 生き延びられないトランザクションは何度やっても通らないので、上限はその手前まで
-/// 伸ばしておき、混雑が収まる時間を与えるほうが早く収束する。
+/// tikv-client がロックへ与える寿命は 20 秒。そこを超えて生き延びられないトランザクションは
+/// 何度やっても通らないので、手前まで伸ばして混雑が収まる時間を与えるほうが早く収束する。
 const RETRY_BACKOFF_MAX: std::time::Duration = std::time::Duration::from_millis(2000);
 
-/// 待ち時間へ加える揺らぎの割合（±20%）。
+/// 倍々に伸びるだけだと、ぶつかった複数のインスタンスが揃った間隔でやり直し続ける。
 ///
-/// 倍々に伸びるだけの待ち時間だと、同じ相手とぶつかった複数のインスタンスが
-/// **揃った間隔でやり直し続ける**。TiKV の悲観ロックは待たずに即エラーを返す設定
-/// （tikv-client が `wait_timeout = 0` を固定）なので、競合の解消はこちらの
-/// やり直しに委ねられており、足並みが揃うと competing herd がそのまま持続する。
-/// 揺らぎを入れて、ぶつかった側が別々のタイミングへばらけるようにする。
+/// TiKV の悲観ロックは待たず即エラーを返す（`wait_timeout = 0` 固定）ので、競合の解消は
+/// こちらのやり直しに委ねられている。足並みが揃うと competing herd が持続する。
 const RETRY_BACKOFF_JITTER_PERCENT: u64 = 20;
 
-/// 書き込みのやり直し状況。
-///
-/// 「何回競合したか」と「直近の失敗理由」は常に一緒に更新される（片方だけ更新すると、
-/// 上限まで粘ったあとに理由の無いエラーを返すといった食い違いが起きる）。
-/// [`Storage::write`] の 4 か所から使うので、その組を型にして 1 つにまとめてある。
+/// 競合回数と直近の失敗理由を組にするのは、片方だけ更新する食い違いを型で防ぐため。
 #[derive(Default)]
 struct Retry {
     conflicts: u32,
@@ -167,24 +55,19 @@ struct Retry {
 }
 
 impl Retry {
-    /// 競合を 1 回数え、次の試行まで待つ。
     async fn back_off(&mut self, reason: AppError) {
         self.last_error = Some(reason);
         tokio::time::sleep(retry_backoff(self.conflicts)).await;
         self.conflicts += 1;
     }
 
-    /// 待たずにやり直す（競合ではないので回数に数えない）。
+    /// 待たずにやり直す場合。競合ではないので回数には数えない。
     fn note(&mut self, reason: AppError) {
         self.last_error = Some(reason);
     }
 }
 
-/// `attempt` 回目の競合に対する待ち時間。
-///
-/// 打ち切りは `RETRY_BACKOFF_MAX` 側で行う。指数の頭を抑えるのは桁溢れを防ぐためだけで、
-/// **上限より手前で頭打ちにならない**ように余裕を持たせてある（ここが上限より小さいと、
-/// 定数を上げても実際の待ち時間が伸びない）。
+/// `min(16)` は桁溢れ避け。ここを [`RETRY_BACKOFF_MAX`] より手前にすると上限が効かなくなる。
 fn retry_backoff(attempt: u32) -> std::time::Duration {
     let base = RETRY_BACKOFF_BASE
         .saturating_mul(1u32 << attempt.min(16))
@@ -192,7 +75,6 @@ fn retry_backoff(attempt: u32) -> std::time::Duration {
     apply_jitter(base)
 }
 
-/// 待ち時間に ±[`RETRY_BACKOFF_JITTER_PERCENT`]% の揺らぎを与える。
 fn apply_jitter(base: std::time::Duration) -> std::time::Duration {
     let millis = base.as_millis() as u64;
     let span = millis * RETRY_BACKOFF_JITTER_PERCENT / 100;
@@ -202,7 +84,6 @@ fn apply_jitter(base: std::time::Duration) -> std::time::Duration {
     }
     let mut bytes = [0u8; 8];
     rand_core::OsRng.fill_bytes(&mut bytes);
-    // [millis - span, millis + span] の一様分布。
     let offset = u64::from_le_bytes(bytes) % (span * 2 + 1);
     std::time::Duration::from_millis(millis - span + offset)
 }
@@ -213,44 +94,41 @@ impl From<tikv_client::Error> for AppError {
     }
 }
 
-// --- トランザクションの開き方 ---
-//
-// tikv-client の既定は [`CheckLevel::Panic`] で、コミットも rollback もされないまま
-// [`Transaction`] が drop されると panic する。HTTP ハンドラの Future はクライアント
-// 切断で途中破棄されうるため、この経路は**通常運用で踏まれる**。
-// 踏めばそのリクエストは巻き添えになるし、ログも panic で埋まる。
-//
-// そこでこのバックエンドは `begin_optimistic` / `begin_pessimistic` を直接使わず、
-// 必ず下の 2 つを通して開く。破棄の後始末は [`rollback_in_background`] が引き受け、
-// それでも取り残されたものだけが警告として残るようにしてある。
+// 放置された [`Transaction`] の drop で panic しないよう、必ず下の 3 つを通して開くこと。
 
-/// 読み取りトランザクションの設定。
 fn read_options() -> TransactionOptions {
     TransactionOptions::new_optimistic().drop_check(CheckLevel::Warn)
 }
 
-/// 明示ロック専用トランザクションの設定。**必ず悲観**。
+/// カタログ経路の明示ロック専用。**必ず悲観にすること。**
 ///
-/// [`write_options`] と統合してはならない。楽観の `lock_keys` は RPC を出さず
-/// ローカルバッファへ印を付けるだけで、検査はコミット時に行われる。このトランザクションは
-/// 必ず rollback で終わるので、検査は永久に行われず**排他が黙って消える**
-/// （モジュール冒頭のカタログ経路の節を参照）。
+/// テーブル一覧のように範囲スキャンから変更を導く操作は、キー単位の競合検査では守れない
+/// （`database_remove` と `table_create` が書くキーは重ならないのに、両方成功するとテーブルが
+/// 取り残される）。読んだ範囲に対する排他が要るので、LMDB の `env.write_txn()` と同じ順序――
+/// ライタミューテックス取得 → スナップショット確定――を 2 本のトランザクションで再現する：
+/// このトランザクションでロックキーを取得 → その後に作業トランザクションを開始 → コミット →
+/// こちらを rollback。ロック側は必ず rollback で終わるので MVCC のバージョンは作られない。
+///
+/// 楽観にすると `lock_keys` が RPC を出さずローカルバッファへ印を付けるだけになり、検査は
+/// コミット時に回る。必ず rollback で終わる以上その検査は永久に行われず、**排他が黙って
+/// 消える**。[`write_options`] と統合してはならない。
 fn lock_options() -> TransactionOptions {
     TransactionOptions::new_pessimistic().drop_check(CheckLevel::Warn)
 }
 
-/// 作業（書き込み）トランザクションの設定。
+/// 作業（書き込み）トランザクションの設定。**悲観**。
 ///
-/// **悲観**。一度は楽観へ寄せたが、競合の濃いワークロードで書き込みが落ちたため戻した
-/// （理由と実測は `tree/write.rs` の冒頭）。[`lock_options`] と分けたままにしてあるのは、
-/// 将来また作業側だけを楽観へ寄せられるようにするため――そのときロック側まで
-/// 巻き込まないことが要点で、テストがそれを固定している。
+/// 楽観でも正しさは保たれ往復も減るが、競合の検出が prewrite まで遅れるので 1 回の競合で
+/// 捨てる仕事が「降下・復元・変更・シリアライズの全部」になる。同じ空間領域へ書き込みが
+/// 集中する使い方（都市データの一括投入など）では 6 割超が 2 回以上やり直し、
+/// `Failed to resolve lock` が定常的に 500 として出た。往復数より書き込みが落ちないことを取る。
 ///
-/// `one_pc` は 1 回の prewrite でコミットまで済ませる最適化。効くのは変更が
-/// **1 リージョンに収まる**ときだけで、跨ぐ場合は tikv-client が自動的に 2PC へ落とす。
-/// 収まったのに TiKV が断った場合は [`tikv_client::Error::OnePcFailure`] になる――
-/// **フォールバックは実装されていない**ので、呼び出し側が 2PC でやり直す
-/// （[`Storage::write`] を参照）。
+/// 低競合が前提ならここを楽観へ寄せてよい。そのとき [`lock_options`] は悲観のまま残すこと
+/// （分けてあるのはそのため）。
+///
+/// `one_pc` が効くのは変更が 1 リージョンに収まるときだけ（跨ぐ場合は tikv-client が 2PC へ
+/// 落とす）。収まったのに TiKV が断ると [`tikv_client::Error::OnePcFailure`] になり、
+/// **フォールバックは実装されていない**ので呼び出し側が 2PC でやり直す。
 fn write_options(one_pc: bool) -> TransactionOptions {
     let options = TransactionOptions::new_pessimistic().drop_check(CheckLevel::Warn);
     if one_pc {
@@ -260,13 +138,10 @@ fn write_options(one_pc: bool) -> TransactionOptions {
     }
 }
 
-/// 破棄されるトランザクションを、バックグラウンドで rollback する。
+/// Future が途中で捨てられてもロックだけは返しにいく。
 ///
-/// 悲観ロックを握ったまま消えると、ロックの TTL が切れるまで同じシャードへの
-/// 書き込みが止まる。切断のたびにそれが起きると、詰まりが次の要求へ連鎖するので、
-/// Future が途中で捨てられた場合でもロックだけは返しにいく。
-///
-/// ランタイムが既に無い（プロセス終了時など）なら諦めてそのまま捨てる。
+/// 悲観ロックを握ったまま消えると TTL が切れるまで同じシャードへの書き込みが止まり、
+/// 詰まりが次の要求へ連鎖する。
 fn rollback_in_background(mut txn: Transaction) {
     match tokio::runtime::Handle::try_current() {
         Ok(handle) => {
@@ -278,15 +153,11 @@ fn rollback_in_background(mut txn: Transaction) {
     }
 }
 
-/// ロックが足りないので、この試行を捨ててやり直すことを示すマーカー。
+/// この試行を捨ててやり直すことを示すマーカー。
 ///
-/// [`AppError`] とは別の型にしてあるのが要点で、[`TikvWrite::require_lock`] の戻り値を
-/// 見ればそれが「アプリケーションの失敗」ではなく「制御用の巻き戻し」だと型で判る。
-/// 操作側は `?` で伝播させるだけでよく、その際 [`From`] でアプリケーションエラーへ落ちる。
-///
-/// [`Storage::write`] はクロージャの結果を見る**前に**ロック充足を確認するので、
-/// 変換後の値が呼び出し元へ届くことはない。届いたとすればそれは実装のバグであり、
-/// メッセージからそう判るようにしてある。
+/// [`AppError`] と別の型にしてあるので、「アプリケーションの失敗」ではなく「制御用の巻き戻し」
+/// だと型で判る。[`Storage::write`] はクロージャの結果を見る**前に**やり直しの要否を確認する
+/// ため、[`From`] 変換後の値が呼び出し元へ届いたらそれは実装のバグ。
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct NeedsRestart;
 
@@ -301,30 +172,16 @@ impl From<NeedsRestart> for AppError {
 
 /// TiKV が「やり直せば通る」種類の失敗を返したか。
 ///
-/// ロック保持者がコミットすると待機側は書き込み競合として弾かれる。tikv-client は
-/// これを内部でリトライせず呼び出し側へ委ねるため、ここで判定して自分でやり直す。
-/// こうすることで「書き込みは待たされても失敗しない」という LMDB の性質が
-/// 呼び出し側から見て保たれる。
+/// tikv-client は競合を内部でリトライせず呼び出し側へ委ねる。ここで拾って自分でやり直すことで、
+/// 「書き込みは待たされても失敗しない」という LMDB の性質を保つ。
 ///
-/// 判定は `KeyError` のフィールドを直接見る。Debug 文字列の部分一致だと、
-/// 利用者が付けた名前がたまたま一致して誤ってやり直したり、tikv-client 側の
-/// 文言変更で黙って「待てば通る失敗」が 500 に化けたりする。
+/// 判定に Debug 文字列の部分一致を使わないのは、利用者が付けた名前がたまたま一致して誤って
+/// やり直したり、tikv-client の文言変更で黙って 500 に化けたりするため。
 fn is_retryable(err: &tikv_client::Error) -> bool {
     use tikv_client::Error;
 
     match err {
-        // `conflict` は書き込み競合（悲観トランザクションでの `PessimisticRetry` を含む）、
-        // `deadlock` は TiKV のデッドロック検出、`retryable` は
-        // 「クライアントはトランザクションをやり直してよい」という明示の指示。
-        //
-        // `commit_ts_expired` と `txn_not_found` は**この試行が寿命切れになった**印。
-        // ロックには TTL があり、ハートビートで延ばし続けられなかった（＝処理が
-        // TTL より長くかかった、あるいはハートビートが遅れた）トランザクションは、
-        // 他者のロック解決によって巻き戻される。そのあとコミットしようとすると
-        // 「コミット時刻が遅すぎる」「そんなトランザクションは無い」と返る。
-        //
-        // **どちらも何もコミットされていない**ので、新しいトランザクションでやり直すのが
-        // 正しい。ここを落とすと、混雑して 1 件が遅くなったときに 500 になる。
+        // 寿命切れ（`commit_ts_expired` / `txn_not_found`）は何もコミットされていない。
         Error::KeyError(key_error) => {
             key_error.conflict.is_some()
                 || key_error.deadlock.is_some()
@@ -332,65 +189,42 @@ fn is_retryable(err: &tikv_client::Error) -> bool {
                 || key_error.commit_ts_expired.is_some()
                 || key_error.txn_not_found.is_some()
         }
-        // 他者のロックが載ったキーへ prewrite しようとして、解決を待ちきれなかった。
-        //
-        // **これは「今その相手が握っている」という意味でしかない。** tikv-client は
-        // `KeyIsLocked` を受けると `resolve_lock` で解決を試み、相手がまだ生きている
-        // うちは短い backoff（2ms〜500ms を 10 回）で粘るが、それを使い切ると
-        // この失敗になる。競合が濃いときほど当たる。
-        //
-        // 楽観トランザクションではロックに当たるのが prewrite なので、競合の signal が
-        // ここへ出る。悲観だった頃は `pessimistic_lock` の段で `conflict` として
-        // 上の分岐に落ちていたため、この変換を書き忘れると**混雑時だけ 500 になる**。
+        // 「今その相手が握っている」だけ。拾い漏らすと**混雑時だけ 500 になる**。
         Error::ResolveLockError(_) => true,
         Error::MultipleKeyErrors(errors) | Error::ExtractedErrors(errors) => {
             errors.iter().any(is_retryable)
         }
         Error::PessimisticLockError { inner, .. } => is_retryable(inner),
-        // `UndeterminedError` はコミットの成否が不明なので、やり直すと二重適用に
-        // なりうる。ここでは拾わず、呼び出し元へそのまま伝える。
+        // `UndeterminedError` はコミットの成否が不明なので、やり直すと二重適用になりうる。
         _ => false,
     }
 }
 
-/// 1PC を断られたか。
-///
-/// tikv-client は 1 リージョンに収まった変更に対して TiKV が 1PC を拒んだとき、
-/// **2PC へフォールバックせず**この失敗を返す。やり直せば通るが、同じ条件なら
-/// また断られるので、**次の試行では 1PC を諦める**必要がある（[`is_retryable`] と
-/// 分けてあるのはそのため）。
+/// [`is_retryable`] と分けるのは、やり直す前に 1PC を諦めさせる必要があるため。
 fn is_one_pc_failure(err: &tikv_client::Error) -> bool {
     matches!(err, tikv_client::Error::OnePcFailure)
 }
 
-/// TiKV バックエンドのハンドル。複製してもクラスタへの接続は共有される。
-///
-/// 構築は `init.rs`（[`TikvDb::connect`]）が担う。
+/// 複製してもクラスタへの接続は共有される。
 #[derive(Clone)]
 pub struct TikvDb {
     pub(super) client: Arc<TransactionClient>,
 }
 
-/// 保持中のロック。解放は必ず rollback で行う。
-///
-/// 中身が [`Option`] なのは、[`release`](Self::release) を通らずに破棄された場合でも
-/// [`Drop`] がロックを返しにいけるようにするため。
+/// 保持中のロック。中身が [`Option`] なのは、[`Drop`] でも返しにいけるようにするため。
 struct LockGuard {
     txn: Option<Transaction>,
 }
 
 impl LockGuard {
-    /// ロックキーをまとめて取得する。
-    ///
-    /// `keys` が [`BTreeSet`] なのは偶然ではない。反復順（＝バイト昇順）が
-    /// そのままデッドロック回避に必要な全順序になる（モジュール冒頭を参照）。
     /// まとめて渡すのは、`lock_keys` がリージョンごとに 1 リクエストへ束ねるため。
-    /// 1 キーずつ呼ぶとロック数だけ往復が増える。
+    ///
+    /// ただし束ねる以上、1 回の呼び出しの**内部**での取得順までは保証されない。最後の砦として、
+    /// TiKV 側が検出したデッドロックは [`is_retryable`] が拾ってやり直す。
     async fn acquire(
         client: &TransactionClient,
         keys: &BTreeSet<Vec<u8>>,
     ) -> Result<Self, tikv_client::Error> {
-        // **悲観**で開くこと（[`lock_options`] の注記を参照）。
         let mut txn = client.begin_with_options(lock_options()).await?;
         if let Err(e) = txn.lock_keys(keys.iter().cloned()).await {
             let _ = txn.rollback().await;
@@ -419,18 +253,12 @@ impl Drop for LockGuard {
 
 /// コミットし、**失敗したらロックを返してから**そのエラーを返す。
 ///
-/// [`tikv_client::Transaction::commit`] は失敗しても自分では巻き戻さない。エラーを返して
-/// 終わるだけで、prewrite が途中まで書いたロックはそのまま残る。ここで返しにいかないと、
-/// ロックは TTL（3 秒〜最大 20 秒）が切れるまで居座る。
+/// [`tikv_client::Transaction::commit`] は失敗しても巻き戻さないので、prewrite が途中まで書いた
+/// ロックが TTL 切れまで居座る。これは競合時に雪だるま式に悪化する（A が残したロックに B が
+/// 当たって backoff を使い切り、B もロックを残す…）。
 ///
-/// これは競合時に**雪だるま式に悪化する**。A の prewrite が競合で失敗してロックを残す →
-/// B がそのロックに当たり、まだ生きているので `resolve_lock` が待たされ、backoff を
-/// 使い切って失敗する → B もロックを残す → … と、詰まりが次の要求へ連鎖していく。
-/// やり直す前にここで返しておけば、次の試行は自分が残した障害物に当たらない。
-///
-/// **`UndeterminedError` のときだけは巻き戻さない。** これは「主キーのコミットが
-/// 成功したかどうか判らない」という意味で、実際には成功しているかもしれない。
-/// 巻き戻すとコミット済みのトランザクションを取り消しかねないので、そのまま伝える。
+/// **`UndeterminedError` のときだけは巻き戻さない。** 実際には成功しているかもしれず、
+/// 巻き戻すとコミット済みのトランザクションを取り消しかねない。
 async fn commit_or_release(txn: &mut Transaction) -> Result<(), tikv_client::Error> {
     match txn.commit().await {
         Ok(_) => Ok(()),
@@ -439,7 +267,7 @@ async fn commit_or_release(txn: &mut Transaction) -> Result<(), tikv_client::Err
         }
         Err(e) => {
             if let Err(rollback_error) = txn.rollback().await {
-                // 巻き戻せなくても元の失敗を優先して伝える。ロックは TTL で消える。
+                // 巻き戻せなくても元の失敗を優先する。ロックは TTL で消える。
                 tracing::warn!("failed to release locks after a failed commit: {rollback_error}");
             }
             Err(e)
@@ -447,31 +275,25 @@ async fn commit_or_release(txn: &mut Transaction) -> Result<(), tikv_client::Err
     }
 }
 
-/// 開いていれば巻き戻す。一度も触れていない試行では開いていないので何もしない。
+/// 一度もデータへ触れていない試行では開いていないので、何もしない。
 async fn rollback(txn: Option<Transaction>) {
     if let Some(mut txn) = txn {
         let _ = txn.rollback().await;
     }
 }
 
-/// 読み取りトランザクション。
-///
-/// `R` は読み取り元。通常の読み取りとクエリ実行器の入力源は開始タイムスタンプを
-/// 固定した [`tikv_client::Snapshot`]、書き込みトランザクション上の読み取りは
-/// [`kv::LazyTxn`] を使う。
+/// `R` は読み取り元。通常の読み取りは [`Snapshot`]、書き込み上の読み取りは `kv::LazyTxn`。
 pub struct TikvRead<'a, R = Snapshot> {
     pub(crate) txn: kv::Readers<R>,
-    /// ストレージのハンドルより長生きしないことを型で示すだけのマーカー。
+    /// ストレージのハンドルより長生きしないことを型で示すだけ。
     pub(crate) _db: PhantomData<&'a TikvDb>,
 }
 
 impl TikvRead<'_, Snapshot> {
-    /// `ts` の断面を読む読み取り元を作る。
+    /// トランザクションを開かないのが要点。開くと開始と rollback で 2 往復かかる。
     ///
-    /// 読み取りにトランザクションを開かないのが要点。開くと開始で 1 往復、
-    /// 後始末の rollback でもう 1 往復かかるが、読むだけならどちらも要らない。
-    /// さらにタイムスタンプを手元に持てるので、同じ断面のスナップショットを
-    /// 追加で開いて**チャンクを並行に読める**（[`kv::Readers`]）。
+    /// さらにタイムスタンプを手元に持てるので、同じ断面のスナップショットを追加で開いて
+    /// チャンクを並行に読める（[`kv::Readers`]）。
     pub(crate) fn at(client: Arc<TransactionClient>, ts: tikv_client::Timestamp) -> Self {
         Self {
             txn: kv::Readers::fanned_out(client, ts),
@@ -480,31 +302,29 @@ impl TikvRead<'_, Snapshot> {
     }
 }
 
-/// 書き込みトランザクション。
-///
-/// 中身の [`LazyTxn`] は**最初に実際へ触れるまで開かない**。ロック宣言だけで
-/// 巻き戻る 1 周目が、ネットワークに触れずに終わるようにするため。
 pub struct TikvWrite<'a> {
     pub(crate) txn: kv::Readers<LazyTxn>,
     pub(crate) _db: PhantomData<&'a TikvDb>,
-    /// この試行で保持しているロック。
+    /// [`BTreeSet`] なので取得は常にキーのバイト昇順になる。キーは `0x7F ‖ scope ‖ id` で
+    /// [`LockScope`] の判別値が粗い粒度から順に振られているため、この昇順がそのまま
+    /// ロック階層の順序になり、待ちグラフに循環ができない。
     held: BTreeSet<Vec<u8>>,
-    /// 操作が宣言したが、まだ保持していないロック。
-    /// 空でなければ、この試行は巻き戻してやり直す。
+    /// 宣言されたが、まだ保持していないロック。空でなければこの試行は巻き戻す。
     missing: BTreeSet<Vec<u8>>,
-    /// 読んだ内容が古かったので、この試行を捨てて新しいスナップショットでやり直す。
+    /// 読んだ木の形が古かった。
     stale: bool,
 }
 
 impl TikvWrite<'_> {
     /// この操作が触る範囲を宣言する。**実際にデータへ触れる前**に呼ぶこと。
     ///
-    /// まだ取得していないロックだった場合は [`NeedsRestart`] を返す。呼び出し側が
-    /// `?` で伝播させれば、その試行は破棄され、宣言されたロックを揃えた状態で
-    /// クロージャが最初から実行し直される。
+    /// `database_remove` のように「ロックを取って初めて対象が判る」操作があるため、呼び出し前に
+    /// ロック集合を列挙できない。書き込みクロージャは競合時のやり直しに備えて元々複数回
+    /// 呼ばれてよいので、まだ持っていないロックが宣言されたらその場で巻き戻し、集めたロックを
+    /// 揃えた状態でやり直す。
     ///
-    /// 宣言忘れをコンパイラに検出させるため、確認を戻り値に持たせている
-    /// （フラグを別途調べる方式では、確認を書き忘れてもコンパイルが通ってしまう）。
+    /// 確認を戻り値に持たせているのは、宣言忘れをコンパイラに検出させるため（フラグを別途
+    /// 調べる方式では、確認を書き忘れてもコンパイルが通る）。
     pub(crate) fn require_lock(&mut self, scope: LockScope, id: &[u8]) -> Result<(), NeedsRestart> {
         let key = keys::lock(scope, id);
         if self.held.contains(&key) {
@@ -514,11 +334,7 @@ impl TikvWrite<'_> {
         Err(NeedsRestart)
     }
 
-    /// 複数スコープをまとめて宣言する。
-    ///
-    /// 1 つずつ宣言してやり直すと 1 回の試行で 1 つしかロックを集められないので、
-    /// 複数必要な操作はここで全部宣言してから戻る。取得順は集合が決めるので、
-    /// 渡す順序は問わない（モジュール冒頭のデッドロックの節を参照）。
+    /// 1 つずつ宣言すると 1 回の試行で 1 つしか集められないので、まとめて宣言する。
     pub(crate) fn require_locks<'k>(
         &mut self,
         scopes: impl IntoIterator<Item = (LockScope, &'k [u8])>,
@@ -535,21 +351,12 @@ impl TikvWrite<'_> {
         Ok(())
     }
 
-    /// 読んだ木の形が古かったことを記録し、この試行を捨てさせる。
-    ///
-    /// 同じトランザクションの中で読み直しても意味がない。`get` は常に `start_ts` の
-    /// スナップショットを読むので、何度試しても同じ古い答えが返るためである。
-    /// 新しいトランザクションを開けば `start_ts` が他者のコミットより後になり、
-    /// 必ず前進する。
+    /// 読み直しても `get` は `start_ts` を読むので、新しい試行でないと前進しない。
     pub(crate) fn mark_stale(&mut self) -> NeedsRestart {
         self.stale = true;
         NeedsRestart
     }
 
-    /// この試行を捨ててやり直す必要があるか。
-    ///
-    /// 理由は 2 つある。宣言されたロックが足りない（`missing`）か、読んだ内容が
-    /// 古かった（`stale`）か。どちらも「コミットしてはいけない」点では同じ。
     fn needs_restart(&self) -> bool {
         !self.missing.is_empty() || self.stale
     }
@@ -558,8 +365,6 @@ impl TikvWrite<'_> {
 impl Storage for TikvDb {
     type Read<'a> = TikvRead<'a, Snapshot>;
     type Write<'a> = TikvWrite<'a>;
-    /// 断面は開始タイムスタンプそのもの。各読み取りはこの時刻の
-    /// [`tikv_client::Snapshot`] を開く（`query_source.rs`）。
     type QuerySnapshot = tikv_client::Timestamp;
 
     #[tracing::instrument(skip_all)]
@@ -576,10 +381,7 @@ impl Storage for TikvDb {
         F: for<'a, 'b> AsyncFnOnce(&'a Self::Read<'b>) -> Result<T, AppError> + Send + 'static,
         T: Send + 'static,
     {
-        // 読み取りはロックを取らない。スナップショットから読むだけなので
-        // 書き込みをブロックせず、書き込みにもブロックされない（LMDB と同じ）。
-        //
-        // トランザクションではなくスナップショットを開く（[`TikvRead::at`] を参照）。
+        // ロックを取らないので、書き込みをブロックせず書き込みにもブロックされない。
         let ts = self.client.current_timestamp().await?;
         let r = TikvRead::at(self.client.clone(), ts);
         f(&r).await
@@ -595,18 +397,13 @@ impl Storage for TikvDb {
         T: Send + 'static,
     {
         let mut locks: BTreeSet<Vec<u8>> = BTreeSet::new();
-        // 競合でのやり直しだけを数える。ロック不足での巻き戻しは待つ理由がない
-        // （相手を待っているのではなく、必要な範囲が判っただけなので）。
+        // 数えるのは競合だけ。ロック不足での巻き戻しは相手を待っているわけではない。
         let mut retry = Retry::default();
-        // 1PC を試すか。断られたら諦めて 2PC でやり直す（[`is_one_pc_failure`]）。
-        // 試行をまたいで持ち回るのが要点で、そうしないと断られ続ける構成で
-        // 毎回 1 回ぶん無駄な prewrite を投げ、上限まで失敗し続ける。
+        // 試行をまたいで持ち回らないと、断られ続ける構成で上限まで失敗し続ける。
         let mut one_pc = true;
 
         for _ in 0..MAX_ATTEMPTS {
-            // 1. ロックを取得する。初回は集合が空なので、そもそもトランザクションを
-            //    開かない（空の `lock_keys` は何もしないのに、開くだけで PD から
-            //    タイムスタンプを取ることになる）。
+            // 空の `lock_keys` は何もしないのに、開くだけで PD から ts を取ることになる。
             let guard = if locks.is_empty() {
                 None
             } else {
@@ -620,10 +417,7 @@ impl Storage for TikvDb {
                 }
             };
 
-            // 2. 作業トランザクションはロックを保持した状態で開く。実際に開くのは
-            //    クロージャが最初にデータへ触れたときで（[`LazyTxn`]）、そこで
-            //    start_ts が確定する。ロック取得より後になるので、前任者のコミットが
-            //    必ず見える。
+            // start_ts がロック取得より後になるので、前任者のコミットが必ず見える。
             let mut w = TikvWrite {
                 txn: kv::Readers::new(LazyTxn::new(self.client.clone(), one_pc)),
                 _db: PhantomData,
@@ -634,36 +428,28 @@ impl Storage for TikvDb {
 
             // やり直しに備えて複製を渡す。`f` 自体は次の試行のために残す。
             let result = f.clone()(&mut w).await;
-            // やり直しの要否は**結果より先**に確認する。こうしておけば、クロージャが
-            // `NeedsRestart` 由来のエラーを握り潰して `Ok` を返しても、その試行は
-            // 確実に捨てられる（＝宣言し忘れた範囲や古い読みのまま commit されない）。
+            // **結果より先**に確認する。クロージャが握り潰して `Ok` を返しても捨てられる。
             let restart = w.needs_restart();
             let newly_required = std::mem::take(&mut w.missing);
             let was_stale = w.stale;
             let mut lazy = w.txn.into_inner();
 
-            // 溜めた変更をここで初めて送る（[`LazyTxn::flush`]）。捨てる試行では
-            // 送らない――送らなければロックも MVCC のバージョンも作られずに済む。
+            // 捨てる試行では送らない。送らなければロックも MVCC のバージョンも作られない。
             let flushed = if restart || result.is_err() {
                 Ok(())
             } else {
                 lazy.flush().await
             };
 
-            // ロックの取得はクロージャの内側で起きるので、競合はアプリケーションエラーの
-            // 形で返ってくる。やり直せる失敗かどうかは作業トランザクションが覚えている。
+            // 競合はクロージャの内側で起きるので、失敗の分類はトランザクションが覚えている。
             let conflicted = lazy.conflicted();
-            // 一度もデータへ触れていなければトランザクションは開いていない。
             let txn = lazy.into_opened();
 
-            // 3. やり直しが要るなら、この試行は捨てる。
             if restart {
                 rollback(txn).await;
                 LockGuard::release(guard).await;
                 locks.extend(newly_required);
-                // 古い読みが原因なら、他者のコミットが見えるようになるまで少し待つ。
-                // ロック不足が原因の場合は待つ理由がない（競合ではなく、必要な範囲が
-                // 判っただけなので、次の周回は必ず前進する）。
+                // 古い読みが原因のときだけ待つ。ロック不足なら次の周回は必ず前進する。
                 if was_stale {
                     let reason = AppError::Conflict(
                         "read a stale view of the shard tree; retrying with a newer snapshot"
@@ -674,7 +460,6 @@ impl Storage for TikvDb {
                 continue;
             }
 
-            // 送信そのものが失敗したなら、コミットへは進まない。
             if let Err(e) = flushed {
                 rollback(txn).await;
                 LockGuard::release(guard).await;
@@ -692,12 +477,10 @@ impl Storage for TikvDb {
                     None => Ok(value),
                 },
                 Err(app_err) => {
-                    // クロージャが失敗したらコミットしない。ロックは必ず解放する。
                     rollback(txn).await;
                     LockGuard::release(guard).await;
                     if conflicted {
                         // 競合で弾かれただけなので、新しいトランザクションでやり直す。
-                        // 呼び出し側から見て「書き込みは待たされても失敗しない」を保つ。
                         retry.back_off(app_err).await;
                         continue;
                     }
@@ -709,7 +492,7 @@ impl Storage for TikvDb {
 
             match outcome {
                 Ok(value) => return Ok(value),
-                // 1PC を断られただけ。競合ではないので待たず、2PC で即やり直す。
+                // 競合ではないので待たず、2PC で即やり直す。
                 Err(e) if is_one_pc_failure(&e) => {
                     tracing::debug!("TiKV declined one-phase commit; retrying with two-phase");
                     one_pc = false;
@@ -724,8 +507,7 @@ impl Storage for TikvDb {
             }
         }
 
-        // ここへ来る理由は 2 つある。競合し続けた（`last_error` あり）か、
-        // ロック宣言が収束しなかった（実装のバグ）か。区別できるようにしておく。
+        // `last_error` が無いのはロック宣言が収束しなかったとき（実装のバグ）。
         Err(retry.last_error.unwrap_or_else(|| {
             AppError::Conflict(format!(
                 "write did not settle within {MAX_ATTEMPTS} attempts ({} lock(s) held at the end)",
@@ -739,10 +521,7 @@ impl Storage for TikvDb {
 mod tests {
     use super::*;
 
-    /// `LockScope` の判別値が「データベース → テーブル → ユーザー」の順に並ぶこと。
-    ///
-    /// ロックキーのバイト昇順がそのまま取得順になるので、この並びが崩れると
-    /// デッドロック回避の前提が壊れる。
+    /// この並びが崩れるとデッドロック回避の前提が壊れる。
     #[test]
     fn lock_scopes_sort_into_the_hierarchy_order() {
         let db = keys::lock(LockScope::Database, b"z-database");
@@ -757,8 +536,6 @@ mod tests {
         assert_eq!(ordered, vec![db, user]);
     }
 
-    /// バックオフが上限を超えず、かつ毎回同じ値にならないこと。
-    ///
     /// 揃った間隔でやり直すと、ぶつかった相手と足並みが揃ったままになる。
     #[test]
     fn retry_backoff_grows_within_bounds_and_varies() {
@@ -791,26 +568,20 @@ mod tests {
         }
     }
 
-    /// 競合由来の失敗がやり直し対象に分類されること。
-    ///
-    /// 楽観トランザクションでは他者のロックに当たるのが prewrite なので、競合の signal は
-    /// [`tikv_client::Error::ResolveLockError`] として出る。ここが漏れていると、
-    /// **混雑したときだけ 500 が返る**（空いていれば当たらないので気づけない）。
+    /// 分類が漏れていると**混雑したときだけ 500 が返る**。
     #[test]
     fn contention_failures_are_classified_as_retryable() {
         use tikv_client::Error;
 
-        // 他者がロックを握っていて解決を待ちきれなかった。待てば通る。
         assert!(
             is_retryable(&Error::ResolveLockError(Vec::new())),
             "ロック解決の失敗がやり直し対象から漏れている"
         );
-        // 入れ子（リージョンを跨いだ prewrite などでまとめられた場合）でも拾う。
+        // 入れ子（リージョンを跨いだ prewrite でまとめられた場合）でも拾う。
         assert!(is_retryable(&Error::ExtractedErrors(vec![
             Error::ResolveLockError(Vec::new()),
         ])));
 
-        // この試行が寿命切れになった印。何もコミットされていないのでやり直せる。
         let expired = Error::KeyError(Box::new(tikv_client::proto::kvrpcpb::KeyError {
             commit_ts_expired: Some(Default::default()),
             ..Default::default()
@@ -840,33 +611,22 @@ mod tests {
             Error::ResolveLockError(Vec::new())
         ))));
 
-        // 1PC 拒否は競合ではないので、こちらの分類には入れない
-        // （待たずに 2PC でやり直す。`is_one_pc_failure` を参照）。
+        // 1PC 拒否は競合ではないので、こちらの分類には入れない。
         assert!(!is_retryable(&Error::OnePcFailure));
         assert!(is_one_pc_failure(&Error::OnePcFailure));
     }
 
-    /// ロック専用トランザクションが**悲観のまま**であること。
+    /// ロック専用が楽観になると排他が黙って消えるが、競合を起こさない単体テストは通る。
     ///
-    /// これが楽観になると `lock_keys` は RPC を出さずローカルバッファへ印を付けるだけになり、
-    /// 検査はコミット時に回る。[`LockGuard`] は必ず rollback で終わるので検査は永久に
-    /// 行われず、**カタログ操作の排他が黙って消える**。
-    ///
-    /// 消えても単体テストは通ってしまう（競合を能動的に起こさないため）。壊れ方は
-    /// 「複数インスタンスでだけ、範囲スキャンから導く操作がファントムを起こす」形なので、
-    /// 気づくのは本番になる。だからここで型として固定しておく。
-    ///
-    /// 作業側（[`write_options`]）は性能の都合で楽観へ振れうる。そのときに
-    /// ロック側まで巻き込まないことが、この検査の目的である。
+    /// 壊れ方は「複数インスタンスでだけファントムが起きる」形で気づくのが本番になるので、
+    /// 型として固定しておく。作業側だけが楽観へ振れても巻き込まないこと。
     #[test]
     fn lock_transactions_stay_pessimistic() {
-        // 悲観／楽観の別は `TransactionOptions` の外から読めないので、
-        // 既知の構成と突き合わせて判定する。
+        // 悲観／楽観の別は外から読めないので、既知の構成と突き合わせる。
         let pessimistic = TransactionOptions::new_pessimistic().drop_check(CheckLevel::Warn);
         assert_eq!(lock_options(), pessimistic, "ロック専用は悲観であること");
 
-        // 作業側は今も悲観だが、**それに依存して同一視してはならない**。
-        // 作業側だけを楽観へ寄せる変更が入っても、ロック側は悲観のままである必要がある。
+        // 作業側は今も悲観だが、それに依存して同一視してはならない。
         let optimistic = TransactionOptions::new_optimistic().drop_check(CheckLevel::Warn);
         assert_ne!(
             lock_options(),

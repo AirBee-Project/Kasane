@@ -178,7 +178,7 @@ pub async fn check_tables(
 /// この重複がそのまま往復数の重複になる。
 ///
 /// 解決を 1 回に寄せて、その結果でここが判定すれば、認可のための往復は 0 になる。
-/// 呼び出し側は [`ReadRepository::resolve_tables`](crate::repositories::ReadRepository::resolve_tables)
+/// 呼び出し側は [`ReadRepository::resolve_tables`]
 /// の結果をそのまま渡せばよい。
 ///
 /// # 呼ぶ順序

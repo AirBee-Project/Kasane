@@ -1,7 +1,10 @@
-//! リーフの書き換え（純粋な計算）。
+//! リーフの書き換え（純粋な計算）。**ここには await が 1 つも無い。**
 //!
-//! **ここには await が 1 つも無い。** 引数だけで完結する同期関数にしてあるのは、
-//! rkyv の復元と直列化を丸ごと blocking タスクへ移すため（ファイル末尾の設計メモを参照）。
+//! 同期関数にしてあるのは、この計算を丸ごと blocking タスクへ移せるようにするため。
+//! リーフ 1 枚につき rkyv の復元（`SpatialIdMap::from_bytes` は `Arc` 木を丸ごと組み直す）と
+//! 直列化が走るので重い。非同期ワーカー上で回すと **tikv-client が spawn したハートビート**
+//! までワーカーを待つことになり、ロックの TTL（20 秒）を延ばしきれずに他者へ回収される。
+//! つまり CPU をワーカーへ置いたままにすると、負荷が上がったときに書き込みが落ちる。
 
 use kasane_logic::{FlexId, SpatialIdMap, SpatialIdSet};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -13,52 +16,28 @@ use super::{
     value_index,
 };
 
-// --- リーフの書き換え（純粋な計算） ---
-//
-// ここから下はネットワークに触れない。ロック済みのリーフのバイト列を受け取り、
-// 適用すべき変更（[`kv::Mutation`]）を組み立てて返すだけである。
-//
-// 分けてあるのは、この計算が**重い**からである。リーフ 1 枚につき rkyv の復元
-// （`SpatialIdMap::from_bytes` は `Arc` 木を丸ごと組み直す）と直列化が走り、
-// 分割が起きればさらに増える。これを非同期ワーカー上で回すと、そのワーカーは
-// その間まったく他のタスクを進められない。
-//
-// 巻き添えになるのは無関係なリクエストだけではない。**tikv-client が spawn した
-// ハートビート**もワーカーを待つ。ハートビートはロックの寿命（20 秒）を 10 秒ごとに
-// 延ばしているので、そこが遅れるとロックが期限切れになり、他者に回収される。
-// 回収された側は失敗し、待っていた側は `Failed to resolve lock` を受け取る。
-// つまり**CPU をワーカーへ置いたままにすると、負荷が上がったときに書き込みが落ちる**。
-//
-// 呼び出し側は [`TikvWrite::apply_leaves`] でここを blocking タスクへ出す。
-
-/// 1 枚のリーフに何をするか。
-///
-/// 値を借用ではなく所有で持つのは、この操作ごと blocking タスクへ move するため
-/// （[`TikvWrite::apply_leaves`](super::TikvWrite::apply_leaves)）。
+/// 値を借用ではなく所有で持つのは、この操作ごと blocking タスクへ move するため。
 pub(super) enum LeafOp {
-    /// 対象の空間 ID すべてへ書く（既存値は上書き）。
+    /// 既存値は上書き。
     Insert(Vec<u8>),
     /// まだ値の無い空間 ID にだけ書く。
     Upsert(Vec<u8>),
-    /// 対象の空間 ID の値を消す。
     Remove,
-    /// 空間 ID ごとに別々の値を書く（一括書き込み）。
+    /// 空間 ID ごとに別々の値を書く。
     InsertMany(BatchWrite),
 }
 
-/// 値ごとに分かれた一括書き込みを、リーフへ適用できる形に畳んだもの。
+/// `owner` が `flex_id → values` の添字を持つので、走査中はハッシュ 1 回で書く値が決まる。
 ///
-/// `owner` が `flex_id → values` の添字を持つので、リーフの走査中は**ハッシュ 1 回で
-/// 書くべき値が決まる**。要素ごとに空間 ID 集合を持ち回って毎回交差を取ると、
-/// 要素数 × リーフの FlexId 数になってしまう。
+/// 要素ごとに空間 ID 集合を持ち回って毎回交差を取ると、要素数 × リーフの FlexId 数になる。
 pub(super) struct BatchWrite {
-    /// 同じ空間 ID が複数回指定された場合は**後勝ち**（後から挿入した添字が残る）。
+    /// 同じ空間 ID が複数回指定された場合は**後勝ち**。
     owner: FxHashMap<FlexId, u32>,
     values: Vec<Vec<u8>>,
 }
 
 impl BatchWrite {
-    /// `(空間 ID, 値)` の並びから畳む。書き込み対象の全 `FlexId` も返す。
+    /// 書き込み対象の全 `FlexId` も返す。
     pub(super) fn new(entries: Vec<(SpatialIdSet, Vec<u8>)>) -> (Self, Vec<FlexId>) {
         let mut owner: FxHashMap<FlexId, u32> = FxHashMap::default();
         let mut values = Vec::with_capacity(entries.len());
@@ -66,7 +45,7 @@ impl BatchWrite {
             let slot = values.len() as u32;
             values.push(value);
             for flex_id in ids.flex_ids() {
-                // 後勝ち。1 件ずつ順に書いたときと同じ結果にする。
+                // 1 件ずつ順に書いたときと同じ結果にする。
                 owner.insert(flex_id, slot);
             }
         }
@@ -101,7 +80,7 @@ impl LeafOp {
             }
             LeafOp::InsertMany(batch) => {
                 for flex_id in targets {
-                    // 降下で振り分けられた ID は必ず台帳にある。無ければ他所の ID なので飛ばす。
+                    // 降下で振り分けられた ID は必ず台帳にある。無ければ他所の ID。
                     if let Some(&slot) = batch.owner.get(flex_id) {
                         map.insert(*flex_id, batch.values[slot as usize].clone());
                     }
@@ -111,11 +90,7 @@ impl LeafOp {
     }
 }
 
-/// 1 つのリーフへの変更を適用し、値インデックスの差分と保存を変更として組み立てる。
-///
-/// `index` が `None`（索引を維持しないテーブル）なら、索引の差分計算そのものを飛ばす。
-/// 索引キーは格納 `FlexId` 1 件につき 1 つ増えるので、ここを通るかどうかで
-/// 1 回の書き込みが触るキー数が 3 桁変わる。
+/// 索引キーは格納 `FlexId` 1 件につき 1 つ増えるので、`index` の有無で触るキー数が 3 桁変わる。
 pub(super) fn apply_leaf(
     table_id: TableId,
     index: Option<TableDataType>,
@@ -133,7 +108,6 @@ pub(super) fn apply_leaf(
 
     let scan: SpatialIdSet = targets.iter().cloned().collect();
 
-    // 変更前の重なりリーフからインデックスキーを計算。
     let mut old_keys = FxHashSet::default();
     let mut pre_modify_scan = scan.clone();
     for f_scan in scan.iter() {
@@ -145,7 +119,6 @@ pub(super) fn apply_leaf(
 
     op.apply(&mut map, targets);
 
-    // 変更後の重なりリーフからインデックスキーを計算。
     let mut new_keys = FxHashSet::default();
     for f_scan in pre_modify_scan.iter() {
         for (f, v) in map.get_overlapping(&f_scan) {
@@ -173,11 +146,7 @@ fn store_shard(
         return Ok(());
     }
 
-    // 分割が必要 → パス圧縮した被覆子領域を構築し、親をポインタノードにする。
-    //
-    // 子領域へ他者が到達する経路は今は存在しない（到達するには親がポインタノードで
-    // ある必要があり、それを作るのがこの処理自身）。したがって子のロックを別途
-    // 取る必要はなく、書き込み時の暗黙ロックで足りる。
+    // 子へ他者が到達する経路は無い（親をポインタノードにするのがこの処理自身）。
     let mut children = Vec::new();
     let ((lo_r, lo), (hi_r, hi)) = map
         .split_shard()
@@ -193,9 +162,8 @@ fn store_shard(
     Ok(())
 }
 
-/// 分割された子シャードを保存するか、さらに分割するかを決める（パス圧縮の本体）。
-///
-/// 同期関数なので普通に再帰できる（非同期だった頃は `Box::pin` で間接化していた）。
+/// パス圧縮の本体。片側が空になる分割（退化分割）で中間ポインタを作らないので、実際に
+/// データが分かれる軸でだけポインタノードができて木が浅く保たれる。
 fn emit_child(
     table_id: TableId,
     cr: FlexId,
@@ -215,17 +183,16 @@ fn emit_child(
         return Ok(());
     }
 
-    // 過大：1 段だけ覗いて、退化分割か実分割かを決める。
+    // 1 段だけ覗いて、退化分割か実分割かを決める。
     let ((clo_r, clo), (chi_r, chi)) = cm
         .split_shard()
         .ok_or_else(|| AppError::InternalError("split on shardless map".to_string()))?;
 
     if clo.is_empty() || chi.is_empty() {
-        // 退化分割：中間ポインタを作らず孫を巻き上げる（チェーン圧縮）。
+        // 退化分割：中間ポインタを作らず孫を巻き上げる。
         emit_child(table_id, clo_r, clo, covers, out)?;
         emit_child(table_id, chi_r, chi, covers, out)?;
     } else {
-        // 実分割：cr を独立ポインタノードにする。
         let mut grand = Vec::new();
         emit_child(table_id, clo_r, clo, &mut grand, out)?;
         emit_child(table_id, chi_r, chi, &mut grand, out)?;
@@ -239,7 +206,7 @@ fn emit_child(
     Ok(())
 }
 
-/// リーフを件数ヘッダ付きで保存する。
+/// 件数ヘッダ付きで保存する。
 fn put_leaf(
     table_id: TableId,
     region: &FlexId,
@@ -257,8 +224,6 @@ fn put_leaf(
     Ok(())
 }
 
-/// 親へ畳んだ結果を変更として組み立てる（[`TikvWrite::try_merge_up`] の重い部分）。
-///
 /// 子のバイト列はロック時に手元へ来ているので引き直さない。
 pub(super) fn merge_children(
     table_id: TableId,
@@ -276,8 +241,7 @@ pub(super) fn merge_children(
         }
     }
 
-    // 索引を維持しないテーブルでは、統合は木の形を変えるだけ。`(FlexId, 値)` の
-    // 対応は親へ移っても変わらないので、索引の差分計算そのものが要らない。
+    // 統合は木の形を変えるだけで、`(FlexId, 値)` の対応は親へ移っても変わらない。
     let old_keys = index.map(|data_type| {
         let mut keys = FxHashSet::default();
         for m in &child_maps {
@@ -299,7 +263,6 @@ pub(super) fn merge_children(
         kv::value_index_mutations(&old_keys, &new_keys, &mut out);
     }
 
-    // 親キーをリーフ（空なら削除）に置換し、子キーを削除する。
     if merged.is_empty() {
         out.extend(kv::shard_deletions(table_id, &parent_region));
     } else {
@@ -311,7 +274,6 @@ pub(super) fn merge_children(
     Ok(out)
 }
 
-/// 値インデックスのキーを組み立てる。
 fn index_key(
     table_id: TableId,
     data_type: TableDataType,

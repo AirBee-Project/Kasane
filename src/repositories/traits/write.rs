@@ -12,23 +12,14 @@ use crate::models::users::{PrivilegeRule, PrivilegeTarget};
 
 use super::CatalogRepository;
 
-/// 書き込みトランザクション上で行える操作。
-///
-/// 読み取り系の一部（`database_info` / `table_info`）も併せ持つのは、作成前の重複確認など
-/// 「同じトランザクション内で読んでから書く」処理が必要なため。
-// `async fn` の戻り値の Future には呼び出し側から `Send` 境界を付けられない。
-// このアプリではバックエンドが feature で 1 つに確定し、Send 性は具体型経由で
-// 漏れ出すため、trait 側で境界を要求する必要がない（`storage.rs` の設計メモを参照）。
-// 署名の読みやすさを優先して `async fn` を使う。
+// `async fn` の Future に `Send` を課さない理由は [`Storage`](super::Storage) を参照。
 #[allow(async_fn_in_trait)]
 pub trait WriteRepository: CatalogRepository {
-    // --- 同一トランザクション内での確認用の読み取り ---
+    // 作成前の重複確認のため「同じトランザクション内で読んでから書く」経路も要る。
 
     async fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError>;
 
     async fn table_info(&self, db_name: &str, table_name: &str) -> Result<Option<Table>, AppError>;
-
-    // --- データベース ---
 
     async fn database_create(
         &mut self,
@@ -51,8 +42,7 @@ pub trait WriteRepository: CatalogRepository {
         copy_name: &str,
     ) -> Result<DatabaseInfoResponse, AppError>;
 
-    // --- テーブル ---
-
+    /// `value_index`: 値インデックスを維持するか。作成後は変更できない。
     #[allow(clippy::too_many_arguments)]
     async fn table_create(
         &mut self,
@@ -62,7 +52,6 @@ pub trait WriteRepository: CatalogRepository {
         max_zoom_level: u8,
         constraints: Option<TableConstraints>,
         description: Option<String>,
-        // `value_index`: 値インデックスを維持するか。作成後は変更できない。
         value_index: bool,
     ) -> Result<Table, AppError>;
 
@@ -87,13 +76,10 @@ pub trait WriteRepository: CatalogRepository {
         copy_table_name: &str,
     ) -> Result<Table, AppError>;
 
-    // --- データ ---
-
     /// `index` は値インデックスへ反映する型。`None` なら索引を維持しない。
     ///
-    /// 書き込み経路が型を必要とするのは索引キーの順序保存エンコードのためだけなので、
-    /// 「索引するか」と「どう索引するか」を 1 つの引数にまとめてある
-    /// （[`Table::value_indexing`](crate::models::database::table::Table::value_indexing)）。
+    /// 「索引するか」と「どう索引するか」を 1 引数にまとめてあるのは、書き込み経路が型を
+    /// 必要とするのが索引キーの順序保存エンコードだけだから。
     async fn data_insert(
         &mut self,
         table_id: TableId,
@@ -102,14 +88,11 @@ pub trait WriteRepository: CatalogRepository {
         data: &[u8],
     ) -> Result<(), AppError>;
 
-    /// 値ごとに分かれた書き込みを**まとめて**適用する。
+    /// `entries` は `(空間 ID, 値)` の並び。同じ空間 ID が複数回現れたら後勝ち。
     ///
-    /// `entries` は `(空間 ID, 値)` の並び。同じ空間 ID が複数回現れたら**後勝ち**で、
-    /// 1 件ずつ順に [`data_insert`](Self::data_insert) を呼んだのと同じ結果になる。
-    ///
-    /// 1 件ずつ呼ぶのと決定的に違うのは、**シャードを 1 度しか読み書きしないこと**。
-    /// このツリーは 1 件の変更でもリーフを丸ごと書き直すので、同じリーフへ N 件を
-    /// 別々に書くと**リーフのサイズ × N** を書くことになる。まとめれば 1 回で済む。
+    /// 1 件ずつ [`data_insert`](Self::data_insert) を呼ぶのと結果は同じだが、シャードを
+    /// 1 度しか読み書きしない。このツリーは 1 件の変更でもリーフを丸ごと書き直すので、
+    /// 別々に書くと「リーフのサイズ × 件数」を書くことになる。
     async fn data_insert_many(
         &mut self,
         table_id: TableId,
@@ -131,8 +114,6 @@ pub trait WriteRepository: CatalogRepository {
         index: Option<TableDataType>,
         ids: SpatialIdSet,
     ) -> Result<(), AppError>;
-
-    // --- ユーザーと権限 ---
 
     async fn create_user(
         &mut self,

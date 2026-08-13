@@ -1,9 +1,5 @@
 //! 読み取りの入口。`TikvRead` に生やす固有メソッドはここだけ。
-//!
-//! 降下（ネットワーク）は [`routing`](super::routing) に任せ、ここは
-//! **降下で決まった葉から値を取り出す**側を持つ。葉の走査は FlexId 数に比例する
-//! CPU 処理なので、非同期ワーカーを占有しないよう blocking タスクへ出したうえで、
-//! 葉が多ければ rayon で分散する（モジュール冒頭の「CPU をどこで回すか」）。
+//! 降下（ネットワーク）は [`routing`](super::routing)、葉の解決（CPU）はここが持つ。
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -31,10 +27,7 @@ impl<R: Reader> TikvRead<'_, R> {
         let mut by_value = ValueMap::default();
         let mut held = 0usize;
 
-        // 全件をまとめてルーティングせず、チャンクに区切って `limit` へ達した時点で
-        // 打ち切る。ここで区切るのは**打ち切りの粒度**と手元に持つ `FlexId` の量で、
-        // 1 リクエストのキー数ではない（そちらは `kv::BATCH_KEYS` が別途縛る。
-        // 木の同じ深さで引くキー数は相異なる領域の数であって、`flex_id` の数ではない）。
+        // 区切るのは打ち切りの粒度であって、1 リクエストのキー数ではない（`kv::BATCH_KEYS`）。
         const ROUTING_BATCH_SIZE: usize = 8192;
         let mut iter = ids.flex_ids();
 
@@ -47,8 +40,6 @@ impl<R: Reader> TikvRead<'_, R> {
                 break;
             }
 
-            // ルーティング（ネットワーク）と解決（CPU）を分ける。前者はここで、
-            // 後者は blocking タスクの上で葉ごとに並列に回す。
             let routed = route_leaves_batched(&self.txn, table_id, &batch)
                 .await?
                 .leaves;
@@ -76,7 +67,7 @@ impl<R: Reader> TikvRead<'_, R> {
 
         let mut out = Vec::new();
         for key in keys {
-            // 可変長値で前方一致しただけの別キーを除外（残りがちょうど flexid 分の長さ）。
+            // 前方一致しただけの別キーを除外（残りがちょうど flexid 分の長さ）。
             if key.len() != prefix.len() + FlexId::ENCODED_LEN {
                 continue;
             }
@@ -87,11 +78,8 @@ impl<R: Reader> TikvRead<'_, R> {
 
     /// 値が `lo`〜`hi`（両端含む）に入る FlexId を引く。
     ///
-    /// 値インデックスのキーは `0x07 ‖ table_id ‖ vkey ‖ flexid` と値を可変長のまま
-    /// 連結しているため、可変長型では**バイト範囲だけでは絞りきれない**。
-    /// `vkey` が `hi` の真の接頭辞になっている行は、続く flexid のバイト次第で
-    /// `hi ‖ 0xFF…` を超えた位置に並びうる（例: `hi = "bz"` に対する値 `"b"`）。
-    /// そこで型の幅で読む範囲を決め、取り出した `vkey` で最終的に絞る。
+    /// 可変長型はバイト範囲だけで絞りきれないので、型の幅で読む範囲を決めてから
+    /// 取り出した `vkey` で厳密に絞る（`encoding::value_index::range_scan_bounds`）。
     #[tracing::instrument(skip_all, fields(table_id = %table_id))]
     pub(in crate::repositories::tikv) async fn data_filter_range_impl(
         &self,
@@ -111,8 +99,7 @@ impl<R: Reader> TikvRead<'_, R> {
             end.extend_from_slice(&[0xFF; FlexId::ENCODED_LEN]);
             kv::scan_inclusive_keys(&self.txn, start, end).await?
         } else {
-            // 可変長では該当キーがバイト順で連続しないため、過不足なしにはできない。
-            // 「必ず覆う最小の範囲」まで絞り、あとは下の厳密フィルタに任せる。
+            // 覆う最小の範囲まで絞り、あとは下の厳密フィルタに任せる。
             let (start, end) = keys::value_index_scan_bounds(table_id, &lo_vkey, &hi_vkey);
             kv::scan_keys_range(&self.txn, start, end).await?
         };
@@ -129,15 +116,10 @@ impl<R: Reader> TikvRead<'_, R> {
         Ok(out)
     }
 
-    /// クエリ実行器の入力として、指定範囲群の値をまとめて読み出す。
+    /// **復元は葉を走査しながらその場で行う。**
     ///
-    /// 範囲を 1 本ずつ渡されないのが要点（[`route_leaves_for_ranges`] を参照）。
-    ///
-    /// **復元は葉を走査しながらその場で行う。** 格納バイト列を `Vec<u8>` として一旦
-    /// 取り出すと、結果 1 行につきヒープ確保が 1 回起きる。呼び出し側はそれを直後に
-    /// `V` へ復元して捨てるので、確保も複製も丸ごと無駄になる。件数はクエリの広さに
-    /// 比例するため、この 1 行分が積み上がると効く（LMDB 側は借用のまま復元していて、
-    /// もともとこの確保が無い）。
+    /// 格納バイト列を `Vec<u8>` として一旦取り出すと結果 1 行につきヒープ確保が 1 回起き、
+    /// 呼び出し側はそれを直後に `V` へ復元して捨てるので丸ごと無駄になる。
     #[tracing::instrument(skip_all, fields(table_id = %table_id, ranges = ranges.len()))]
     pub(in crate::repositories::tikv) async fn read_values_in_ranges<V: Send>(
         &self,
@@ -153,14 +135,10 @@ impl<R: Reader> TikvRead<'_, R> {
     }
 }
 
-// --- 葉の解決（CPU 側） ---
-
-/// 1 枚のリーフを走査し、そこへ振り分けられた各クエリを解決して `by_value` へ積む。
+/// 1 枚のリーフを走査し、`by_value` へ積む。
 ///
-/// FlexId ごとに値バイト列でハッシュすると、値の種類が少数でも結果 FlexId の数だけ
-/// 長いバイト列をハッシュすることになる。そこでまず**この葉ローカルの辞書インデックス
-/// （`u32`）**でグルーピングし（整数ハッシュは軽い）、葉に現れた distinct 値の数だけ
-/// 実バイト列へ復元して全体マップへマージする。
+/// 葉ローカルの辞書インデックス（`u32`）で先にグルーピングするのは、値バイト列で直接ハッシュ
+/// すると結果 FlexId の数だけ長いバイト列をハッシュすることになるため。
 fn resolve_leaf(
     leaf: &RoutedLeaf,
     by_value: &mut ValueMap,
@@ -200,18 +178,16 @@ fn resolve_leaf(
         counter.fetch_add(counted, Ordering::Relaxed);
     }
 
-    // 葉の distinct 値だけ実バイト列へ復元して全体マップへマージする。
+    // 葉に現れた distinct 値の数だけ実バイト列へ復元する。
     for (packed, flex_ids) in local {
         merge_into(by_value, arch.value_bytes(packed), flex_ids);
     }
     Ok(())
 }
 
-/// 葉をまとめて解決する。
+/// 部分マップを作って最後にマージできるのは、同一 FlexId が 1 つの葉にしか属さないため。
 ///
-/// 葉は互いに独立（同一 FlexId は 1 つの葉にしか属さない）なので、部分マップを作って
-/// 最後に値でマージするだけで正しく合流できる。走査は blocking タスクの上で行い、
-/// 葉が多ければさらに rayon で分散する。
+/// 走査は非同期ワーカーを占有しないよう blocking タスクの上で行う。
 async fn resolve_leaves(
     leaves: Vec<RoutedLeaf>,
     limit: Option<usize>,
@@ -264,8 +240,7 @@ async fn resolve_leaves(
     .map_err(|e| AppError::InternalError(format!("leaf resolution task: {e}")))?
 }
 
-/// 同じ値へ集まった FlexId を 1 つのマップへ寄せる。
-/// 既にある値には追記し、初出のときだけバイト列を確保する。
+/// 初出のときだけバイト列を確保する。
 fn merge_into(by_value: &mut ValueMap, value: &[u8], mut flex_ids: Vec<FlexId>) {
     match by_value.get_mut(value) {
         Some(existing) => existing.append(&mut flex_ids),
@@ -276,14 +251,9 @@ fn merge_into(by_value: &mut ValueMap, value: &[u8], mut flex_ids: Vec<FlexId>) 
 }
 
 /// 範囲に重なる `(FlexId, 値)` を葉から取り出し、その場で `V` へ復元する。
-/// 葉が多ければ rayon で分散する。
 ///
-/// ここは `Source::read_subset` の内側（＝クエリ実行器を回している blocking タスクの上）
-/// から呼ばれるので、さらに blocking タスクへ出さずその場で並列化する。
-///
-/// 同じ `(FlexId, 値)` が複数の範囲から重複して出うるが、呼び出し側の union が
-/// そのまま吸収する（`query_source.rs` の注記を参照）。復元できない値（型に合わない
-/// 格納値）はここで落とす。
+/// `Source::read_subset` の内側（＝クエリ実行器を回している blocking タスクの上）から呼ばれる
+/// ので、さらに blocking タスクへ出さずその場で並列化する。復元できない値はここで落とす。
 fn decode_range_leaves<V: Send>(
     leaves: &[RoutedRange],
     ranges: &[RangeId],

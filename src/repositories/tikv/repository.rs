@@ -1,8 +1,7 @@
-//! [`TikvRead`] / [`TikvWrite`] を抽象 API の trait 群へ適合させる層。
+//! 抽象 trait への適合。委譲だけを行う。
 //!
-//! 実処理は `catalog` / `users` / `data` の各モジュールにあり、ここはその委譲だけを行う。
-//! trait の実装は 1 つのブロックにまとめる必要があるため、操作の定義（モジュール分割）と
-//! trait への適合（この 1 箇所）を分けている。
+//! trait の実装は 1 ブロックにまとめる必要があるので、操作の定義（モジュール分割）と
+//! 適合（ここ）を分けている（LMDB 実装も同じ構成）。
 
 use kasane_logic::{FlexId, SpatialIdSet};
 
@@ -18,8 +17,7 @@ use crate::repositories::{CatalogRepository, ReadRepository, ValueGroups, WriteR
 use super::kv::Reader;
 use super::{TikvRead, TikvWrite, catalog, users};
 
-/// [`CatalogRepository`] の点参照は読み取り側と書き込み側で同一なので、
-/// impl ヘッダだけを差し替えて本体を共有する。
+/// 点参照は読み取り側と書き込み側で同一なので、impl ヘッダだけを差し替えて本体を共有する。
 macro_rules! impl_catalog_repository {
     ($($header:tt)*) => {
         $($header)* {

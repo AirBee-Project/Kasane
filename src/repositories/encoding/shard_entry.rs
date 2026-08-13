@@ -1,49 +1,34 @@
-//! シャードツリーのノード（リーフ／ポインタ）のバイト表現。
-//!
-//! 保存先がどのバックエンドでも同じ形式を使う。ここには符号化・復号だけを置き、
-//! ツリーの探索や分割・統合はバックエンド側（トランザクションを持つ層）が担う。
+//! バックエンドを問わず同じ形式を使う。
 
 use kasane_logic::FlexId;
 
 use crate::error::AppError;
 
-/// 1 つのシャードが保持できる [`FlexId`] 数の上限。これを超えたシャードは動的に分割される。
+/// 1 シャードが保持できる [`FlexId`] 数の上限。超えたら分割する。
 ///
-/// **バイト数ではなく件数で見ている点に注意。** 隣接して同じ値を持つ領域は木の中で
-/// 結合されるので、連続したデータはいくら広くても件数が増えず、リーフも小さいままになる。
-/// 一方**散らばったデータは結合されず、1 件あたり 350 バイト前後**になる（実測）。
+/// このツリーは 1 件の変更でもリーフを丸ごと書き直すので、上限がそのまま 1 回の書き込み量に
+/// なる。256 ならリーフは 90KB 前後（1024 では 350KB に達した）。
 ///
-/// この値を 1024 にしていたときのリーフは最大 350KB に達していた。このツリーは
-/// **1 件の変更でもリーフを丸ごと書き直す**ので、その大きさがそのまま 1 回の書き込み量に
-/// なる。KV ストアの 1 値としても、更新のたびに書き直す対象としても大きすぎる。
-///
-/// 256 にするとリーフは 90KB 前後に収まる。木は 2 段深くなるが、降下は 1 段 1 往復
-/// （TiKV では 1〜2ms）なので、書き込み量が 1/4 になる利益のほうがはるかに大きい。
-///
-/// 下げると 1 リクエストが跨るリーフ数は増える。そちらは同時書き込みを 1 つの
-/// トランザクションへ畳むこと（`services::database::table::data::coalesce`）で相殺する。
+/// バイト数ではなく件数で見るのは、隣接して同じ値を持つ領域が結合されるため。連続データは
+/// いくら広くても件数が増えないが、散らばったデータは 1 件あたり 350 バイト前後になる。
 pub const MAX_FLEX_ID_PER_SHARD: usize = 256;
 
-/// 兄弟シャードの合算件数がこの値以下になったら再び merge して 1 つのシャードにする。
+/// 兄弟シャードの合算件数がこの値以下になったら 1 つへ統合する。
 pub const MERGE_FLEX_ID_THRESHOLD: usize = MAX_FLEX_ID_PER_SHARD / 2;
 
 const TAG_LEAF: u8 = 0;
 const TAG_POINTERS: u8 = 1;
 
-/// Leaf エントリのヘッダ長 = タグ(1) + 件数(u32 LE, 4)。
-/// 件数を埋めておくことで `table_count` がリーフを deserialize せず合算できる。
+/// タグ(1) + 件数(u32 LE, 4)。件数を埋めておくとリーフを deserialize せずに合算できる。
 const LEAF_HEADER_LEN: usize = 1 + 4;
 
-/// シャードツリーのノードの論理表現。
 pub enum ShardEntry {
-    /// 実データ（`SpatialIdMap` の rkyv バイト列）。
+    /// `SpatialIdMap` の rkyv バイト列。
     Leaf(Vec<u8>),
-    /// 子シャードの領域へのポインタたち。
     Pointers(Vec<FlexId>),
 }
 
 impl ShardEntry {
-    /// 生バイト列を解釈する。
     pub fn decode(bytes: &[u8]) -> Result<Self, AppError> {
         match bytes.first() {
             Some(&TAG_LEAF) => {
@@ -74,7 +59,6 @@ impl ShardEntry {
         }
     }
 
-    /// リーフ（`SpatialIdMap` バイト列）を、保持 [`FlexId`] 件数ヘッダ付きでエンコードする。
     pub fn encode_leaf(flex_id_count: u32, map_bytes: &[u8]) -> Vec<u8> {
         let mut out = Vec::with_capacity(LEAF_HEADER_LEN + map_bytes.len());
         out.push(TAG_LEAF);
@@ -83,8 +67,7 @@ impl ShardEntry {
         out
     }
 
-    /// エントリがリーフなら、ヘッダに埋めた保持件数を deserialize せず返す。
-    /// ポインタノードなら `None`。`table_count` の高速集計に使う。
+    /// ヘッダの件数をそのまま返す（deserialize しない）。ポインタノードなら `None`。
     pub fn leaf_count(entry: &[u8]) -> Result<Option<u32>, AppError> {
         match entry.first() {
             Some(&TAG_LEAF) => {
@@ -100,7 +83,6 @@ impl ShardEntry {
         }
     }
 
-    /// 子シャード領域へのポインタノードをエンコードする。
     pub fn encode_pointers(regions: &[FlexId]) -> Vec<u8> {
         let mut out = Vec::with_capacity(1 + regions.len() * FlexId::ENCODED_LEN);
         out.push(TAG_POINTERS);
@@ -110,10 +92,10 @@ impl ShardEntry {
         out
     }
 
-    /// ポインタノードなら子領域群を、リーフなら `None` を返す**軽量版**。
+    /// ポインタノードなら子領域群、リーフなら `None`。
     ///
-    /// ルーティングはタグだけ見れば十分なので、リーフ本体（`SpatialIdMap` バイト列）を
-    /// コピーする [`decode`](Self::decode) を避け、無駄なアロケーションをなくす。
+    /// ルーティングはタグだけ見れば足りるので、本体をコピーする [`decode`](Self::decode)
+    /// を避ける。
     pub fn child_pointers(bytes: &[u8]) -> Result<Option<Vec<FlexId>>, AppError> {
         match bytes.first() {
             Some(&TAG_LEAF) => Ok(None),
@@ -125,8 +107,7 @@ impl ShardEntry {
         }
     }
 
-    /// エントリ生バイト列がリーフなら、その中身（`SpatialIdMap` バイト列）への借用を返す。
-    /// ポインタノードなら `None`、不正なら `Err`。
+    /// リーフなら中身への借用、ポインタノードなら `None`。
     pub fn leaf_payload(entry: &[u8]) -> Result<Option<&[u8]>, AppError> {
         match entry.first() {
             Some(&TAG_LEAF) => {
