@@ -7,7 +7,7 @@
 //! # なぜ分けるのか
 //!
 //! - **テーブル全体の排他が要らなくなる。** データ書き込みはリーフ単位でしか
-//!   ロックを取らないので（`data.rs`）、削除時に実体を消そうとすると並行中の
+//!   ロックを取らないので（`tree/write.rs`）、削除時に実体を消そうとすると並行中の
 //!   書き込みと衝突しないことを保証できない。カタログから辿れなくしてしまえば、
 //!   取り残されたキーは誰にも見えない。
 //! - **1 トランザクションのサイズ上限に縛られない。** 大きなテーブルの全キーを
@@ -99,33 +99,28 @@ impl GcConfig {
     /// - `KASANE_TIKV_GC_CHUNK_DELAY_MS`（既定 200）
     /// - `KASANE_TIKV_GC_MAX_CHUNKS`（既定 16）
     pub fn from_env() -> Self {
-        fn num(name: &str, default: u64) -> u64 {
-            std::env::var(name)
-                .ok()
-                .and_then(|raw| raw.trim().parse::<u64>().ok())
-                .unwrap_or(default)
-        }
+        use super::init::env_parsed;
         Self {
-            mvcc_interval: Duration::from_secs(num(
+            mvcc_interval: Duration::from_secs(env_parsed(
                 "KASANE_TIKV_MVCC_GC_INTERVAL_SECS",
                 DEFAULT_MVCC_INTERVAL_SECS,
             )),
-            mvcc_retention: Duration::from_secs(num(
+            mvcc_retention: Duration::from_secs(env_parsed(
                 "KASANE_TIKV_MVCC_GC_RETENTION_SECS",
                 DEFAULT_MVCC_RETENTION_SECS,
             )),
-            interval: Duration::from_secs(num(
+            interval: Duration::from_secs(env_parsed(
                 "KASANE_TIKV_GC_INTERVAL_SECS",
                 DEFAULT_SWEEP_INTERVAL_SECS,
             )),
-            chunk_delay: Duration::from_millis(num(
+            chunk_delay: Duration::from_millis(env_parsed(
                 "KASANE_TIKV_GC_CHUNK_DELAY_MS",
                 DEFAULT_CHUNK_DELAY_MS,
             )),
-            max_chunks_per_table: num(
+            max_chunks_per_table: env_parsed(
                 "KASANE_TIKV_GC_MAX_CHUNKS",
-                DEFAULT_MAX_CHUNKS_PER_TABLE as u64,
-            ) as usize,
+                DEFAULT_MAX_CHUNKS_PER_TABLE,
+            ),
         }
     }
 
@@ -155,15 +150,15 @@ impl<R: Reader> TikvRead<'_, R> {
     }
 }
 
-impl TikvWrite<'_> {
-    /// テーブルを回収待ち行列へ積む。
-    ///
-    /// 行列の表現（キーと値）を知るのはこのモジュールだけにしておきたいので、
-    /// カタログ側からは「回収に回す」とだけ言えるようにしてある。
-    pub(super) fn retire(&self, table_id: TableId) -> (Vec<u8>, Vec<u8>) {
-        (keys::garbage(table_id), QUEUED.to_vec())
-    }
+/// テーブルを回収待ち行列へ積む書き込み。
+///
+/// 行列の表現（キーと値）を知るのはこのモジュールだけにしておきたいので、
+/// カタログ側からは「回収に回す」とだけ言えるようにしてある。
+pub(super) fn retire(table_id: TableId) -> (Vec<u8>, Vec<u8>) {
+    (keys::garbage(table_id), QUEUED.to_vec())
+}
 
+impl TikvWrite<'_> {
     /// 1 テーブル分の実体を 1 チャンクだけ削除し、消した件数を返す。
     ///
     /// 消し切っていれば（`0` を返すなら）そのまま回収待ち行列からも外す。
@@ -177,7 +172,7 @@ impl TikvWrite<'_> {
                 return Ok(removed);
             }
         }
-        kv::delete(&self.txn, keys::garbage(table_id)).await?;
+        kv::delete(&self.txn, keys::garbage(table_id)).await;
         Ok(0)
     }
 }

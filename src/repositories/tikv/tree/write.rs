@@ -7,7 +7,7 @@ use kasane_logic::{FlexId, RangeId, SpatialIdSet};
 use rustc_hash::FxHashSet;
 use std::collections::BTreeSet;
 
-use super::leaf::{BatchWrite, OwnedLeafOp, apply_leaf, merge_children};
+use super::leaf::{BatchWrite, LeafOp, apply_leaf, merge_children};
 use super::node::archived_leaf;
 use super::routing::{ParentMap, RoutedLeaf, Routing, route_leaves_batched};
 use super::{
@@ -112,7 +112,7 @@ impl TikvWrite<'_> {
         table_id: TableId,
         index: Option<TableDataType>,
         leaves: Vec<RoutedLeaf>,
-        op: OwnedLeafOp,
+        op: LeafOp,
     ) -> Result<(), AppError> {
         if leaves.is_empty() {
             return Ok(());
@@ -123,7 +123,7 @@ impl TikvWrite<'_> {
             span.in_scope(|| {
                 let mut out = Vec::new();
                 for leaf in &leaves {
-                    apply_leaf(table_id, index, leaf, &op.borrow(), &mut out)?;
+                    apply_leaf(table_id, index, leaf, &op, &mut out)?;
                 }
                 Ok::<_, AppError>(out)
             })
@@ -131,7 +131,8 @@ impl TikvWrite<'_> {
         .await
         .map_err(|e| AppError::InternalError(format!("leaf write task: {e}")))??;
 
-        self.stage(mutations).await
+        kv::stage(&self.txn, mutations).await;
+        Ok(())
     }
 
     #[tracing::instrument(skip_all, fields(table_id = %table_id))]
@@ -144,7 +145,7 @@ impl TikvWrite<'_> {
     ) -> Result<(), AppError> {
         let flex_ids: Vec<FlexId> = ids.flex_ids().collect();
         let leaves = self.lock_target_leaves(table_id, &flex_ids).await?.leaves;
-        self.apply_leaves(table_id, index, leaves, OwnedLeafOp::Insert(data.to_vec()))
+        self.apply_leaves(table_id, index, leaves, LeafOp::Insert(data.to_vec()))
             .await
     }
 
@@ -167,7 +168,7 @@ impl TikvWrite<'_> {
             return Ok(());
         }
         let leaves = self.lock_target_leaves(table_id, &flex_ids).await?.leaves;
-        self.apply_leaves(table_id, index, leaves, OwnedLeafOp::InsertMany(batch))
+        self.apply_leaves(table_id, index, leaves, LeafOp::InsertMany(batch))
             .await
     }
 
@@ -181,7 +182,7 @@ impl TikvWrite<'_> {
     ) -> Result<(), AppError> {
         let flex_ids: Vec<FlexId> = ids.flex_ids().collect();
         let leaves = self.lock_target_leaves(table_id, &flex_ids).await?.leaves;
-        self.apply_leaves(table_id, index, leaves, OwnedLeafOp::Upsert(data.to_vec()))
+        self.apply_leaves(table_id, index, leaves, LeafOp::Upsert(data.to_vec()))
             .await
     }
 
@@ -196,7 +197,7 @@ impl TikvWrite<'_> {
         let routing = self.lock_target_leaves(table_id, &flex_ids).await?;
 
         let affected: Vec<FlexId> = routing.leaves.iter().map(|leaf| leaf.region).collect();
-        self.apply_leaves(table_id, index, routing.leaves, OwnedLeafOp::Remove)
+        self.apply_leaves(table_id, index, routing.leaves, LeafOp::Remove)
             .await?;
 
         // 同じ親を持つ兄弟がそれぞれ上へ辿ると、先の統合で消えた領域を後から調べに
@@ -209,13 +210,6 @@ impl TikvWrite<'_> {
         Ok(())
     }
 
-    /// 溜めた変更をトランザクションへ渡す。
-    async fn stage(&mut self, mutations: Vec<kv::Mutation>) -> Result<(), AppError> {
-        kv::mutate_many(&self.txn, mutations).await
-    }
-}
-
-impl TikvWrite<'_> {
     /// 削除でデータ量が減ったリーフを親へ統合し、可能な限り木を圧縮する。
     ///
     /// 統合は親と**その全子**を書き換えるので、判断の前にその集合をまとめてロックする。
@@ -305,7 +299,7 @@ impl TikvWrite<'_> {
             .await
             .map_err(|e| AppError::InternalError(format!("shard merge task: {e}")))??;
 
-            self.stage(mutations).await?;
+            kv::stage(&self.txn, mutations).await;
 
             // 子はもう存在しない。兄弟がここから上を辿り直さないよう印を付ける。
             settled.extend(child_regions);

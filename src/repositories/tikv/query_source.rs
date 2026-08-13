@@ -44,24 +44,6 @@ pub struct TikvTableSource<V> {
     handle: Handle,
 }
 
-impl<V> TikvTableSource<V> {
-    fn new(
-        db: TikvDb,
-        table_id: TableId,
-        decode: DecodeFn<V>,
-        snapshot_ts: Timestamp,
-        handle: Handle,
-    ) -> Self {
-        Self {
-            db,
-            table_id,
-            decode,
-            snapshot_ts,
-            handle,
-        }
-    }
-}
-
 impl TikvDb {
     /// テーブル 1 つをクエリの入力源として見せるアダプタを作る。
     ///
@@ -76,13 +58,13 @@ impl TikvDb {
         decode: DecodeFn<V>,
         snapshot_ts: Timestamp,
     ) -> TikvTableSource<V> {
-        TikvTableSource::new(
-            self.clone(),
+        TikvTableSource {
+            db: self.clone(),
             table_id,
             decode,
             snapshot_ts,
-            Handle::current(),
-        )
+            handle: Handle::current(),
+        }
     }
 }
 

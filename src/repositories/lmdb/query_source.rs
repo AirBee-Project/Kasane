@@ -24,7 +24,7 @@ use super::keys::TableIdAndFlexId;
 use super::shard;
 use crate::models::id::TableId;
 
-pub use crate::repositories::traits::DecodeFn;
+use crate::repositories::traits::DecodeFn;
 
 /// 1テーブルを 1 つのクエリ入力源として見せるアダプタ。
 ///

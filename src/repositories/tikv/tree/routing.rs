@@ -7,9 +7,7 @@ use kasane_logic::{FlexId, RangeId};
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
-use super::node::{decode_leaf, load_nodes};
-use kasane_logic::SpatialIdMap;
-
+use super::node::load_nodes;
 use super::{AppError, Reader, Readers, ShardEntry, ShardValue, TableId};
 
 // --- ルーティング ---
@@ -24,19 +22,10 @@ pub(super) struct RoutedLeaf {
     pub node: Option<ShardValue>,
 }
 
-impl RoutedLeaf {
-    pub(super) fn leaf_map(&self) -> Result<SpatialIdMap<Vec<u8>>, AppError> {
-        decode_leaf(&self.region, self.node.as_ref().map(ShardValue::entry))
-    }
-}
-
-/// ある領域の親と、その親が持つ全子領域。
+/// 子領域から `(親, 親が持つ全子領域)` を引く対応表。
 ///
-/// 兄弟のリストは親 1 つにつき 1 本しかないので、子の数だけ複製せず共有する。
-pub(super) type Parentage = (FlexId, Arc<Vec<FlexId>>);
-
-/// 子領域から親を引く対応表。
-pub(super) type ParentMap = FxHashMap<FlexId, Parentage>;
+/// 兄弟のリストは親 1 つにつき 1 本しかないので、子の数だけ複製せず [`Arc`] で共有する。
+pub(super) type ParentMap = FxHashMap<FlexId, (FlexId, Arc<Vec<FlexId>>)>;
 
 /// 降下でわかった木の形。
 pub(super) struct Routing {

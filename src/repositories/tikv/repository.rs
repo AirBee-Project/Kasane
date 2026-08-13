@@ -118,14 +118,6 @@ impl<R: Reader> ReadRepository for TikvRead<'_, R> {
             .await
     }
 
-    async fn get_user(&self, username: &str) -> Result<Option<User>, AppError> {
-        self.get_user_impl(username).await
-    }
-
-    async fn require_user(&self, username: &str) -> Result<User, AppError> {
-        self.require_user_impl(username).await
-    }
-
     async fn get_all_users(&self) -> Result<Vec<User>, AppError> {
         self.get_all_users_impl().await
     }

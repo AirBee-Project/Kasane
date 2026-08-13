@@ -27,21 +27,6 @@ pub(super) fn user_meta(
 }
 
 impl<'a> KasaneDbRead<'a> {
-    #[tracing::instrument(skip_all, fields(username = %username))]
-    pub async fn get_user_impl(&self, username: &str) -> Result<Option<User>, AppError> {
-        Ok(CatalogRepository::user_meta(self, username)
-            .await?
-            .map(|meta| User::from_meta(username, meta)))
-    }
-
-    #[tracing::instrument(skip_all, fields(username = %username))]
-    pub async fn require_user_impl(&self, username: &str) -> Result<User, AppError> {
-        Ok(User::from_meta(
-            username,
-            self.require_user_meta(username).await?,
-        ))
-    }
-
     #[tracing::instrument(skip_all)]
     pub fn get_all_users_impl(&self) -> Result<Vec<User>, AppError> {
         let mut users = Vec::new();

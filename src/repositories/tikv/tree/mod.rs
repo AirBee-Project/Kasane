@@ -10,8 +10,7 @@
 //!
 //! ```text
 //!   read.rs      write.rs     ← 外向きの入口（TikvRead / TikvWrite の固有メソッド）
-//!      │            │
-//!      ├─ resolve.rs│         ← 葉の解決（CPU・rayon）
+//!      │            │           read.rs は葉の解決（CPU・rayon）も持つ
 //!      │            ├─ leaf.rs ← リーフの書き換え（純粋計算・blocking へ出す）
 //!      └──── routing.rs ──────┘ ← 木の降下（どのリーフが担当か）
 //!                │
@@ -53,7 +52,6 @@
 mod leaf;
 mod node;
 mod read;
-mod resolve;
 mod routing;
 mod write;
 

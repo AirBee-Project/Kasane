@@ -14,6 +14,7 @@ use crate::models::users::{
 };
 use crate::repositories::CatalogRepository;
 
+use super::catalog::{decode, encode};
 use super::kv::{Reader, Readers};
 use super::{TikvRead, TikvWrite, kv};
 
@@ -22,9 +23,7 @@ pub(super) async fn user_meta<R: Reader>(
     username: &str,
 ) -> Result<Option<UserMetadata>, AppError> {
     match kv::get(txn, keys::user(username)).await? {
-        Some(bytes) => Ok(Some(serde_json::from_slice(&bytes).map_err(|_| {
-            AppError::InternalError("Failed to parse user metadata".into())
-        })?)),
+        Some(bytes) => Ok(Some(decode("user", &bytes)?)),
         None => Ok(None),
     }
 }
@@ -34,27 +33,11 @@ async fn put_user_meta(
     username: &str,
     meta: &UserMetadata,
 ) -> Result<(), AppError> {
-    let bytes = serde_json::to_vec(meta)
-        .map_err(|_| AppError::InternalError("Failed to serialize user metadata".into()))?;
-    kv::put(txn, keys::user(username), bytes).await
+    kv::put(txn, keys::user(username), encode("user", meta)?).await;
+    Ok(())
 }
 
 impl<R: Reader> TikvRead<'_, R> {
-    #[tracing::instrument(skip_all, fields(username = %username))]
-    pub(super) async fn get_user_impl(&self, username: &str) -> Result<Option<User>, AppError> {
-        Ok(user_meta(&self.txn, username)
-            .await?
-            .map(|meta| User::from_meta(username, meta)))
-    }
-
-    #[tracing::instrument(skip_all, fields(username = %username))]
-    pub(super) async fn require_user_impl(&self, username: &str) -> Result<User, AppError> {
-        Ok(User::from_meta(
-            username,
-            self.require_user_meta(username).await?,
-        ))
-    }
-
     #[tracing::instrument(skip_all)]
     pub(super) async fn get_all_users_impl(&self) -> Result<Vec<User>, AppError> {
         let entries = kv::scan_prefix(&self.txn, &keys::Ns::Users.prefix()).await?;
@@ -62,9 +45,7 @@ impl<R: Reader> TikvRead<'_, R> {
             .iter()
             .map(|(key, value)| {
                 let username = keys::username_from_key(key)?;
-                let meta: UserMetadata = serde_json::from_slice(value)
-                    .map_err(|_| AppError::InternalError("Failed to parse user metadata".into()))?;
-                Ok(User::from_meta(username, meta))
+                Ok(User::from_meta(username, decode("user", value)?))
             })
             .collect()
     }
@@ -160,6 +141,7 @@ impl TikvWrite<'_> {
         self.require_lock(LockScope::User, username.as_bytes())?;
 
         self.require_user_meta(username).await?;
-        kv::delete(&self.txn, keys::user(username)).await
+        kv::delete(&self.txn, keys::user(username)).await;
+        Ok(())
     }
 }

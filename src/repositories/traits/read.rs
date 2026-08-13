@@ -84,9 +84,24 @@ pub trait ReadRepository: CatalogRepository {
         hi: &[u8],
     ) -> Result<Vec<FlexId>, AppError>;
 
-    async fn get_user(&self, username: &str) -> Result<Option<User>, AppError>;
-
-    async fn require_user(&self, username: &str) -> Result<User, AppError>;
-
     async fn get_all_users(&self) -> Result<Vec<User>, AppError>;
+
+    // --- 上に載る共通ロジック ---
+    //
+    // 1 ユーザーの参照は [`CatalogRepository`] の点参照だけで書けるので、
+    // バックエンドごとに同じ変換を持たせない。
+
+    async fn get_user(&self, username: &str) -> Result<Option<User>, AppError> {
+        Ok(self
+            .user_meta(username)
+            .await?
+            .map(|meta| User::from_meta(username, meta)))
+    }
+
+    async fn require_user(&self, username: &str) -> Result<User, AppError> {
+        Ok(User::from_meta(
+            username,
+            self.require_user_meta(username).await?,
+        ))
+    }
 }

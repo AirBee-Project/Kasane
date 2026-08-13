@@ -10,7 +10,7 @@
 //! | `keys.rs` | キーのバイト表現 |
 //! | `kv.rs` | このバックエンド固有の低レベルアクセス（LMDB 側は `shard.rs`） |
 //! | `catalog.rs` | データベース・テーブルのカタログ操作 |
-//! | `data.rs` | FlexTree のデータ操作 |
+//! | `tree/` | FlexTree のデータ操作（LMDB 側は `data.rs` 1 枚） |
 //! | `users.rs` | ユーザーと権限 |
 //! | `query_source.rs` | クエリ実行器への入力源 |
 //! | `repository.rs` | 抽象 trait への適合 |
@@ -31,11 +31,11 @@
 //!
 //! テーブル全体を排他しないため、**別のリーフへの書き込みは並列に流れる**。
 //! 複数の Kasane インスタンスが同じクラスタへ書き込む構成でも同じ。
-//! なぜリーフ単位のロックで足りるのかは `data.rs` の書き込みの節を参照。
+//! なぜリーフ単位のロックで足りるのかは `tree/write.rs` の冒頭を参照。
 //!
 //! ここを楽観トランザクションへ寄せたことがある。不変条件は楽観でも通用し、往復も
 //! 転送量も減るのだが、**競合の濃いワークロードで書き込みが落ちた**ので戻した。
-//! 経緯と実測は `data.rs` に残してある。
+//! 経緯と実測は `tree/write.rs` に残してある。
 //!
 //! ## カタログ経路：ロック専用トランザクション（**悲観のまま**）
 //!
@@ -155,14 +155,29 @@ const RETRY_BACKOFF_MAX: std::time::Duration = std::time::Duration::from_millis(
 /// 揺らぎを入れて、ぶつかった側が別々のタイミングへばらけるようにする。
 const RETRY_BACKOFF_JITTER_PERCENT: u64 = 20;
 
-/// 競合でやり直す前に待つ。
+/// 書き込みのやり直し状況。
 ///
-/// 4 か所から呼ばれるので、待ち方と回数の数え方が散らばらないよう 1 つにまとめてある
-/// （散らすと、片方だけ `last_error` を残し忘れるといった食い違いが起きる）。
-async fn back_off(conflicts: &mut u32, reason: AppError, last_error: &mut Option<AppError>) {
-    *last_error = Some(reason);
-    tokio::time::sleep(retry_backoff(*conflicts)).await;
-    *conflicts += 1;
+/// 「何回競合したか」と「直近の失敗理由」は常に一緒に更新される（片方だけ更新すると、
+/// 上限まで粘ったあとに理由の無いエラーを返すといった食い違いが起きる）。
+/// [`Storage::write`] の 4 か所から使うので、その組を型にして 1 つにまとめてある。
+#[derive(Default)]
+struct Retry {
+    conflicts: u32,
+    last_error: Option<AppError>,
+}
+
+impl Retry {
+    /// 競合を 1 回数え、次の試行まで待つ。
+    async fn back_off(&mut self, reason: AppError) {
+        self.last_error = Some(reason);
+        tokio::time::sleep(retry_backoff(self.conflicts)).await;
+        self.conflicts += 1;
+    }
+
+    /// 待たずにやり直す（競合ではないので回数に数えない）。
+    fn note(&mut self, reason: AppError) {
+        self.last_error = Some(reason);
+    }
 }
 
 /// `attempt` 回目の競合に対する待ち時間。
@@ -227,7 +242,7 @@ fn lock_options() -> TransactionOptions {
 /// 作業（書き込み）トランザクションの設定。
 ///
 /// **悲観**。一度は楽観へ寄せたが、競合の濃いワークロードで書き込みが落ちたため戻した
-/// （理由と実測は `data.rs` の書き込みの節）。[`lock_options`] と分けたままにしてあるのは、
+/// （理由と実測は `tree/write.rs` の冒頭）。[`lock_options`] と分けたままにしてあるのは、
 /// 将来また作業側だけを楽観へ寄せられるようにするため――そのときロック側まで
 /// 巻き込まないことが要点で、テストがそれを固定している。
 ///
@@ -384,8 +399,11 @@ impl LockGuard {
         Ok(Self { txn: Some(txn) })
     }
 
-    async fn release(mut self) {
-        if let Some(mut txn) = self.txn.take() {
+    /// 保持していれば解放する。空集合の試行では取っていないので何もしない。
+    async fn release(guard: Option<Self>) {
+        if let Some(mut guard) = guard
+            && let Some(mut txn) = guard.txn.take()
+        {
             let _ = txn.rollback().await;
         }
     }
@@ -396,13 +414,6 @@ impl Drop for LockGuard {
         if let Some(txn) = self.txn.take() {
             rollback_in_background(txn);
         }
-    }
-}
-
-/// ロックを保持していれば解放する。空集合の試行では取っていないので何もしない。
-async fn release(guard: Option<LockGuard>) {
-    if let Some(guard) = guard {
-        guard.release().await;
     }
 }
 
@@ -584,10 +595,9 @@ impl Storage for TikvDb {
         T: Send + 'static,
     {
         let mut locks: BTreeSet<Vec<u8>> = BTreeSet::new();
-        let mut last_error: Option<AppError> = None;
         // 競合でのやり直しだけを数える。ロック不足での巻き戻しは待つ理由がない
         // （相手を待っているのではなく、必要な範囲が判っただけなので）。
-        let mut conflicts: u32 = 0;
+        let mut retry = Retry::default();
         // 1PC を試すか。断られたら諦めて 2PC でやり直す（[`is_one_pc_failure`]）。
         // 試行をまたいで持ち回るのが要点で、そうしないと断られ続ける構成で
         // 毎回 1 回ぶん無駄な prewrite を投げ、上限まで失敗し続ける。
@@ -603,7 +613,7 @@ impl Storage for TikvDb {
                 match LockGuard::acquire(&self.client, &locks).await {
                     Ok(guard) => Some(guard),
                     Err(e) if is_retryable(&e) => {
-                        back_off(&mut conflicts, AppError::from(e), &mut last_error).await;
+                        retry.back_off(AppError::from(e)).await;
                         continue;
                     }
                     Err(e) => return Err(AppError::from(e)),
@@ -649,7 +659,7 @@ impl Storage for TikvDb {
             // 3. やり直しが要るなら、この試行は捨てる。
             if restart {
                 rollback(txn).await;
-                release(guard).await;
+                LockGuard::release(guard).await;
                 locks.extend(newly_required);
                 // 古い読みが原因なら、他者のコミットが見えるようになるまで少し待つ。
                 // ロック不足が原因の場合は待つ理由がない（競合ではなく、必要な範囲が
@@ -659,7 +669,7 @@ impl Storage for TikvDb {
                         "read a stale view of the shard tree; retrying with a newer snapshot"
                             .to_string(),
                     );
-                    back_off(&mut conflicts, reason, &mut last_error).await;
+                    retry.back_off(reason).await;
                 }
                 continue;
             }
@@ -667,9 +677,9 @@ impl Storage for TikvDb {
             // 送信そのものが失敗したなら、コミットへは進まない。
             if let Err(e) = flushed {
                 rollback(txn).await;
-                release(guard).await;
+                LockGuard::release(guard).await;
                 if is_retryable(&e) {
-                    back_off(&mut conflicts, AppError::from(e), &mut last_error).await;
+                    retry.back_off(AppError::from(e)).await;
                     continue;
                 }
                 return Err(AppError::from(e));
@@ -684,18 +694,18 @@ impl Storage for TikvDb {
                 Err(app_err) => {
                     // クロージャが失敗したらコミットしない。ロックは必ず解放する。
                     rollback(txn).await;
-                    release(guard).await;
+                    LockGuard::release(guard).await;
                     if conflicted {
                         // 競合で弾かれただけなので、新しいトランザクションでやり直す。
                         // 呼び出し側から見て「書き込みは待たされても失敗しない」を保つ。
-                        back_off(&mut conflicts, app_err, &mut last_error).await;
+                        retry.back_off(app_err).await;
                         continue;
                     }
                     return Err(app_err);
                 }
             };
 
-            release(guard).await;
+            LockGuard::release(guard).await;
 
             match outcome {
                 Ok(value) => return Ok(value),
@@ -703,11 +713,11 @@ impl Storage for TikvDb {
                 Err(e) if is_one_pc_failure(&e) => {
                     tracing::debug!("TiKV declined one-phase commit; retrying with two-phase");
                     one_pc = false;
-                    last_error = Some(AppError::from(e));
+                    retry.note(AppError::from(e));
                     continue;
                 }
                 Err(e) if is_retryable(&e) => {
-                    back_off(&mut conflicts, AppError::from(e), &mut last_error).await;
+                    retry.back_off(AppError::from(e)).await;
                     continue;
                 }
                 Err(e) => return Err(AppError::from(e)),
@@ -716,7 +726,7 @@ impl Storage for TikvDb {
 
         // ここへ来る理由は 2 つある。競合し続けた（`last_error` あり）か、
         // ロック宣言が収束しなかった（実装のバグ）か。区別できるようにしておく。
-        Err(last_error.unwrap_or_else(|| {
+        Err(retry.last_error.unwrap_or_else(|| {
             AppError::Conflict(format!(
                 "write did not settle within {MAX_ATTEMPTS} attempts ({} lock(s) held at the end)",
                 locks.len()

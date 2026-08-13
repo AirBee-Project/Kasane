@@ -295,22 +295,10 @@ impl LazyTxn {
     }
 
     /// 変更を台帳へ積む。**ここではネットワークに触れない**（[`pending`](Self::pending)）。
-    fn stage(&mut self, key: Vec<u8>, value: Option<Vec<u8>>) {
-        self.pending.insert(key, value);
-    }
-
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) {
-        self.stage(key, Some(value));
-    }
-
-    fn delete(&mut self, key: Vec<u8>) {
-        self.stage(key, None);
-    }
-
-    fn mutate(&mut self, mutations: Vec<Mutation>) {
+    fn stage(&mut self, mutations: impl IntoIterator<Item = Mutation>) {
         for m in mutations {
             let value = (m.op != Op::Del as i32).then_some(m.value);
-            self.stage(m.key, value);
+            self.pending.insert(m.key, value);
         }
     }
 
@@ -503,34 +491,40 @@ pub(super) async fn get<R: Reader>(
     txn.read_one(key).await.map_err(AppError::from)
 }
 
-pub(super) async fn put(
-    txn: &Readers<LazyTxn>,
-    key: Vec<u8>,
-    value: Vec<u8>,
-) -> Result<(), AppError> {
-    txn.lock().await.put(key, value);
-    Ok(())
+// --- 変更の登録 ---
+//
+// 書き込みは [`LazyTxn::pending`] へ積むだけなので**失敗しない**。実際の送信は
+// [`LazyTxn::flush`] がコミット直前に 1 回だけ行う。台帳は [`BTreeMap`] なので、
+// ここへ積む順序は送信順に影響しない（送信は常にキー昇順）。
+
+/// 変更をまとめて登録する。
+pub(super) async fn stage(txn: &Readers<LazyTxn>, mutations: impl IntoIterator<Item = Mutation>) {
+    txn.lock().await.stage(mutations);
 }
 
-pub(super) async fn delete(txn: &Readers<LazyTxn>, key: Vec<u8>) -> Result<(), AppError> {
-    txn.lock().await.delete(key);
-    Ok(())
+pub(super) async fn put(txn: &Readers<LazyTxn>, key: Vec<u8>, value: Vec<u8>) {
+    stage(txn, [put_mutation(key, value)]).await;
 }
 
-/// 複数キーへの変更をまとめて適用する。
-///
-/// 実際の送信は [`LazyTxn::flush`] がコミット直前に 1 回だけ行う。ここでの「まとめて」は
-/// **同じ台帳へ積む単位**という意味しか持たないが、呼び出し側から見た意味論
-/// （この変更群は不可分に適用される）は変わらない。
-pub(super) async fn mutate_many(
+pub(super) async fn delete(txn: &Readers<LazyTxn>, key: Vec<u8>) {
+    stage(txn, [delete_mutation(key)]).await;
+}
+
+pub(super) async fn put_many(
     txn: &Readers<LazyTxn>,
-    mutations: Vec<Mutation>,
-) -> Result<(), AppError> {
-    if mutations.is_empty() {
-        return Ok(());
-    }
-    txn.lock().await.mutate(mutations);
-    Ok(())
+    entries: impl IntoIterator<Item = (Vec<u8>, Vec<u8>)>,
+) {
+    stage(
+        txn,
+        entries
+            .into_iter()
+            .map(|(key, value)| put_mutation(key, value)),
+    )
+    .await;
+}
+
+pub(super) async fn delete_many(txn: &Readers<LazyTxn>, keys: impl IntoIterator<Item = Vec<u8>>) {
+    stage(txn, keys.into_iter().map(delete_mutation)).await;
 }
 
 /// `key -> value` の書き込みを表す [`Mutation`]。
@@ -551,46 +545,6 @@ pub(super) fn delete_mutation(key: Vec<u8>) -> Mutation {
         value: Vec::new(),
         assertion: Assertion::None as i32,
     }
-}
-
-/// 削除と書き込みをまとめて 1 回の変更として適用する。
-///
-/// キー順に並べてから渡すので、ロック取得順に依存するデッドロック回避の前提を保てる
-/// （削除と書き込みを別々に流すと、その間で順序が崩れる）。
-pub(super) async fn write_batch(
-    txn: &Readers<LazyTxn>,
-    deletes: impl IntoIterator<Item = Vec<u8>>,
-    puts: impl IntoIterator<Item = (Vec<u8>, Vec<u8>)>,
-) -> Result<(), AppError> {
-    let mut mutations: Vec<Mutation> = deletes
-        .into_iter()
-        .map(delete_mutation)
-        .chain(
-            puts.into_iter()
-                .map(|(key, value)| put_mutation(key, value)),
-        )
-        .collect();
-    mutations.sort_unstable_by(|a, b| a.key.cmp(&b.key));
-    mutate_many(txn, mutations).await
-}
-
-pub(super) async fn put_many(
-    txn: &Readers<LazyTxn>,
-    entries: impl IntoIterator<Item = (Vec<u8>, Vec<u8>)>,
-) -> Result<(), AppError> {
-    let mutations = entries
-        .into_iter()
-        .map(|(key, value)| put_mutation(key, value))
-        .collect();
-    mutate_many(txn, mutations).await
-}
-
-pub(super) async fn delete_many(
-    txn: &Readers<LazyTxn>,
-    keys: impl IntoIterator<Item = Vec<u8>>,
-) -> Result<(), AppError> {
-    let mutations = keys.into_iter().map(delete_mutation).collect();
-    mutate_many(txn, mutations).await
 }
 
 /// 複数キーをまとめて引く。存在しないキーは結果に現れない。
@@ -694,38 +648,49 @@ async fn batch_get_fanned_out(
     }
 }
 
-fn range_from(start: Vec<u8>, end: Option<Vec<u8>>) -> BoundRange {
+/// `start`（含む）〜`end`（排他、`None` なら終端まで）を覆う範囲。
+fn range_from(start: Vec<u8>, end: Option<&[u8]>) -> BoundRange {
     match end {
-        Some(end) => BoundRange::from(start..end),
+        Some(end) => BoundRange::from(start..end.to_vec()),
         None => BoundRange::from(start..),
     }
 }
 
-/// プレフィックスに一致する全キーと値を取り出す（バッチ分割して読み切る）。
+/// 読み切ったか、次のバッチをどこから読むか。
+///
+/// TiKV は 1 リクエストの件数に上限があるので、スキャンは [`SCAN_BATCH`] 件ずつに
+/// 分けて読み進める。その継続判断はどのスキャンでも同じなので、ここに 1 つだけ置く。
+///
+/// **判定は生の取得件数で行う。** 未送信の変更を重ねるのは読み切ったあとで、
+/// 途中で件数を増減させると読み切る前に止まったり同じ場所を読み直したりする。
+fn next_cursor(last_key: &[u8], fetched: usize) -> Option<Vec<u8>> {
+    if fetched < SCAN_BATCH as usize {
+        return None;
+    }
+    // 次のバッチは最後に読んだキーの直後から。
+    let mut cursor = last_key.to_vec();
+    cursor.push(0);
+    Some(cursor)
+}
+
+/// プレフィックスに一致する全キーと値を取り出す。
 pub(super) async fn scan_prefix<R: Reader>(
     txn: &Readers<R>,
     prefix: &[u8],
 ) -> Result<Vec<(Vec<u8>, Vec<u8>)>, AppError> {
     let end = keys::prefix_end(prefix);
-    let mut start = prefix.to_vec();
+    let mut cursor = Some(prefix.to_vec());
     let mut out: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
 
-    loop {
+    while let Some(start) = cursor {
         let batch = {
             let mut txn = txn.lock().await;
-            txn.read_range(range_from(start.clone(), end.clone()), SCAN_BATCH)
+            txn.read_range(range_from(start, end.as_deref()), SCAN_BATCH)
                 .await?
         };
-
-        // 終端の判定は**生の取得件数**で行う。重ねるのは読み切ったあと。
         let fetched = batch.len();
         out.extend(batch);
-        if fetched < SCAN_BATCH as usize {
-            break;
-        }
-        // 次のバッチは最後に読んだキーの直後から。
-        start = out.last().expect("バッチが空でない").0.clone();
-        start.push(0);
+        cursor = out.last().and_then(|(key, _)| next_cursor(key, fetched));
     }
 
     let staged = txn.lock().await.staged_range(prefix, end.as_deref());
@@ -743,32 +708,24 @@ pub(super) async fn scan_prefix<R: Reader>(
     Ok(merged.into_iter().collect())
 }
 
-/// 指定範囲のキーだけを取り出す（バッチ分割して読み切る）。
-/// `start`（含む）から `end`（排他、`None` なら終端まで）のキーを取り出す。
+/// `start`（含む）から `end`（排他、`None` なら終端まで）のキーだけを取り出す。
 pub(super) async fn scan_keys_range<R: Reader>(
     txn: &Readers<R>,
     start: Vec<u8>,
     end: Option<Vec<u8>>,
 ) -> Result<Vec<Vec<u8>>, AppError> {
-    let mut cursor = start.clone();
+    let mut cursor = Some(start.clone());
     let mut out: Vec<Vec<u8>> = Vec::new();
 
-    loop {
+    while let Some(from) = cursor {
         let batch = {
             let mut txn = txn.lock().await;
-            txn.read_range_keys(range_from(cursor.clone(), end.clone()), SCAN_BATCH)
+            txn.read_range_keys(range_from(from, end.as_deref()), SCAN_BATCH)
                 .await?
         };
-
-        // 終端の判定は**生の取得件数**で行う。重ねるのは読み切ったあと。
         let fetched = batch.len();
         out.extend(batch);
-        if fetched < SCAN_BATCH as usize {
-            break;
-        }
-        // 次のバッチは最後に読んだキーの直後から。
-        cursor = out.last().expect("バッチが空でない").clone();
-        cursor.push(0);
+        cursor = out.last().and_then(|key| next_cursor(key, fetched));
     }
 
     let staged = txn.lock().await.staged_range(&start, end.as_deref());
@@ -799,12 +756,11 @@ pub(super) async fn scan_prefix_keys<R: Reader>(
 pub(super) async fn scan_inclusive_keys<R: Reader>(
     txn: &Readers<R>,
     start: Vec<u8>,
-    end_inclusive: Vec<u8>,
+    mut end_inclusive: Vec<u8>,
 ) -> Result<Vec<Vec<u8>>, AppError> {
     // 終端を含めたいので、末尾に 0 を足して排他終端へ変換する。
-    let mut end = end_inclusive;
-    end.push(0);
-    scan_keys_range(txn, start, Some(end)).await
+    end_inclusive.push(0);
+    scan_keys_range(txn, start, Some(end_inclusive)).await
 }
 
 // --- シャード値のフレーム ---
@@ -834,12 +790,14 @@ pub(super) struct ShardValue {
     framed: Vec<u8>,
 }
 
-impl ShardValue {
-    /// 保存されていたバイト列を検証して受け取る。
-    ///
-    /// CRC が合わない場合は「壊れている」ものとして拒否する。ここを通過したバイト列だけが
-    /// `access_unchecked` へ渡る。
-    fn verify(framed: Vec<u8>) -> Result<Self, AppError> {
+/// 保存されていたバイト列を検証して受け取る。
+///
+/// CRC が合わない場合は「壊れている」ものとして拒否する。ここを通過したバイト列だけが
+/// `access_unchecked` へ渡る。
+impl TryFrom<Vec<u8>> for ShardValue {
+    type Error = AppError;
+
+    fn try_from(framed: Vec<u8>) -> Result<Self, AppError> {
         if framed.len() < FRAME_HEADER_LEN {
             return Err(AppError::StorageError(
                 "shard value is shorter than its frame header".to_string(),
@@ -858,7 +816,9 @@ impl ShardValue {
         }
         Ok(Self { framed })
     }
+}
 
+impl ShardValue {
     /// 検証済みのシャードエントリ（`encoding::shard_entry` の形式）。
     pub(super) fn entry(&self) -> &[u8] {
         &self.framed[FRAME_HEADER_LEN..]
@@ -899,7 +859,7 @@ fn frame(entry: &[u8]) -> Vec<u8> {
 ///
 /// 送信と分けてあるのは、書き込み経路の重い計算（rkyv の復元・直列化）を非同期ワーカーの
 /// 外へ出すため。変更を値として組み立てられれば、その計算ごと blocking タスクへ移せる
-/// （`data.rs` の書き込みの節を参照）。
+/// （`tree/leaf.rs` の設計メモを参照）。
 pub(super) fn shard_mutations(
     table_id: TableId,
     region: &FlexId,
@@ -975,7 +935,7 @@ pub(super) async fn lock_shards(
     let mut out = BTreeMap::new();
     for (key, region) in by_key {
         let value = match found.remove(&key) {
-            Some(framed) => Some(ShardValue::verify(framed)?),
+            Some(framed) => Some(ShardValue::try_from(framed)?),
             None => None,
         };
         out.insert(region, value);
@@ -996,7 +956,7 @@ pub(super) async fn delete_prefix_chunk(
     let batch = {
         let mut txn = txn.lock().await;
         let raw = txn
-            .read_range_keys(range_from(prefix.to_vec(), end.clone()), limit)
+            .read_range_keys(range_from(prefix.to_vec(), end.as_deref()), limit)
             .await?;
         // 同じトランザクションで既に消したキーは数えない。数えてしまうと
         // 「まだ残っている」と読めてしまい、呼び出し側の繰り返しが止まらなくなる。
@@ -1015,7 +975,7 @@ pub(super) async fn delete_prefix_chunk(
         }
     };
     let removed = batch.len();
-    delete_many(txn, batch).await?;
+    delete_many(txn, batch).await;
     Ok(removed)
 }
 
@@ -1042,7 +1002,7 @@ pub(super) async fn batch_get_shards<R: Reader>(
     batch_get(txn, keys)
         .await?
         .into_iter()
-        .map(|(key, framed)| Ok((key, ShardValue::verify(framed)?)))
+        .map(|(key, framed)| Ok((key, ShardValue::try_from(framed)?)))
         .collect()
 }
 
@@ -1053,7 +1013,7 @@ pub(super) async fn scan_shard_prefix<R: Reader>(
     scan_prefix(txn, prefix)
         .await?
         .into_iter()
-        .map(|(key, framed)| Ok((key, ShardValue::verify(framed)?)))
+        .map(|(key, framed)| Ok((key, ShardValue::try_from(framed)?)))
         .collect()
 }
 
@@ -1064,13 +1024,13 @@ mod tests {
     #[test]
     fn framed_value_round_trips() {
         let entry = b"shard entry bytes".to_vec();
-        let value = ShardValue::verify(frame(&entry)).unwrap();
+        let value = ShardValue::try_from(frame(&entry)).unwrap();
         assert_eq!(value.entry(), entry.as_slice());
     }
 
     #[test]
     fn empty_entry_round_trips() {
-        let value = ShardValue::verify(frame(&[])).unwrap();
+        let value = ShardValue::try_from(frame(&[])).unwrap();
         assert_eq!(value.entry(), b"");
     }
 
@@ -1080,16 +1040,16 @@ mod tests {
         // ペイロードの 1 バイトだけを壊す（CRC ヘッダは触らない）。
         let last = framed.len() - 1;
         framed[last] ^= 0xFF;
-        assert!(ShardValue::verify(framed).is_err());
+        assert!(ShardValue::try_from(framed).is_err());
     }
 
     #[test]
     fn truncated_value_is_rejected() {
         let mut framed = frame(b"shard entry bytes");
         framed.truncate(framed.len() - 3);
-        assert!(ShardValue::verify(framed).is_err());
+        assert!(ShardValue::try_from(framed).is_err());
         // ヘッダにも届かない長さも弾く（スライスで panic しないこと）。
-        assert!(ShardValue::verify(vec![0x00, 0x01]).is_err());
-        assert!(ShardValue::verify(Vec::new()).is_err());
+        assert!(ShardValue::try_from(vec![0x00, 0x01]).is_err());
+        assert!(ShardValue::try_from(Vec::new()).is_err());
     }
 }

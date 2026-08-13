@@ -117,14 +117,6 @@ impl ReadRepository for KasaneDbRead<'_> {
         self.data_filter_range_impl(table_id, data_type, lo, hi)
     }
 
-    async fn get_user(&self, username: &str) -> Result<Option<User>, AppError> {
-        self.get_user_impl(username).await
-    }
-
-    async fn require_user(&self, username: &str) -> Result<User, AppError> {
-        self.require_user_impl(username).await
-    }
-
     async fn get_all_users(&self) -> Result<Vec<User>, AppError> {
         self.get_all_users_impl()
     }

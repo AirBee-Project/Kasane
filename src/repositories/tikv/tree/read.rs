@@ -1,10 +1,17 @@
 //! 読み取りの入口。`TikvRead` に生やす固有メソッドはここだけ。
+//!
+//! 降下（ネットワーク）は [`routing`](super::routing) に任せ、ここは
+//! **降下で決まった葉から値を取り出す**側を持つ。葉の走査は FlexId 数に比例する
+//! CPU 処理なので、非同期ワーカーを占有しないよう blocking タスクへ出したうえで、
+//! 葉が多ければ rayon で分散する（モジュール冒頭の「CPU をどこで回すか」）。
+
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use kasane_logic::{FlexId, RangeId, SpatialIdSet};
+use rustc_hash::FxHashMap;
 
 use super::node::archived_leaf;
-use super::resolve::resolve_leaves_off_worker;
-use super::routing::{RoutedRange, route_leaves_batched, route_leaves_for_ranges};
+use super::routing::{RoutedLeaf, RoutedRange, route_leaves_batched, route_leaves_for_ranges};
 use super::{
     AppError, LEAF_PARALLEL_THRESHOLD, Reader, TableDataType, TableId, TikvRead, ValueMap, keys, kv,
 };
@@ -45,16 +52,11 @@ impl<R: Reader> TikvRead<'_, R> {
             let routed = route_leaves_batched(&self.txn, table_id, &batch)
                 .await?
                 .leaves;
-            let partial = resolve_leaves_off_worker(routed, limit, held).await?;
+            let partial = resolve_leaves(routed, limit, held).await?;
 
-            for (value, mut flex_ids) in partial {
+            for (value, flex_ids) in partial {
                 held += flex_ids.len();
-                match by_value.get_mut(&value) {
-                    Some(existing) => existing.append(&mut flex_ids),
-                    None => {
-                        by_value.insert(value, flex_ids);
-                    }
-                }
+                merge_into(&mut by_value, &value, flex_ids);
             }
         }
 
@@ -148,6 +150,128 @@ impl<R: Reader> TikvRead<'_, R> {
         }
         let leaves = route_leaves_for_ranges(&self.txn, table_id, ranges).await?;
         decode_range_leaves(&leaves, ranges, decode)
+    }
+}
+
+// --- 葉の解決（CPU 側） ---
+
+/// 1 枚のリーフを走査し、そこへ振り分けられた各クエリを解決して `by_value` へ積む。
+///
+/// FlexId ごとに値バイト列でハッシュすると、値の種類が少数でも結果 FlexId の数だけ
+/// 長いバイト列をハッシュすることになる。そこでまず**この葉ローカルの辞書インデックス
+/// （`u32`）**でグルーピングし（整数ハッシュは軽い）、葉に現れた distinct 値の数だけ
+/// 実バイト列へ復元して全体マップへマージする。
+fn resolve_leaf(
+    leaf: &RoutedLeaf,
+    by_value: &mut ValueMap,
+    limit: Option<usize>,
+    counter: &AtomicUsize,
+) -> Result<(), AppError> {
+    // 未作成領域にはデータが無い。
+    let Some(node) = &leaf.node else {
+        return Ok(());
+    };
+    let arch = archived_leaf(node.entry())?;
+
+    let mut local: FxHashMap<u32, Vec<FlexId>> = FxHashMap::default();
+    // カウンタへの反映をまとめる粒度。1 件ごとに触ると原子操作が支配的になる。
+    let batch = limit.unwrap_or(0).clamp(1, 256);
+    let mut counted = 0usize;
+
+    for query in &leaf.queries {
+        if limit.is_some_and(|l| counter.load(Ordering::Relaxed) >= l) {
+            break;
+        }
+        arch.get_indexed(query, |got, packed| {
+            if let Some(limit) = limit {
+                if counter.load(Ordering::Relaxed) >= limit {
+                    return;
+                }
+                counted += 1;
+                if counted >= batch {
+                    counter.fetch_add(counted, Ordering::Relaxed);
+                    counted = 0;
+                }
+            }
+            local.entry(packed).or_default().push(got);
+        });
+    }
+    if counted > 0 {
+        counter.fetch_add(counted, Ordering::Relaxed);
+    }
+
+    // 葉の distinct 値だけ実バイト列へ復元して全体マップへマージする。
+    for (packed, flex_ids) in local {
+        merge_into(by_value, arch.value_bytes(packed), flex_ids);
+    }
+    Ok(())
+}
+
+/// 葉をまとめて解決する。
+///
+/// 葉は互いに独立（同一 FlexId は 1 つの葉にしか属さない）なので、部分マップを作って
+/// 最後に値でマージするだけで正しく合流できる。走査は blocking タスクの上で行い、
+/// 葉が多ければさらに rayon で分散する。
+async fn resolve_leaves(
+    leaves: Vec<RoutedLeaf>,
+    limit: Option<usize>,
+    held: usize,
+) -> Result<ValueMap, AppError> {
+    if leaves.is_empty() {
+        return Ok(ValueMap::default());
+    }
+    // blocking タスクは呼び出し元のスパンを引き継がないので、明示的に渡す。
+    let span = tracing::Span::current();
+    tokio::task::spawn_blocking(move || {
+        span.in_scope(|| {
+            let counter = AtomicUsize::new(held);
+            let resolve_chunk = |chunk: &[RoutedLeaf]| -> Result<ValueMap, AppError> {
+                let mut out = ValueMap::default();
+                for leaf in chunk {
+                    if limit.is_some_and(|l| counter.load(Ordering::Relaxed) >= l) {
+                        break;
+                    }
+                    resolve_leaf(leaf, &mut out, limit, &counter)?;
+                }
+                Ok(out)
+            };
+
+            if leaves.len() < LEAF_PARALLEL_THRESHOLD {
+                return resolve_chunk(&leaves);
+            }
+
+            use rayon::prelude::*;
+            // 葉ごとに 1 タスクにすると、小さな葉ばかりのときに分配のほうが高くつく。
+            let chunk = leaves
+                .len()
+                .div_ceil(rayon::current_num_threads().max(1))
+                .max(1);
+            let partials: Vec<ValueMap> = leaves
+                .par_chunks(chunk)
+                .map(&resolve_chunk)
+                .collect::<Result<Vec<_>, AppError>>()?;
+
+            let mut out = ValueMap::default();
+            for partial in partials {
+                for (value, flex_ids) in partial {
+                    merge_into(&mut out, &value, flex_ids);
+                }
+            }
+            Ok(out)
+        })
+    })
+    .await
+    .map_err(|e| AppError::InternalError(format!("leaf resolution task: {e}")))?
+}
+
+/// 同じ値へ集まった FlexId を 1 つのマップへ寄せる。
+/// 既にある値には追記し、初出のときだけバイト列を確保する。
+fn merge_into(by_value: &mut ValueMap, value: &[u8], mut flex_ids: Vec<FlexId>) {
+    match by_value.get_mut(value) {
+        Some(existing) => existing.append(&mut flex_ids),
+        None => {
+            by_value.insert(value.to_vec(), flex_ids);
+        }
     }
 }
 

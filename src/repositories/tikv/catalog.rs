@@ -11,24 +11,21 @@ use crate::models::database::{DatabaseInfoResponse, DatabaseMetadata};
 use crate::models::id::{DatabaseId, TableId};
 use crate::repositories::ResolvedTable;
 
-fn encode_database(meta: &DatabaseMetadata) -> Result<Vec<u8>, AppError> {
+/// メタデータ（データベース・テーブル・ユーザー）は JSON で保存する。
+///
+/// LMDB 側は heed の [`SerdeJson`](heed::types::SerdeJson) が同じ役割を担うので、
+/// 対応するのはこの 2 つだけ。何を扱っているかは失敗時の文言のためだけに受け取る。
+pub(super) fn encode<T: serde::Serialize>(what: &str, meta: &T) -> Result<Vec<u8>, AppError> {
     serde_json::to_vec(meta)
-        .map_err(|e| AppError::InternalError(format!("failed to encode database metadata: {e}")))
+        .map_err(|e| AppError::InternalError(format!("failed to encode {what} metadata: {e}")))
 }
 
-fn decode_database(bytes: &[u8]) -> Result<DatabaseMetadata, AppError> {
+pub(super) fn decode<T: serde::de::DeserializeOwned>(
+    what: &str,
+    bytes: &[u8],
+) -> Result<T, AppError> {
     serde_json::from_slice(bytes)
-        .map_err(|e| AppError::InternalError(format!("failed to decode database metadata: {e}")))
-}
-
-fn encode_table(meta: &TableMetadata) -> Result<Vec<u8>, AppError> {
-    serde_json::to_vec(meta)
-        .map_err(|e| AppError::InternalError(format!("failed to encode table metadata: {e}")))
-}
-
-fn decode_table(bytes: &[u8]) -> Result<TableMetadata, AppError> {
-    serde_json::from_slice(bytes)
-        .map_err(|e| AppError::InternalError(format!("failed to decode table metadata: {e}")))
+        .map_err(|e| AppError::InternalError(format!("failed to decode {what} metadata: {e}")))
 }
 
 pub(super) async fn database_meta<R: Reader>(
@@ -39,7 +36,7 @@ pub(super) async fn database_meta<R: Reader>(
         return Ok(None);
     }
     match kv::get(txn, keys::database(name)).await? {
-        Some(bytes) => Ok(Some(decode_database(&bytes)?)),
+        Some(bytes) => Ok(Some(decode("database", &bytes)?)),
         None => Ok(None),
     }
 }
@@ -60,7 +57,7 @@ pub(super) async fn table_meta<R: Reader>(
         return Ok(None);
     }
     match kv::get(txn, keys::table(db_id, table_name)).await? {
-        Some(bytes) => Ok(Some(decode_table(&bytes)?)),
+        Some(bytes) => Ok(Some(decode("table", &bytes)?)),
         None => Ok(None),
     }
 }
@@ -149,7 +146,7 @@ pub(super) async fn resolve_tables<R: Reader>(
     let mut db_ids: HashMap<&str, DatabaseId> = HashMap::new();
     for (key, bytes) in kv::batch_get(txn, db_keys.keys().cloned().collect()).await? {
         if let Some(name) = db_keys.get(&key) {
-            db_ids.insert(name, decode_database(&bytes)?.id);
+            db_ids.insert(name, decode::<DatabaseMetadata>("database", &bytes)?.id);
         }
     }
 
@@ -166,7 +163,7 @@ pub(super) async fn resolve_tables<R: Reader>(
 
     let mut metas: HashMap<Vec<u8>, TableMetadata> = HashMap::new();
     for (key, bytes) in kv::batch_get(txn, table_keys.into_iter().collect()).await? {
-        metas.insert(key, decode_table(&bytes)?);
+        metas.insert(key, decode("table", &bytes)?);
     }
 
     // 入力と同じ並びで組み立てる。同じ参照が複数回現れても、引いたのは 1 度きり。
@@ -212,7 +209,7 @@ pub(super) async fn table_list_by_id<R: Reader>(
         .iter()
         .map(|(key, value)| {
             let name = keys::table_name_from_key(key)?;
-            Ok(Table::from_meta(name, decode_table(value)?))
+            Ok(Table::from_meta(name, decode("table", value)?))
         })
         .collect()
 }
@@ -227,7 +224,7 @@ impl<R: Reader> TikvRead<'_, R> {
             .iter()
             .map(|(key, value)| {
                 let name = keys::database_name_from_key(key)?;
-                let meta = decode_database(value)?;
+                let meta: DatabaseMetadata = decode("database", value)?;
                 Ok((
                     meta.id,
                     DatabaseInfoResponse {
@@ -276,13 +273,13 @@ impl TikvWrite<'_> {
             id,
             description: description.clone(),
         };
-        kv::put(&self.txn, keys::database(name), encode_database(&meta)?).await?;
+        kv::put(&self.txn, keys::database(name), encode("database", &meta)?).await;
         kv::put(
             &self.txn,
             keys::database_id_index(id),
             name.as_bytes().to_vec(),
         )
-        .await?;
+        .await;
 
         Ok(DatabaseInfoResponse {
             name: name.to_string(),
@@ -311,14 +308,14 @@ impl TikvWrite<'_> {
         // この一覧が途中で増えることはない（`table_create` も同じロックを取る）。
         let tables = table_list_by_id(&self.txn, meta.id).await?;
         for table in tables {
-            self.retire_table(meta.id, &table.name, table.id).await?;
+            self.retire_table(meta.id, &table.name, table.id).await;
         }
 
         kv::delete_many(
             &self.txn,
             [keys::database(name), keys::database_id_index(meta.id)],
         )
-        .await?;
+        .await;
         Ok(())
     }
 
@@ -358,20 +355,20 @@ impl TikvWrite<'_> {
         }
 
         if name != final_new_name {
-            kv::delete(&self.txn, keys::database(name)).await?;
+            kv::delete(&self.txn, keys::database(name)).await;
             kv::put(
                 &self.txn,
                 keys::database_id_index(meta.id),
                 final_new_name.as_bytes().to_vec(),
             )
-            .await?;
+            .await;
         }
         kv::put(
             &self.txn,
             keys::database(final_new_name),
-            encode_database(&meta)?,
+            encode("database", &meta)?,
         )
-        .await?;
+        .await;
         Ok(())
     }
 
@@ -411,15 +408,15 @@ impl TikvWrite<'_> {
         kv::put(
             &self.txn,
             keys::database(copy_name),
-            encode_database(&copy_meta)?,
+            encode("database", &copy_meta)?,
         )
-        .await?;
+        .await;
         kv::put(
             &self.txn,
             keys::database_id_index(copy_db_id),
             copy_name.as_bytes().to_vec(),
         )
-        .await?;
+        .await;
 
         for table in src_tables {
             self.copy_table_into(src_meta.id, &table.name, copy_db_id, &table.name)
@@ -494,15 +491,15 @@ impl TikvWrite<'_> {
         kv::put(
             &self.txn,
             keys::table(db_meta.id, table_name),
-            encode_table(&meta)?,
+            encode("table", &meta)?,
         )
-        .await?;
+        .await;
         kv::put(
             &self.txn,
             keys::table_id_index(id),
             table_name.as_bytes().to_vec(),
         )
-        .await?;
+        .await;
 
         Ok(Table {
             id,
@@ -592,20 +589,20 @@ impl TikvWrite<'_> {
         };
 
         if changed_name {
-            kv::delete(&self.txn, keys::table(db_meta.id, table_name)).await?;
+            kv::delete(&self.txn, keys::table(db_meta.id, table_name)).await;
             kv::put(
                 &self.txn,
                 keys::table_id_index(table.id),
                 table.name.as_bytes().to_vec(),
             )
-            .await?;
+            .await;
         }
         kv::put(
             &self.txn,
             keys::table(db_meta.id, &table.name),
-            encode_table(&meta)?,
+            encode("table", &meta)?,
         )
-        .await?;
+        .await;
 
         Ok(table)
     }
@@ -632,7 +629,8 @@ impl TikvWrite<'_> {
                 name: table_name.to_string(),
             })?;
 
-        self.retire_table(db_meta.id, table_name, table.id).await
+        self.retire_table(db_meta.id, table_name, table.id).await;
+        Ok(())
     }
 
     #[tracing::instrument(skip_all, fields(src_db_name = %src_db_name, src_table_name = %src_table_name, copy_db_name = %copy_db_name, copy_table_name = %copy_table_name))]
@@ -714,15 +712,15 @@ impl TikvWrite<'_> {
         kv::put(
             &self.txn,
             keys::table(dst_db_id, dst_table_name),
-            encode_table(&copy_meta)?,
+            encode("table", &copy_meta)?,
         )
-        .await?;
+        .await;
         kv::put(
             &self.txn,
             keys::table_id_index(copy_id),
             dst_table_name.as_bytes().to_vec(),
         )
-        .await?;
+        .await;
 
         // テーブルのデータ実体を、キー先頭の table_id だけ差し替えて複製する。
         // 対象は `keys::table_data_prefixes` が一括で決める。ここで自前に並べると、
@@ -737,7 +735,7 @@ impl TikvWrite<'_> {
                 keys::replace_leading_id(&mut dst, copy_id)?;
                 copied.push((dst, value));
             }
-            kv::put_many(&self.txn, copied).await?;
+            kv::put_many(&self.txn, copied).await;
         }
 
         Ok(Table {
@@ -757,7 +755,7 @@ impl TikvWrite<'_> {
     /// 実体の削除は [`gc`](super::gc) が後から分割して行う。こうする理由は 2 つある。
     ///
     /// - **テーブル全体の排他が要らなくなる。** データ書き込みはリーフ単位でしか
-    ///   ロックを取らないので（`data.rs`）、実体をここで消そうとすると並行中の
+    ///   ロックを取らないので（`tree/write.rs`）、実体をここで消そうとすると並行中の
     ///   書き込みと衝突しないことを保証できない。カタログから辿れなくしてしまえば、
     ///   取り残されたキーは誰にも見えず、回収するだけでよい。
     /// - **1 トランザクションのサイズ上限に縛られない。** 大きなテーブルの全キーを
@@ -766,22 +764,15 @@ impl TikvWrite<'_> {
     ///
     /// `TableId` は UUIDv7 なので再利用されない。回収前に飛び込んだ書き込みが
     /// 残骸を作っても、次の掃除で回収される。
-    async fn retire_table(
-        &mut self,
-        db_id: DatabaseId,
-        table_name: &str,
-        table_id: TableId,
-    ) -> Result<(), AppError> {
-        // カタログ項目の除去と回収待ち行列への登録は 1 回の変更にまとめる。
-        // 悲観トランザクションでは 1 キーごとにロック RPC がかかるため。
-        kv::write_batch(
+    async fn retire_table(&mut self, db_id: DatabaseId, table_name: &str, table_id: TableId) {
+        kv::delete_many(
             &self.txn,
             [
                 keys::table(db_id, table_name),
                 keys::table_id_index(table_id),
             ],
-            [self.retire(table_id)],
         )
-        .await
+        .await;
+        kv::put_many(&self.txn, [super::gc::retire(table_id)]).await;
     }
 }

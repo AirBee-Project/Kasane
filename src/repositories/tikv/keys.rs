@@ -13,6 +13,7 @@
 //!   0x06 ‖ table_id(16) ‖ flex_id        -> シャードエントリ
 //!   0x07 ‖ table_id(16) ‖ vkey ‖ flex_id -> 値インデックス（値なし）
 //!   0x08 ‖ table_id(16) ‖ flex_id        -> シャードの保持件数（u32 LE）
+//!   0x09 ‖ table_id(16)                  -> 回収待ちテーブル（値に意味なし）
 //!   0x7F ‖ scope ‖ id                    -> ロック専用キー（値を書かない）
 //! ```
 //!
@@ -26,6 +27,11 @@ use kasane_logic::FlexId;
 use crate::error::AppError;
 use crate::models::id::{DatabaseId, TableId};
 use crate::repositories::encoding::UUID_LEN;
+
+/// 与えたプレフィックスで始まる全キーを覆う範囲の終端（排他）。
+///
+/// バイト辞書順の操作そのものは両バックエンドで同じなので、実体は共通モジュールにある。
+pub use crate::repositories::encoding::prefix_end;
 
 /// 論理テーブルを区別する名前空間タグ。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,28 +122,25 @@ pub fn user(username: &str) -> Vec<u8> {
 
 /// [`Ns::Users`] のキーからユーザー名を取り出す。
 pub fn username_from_key(key: &[u8]) -> Result<&str, AppError> {
-    body_after_tag(key, "user").and_then(|body| {
-        std::str::from_utf8(body)
-            .map_err(|e| AppError::InternalError(format!("username is not valid utf-8: {e}")))
-    })
+    name_after_tag(key, "username")
 }
 
 /// [`Ns::Databases`] のキーからデータベース名を取り出す。
 pub fn database_name_from_key(key: &[u8]) -> Result<&str, AppError> {
-    body_after_tag(key, "database").and_then(|body| {
-        std::str::from_utf8(body)
-            .map_err(|e| AppError::InternalError(format!("database name is not valid utf-8: {e}")))
-    })
+    name_after_tag(key, "database name")
 }
 
-/// 名前空間タグ 1 バイトを剥がす。
+/// 名前空間タグ 1 バイトを剥がして、残りを名前として読む。
 ///
 /// スキャンで引いたキーは必ずタグを持つが、その前提を暗黙にせず確認する。
 /// 添字だけで剥がすと、想定外の短いキーが来たときに panic になる。
-fn body_after_tag<'k>(key: &'k [u8], what: &str) -> Result<&'k [u8], AppError> {
-    key.split_first()
+fn name_after_tag<'k>(key: &'k [u8], what: &str) -> Result<&'k str, AppError> {
+    let body = key
+        .split_first()
         .map(|(_tag, body)| body)
-        .ok_or_else(|| AppError::InternalError(format!("{what} key is empty")))
+        .ok_or_else(|| AppError::InternalError(format!("{what} key is empty")))?;
+    std::str::from_utf8(body)
+        .map_err(|e| AppError::InternalError(format!("{what} is not valid utf-8: {e}")))
 }
 
 /// キー内の識別子（名前空間タグ直後の [`UUID_LEN`] バイト）を差し替える。
@@ -145,22 +148,25 @@ fn body_after_tag<'k>(key: &'k [u8], what: &str) -> Result<&'k [u8], AppError> {
 /// シャードと値インデックスのキーはどちらも `タグ ‖ table_id ‖ …` なので、
 /// テーブルの複製ではこの部分だけを付け替えれば残りをそのまま流用できる。
 pub fn replace_leading_id(key: &mut [u8], id: TableId) -> Result<(), AppError> {
-    let end = 1 + UUID_LEN;
-    if key.len() < end {
-        return Err(AppError::InternalError(
-            "key is too short to carry a table id".to_string(),
-        ));
-    }
-    key[1..end].copy_from_slice(&id.into_bytes());
+    let slot = key.get_mut(1..1 + UUID_LEN).ok_or_else(|| {
+        AppError::InternalError("key is too short to carry a table id".to_string())
+    })?;
+    slot.copy_from_slice(&id.into_bytes());
     Ok(())
+}
+
+/// `ns ‖ table_id ‖ flex_id`。シャード本体と件数はレイアウトが同じで、タグだけが違う。
+fn region_key(ns: Ns, table_id: TableId, region: &FlexId) -> Vec<u8> {
+    let mut key = Vec::with_capacity(1 + UUID_LEN + FlexId::ENCODED_LEN);
+    key.push(ns as u8);
+    key.extend_from_slice(&table_id.into_bytes());
+    key.extend_from_slice(&region.encode());
+    key
 }
 
 /// `0x06 ‖ table_id ‖ flex_id`
 pub fn shard(table_id: TableId, region: &FlexId) -> Vec<u8> {
-    let mut rest = Vec::with_capacity(UUID_LEN + FlexId::ENCODED_LEN);
-    rest.extend_from_slice(&table_id.into_bytes());
-    rest.extend_from_slice(&region.encode());
-    with_ns(Ns::TablesData, &rest)
+    region_key(Ns::TablesData, table_id, region)
 }
 
 /// [`shard`] で作ったキーから領域を復元する。
@@ -168,19 +174,19 @@ pub fn shard(table_id: TableId, region: &FlexId) -> Vec<u8> {
 /// シャードキーは長さが固定（タグ 1 + `table_id` 16 + `flex_id`）なので、末尾を
 /// 切り出して decode するだけで戻せる。**キー → 領域の対応表を作らずに済ませる**ための
 /// 入口で、木の降下では 1 段ごとに領域の数だけ引くため、対応表を作ると
-/// 「キーの複製 + バイト列のハッシュ」がその数だけ乗る（`data.rs` の `load_nodes`）。
+/// 「キーの複製 + バイト列のハッシュ」がその数だけ乗る（`tree/node.rs` の `load_nodes`）。
 pub fn region_from_shard_key(key: &[u8]) -> Result<FlexId, AppError> {
-    let start = 1 + UUID_LEN;
-    let end = start + FlexId::ENCODED_LEN;
-    if key.len() != end {
-        return Err(AppError::InternalError(format!(
-            "shard key has an unexpected length (expected {end}, found {})",
-            key.len()
-        )));
-    }
-    let mut bytes = [0u8; FlexId::ENCODED_LEN];
-    bytes.copy_from_slice(&key[start..end]);
-    FlexId::decode(&bytes).map_err(|e| AppError::InternalError(format!("flex_id decode: {e}")))
+    let expected = 1 + UUID_LEN + FlexId::ENCODED_LEN;
+    let bytes: &[u8; FlexId::ENCODED_LEN] = key
+        .get(1 + UUID_LEN..)
+        .and_then(|tail| tail.try_into().ok())
+        .ok_or_else(|| {
+            AppError::InternalError(format!(
+                "shard key has an unexpected length (expected {expected}, found {})",
+                key.len()
+            ))
+        })?;
+    FlexId::decode(bytes).map_err(|e| AppError::InternalError(format!("flex_id decode: {e}")))
 }
 
 /// あるテーブルの全シャードを覆うプレフィックス。
@@ -192,10 +198,7 @@ pub fn shards_of(table_id: TableId) -> Vec<u8> {
 ///
 /// 本体（[`shard`]）と同じ並びにしてあるので、テーブル単位のプレフィックスも対応する。
 pub fn shard_count(table_id: TableId, region: &FlexId) -> Vec<u8> {
-    let mut rest = Vec::with_capacity(UUID_LEN + FlexId::ENCODED_LEN);
-    rest.extend_from_slice(&table_id.into_bytes());
-    rest.extend_from_slice(&region.encode());
-    with_ns(Ns::ShardCount, &rest)
+    region_key(Ns::ShardCount, table_id, region)
 }
 
 /// あるテーブルの全シャード件数を覆うプレフィックス。
@@ -236,13 +239,12 @@ pub fn garbage(table_id: TableId) -> Vec<u8> {
 
 /// [`garbage`] のキーから [`TableId`] を復元する。
 pub fn table_id_from_garbage_key(key: &[u8]) -> Result<TableId, AppError> {
-    let end = 1 + UUID_LEN;
-    if key.len() < end {
-        return Err(AppError::InternalError(
-            "garbage key is too short to carry a table id".to_string(),
-        ));
-    }
-    let bytes: [u8; UUID_LEN] = key[1..end].try_into().expect("長さは確認済み");
+    let bytes: [u8; UUID_LEN] = key
+        .get(1..1 + UUID_LEN)
+        .and_then(|id| id.try_into().ok())
+        .ok_or_else(|| {
+            AppError::InternalError("garbage key is too short to carry a table id".to_string())
+        })?;
     Ok(TableId(uuid::Uuid::from_bytes(bytes)))
 }
 
@@ -293,14 +295,6 @@ pub fn lock(scope: LockScope, id: &[u8]) -> Vec<u8> {
     rest.push(scope as u8);
     rest.extend_from_slice(id);
     with_ns(Ns::Lock, &rest)
-}
-
-/// 与えたプレフィックスで始まる全キーを覆う範囲の終端（排他）。
-///
-/// バイト辞書順の操作そのものは両バックエンドで同じなので、実体は
-/// [`encoding::prefix_end`](crate::repositories::encoding::prefix_end) にある。
-pub fn prefix_end(prefix: &[u8]) -> Option<Vec<u8>> {
-    crate::repositories::encoding::prefix_end(prefix)
 }
 
 /// 値インデックスの範囲検索で走査すべきキー範囲（名前空間タグ付き）。
@@ -440,12 +434,5 @@ mod tests {
     fn lock_scopes_are_ordered_from_coarse_to_fine() {
         // この並びが崩れると、BTreeSet 経由の取得順がロック階層と食い違う。
         assert!(LockScope::Database < LockScope::User);
-    }
-
-    #[test]
-    fn prefix_end_rolls_over_trailing_max_bytes() {
-        assert_eq!(prefix_end(&[0x01, 0x02]), Some(vec![0x01, 0x03]));
-        assert_eq!(prefix_end(&[0x01, 0xFF]), Some(vec![0x02]));
-        assert_eq!(prefix_end(&[0xFF, 0xFF]), None);
     }
 }

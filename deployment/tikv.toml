@@ -1,10 +1,3 @@
-# 開発・テスト用の単一ノード TiKV 設定。
-#
-# **CI が回ればよい大きさに絞ってある。** スレッドプールはすべて 1〜2 で、負荷をかけると
-# そこが直列の詰まりになる。手元で書き込み負荷を見るときは大きいほうへ差し替えること:
-#
-#   KASANE_TIKV_CONFIG=tikv-large.toml docker compose up -d --wait
-
 [server]
 grpc-concurrency = 1
 
@@ -33,9 +26,6 @@ use-unified-pool = true
 [rocksdb]
 max-background-jobs = 2
 max-sub-compactions = 1
-# TiKV は起動時に `rocksdb + raftdb の max-open-files + 1000` 以上の nofile を要求し、
-# 足りなければ FATAL で落ちる。既定 (40960 + 40960 + 1000 = 82920) は GitHub Actions の
-# Docker 既定 nofile 65536 を超えるため、要求値のほうを下げておく。
 max-open-files = 4096
 
 [raftdb]

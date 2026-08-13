@@ -17,23 +17,6 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
-# ストレージバックエンドはビルドごとに 1 つしか選べない（src/backend.rs の compile_error!）
-# ため、イメージもバックエンドごとに 1 枚焼く。タグは次のとおり。
-#
-#   ghcr.io/<repo>:<version>-lmdb / :lmdb / :latest   （既定のバックエンド）
-#   ghcr.io/<repo>:<version>-tikv / :tikv
-#
-# それぞれ linux/amd64 と linux/arm64 のマルチアーキ。
-#
-# ■ ジョブの分け方
-#
-#   version ──> build (backend × platform = 4 本) ──> merge (backend ごと) ──> release
-#
-# バージョンの採番とタグ付けは 1 回だけ行いたいので `version` へ切り出す。
-# ビルドは**アーキごとにネイティブなランナー**で回す（QEMU エミュレーションだと
-# Rust のリリースビルド、特に grpcio の C++ ビルドが桁違いに遅くなる）。
-# ネイティブに焼くとアーキごとに別のイメージになるので、`merge` で 1 つの
-# マニフェストリストへ束ねてからタグを付ける。
 jobs:
   version:
     name: Bump version and tag
@@ -88,12 +71,9 @@ jobs:
     needs: version
     runs-on: ${{ matrix.runner }}
     permissions:
-      # `permissions:` を書くと、挙げなかったスコープは `none` になる。
-      # `contents: read` が無いと actions/checkout がタグを取得できない。
       contents: read
       packages: write
     strategy:
-      # 片方が落ちても、もう片方の結果は見たい。
       fail-fast: false
       matrix:
         backend: [lmdb, tikv]
@@ -107,15 +87,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # `version` ジョブが打ったタグを焼く。`main` を指すと、その間に別のコミットが
-          # 入った場合にバージョンと中身がずれる。
           ref: v${{ needs.version.outputs.version }}
 
       - name: Resolve image name
-        # GHCR はイメージ名に大文字を受け付けない。`github.repository` は
-        # 組織名・リポジトリ名の大文字をそのまま含むので、ここで小文字へ落とす。
-        # （タグ付けは metadata-action が自動で小文字化するが、下の
-        # push-by-digest は生の名前をそのまま使うため、ここで揃えておく必要がある。）
         run: echo "REGISTRY_IMAGE=${REGISTRY}/${IMAGE_NAME,,}" >> "$GITHUB_ENV"
         env:
           REGISTRY: ${{ env.REGISTRY }}
@@ -146,11 +120,7 @@ jobs:
           build-args: |
             BACKEND=backend-${{ matrix.backend }}
           labels: ${{ steps.meta.outputs.labels }}
-          # タグは付けずダイジェストだけを push する。タグ付けは全アーキが
-          # 揃ってから `merge` がまとめて行う。
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
-          # バックエンドとアーキでビルド内容が違うので、キャッシュも分ける。
-          # 共有すると互いを追い出し合ってキャッシュが効かなくなる。
           cache-from: type=gha,scope=${{ matrix.backend }}-${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=${{ matrix.backend }}-${{ matrix.platform }}
 
@@ -163,7 +133,6 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          # upload-artifact@v4 は名前の重複を許さないので、組み合わせごとに分ける。
           name: digests-${{ matrix.backend }}-${{ matrix.platform }}
           path: /tmp/digests/*
           if-no-files-found: error

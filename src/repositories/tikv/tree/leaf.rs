@@ -32,15 +32,18 @@ use super::{
 // 呼び出し側は [`TikvWrite::apply_leaves`] でここを blocking タスクへ出す。
 
 /// 1 枚のリーフに何をするか。
-pub(super) enum LeafOp<'a> {
+///
+/// 値を借用ではなく所有で持つのは、この操作ごと blocking タスクへ move するため
+/// （[`TikvWrite::apply_leaves`](super::TikvWrite::apply_leaves)）。
+pub(super) enum LeafOp {
     /// 対象の空間 ID すべてへ書く（既存値は上書き）。
-    Insert(&'a [u8]),
+    Insert(Vec<u8>),
     /// まだ値の無い空間 ID にだけ書く。
-    Upsert(&'a [u8]),
+    Upsert(Vec<u8>),
     /// 対象の空間 ID の値を消す。
     Remove,
     /// 空間 ID ごとに別々の値を書く（一括書き込み）。
-    InsertMany(&'a BatchWrite),
+    InsertMany(BatchWrite),
 }
 
 /// 値ごとに分かれた一括書き込みを、リーフへ適用できる形に畳んだもの。
@@ -72,31 +75,12 @@ impl BatchWrite {
     }
 }
 
-/// [`LeafOp`] の所有版。blocking タスクへ移すために借用を持たない形にしてある。
-pub(super) enum OwnedLeafOp {
-    Insert(Vec<u8>),
-    Upsert(Vec<u8>),
-    Remove,
-    InsertMany(BatchWrite),
-}
-
-impl OwnedLeafOp {
-    pub(super) fn borrow(&self) -> LeafOp<'_> {
-        match self {
-            Self::Insert(data) => LeafOp::Insert(data),
-            Self::Upsert(data) => LeafOp::Upsert(data),
-            Self::Remove => LeafOp::Remove,
-            Self::InsertMany(batch) => LeafOp::InsertMany(batch),
-        }
-    }
-}
-
-impl LeafOp<'_> {
-    pub(super) fn apply(&self, map: &mut SpatialIdMap<Vec<u8>>, targets: &[FlexId]) {
+impl LeafOp {
+    fn apply(&self, map: &mut SpatialIdMap<Vec<u8>>, targets: &[FlexId]) {
         match self {
             LeafOp::Insert(data) => {
                 for flex_id in targets {
-                    map.insert(*flex_id, data.to_vec());
+                    map.insert(*flex_id, data.clone());
                 }
             }
             LeafOp::Upsert(data) => {
@@ -106,7 +90,7 @@ impl LeafOp<'_> {
                     target_set.clear();
                     target_set.insert(*flex_id);
                     for f in (&target_set - &occupied).flex_ids() {
-                        map.insert(f, data.to_vec());
+                        map.insert(f, data.clone());
                     }
                 }
             }
@@ -136,10 +120,10 @@ pub(super) fn apply_leaf(
     table_id: TableId,
     index: Option<TableDataType>,
     leaf: &RoutedLeaf,
-    op: &LeafOp<'_>,
+    op: &LeafOp,
     out: &mut Vec<kv::Mutation>,
 ) -> Result<(), AppError> {
-    let mut map = leaf.leaf_map()?;
+    let mut map = decode_leaf(&leaf.region, leaf.node.as_ref().map(ShardValue::entry))?;
     let targets = &leaf.queries;
 
     let Some(data_type) = index else {
@@ -174,7 +158,7 @@ pub(super) fn apply_leaf(
 }
 
 /// 変更後のリーフを保存する。過大なら分割し、空なら削除する。
-pub(super) fn store_shard(
+fn store_shard(
     table_id: TableId,
     region: FlexId,
     map: SpatialIdMap<Vec<u8>>,
@@ -212,7 +196,7 @@ pub(super) fn store_shard(
 /// 分割された子シャードを保存するか、さらに分割するかを決める（パス圧縮の本体）。
 ///
 /// 同期関数なので普通に再帰できる（非同期だった頃は `Box::pin` で間接化していた）。
-pub(super) fn emit_child(
+fn emit_child(
     table_id: TableId,
     cr: FlexId,
     cm: SpatialIdMap<Vec<u8>>,
@@ -256,7 +240,7 @@ pub(super) fn emit_child(
 }
 
 /// リーフを件数ヘッダ付きで保存する。
-pub(super) fn put_leaf(
+fn put_leaf(
     table_id: TableId,
     region: &FlexId,
     map: &SpatialIdMap<Vec<u8>>,
@@ -328,7 +312,7 @@ pub(super) fn merge_children(
 }
 
 /// 値インデックスのキーを組み立てる。
-pub(super) fn index_key(
+fn index_key(
     table_id: TableId,
     data_type: TableDataType,
     value: &[u8],

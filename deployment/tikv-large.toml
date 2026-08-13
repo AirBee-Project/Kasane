@@ -1,27 +1,12 @@
-# 負荷試験用の単一ノード TiKV 設定。
-#
-#   KASANE_TIKV_CONFIG=tikv-large.toml docker compose up -d --wait
-#
-# 既定の `tikv.toml` は CI 用に**あらゆるスレッドプールを 1 に固定**してある。
-# 数百 MB を書き込むような負荷をかけると、そこが直列の詰まりになって
-# `RemoteStopped` / `Timeout expired` / `TxnNotFound` が連鎖する。
-# こちらはホストの資源を使い切る前提で緩めたもの。
-#
-# **本番構成ではない**（レプリカ 1・PD 1 台）。あくまで手元で「詰まりが設定由来か
-# 実装由来か」を切り分けるためのもの。
-
 [server]
-# 既定 (CI) は 1。書き込みが多いと gRPC の受け口そのものが直列点になる。
 grpc-concurrency = 4
 
 [storage]
-# 既定 (CI) は 1。悲観ロックと prewrite はここを通るので、書き込み並列度の上限を決める。
 scheduler-worker-pool-size = 4
 reserve-space = "0KB"
 reserve-raft-space = "0KB"
 
 [storage.block-cache]
-# 既定 (CI) は 256MB。読み取りがディスクへ落ちる量を減らす。
 capacity = "2GB"
 
 [raftstore]
@@ -39,15 +24,12 @@ use-unified-pool = true
 use-unified-pool = true
 
 [pessimistic-txn]
-# ロックの永続化を待たずに応答を返す／ロックをメモリに載せる。どちらも 7.5 の既定だが、
-# この構成が悲観ロックのレイテンシに依存していることを明示しておく。
 pipelined = true
 in-memory = true
 
 [rocksdb]
 max-background-jobs = 8
 max-sub-compactions = 2
-# nofile の要求値を抑えるため既定より小さくしてある（`tikv.toml` の注記を参照）。
 max-open-files = 4096
 
 [raftdb]

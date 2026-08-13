@@ -70,15 +70,25 @@ impl TikvConfig {
     }
 }
 
+/// 環境変数を数値として読む。未設定・解析不能なら既定値（LMDB 側の同名関数と対）。
+pub(super) fn env_parsed<T: std::str::FromStr>(name: &str, default: T) -> T {
+    std::env::var(name)
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(default)
+}
+
 /// `KASANE_TIKV_REQUEST_TIMEOUT_SECS` があればそれを、無ければ既定値を使う。
 ///
-/// 数値として読めない値は既定へ落とす（起動を止めるほどのことではない）。
+/// `0` は「待たない」ではなく設定ミスなので既定へ落とす。
 fn request_timeout_from_env() -> std::time::Duration {
-    let secs = std::env::var("KASANE_TIKV_REQUEST_TIMEOUT_SECS")
-        .ok()
-        .and_then(|raw| raw.trim().parse::<u64>().ok())
-        .filter(|secs| *secs > 0)
-        .unwrap_or(DEFAULT_REQUEST_TIMEOUT_SECS);
+    let secs = match env_parsed(
+        "KASANE_TIKV_REQUEST_TIMEOUT_SECS",
+        DEFAULT_REQUEST_TIMEOUT_SECS,
+    ) {
+        0 => DEFAULT_REQUEST_TIMEOUT_SECS,
+        secs => secs,
+    };
     std::time::Duration::from_secs(secs)
 }
 
@@ -140,7 +150,7 @@ impl TikvDb {
     }
 
     async fn ensure_initialized(&self) -> Result<(), AppError> {
-        if self.is_initialized().await? {
+        if self.read(async |r| r.cluster_initialized().await).await? {
             return Ok(());
         }
 
@@ -171,10 +181,6 @@ impl TikvDb {
             tracing::info!("cluster was already initialized by another instance");
         }
         Ok(())
-    }
-
-    async fn is_initialized(&self) -> Result<bool, AppError> {
-        self.read(async |r| r.cluster_initialized().await).await
     }
 }
 
@@ -217,7 +223,7 @@ impl TikvWrite<'_> {
             keys::cluster_initialized(),
             MARKER_PRESENT.to_vec(),
         )
-        .await?;
+        .await;
         Ok(!already_seeded)
     }
 }
