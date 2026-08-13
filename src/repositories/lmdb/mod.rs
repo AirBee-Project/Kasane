@@ -87,7 +87,7 @@ pub struct AppDb {
 /// このモジュールだけにする（feature でバックエンドを差し替える際もここごと入れ替わる）。
 impl From<heed::Error> for AppError {
     fn from(error: heed::Error) -> Self {
-        AppError::StorageError(error.to_string())
+        Self::StorageError(error.to_string())
     }
 }
 

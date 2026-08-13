@@ -7,8 +7,8 @@
 
 use kasane::models::spatial_id::RawSingleId;
 
-use crate::database::table::common::TestApp;
-use crate::database::table::data::common::put_data;
+use crate::common::TestApp;
+use crate::common::data::put_data;
 
 #[tokio::test]
 async fn read_back_coalesces_a_non_power_of_two_calendar_interval() {
@@ -31,12 +31,8 @@ async fn read_back_coalesces_a_non_power_of_two_calendar_interval() {
     )
     .await;
 
-    let result_json = crate::database::table::data::common::search_data(
-        &test_app,
-        "test_table",
-        &single_id_query,
-    )
-    .await;
+    let result_json =
+        crate::common::data::search_data(&test_app, "test_table", &single_id_query).await;
 
     let data = result_json["data"].as_array().expect("no data");
     assert_eq!(data.len(), 1);

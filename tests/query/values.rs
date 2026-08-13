@@ -3,8 +3,8 @@
 use axum::http::StatusCode;
 
 use super::{post_query, single_id, total_ids, values};
-use crate::database::table::common::TestApp;
-use crate::database::table::data::common::put_data;
+use crate::common::TestApp;
+use crate::common::data::put_data;
 
 /// `test_db` に指定型のテーブルを作り、`(x, 値)` を書き込む。
 async fn seed(
@@ -469,9 +469,8 @@ async fn zero_limit_leaves_no_orphan_dictionary_entries() {
 
     let dict_len = result["dictionary"]
         .as_array()
-        .map(|a| a.len())
-        .unwrap_or(0);
-    let group_len = result["data"].as_array().map(|a| a.len()).unwrap_or(0);
+        .map_or(0, std::vec::Vec::len);
+    let group_len = result["data"].as_array().map_or(0, std::vec::Vec::len);
     assert_eq!(
         dict_len, 0,
         "参照されない辞書エントリが残っている: {result}"
@@ -512,9 +511,8 @@ async fn limit_keeps_dictionary_and_groups_consistent() {
 
     let dict_len = result["dictionary"]
         .as_array()
-        .map(|a| a.len())
-        .unwrap_or(0);
-    let group_len = result["data"].as_array().map(|a| a.len()).unwrap_or(0);
+        .map_or(0, std::vec::Vec::len);
+    let group_len = result["data"].as_array().map_or(0, std::vec::Vec::len);
     assert_eq!(
         dict_len, group_len,
         "参照されない辞書エントリが残っている: {result}"

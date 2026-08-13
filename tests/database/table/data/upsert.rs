@@ -1,5 +1,5 @@
-use crate::database::table::common::TestApp;
-use crate::database::table::data::common::{assert_first_entry, patch_data, put_data, search_data};
+use crate::common::TestApp;
+use crate::common::data::{assert_first_entry, patch_data, put_data, search_data};
 use kasane::models::spatial_id::RawSingleId;
 
 #[tokio::test]

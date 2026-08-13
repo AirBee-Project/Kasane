@@ -292,7 +292,7 @@ async fn shard_split_preserves_all_flex_ids() {
 
     let table = make_table(&db, &name).await;
 
-    // MAX_FLEX_ID_PER_SHARD (1024) を超える数の FlexId を、それぞれ別の値で入れる。
+    // MAX_FLEX_ID_PER_SHARD を超える数の FlexId を、それぞれ別の値で入れる。
     const N: u32 = 1500;
     insert_flex_ids(&db, table.id, 0..N, 0, 0).await;
 

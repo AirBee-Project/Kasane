@@ -71,14 +71,9 @@ async fn build_app(db: TikvDb) -> Router {
 ///
 /// MVCC は上書きを古い版として残すので、短時間で見た使用量の増分は
 /// **実際に書いたバイト数**にほぼ比例する。書き込み増幅がそのまま出る。
-async fn store_used_bytes() -> Option<u64> {
-    let endpoint = std::env::var("KASANE_TIKV_PD_ENDPOINTS")
-        .unwrap_or_else(|_| "127.0.0.1:2379".to_string())
-        .split(',')
-        .next()?
-        .trim()
-        .to_string();
-
+/// `endpoint` は接続に使うのと同じ `TikvConfig` から取る。ここで環境変数を
+/// 読み直すと、既定値がこのファイルにもう 1 つできて必ずずれる。
+async fn store_used_bytes(endpoint: &str) -> Option<u64> {
     // 依存を増やしたくないので curl に任せる。取れなければ黙って諦める。
     let out = std::process::Command::new("curl")
         .args(["-s", &format!("http://{endpoint}/pd/api/v1/stores")])
@@ -118,9 +113,9 @@ async fn bench_concurrent_writes() {
     let total = env_usize("KASANE_BENCH_TOTAL", 4096);
     let batch = std::env::var("KASANE_WRITE_BATCH").unwrap_or_else(|_| "256 (既定)".into());
 
-    let db = TikvDb::connect(TikvConfig::from_env())
-        .await
-        .expect("TiKV に接続できない");
+    let config = TikvConfig::from_env();
+    let endpoint = config.pd_endpoints.first().cloned();
+    let db = TikvDb::connect(config).await.expect("TiKV に接続できない");
 
     let db_name = format!("bench_{}", uuid::Uuid::now_v7().simple());
     {
@@ -145,19 +140,25 @@ async fn bench_concurrent_writes() {
     let app = build_app(db.clone()).await;
     let uri = format!("/databases/{db_name}/tables/t/data");
 
-    let before = store_used_bytes().await;
+    let measure = async |at: &Option<String>| match at {
+        Some(endpoint) => store_used_bytes(endpoint).await,
+        None => None,
+    };
+    let before = measure(&endpoint).await;
 
     let next = Arc::new(AtomicUsize::new(0));
     let failures = Arc::new(AtomicUsize::new(0));
-    let latencies = Arc::new(std::sync::Mutex::new(Vec::<Duration>::with_capacity(total)));
 
     let started = Instant::now();
     let mut tasks = Vec::with_capacity(writers);
     for _ in 0..writers {
         let (app, uri) = (app.clone(), uri.clone());
-        let (next, failures, latencies) = (next.clone(), failures.clone(), latencies.clone());
+        let (next, failures) = (next.clone(), failures.clone());
 
+        // 遅延は各タスクが自前で持ち、合流してから束ねる。共有ロックを計測ループの
+        // 中に置くと、測っている当のものを測定器が汚す。
         tasks.push(tokio::spawn(async move {
+            let mut mine = Vec::<Duration>::new();
             loop {
                 let i = next.fetch_add(1, Ordering::Relaxed);
                 if i >= total {
@@ -195,12 +196,14 @@ async fn bench_concurrent_writes() {
                         eprintln!("最初の失敗: {status} {}", String::from_utf8_lossy(&body));
                     }
                 }
-                latencies.lock().unwrap().push(elapsed);
+                mine.push(elapsed);
             }
+            mine
         }));
     }
+    let mut latencies = Vec::<Duration>::with_capacity(total);
     for task in tasks {
-        task.await.unwrap();
+        latencies.extend(task.await.unwrap());
     }
     let wall = started.elapsed();
 
@@ -209,9 +212,8 @@ async fn bench_concurrent_writes() {
     if before.is_some() {
         tokio::time::sleep(Duration::from_secs(20)).await;
     }
-    let after = store_used_bytes().await;
+    let after = measure(&endpoint).await;
 
-    let mut latencies = latencies.lock().unwrap().clone();
     latencies.sort_unstable();
     let at = |q: f64| latencies[((latencies.len() - 1) as f64 * q) as usize];
 

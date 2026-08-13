@@ -4,7 +4,7 @@ use axum::{
 };
 use tower::ServiceExt;
 
-use crate::database::table::common::TestApp;
+use crate::common::TestApp;
 
 #[tokio::test]
 /// テーブルのコピーが同一データベース内で正常に行えるかを検証する。

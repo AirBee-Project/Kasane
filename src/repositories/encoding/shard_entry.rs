@@ -50,7 +50,7 @@ impl ShardEntry {
                 if bytes.len() < LEAF_HEADER_LEN {
                     return Err(AppError::InternalError("truncated leaf entry".to_string()));
                 }
-                Ok(ShardEntry::Leaf(bytes[LEAF_HEADER_LEN..].to_vec()))
+                Ok(Self::Leaf(bytes[LEAF_HEADER_LEN..].to_vec()))
             }
             Some(&TAG_POINTERS) => {
                 let body = &bytes[1..];
@@ -68,7 +68,7 @@ impl ShardEntry {
                             AppError::InternalError(format!("flex_id decode: {e}"))
                         })?);
                 }
-                Ok(ShardEntry::Pointers(regions))
+                Ok(Self::Pointers(regions))
             }
             _ => Err(AppError::InternalError("empty shard entry".to_string())),
         }
@@ -117,9 +117,9 @@ impl ShardEntry {
     pub fn child_pointers(bytes: &[u8]) -> Result<Option<Vec<FlexId>>, AppError> {
         match bytes.first() {
             Some(&TAG_LEAF) => Ok(None),
-            Some(&TAG_POINTERS) => match ShardEntry::decode(bytes)? {
-                ShardEntry::Pointers(children) => Ok(Some(children)),
-                ShardEntry::Leaf(_) => unreachable!("tag は POINTERS"),
+            Some(&TAG_POINTERS) => match Self::decode(bytes)? {
+                Self::Pointers(children) => Ok(Some(children)),
+                Self::Leaf(_) => unreachable!("tag は POINTERS"),
             },
             _ => Err(AppError::InternalError("empty shard entry".to_string())),
         }

@@ -62,10 +62,8 @@ pub enum StoredPrivilege {
 impl StoredPrivilege {
     pub fn role(&self) -> UserRole {
         match self {
-            StoredPrivilege::Global { role } => *role,
-            StoredPrivilege::Database { role, .. } | StoredPrivilege::Table { role, .. } => {
-                UserRole::from(*role)
-            }
+            Self::Global { role } => *role,
+            Self::Database { role, .. } | Self::Table { role, .. } => UserRole::from(*role),
         }
     }
 
@@ -73,9 +71,9 @@ impl StoredPrivilege {
     /// 剥奪の照合をどちらもこのキーで行える。
     pub fn target(&self) -> StoredTarget {
         match *self {
-            StoredPrivilege::Global { .. } => StoredTarget::Global,
-            StoredPrivilege::Database { db_id, .. } => StoredTarget::Database(db_id),
-            StoredPrivilege::Table { table_id, .. } => StoredTarget::Table(table_id),
+            Self::Global { .. } => StoredTarget::Global,
+            Self::Database { db_id, .. } => StoredTarget::Database(db_id),
+            Self::Table { table_id, .. } => StoredTarget::Table(table_id),
         }
     }
 }
@@ -124,9 +122,9 @@ pub enum UserRole {
 impl From<DataRole> for UserRole {
     fn from(role: DataRole) -> Self {
         match role {
-            DataRole::Read => UserRole::Read,
-            DataRole::Write => UserRole::Write,
-            DataRole::Manage => UserRole::Manage,
+            DataRole::Read => Self::Read,
+            DataRole::Write => Self::Write,
+            DataRole::Manage => Self::Manage,
         }
     }
 }

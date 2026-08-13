@@ -238,8 +238,13 @@ impl WriteRepository for KasaneDbWrite<'_> {
         index: Option<TableDataType>,
         entries: Vec<(SpatialIdSet, Vec<u8>)>,
     ) -> Result<(), AppError> {
-        // LMDB は単一ライタで mmap 上の局所操作なので、まとめる旨みは小さい。
-        // 同じ書き込みトランザクション内なので原子性は TiKV 側と同じ。
+        // 素直に 1 件ずつ流す。同じ書き込みトランザクション内なので原子性は
+        // TiKV 側と同じで、ライタロックとコミットも 1 回で済む。
+        //
+        // ただし **リーフの読み直しと書き直しは 1 件ごとに起きる**。同じリーフへ
+        // N 件入れると、そのリーフの rkyv 復号・再直列化・put を N 回払う。
+        // TiKV 側の `BatchWrite` と同じく、リーフごとにまとめて 1 回にできる
+        // 余地がここにある（今は未実装）。
         for (ids, value) in entries {
             self.data_insert_impl(table_id, index, ids, &value)?;
         }

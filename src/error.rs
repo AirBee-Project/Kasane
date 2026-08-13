@@ -41,30 +41,30 @@ pub enum AuthError {
 impl AuthError {
     pub fn status(&self) -> StatusCode {
         match self {
-            AuthError::MissingToken
-            | AuthError::MalformedHeader
-            | AuthError::InvalidToken
-            | AuthError::TokenRevoked
-            | AuthError::InvalidCredentials => StatusCode::UNAUTHORIZED,
-            AuthError::RequiresGlobalAdmin
-            | AuthError::NotSelfOrAdmin
-            | AuthError::InsufficientPrivilege { .. }
-            | AuthError::RootProtected => StatusCode::FORBIDDEN,
+            Self::MissingToken
+            | Self::MalformedHeader
+            | Self::InvalidToken
+            | Self::TokenRevoked
+            | Self::InvalidCredentials => StatusCode::UNAUTHORIZED,
+            Self::RequiresGlobalAdmin
+            | Self::NotSelfOrAdmin
+            | Self::InsufficientPrivilege { .. }
+            | Self::RootProtected => StatusCode::FORBIDDEN,
         }
     }
 
     /// クライアントが分岐に使える安定した機械可読コード。
     pub fn code(&self) -> &'static str {
         match self {
-            AuthError::MissingToken => "missing_token",
-            AuthError::MalformedHeader => "malformed_header",
-            AuthError::InvalidToken => "invalid_token",
-            AuthError::TokenRevoked => "token_revoked",
-            AuthError::InvalidCredentials => "invalid_credentials",
-            AuthError::RequiresGlobalAdmin => "requires_global_admin",
-            AuthError::NotSelfOrAdmin => "not_self_or_admin",
-            AuthError::InsufficientPrivilege { .. } => "insufficient_privilege",
-            AuthError::RootProtected => "root_protected",
+            Self::MissingToken => "missing_token",
+            Self::MalformedHeader => "malformed_header",
+            Self::InvalidToken => "invalid_token",
+            Self::TokenRevoked => "token_revoked",
+            Self::InvalidCredentials => "invalid_credentials",
+            Self::RequiresGlobalAdmin => "requires_global_admin",
+            Self::NotSelfOrAdmin => "not_self_or_admin",
+            Self::InsufficientPrivilege { .. } => "insufficient_privilege",
+            Self::RootProtected => "root_protected",
         }
     }
 }
@@ -72,14 +72,14 @@ impl AuthError {
 impl fmt::Display for AuthError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AuthError::MissingToken => write!(f, "Missing Authorization header"),
-            AuthError::MalformedHeader => write!(f, "Invalid Authorization header format"),
-            AuthError::InvalidToken => write!(f, "Invalid or expired token"),
-            AuthError::TokenRevoked => write!(f, "Authentication token is no longer valid"),
-            AuthError::InvalidCredentials => write!(f, "Invalid username or password"),
-            AuthError::RequiresGlobalAdmin => write!(f, "Requires GlobalAdmin privileges"),
-            AuthError::NotSelfOrAdmin => write!(f, "You can only modify your own account"),
-            AuthError::InsufficientPrivilege {
+            Self::MissingToken => write!(f, "Missing Authorization header"),
+            Self::MalformedHeader => write!(f, "Invalid Authorization header format"),
+            Self::InvalidToken => write!(f, "Invalid or expired token"),
+            Self::TokenRevoked => write!(f, "Authentication token is no longer valid"),
+            Self::InvalidCredentials => write!(f, "Invalid username or password"),
+            Self::RequiresGlobalAdmin => write!(f, "Requires GlobalAdmin privileges"),
+            Self::NotSelfOrAdmin => write!(f, "You can only modify your own account"),
+            Self::InsufficientPrivilege {
                 db_name,
                 table_name: Some(table_name),
                 required,
@@ -88,14 +88,14 @@ impl fmt::Display for AuthError {
                 "Insufficient privileges for table '{}.{}' (requires {:?})",
                 db_name, table_name, required
             ),
-            AuthError::InsufficientPrivilege {
+            Self::InsufficientPrivilege {
                 db_name, required, ..
             } => write!(
                 f,
                 "Insufficient privileges for database '{}' (requires {:?})",
                 db_name, required
             ),
-            AuthError::RootProtected => {
+            Self::RootProtected => {
                 write!(f, "This operation is not allowed on the root user")
             }
         }
@@ -167,48 +167,48 @@ pub enum AppError {
 impl AppError {
     fn status(&self) -> StatusCode {
         match self {
-            AppError::NotFound(_) => StatusCode::NOT_FOUND,
-            AppError::Auth(e) => e.status(),
-            AppError::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            AppError::Conflict(_) => StatusCode::CONFLICT,
-            AppError::InvalidSpatialId { .. } => StatusCode::BAD_REQUEST,
-            AppError::DatabaseNotFound { .. } => StatusCode::NOT_FOUND,
-            AppError::DatabaseAlreadyExists { .. } => StatusCode::CONFLICT,
-            AppError::TableNotFound { .. } => StatusCode::NOT_FOUND,
-            AppError::TableAlreadyExists { .. } => StatusCode::CONFLICT,
-            AppError::ValueTypeMismatch { .. } => StatusCode::BAD_REQUEST,
-            AppError::ConstraintViolation { .. } => StatusCode::BAD_REQUEST,
-            AppError::NumericValueOutOfRange { .. } => StatusCode::BAD_REQUEST,
-            AppError::InvalidStoredValue { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            AppError::StorageError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            AppError::InvalidName { .. } => StatusCode::BAD_REQUEST,
-            AppError::LogicError(_) => StatusCode::BAD_REQUEST,
-            AppError::ZoomLevelPolicy { .. } => StatusCode::BAD_REQUEST,
-            AppError::InvalidPrivilege { .. } => StatusCode::BAD_REQUEST,
+            Self::NotFound(_) => StatusCode::NOT_FOUND,
+            Self::Auth(e) => e.status(),
+            Self::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::Conflict(_) => StatusCode::CONFLICT,
+            Self::InvalidSpatialId { .. } => StatusCode::BAD_REQUEST,
+            Self::DatabaseNotFound { .. } => StatusCode::NOT_FOUND,
+            Self::DatabaseAlreadyExists { .. } => StatusCode::CONFLICT,
+            Self::TableNotFound { .. } => StatusCode::NOT_FOUND,
+            Self::TableAlreadyExists { .. } => StatusCode::CONFLICT,
+            Self::ValueTypeMismatch { .. } => StatusCode::BAD_REQUEST,
+            Self::ConstraintViolation { .. } => StatusCode::BAD_REQUEST,
+            Self::NumericValueOutOfRange { .. } => StatusCode::BAD_REQUEST,
+            Self::InvalidStoredValue { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::StorageError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::InvalidName { .. } => StatusCode::BAD_REQUEST,
+            Self::LogicError(_) => StatusCode::BAD_REQUEST,
+            Self::ZoomLevelPolicy { .. } => StatusCode::BAD_REQUEST,
+            Self::InvalidPrivilege { .. } => StatusCode::BAD_REQUEST,
         }
     }
 
     /// クライアントが分岐に使える安定した機械可読コード。
     fn code(&self) -> &'static str {
         match self {
-            AppError::NotFound(_) => "not_found",
-            AppError::Auth(e) => e.code(),
-            AppError::InternalError(_) => "internal_error",
-            AppError::Conflict(_) => "conflict",
-            AppError::InvalidSpatialId { .. } => "invalid_spatial_id",
-            AppError::DatabaseNotFound { .. } => "database_not_found",
-            AppError::DatabaseAlreadyExists { .. } => "database_already_exists",
-            AppError::TableNotFound { .. } => "table_not_found",
-            AppError::TableAlreadyExists { .. } => "table_already_exists",
-            AppError::ValueTypeMismatch { .. } => "value_type_mismatch",
-            AppError::ConstraintViolation { .. } => "constraint_violation",
-            AppError::NumericValueOutOfRange { .. } => "numeric_value_out_of_range",
-            AppError::InvalidStoredValue { .. } => "invalid_stored_value",
-            AppError::StorageError(_) => "storage_error",
-            AppError::InvalidName { .. } => "invalid_name",
-            AppError::LogicError(_) => "logic_error",
-            AppError::ZoomLevelPolicy { .. } => "zoom_level_policy",
-            AppError::InvalidPrivilege { .. } => "invalid_privilege",
+            Self::NotFound(_) => "not_found",
+            Self::Auth(e) => e.code(),
+            Self::InternalError(_) => "internal_error",
+            Self::Conflict(_) => "conflict",
+            Self::InvalidSpatialId { .. } => "invalid_spatial_id",
+            Self::DatabaseNotFound { .. } => "database_not_found",
+            Self::DatabaseAlreadyExists { .. } => "database_already_exists",
+            Self::TableNotFound { .. } => "table_not_found",
+            Self::TableAlreadyExists { .. } => "table_already_exists",
+            Self::ValueTypeMismatch { .. } => "value_type_mismatch",
+            Self::ConstraintViolation { .. } => "constraint_violation",
+            Self::NumericValueOutOfRange { .. } => "numeric_value_out_of_range",
+            Self::InvalidStoredValue { .. } => "invalid_stored_value",
+            Self::StorageError(_) => "storage_error",
+            Self::InvalidName { .. } => "invalid_name",
+            Self::LogicError(_) => "logic_error",
+            Self::ZoomLevelPolicy { .. } => "zoom_level_policy",
+            Self::InvalidPrivilege { .. } => "invalid_privilege",
         }
     }
 }
@@ -216,43 +216,43 @@ impl AppError {
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AppError::NotFound(msg) => write!(f, "Not found: {}", msg),
-            AppError::Auth(e) => write!(f, "Authentication error: {}", e),
-            AppError::InternalError(msg) => write!(f, "Internal error: {}", msg),
-            AppError::Conflict(msg) => write!(f, "Conflict error: {}", msg),
-            AppError::InvalidSpatialId { reason } => {
+            Self::NotFound(msg) => write!(f, "Not found: {}", msg),
+            Self::Auth(e) => write!(f, "Authentication error: {}", e),
+            Self::InternalError(msg) => write!(f, "Internal error: {}", msg),
+            Self::Conflict(msg) => write!(f, "Conflict error: {}", msg),
+            Self::InvalidSpatialId { reason } => {
                 write!(f, "Invalid Spatial ID: {}", reason)
             }
-            AppError::DatabaseNotFound { name } => {
+            Self::DatabaseNotFound { name } => {
                 write!(f, "Database '{}' not found", name)
             }
-            AppError::DatabaseAlreadyExists { name } => {
+            Self::DatabaseAlreadyExists { name } => {
                 write!(f, "Database '{}' already exists", name)
             }
-            AppError::TableNotFound { name } => write!(f, "Table '{}' not found", name),
-            AppError::TableAlreadyExists { name } => {
+            Self::TableNotFound { name } => write!(f, "Table '{}' not found", name),
+            Self::TableAlreadyExists { name } => {
                 write!(f, "Table '{}' already exists", name)
             }
-            AppError::StorageError(message) => write!(f, "Storage error: {}", message),
-            AppError::InvalidName { reason } => write!(f, "Invalid name: {}", reason),
-            AppError::LogicError(error) => write!(f, "Logic error: {}", error),
-            AppError::ValueTypeMismatch { actual, expected } => write!(
+            Self::StorageError(message) => write!(f, "Storage error: {}", message),
+            Self::InvalidName { reason } => write!(f, "Invalid name: {}", reason),
+            Self::LogicError(error) => write!(f, "Logic error: {}", error),
+            Self::ValueTypeMismatch { actual, expected } => write!(
                 f,
                 "Value type mismatch: expected {:?}, got {:?}",
                 expected, actual
             ),
-            AppError::ConstraintViolation { reason } => {
+            Self::ConstraintViolation { reason } => {
                 write!(f, "Constraint violation: {}", reason)
             }
-            AppError::NumericValueOutOfRange { actual, expected } => write!(
+            Self::NumericValueOutOfRange { actual, expected } => write!(
                 f,
                 "Numeric value out of range: expected {}, got {}",
                 expected, actual
             ),
-            AppError::InvalidStoredValue { reason } => {
+            Self::InvalidStoredValue { reason } => {
                 write!(f, "Invalid stored value: {}", reason)
             }
-            AppError::ZoomLevelPolicy {
+            Self::ZoomLevelPolicy {
                 max_zoom_level,
                 input_zoom_level,
             } => write!(
@@ -260,7 +260,7 @@ impl fmt::Display for AppError {
                 "Zoom level policy violation: expected max {}, got {}",
                 max_zoom_level, input_zoom_level
             ),
-            AppError::InvalidPrivilege { reason } => {
+            Self::InvalidPrivilege { reason } => {
                 write!(f, "Invalid privilege rule: {}", reason)
             }
         }
@@ -282,19 +282,19 @@ impl IntoResponse for AppError {
 
 impl From<AuthError> for AppError {
     fn from(error: AuthError) -> Self {
-        AppError::Auth(error)
+        Self::Auth(error)
     }
 }
 
 impl From<kasane_logic::Error> for AppError {
     fn from(value: kasane_logic::Error) -> Self {
-        AppError::LogicError(value)
+        Self::LogicError(value)
     }
 }
 
 impl From<serde_json::Error> for AppError {
     fn from(error: serde_json::Error) -> Self {
-        AppError::InvalidStoredValue {
+        Self::InvalidStoredValue {
             reason: error.to_string(),
         }
     }

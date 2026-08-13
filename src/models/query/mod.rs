@@ -130,7 +130,7 @@ pub enum QueryNode {
 
     FilterValues {
         #[schema(no_recursion)]
-        input: Box<QueryNode>,
+        input: Box<Self>,
         #[serde(flatten)]
         condition: FilterCondition,
     },
@@ -138,7 +138,7 @@ pub enum QueryNode {
     /// X方向へ平行移動する
     ShiftX {
         #[schema(no_recursion)]
-        input: Box<QueryNode>,
+        input: Box<Self>,
         #[schema(example = 25)]
         z: u8,
         #[schema(example = 1)]
@@ -147,7 +147,7 @@ pub enum QueryNode {
     /// Y方向へ平行移動する
     ShiftY {
         #[schema(no_recursion)]
-        input: Box<QueryNode>,
+        input: Box<Self>,
         #[schema(example = 25)]
         z: u8,
         #[schema(example = 1)]
@@ -156,7 +156,7 @@ pub enum QueryNode {
     /// F(高度)方向へ平行移動する
     ShiftF {
         #[schema(no_recursion)]
-        input: Box<QueryNode>,
+        input: Box<Self>,
         #[schema(example = 25)]
         z: u8,
         #[schema(example = 1)]
@@ -166,7 +166,7 @@ pub enum QueryNode {
     /// 指定された値までズームレベルを落とし、`policy` で集約する
     ZoomOut {
         #[schema(no_recursion)]
-        input: Box<QueryNode>,
+        input: Box<Self>,
         #[schema(example = 24)]
         z: u8,
         #[schema(example = "average")]
@@ -176,7 +176,7 @@ pub enum QueryNode {
     /// X方向の絶対座標範囲へ引き延ばす
     ExtrudeX {
         #[schema(no_recursion)]
-        input: Box<QueryNode>,
+        input: Box<Self>,
         #[schema(example = 25)]
         z: u8,
         #[schema(example = 7300000)]
@@ -189,7 +189,7 @@ pub enum QueryNode {
     /// Y方向の絶対座標範囲へ引き延ばす
     ExtrudeY {
         #[schema(no_recursion)]
-        input: Box<QueryNode>,
+        input: Box<Self>,
         #[schema(example = 25)]
         z: u8,
         #[schema(example = 3276800)]
@@ -202,7 +202,7 @@ pub enum QueryNode {
     /// F方向の絶対座標範囲へ引き延ばす
     ExtrudeF {
         #[schema(no_recursion)]
-        input: Box<QueryNode>,
+        input: Box<Self>,
         #[schema(example = 25)]
         z: u8,
         #[schema(example = -5)]
@@ -216,7 +216,7 @@ pub enum QueryNode {
     /// X方向へ、指定距離で0になるよう値を減衰させる
     FalloffX {
         #[schema(no_recursion)]
-        input: Box<QueryNode>,
+        input: Box<Self>,
         #[schema(example = 25)]
         z: u8,
         #[schema(example = 3)]
@@ -233,7 +233,7 @@ pub enum QueryNode {
     /// Y方向へ、指定距離で0になるよう値を減衰させる
     FalloffY {
         #[schema(no_recursion)]
-        input: Box<QueryNode>,
+        input: Box<Self>,
         #[schema(example = 25)]
         z: u8,
         #[schema(example = 3)]
@@ -250,7 +250,7 @@ pub enum QueryNode {
     /// F方向へ、指定距離で0になるよう値を減衰させる
     FalloffF {
         #[schema(no_recursion)]
-        input: Box<QueryNode>,
+        input: Box<Self>,
         #[schema(example = 25)]
         z: u8,
         #[schema(example = 3)]
@@ -269,9 +269,9 @@ pub enum QueryNode {
     /// 片側にしか値が無い FlexId は `default` を相手側の値とみなす。
     Merge {
         #[schema(no_recursion)]
-        left: Box<QueryNode>,
+        left: Box<Self>,
         #[schema(no_recursion)]
-        right: Box<QueryNode>,
+        right: Box<Self>,
         #[schema(example = json!(0))]
         default: serde_json::Value,
         #[schema(example = "overwrite")]
@@ -281,7 +281,7 @@ pub enum QueryNode {
     /// 値を対応表に基づいて変換する。対応表にない値は `default` になる。
     MapValues {
         #[schema(no_recursion)]
-        input: Box<QueryNode>,
+        input: Box<Self>,
         /// この MapValues が出力する型。対応表の `to` や `default` はこの型として解釈される。
         #[schema(example = "Int")]
         output_type: crate::models::database::table::TableDataType,
@@ -295,7 +295,7 @@ pub enum QueryNode {
     /// 値に対して四則演算を行う
     MathValues {
         #[schema(no_recursion)]
-        input: Box<QueryNode>,
+        input: Box<Self>,
         #[schema(example = "multiply")]
         operator: MathOperator,
         #[schema(value_type = f64, example = 1.5)]
@@ -305,29 +305,29 @@ pub enum QueryNode {
 
 impl QueryNode {
     /// このノードが持つ子部分式を列挙する。
-    pub fn children(&self) -> impl Iterator<Item = &QueryNode> {
+    pub fn children(&self) -> impl Iterator<Item = &Self> {
         let (a, b) = match self {
-            QueryNode::Source { .. } => (None, None),
-            QueryNode::FilterValues { input, .. }
-            | QueryNode::ShiftX { input, .. }
-            | QueryNode::ShiftY { input, .. }
-            | QueryNode::ShiftF { input, .. }
-            | QueryNode::ZoomOut { input, .. }
-            | QueryNode::ExtrudeX { input, .. }
-            | QueryNode::ExtrudeY { input, .. }
-            | QueryNode::ExtrudeF { input, .. }
-            | QueryNode::FalloffX { input, .. }
-            | QueryNode::FalloffY { input, .. }
-            | QueryNode::FalloffF { input, .. }
-            | QueryNode::MathValues { input, .. }
-            | QueryNode::MapValues { input, .. } => (Some(&**input), None),
-            QueryNode::Merge { left, right, .. } => (Some(&**left), Some(&**right)),
+            Self::Source { .. } => (None, None),
+            Self::FilterValues { input, .. }
+            | Self::ShiftX { input, .. }
+            | Self::ShiftY { input, .. }
+            | Self::ShiftF { input, .. }
+            | Self::ZoomOut { input, .. }
+            | Self::ExtrudeX { input, .. }
+            | Self::ExtrudeY { input, .. }
+            | Self::ExtrudeF { input, .. }
+            | Self::FalloffX { input, .. }
+            | Self::FalloffY { input, .. }
+            | Self::FalloffF { input, .. }
+            | Self::MathValues { input, .. }
+            | Self::MapValues { input, .. } => (Some(&**input), None),
+            Self::Merge { left, right, .. } => (Some(&**left), Some(&**right)),
         };
         a.into_iter().chain(b)
     }
 
     /// このノードを根とする部分木を、根から順に列挙する（行きがけ順）。
-    pub fn iter(&self) -> impl Iterator<Item = &QueryNode> {
+    pub fn iter(&self) -> impl Iterator<Item = &Self> {
         let mut stack = vec![self];
         core::iter::from_fn(move || {
             let node = stack.pop()?;
@@ -340,7 +340,7 @@ impl QueryNode {
     pub fn sources(&self) -> Vec<(&str, &str)> {
         self.iter()
             .filter_map(|node| match node {
-                QueryNode::Source {
+                Self::Source {
                     database, table, ..
                 } => Some((database.as_str(), table.as_str())),
                 _ => None,

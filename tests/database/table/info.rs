@@ -5,7 +5,7 @@ use axum::{
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-use crate::database::table::common::TestApp;
+use crate::common::TestApp;
 
 #[tokio::test]
 /// テーブル情報が正しく取得できることを検証する。

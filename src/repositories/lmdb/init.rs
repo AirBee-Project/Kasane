@@ -20,9 +20,7 @@ const MAX_DBS: u32 = 15;
 
 /// 環境変数を真偽値として読む（`1` または `true` を真とみなす）。
 fn env_bool(name: &str) -> bool {
-    std::env::var(name)
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
+    std::env::var(name).is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
 }
 
 /// 環境変数を数値として読む。未設定・解析不能なら既定値。

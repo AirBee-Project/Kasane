@@ -5,8 +5,8 @@ use axum::{
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-use crate::database::table::common::TestApp;
-use crate::database::table::data::common::put_data;
+use crate::common::TestApp;
+use crate::common::data::put_data;
 
 async fn get_table_count(test_app: &TestApp, table_name: &str) -> u64 {
     let req = Request::builder()

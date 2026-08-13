@@ -10,8 +10,8 @@ use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
 use tower::ServiceExt;
 
-use crate::database::table::common::TestApp;
-use crate::database::table::data::common::{put_data, search_data};
+use crate::common::TestApp;
+use crate::common::data::{put_data, search_data};
 
 async fn setup(test_app: &TestApp) {
     test_app.create_database("test_db").await;

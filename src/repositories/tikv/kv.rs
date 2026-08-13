@@ -25,8 +25,6 @@ use crate::error::AppError;
 use crate::models::id::TableId;
 use crate::repositories::encoding::shard_entry::ShardEntry;
 
-use super::to_app_error;
-
 /// 1 回のスキャンで取り出す件数。TiKV は 1 リクエストの上限があるため分割して読む。
 const SCAN_BATCH: u32 = 512;
 
@@ -502,7 +500,7 @@ pub(super) async fn get<R: Reader>(
     key: Vec<u8>,
 ) -> Result<Option<Vec<u8>>, AppError> {
     let mut txn = txn.lock().await;
-    txn.read_one(key).await.map_err(to_app_error)
+    txn.read_one(key).await.map_err(AppError::from)
 }
 
 pub(super) async fn put(
@@ -618,14 +616,14 @@ pub(super) async fn batch_get<R: Reader>(
     // 1 塊で収まる通常の場合はそのまま渡す（`chunks(..).to_vec()` だと、収まる場合まで
     // キー列を丸ごと複製することになる）。
     if keys.len() <= BATCH_KEYS {
-        return txn.read_many(keys).await.map_err(to_app_error);
+        return txn.read_many(keys).await.map_err(AppError::from);
     }
 
     let mut rest = keys;
     let mut out = Vec::new();
     while !rest.is_empty() {
         let tail = rest.split_off(rest.len().min(BATCH_KEYS));
-        out.extend(txn.read_many(rest).await.map_err(to_app_error)?);
+        out.extend(txn.read_many(rest).await?);
         rest = tail;
     }
     Ok(out)
@@ -679,7 +677,7 @@ async fn batch_get_fanned_out(
 
         match joined
             .map_err(|e| AppError::InternalError(format!("batch get task: {e}")))
-            .and_then(|result| result.map_err(to_app_error))
+            .and_then(|result| result.map_err(AppError::from))
         {
             // 既に失敗が確定しているなら、読めた分は捨てる（返すのはエラーなので）。
             Ok(pairs) if failure.is_none() => out.extend(pairs),
@@ -716,8 +714,7 @@ pub(super) async fn scan_prefix<R: Reader>(
         let batch = {
             let mut txn = txn.lock().await;
             txn.read_range(range_from(start.clone(), end.clone()), SCAN_BATCH)
-                .await
-                .map_err(to_app_error)?
+                .await?
         };
 
         // 終端の判定は**生の取得件数**で行う。重ねるのは読み切ったあと。
@@ -760,8 +757,7 @@ pub(super) async fn scan_keys_range<R: Reader>(
         let batch = {
             let mut txn = txn.lock().await;
             txn.read_range_keys(range_from(cursor.clone(), end.clone()), SCAN_BATCH)
-                .await
-                .map_err(to_app_error)?
+                .await?
         };
 
         // 終端の判定は**生の取得件数**で行う。重ねるのは読み切ったあと。
@@ -972,9 +968,7 @@ pub(super) async fn lock_shards(
 
     let mut found = {
         let mut txn = txn.lock().await;
-        txn.lock_and_read(by_key.keys().cloned().collect())
-            .await
-            .map_err(to_app_error)?
+        txn.lock_and_read(by_key.keys().cloned().collect()).await?
     };
 
     // 存在したものを埋め、残りは未作成として `None` にする。
@@ -1003,8 +997,7 @@ pub(super) async fn delete_prefix_chunk(
         let mut txn = txn.lock().await;
         let raw = txn
             .read_range_keys(range_from(prefix.to_vec(), end.clone()), limit)
-            .await
-            .map_err(to_app_error)?;
+            .await?;
         // 同じトランザクションで既に消したキーは数えない。数えてしまうと
         // 「まだ残っている」と読めてしまい、呼び出し側の繰り返しが止まらなくなる。
         let staged = txn.staged_range(prefix, end.as_deref());

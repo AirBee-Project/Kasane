@@ -17,13 +17,13 @@ impl FromStr for DatabaseId {
     type Err = uuid::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(DatabaseId(Uuid::parse_str(s)?))
+        Ok(Self(Uuid::parse_str(s)?))
     }
 }
 
 impl From<Uuid> for DatabaseId {
     fn from(uuid: Uuid) -> Self {
-        DatabaseId(uuid)
+        Self(uuid)
     }
 }
 
@@ -47,13 +47,13 @@ impl FromStr for TableId {
     type Err = uuid::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(TableId(Uuid::parse_str(s)?))
+        Ok(Self(Uuid::parse_str(s)?))
     }
 }
 
 impl From<Uuid> for TableId {
     fn from(uuid: Uuid) -> Self {
-        TableId(uuid)
+        Self(uuid)
     }
 }
 

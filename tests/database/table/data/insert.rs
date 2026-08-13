@@ -4,10 +4,8 @@ use kasane::models::spatial_id::RawSingleId;
 use kasane_logic::{RangeId, SingleId};
 use tower::ServiceExt;
 
-use crate::database::table::common::TestApp;
-use crate::database::table::data::common::{
-    assert_first_entry, put_data, search_data, to_result_map,
-};
+use crate::common::TestApp;
+use crate::common::data::{assert_first_entry, put_data, search_data, to_result_map};
 
 /// singleIdで指定した空間IDにデータを挿入し、同じ場所から正しく取得できるかを検証する。
 #[tokio::test]

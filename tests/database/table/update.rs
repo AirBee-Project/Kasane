@@ -5,7 +5,7 @@ use axum::{
 use serde_json::Value;
 use tower::ServiceExt;
 
-use crate::database::table::common::TestApp;
+use crate::common::TestApp;
 
 #[tokio::test]
 /// テーブルの名前を正常に変更できるかを検証する。

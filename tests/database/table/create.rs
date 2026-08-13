@@ -5,7 +5,7 @@ use axum::{
 use serde_json::Value;
 use tower::ServiceExt;
 
-use crate::database::table::common::TestApp;
+use crate::common::TestApp;
 
 #[tokio::test]
 /// テーブルの正常な作成と取得を検証する。

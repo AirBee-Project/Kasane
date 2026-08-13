@@ -4,7 +4,7 @@ use axum::{
 };
 use tower::ServiceExt;
 
-use crate::database::table::common::TestApp;
+use crate::common::TestApp;
 
 #[tokio::test]
 /// テーブルが正常に削除され、再取得できないことを検証する。
@@ -71,7 +71,7 @@ async fn test_delete_table_cache_bug() {
     let single_id_query = serde_json::json!([
         { "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }
     ]);
-    crate::database::table::data::common::put_data(
+    crate::common::data::put_data(
         &test_app,
         table_name,
         &serde_json::json!({ "value": 1, "spatial_ids": single_id_query }),

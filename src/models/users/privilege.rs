@@ -63,10 +63,8 @@ pub enum PrivilegeTarget {
 impl PrivilegeRule {
     pub fn role(&self) -> UserRole {
         match self {
-            PrivilegeRule::Global { role } => *role,
-            PrivilegeRule::Database { role, .. } | PrivilegeRule::Table { role, .. } => {
-                UserRole::from(*role)
-            }
+            Self::Global { role } => *role,
+            Self::Database { role, .. } | Self::Table { role, .. } => UserRole::from(*role),
         }
     }
 }

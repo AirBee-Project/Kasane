@@ -27,11 +27,8 @@ impl TableDataType {
     pub fn has_fixed_width_value(self) -> bool {
         match self {
             // i64 = 8 バイト / 真偽値 = 1 バイト / Enum は選択肢 ID（u16）/ Presence は値なし。
-            TableDataType::Int
-            | TableDataType::Boolean
-            | TableDataType::Enum
-            | TableDataType::Presence => true,
-            TableDataType::Text => false,
+            Self::Int | Self::Boolean | Self::Enum | Self::Presence => true,
+            Self::Text => false,
         }
     }
 }
@@ -88,10 +85,10 @@ fn is_zero(num: &u16) -> bool {
 impl From<TableDataType> for JsonValueType {
     fn from(value: TableDataType) -> Self {
         match value {
-            TableDataType::Text | TableDataType::Enum => JsonValueType::String,
-            TableDataType::Int => JsonValueType::Number,
-            TableDataType::Boolean => JsonValueType::Bool,
-            TableDataType::Presence => JsonValueType::Null,
+            TableDataType::Text | TableDataType::Enum => Self::String,
+            TableDataType::Int => Self::Number,
+            TableDataType::Boolean => Self::Bool,
+            TableDataType::Presence => Self::Null,
         }
     }
 }
@@ -103,14 +100,14 @@ impl TableConstraints {
     /// 持たせるとストレージ間で値の意味がずれる。制約の定義と同じ場所に 1 つだけ置く。
     pub fn with_enum_ids(
         data_type: TableDataType,
-        constraints: Option<TableConstraints>,
-    ) -> Result<Option<TableConstraints>, String> {
+        constraints: Option<Self>,
+    ) -> Result<Option<Self>, String> {
         let mut actual = constraints;
         if data_type != TableDataType::Enum {
             return Ok(actual);
         }
         match &mut actual {
-            Some(TableConstraints::Enum {
+            Some(Self::Enum {
                 choices,
                 mapping,
                 next_id,
@@ -139,9 +136,9 @@ impl TableConstraints {
     /// 増減を反映したうえで [`with_enum_ids`](Self::with_enum_ids) と同じ規則で ID を振る。
     pub fn merged_with(
         data_type: TableDataType,
-        current: Option<&TableConstraints>,
+        current: Option<&Self>,
         update: super::UpdateTableConstraints,
-    ) -> Result<Option<TableConstraints>, String> {
+    ) -> Result<Option<Self>, String> {
         use super::UpdateTableConstraints as Update;
 
         match (data_type, update) {
@@ -153,7 +150,7 @@ impl TableConstraints {
                 },
             ) => {
                 let (mut cur_min, mut cur_max) = match current {
-                    Some(TableConstraints::Text {
+                    Some(Self::Text {
                         min_length,
                         max_length,
                     }) => (*min_length, *max_length),
@@ -165,14 +162,14 @@ impl TableConstraints {
                 if let Some(v) = max_length {
                     cur_max = v;
                 }
-                Ok(Some(TableConstraints::Text {
+                Ok(Some(Self::Text {
                     min_length: cur_min,
                     max_length: cur_max,
                 }))
             }
             (TableDataType::Int, Update::Int { min, max }) => {
                 let (mut cur_min, mut cur_max) = match current {
-                    Some(TableConstraints::Int { min, max }) => (*min, *max),
+                    Some(Self::Int { min, max }) => (*min, *max),
                     _ => (None, None),
                 };
                 if let Some(v) = min {
@@ -181,7 +178,7 @@ impl TableConstraints {
                 if let Some(v) = max {
                     cur_max = v;
                 }
-                Ok(Some(TableConstraints::Int {
+                Ok(Some(Self::Int {
                     min: cur_min,
                     max: cur_max,
                 }))
@@ -195,7 +192,7 @@ impl TableConstraints {
                 },
             ) => {
                 let (mut cur_choices, mapping, next_id) = match current {
-                    Some(TableConstraints::Enum {
+                    Some(Self::Enum {
                         choices,
                         mapping,
                         next_id,
@@ -218,7 +215,7 @@ impl TableConstraints {
                 // ID の割り当ては新規作成時と同じ規則を通す。
                 Self::with_enum_ids(
                     TableDataType::Enum,
-                    Some(TableConstraints::Enum {
+                    Some(Self::Enum {
                         choices: cur_choices,
                         mapping,
                         next_id,
@@ -234,7 +231,7 @@ impl TableConstraints {
 
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            TableConstraints::Text {
+            Self::Text {
                 min_length,
                 max_length,
             } => {
@@ -247,7 +244,7 @@ impl TableConstraints {
                     ));
                 }
             }
-            TableConstraints::Int { min, max } => {
+            Self::Int { min, max } => {
                 if let (Some(min), Some(max)) = (min, max)
                     && min > max
                 {
@@ -257,7 +254,7 @@ impl TableConstraints {
                     ));
                 }
             }
-            TableConstraints::Enum { choices, .. } => {
+            Self::Enum { choices, .. } => {
                 for c in choices {
                     if c.is_empty() {
                         return Err("Enum choice cannot be empty".to_string());

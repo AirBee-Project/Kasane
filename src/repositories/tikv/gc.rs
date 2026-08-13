@@ -31,7 +31,7 @@ use crate::repositories::Storage;
 
 use super::keys;
 use super::kv::{self, Reader};
-use super::{TikvDb, TikvRead, TikvWrite, to_app_error};
+use super::{TikvDb, TikvRead, TikvWrite};
 
 /// 1 トランザクションで消すキー数の上限。
 ///
@@ -244,11 +244,7 @@ impl TikvDb {
     async fn advance_gc_safepoint(&self, retention: Duration) -> Result<(), AppError> {
         use tikv_client::TimestampExt;
 
-        let now = self
-            .client
-            .current_timestamp()
-            .await
-            .map_err(to_app_error)?;
+        let now = self.client.current_timestamp().await?;
 
         // タイムスタンプは上位ビットがミリ秒。保持期間ぶん手前へ戻した時刻を safepoint にする。
         let retention_ms = retention.as_millis() as i64;
@@ -264,11 +260,7 @@ impl TikvDb {
 
         // 返り値は「要求どおりの safepoint になったか」。他が先に進めていれば false になるが、
         // それは競合ではなく単に相手のほうが新しいというだけなので、失敗として扱わない。
-        let applied = self
-            .client
-            .gc(safepoint.clone())
-            .await
-            .map_err(to_app_error)?;
+        let applied = self.client.gc(safepoint.clone()).await?;
         tracing::debug!(
             safepoint = safepoint.version(),
             applied,
@@ -285,7 +277,7 @@ impl TikvDb {
     pub fn spawn_gc(&self, config: GcConfig) -> Option<tokio::task::JoinHandle<()>> {
         if config.mvcc_interval.is_zero() {
             tracing::warn!(
-                "MVCC garbage collection is disabled (KASANE_TIKV_MVCC_GC_INTERVAL_SECS=0);                  every version of every key will be kept forever"
+                "MVCC garbage collection is disabled (KASANE_TIKV_MVCC_GC_INTERVAL_SECS=0); \n                 every version of every key will be kept forever"
             );
             return None;
         }
@@ -313,7 +305,7 @@ impl TikvDb {
     pub fn spawn_sweeper(&self, config: GcConfig) -> Option<tokio::task::JoinHandle<()>> {
         if config.interval.is_zero() {
             tracing::warn!(
-                "retired-table reclamation is disabled (KASANE_TIKV_GC_INTERVAL_SECS=0);                  deleted tables will keep occupying space until it is turned back on"
+                "retired-table reclamation is disabled (KASANE_TIKV_GC_INTERVAL_SECS=0); \n                 deleted tables will keep occupying space until it is turned back on"
             );
             return None;
         }

@@ -32,6 +32,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use kasane_logic::SpatialIdSet;
 use tokio::sync::{mpsc, oneshot};
@@ -51,24 +52,26 @@ use crate::repositories::{Storage, WriteRepository};
 /// 上限に対して十分小さく、かつ競合を潰すには十分大きい値にしてある。
 const DEFAULT_MAX_BATCH: usize = 256;
 
-/// 1 バッチの上限。`KASANE_WRITE_BATCH` があればそちらを使う。
+/// 何も届かないままこれだけ経ったワーカーは自分から降りる（[`Lanes`] を参照）。
+const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// テーブルごとのワーカーへの入口。
 ///
-/// `1` を指定すると畳み込みが実質無効になり、1 要求 = 1 トランザクションという
-/// 畳み込み導入前とまったく同じ挙動に戻る。効果の計測と、万一の切り戻しに使う。
-fn max_batch() -> usize {
-    static MAX_BATCH: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
-    *MAX_BATCH.get_or_init(|| {
-        std::env::var("KASANE_WRITE_BATCH")
-            .ok()
-            .and_then(|raw| raw.trim().parse::<usize>().ok())
-            .filter(|n| *n > 0)
-            .unwrap_or(DEFAULT_MAX_BATCH)
-    })
-}
+/// 鍵の `TableId` はテーブル作成ごとに新しく振られる UUID なので、**生きている
+/// テーブル数ではなく、これまでに作られたテーブル数で増える**。放っておくと
+/// 作成と削除を繰り返すだけで入口とタスクが際限なく積もる。
+///
+/// そこでワーカーは暇が続いたら自分の枠を外して降りる。降ろすのも入れ直すのも
+/// この `Mutex` の下で行い、送信もロックを持ったまま行うので、
+/// 「降りた直後に送って取りこぼす」は起こらない。
+type Lanes = Arc<Mutex<HashMap<TableId, mpsc::UnboundedSender<Submission>>>>;
 
 /// ワーカーへ渡す 1 件ぶんの要求。
 struct Submission {
     entry: (SpatialIdSet, Vec<u8>),
+    /// 値インデックスへ反映する型。テーブル作成時に決まって以後変わらないので、
+    /// 同じテーブルへの要求なら必ず同じ値になる。
+    index: Option<TableDataType>,
     /// 結果の返り先。要求側が諦めて消えていたら送信は失敗するが、
     /// **バッチ自体は続行する**（既にコミットされる以上、途中で止める意味がない）。
     reply: oneshot::Sender<Result<(), AppError>>,
@@ -78,18 +81,26 @@ struct Submission {
 #[derive(Clone)]
 pub struct WriteCoalescer {
     db: Db,
-    /// テーブルごとのワーカーへの入口。
+    lanes: Lanes,
+    /// 1 バッチの上限。`KASANE_WRITE_BATCH` があればそちらを使う。
     ///
-    /// ワーカーは最初の書き込みで起き、以後プロセスの寿命だけ生きる。テーブル数は
-    /// 高々カタログの規模なので、増え続けることはない。
-    lanes: Arc<Mutex<HashMap<TableId, mpsc::UnboundedSender<Submission>>>>,
+    /// `1` を指定すると畳み込みが実質無効になり、1 要求 = 1 トランザクションという
+    /// 畳み込み導入前とまったく同じ挙動に戻る。効果の計測と、万一の切り戻しに使う。
+    max_batch: usize,
 }
 
 impl WriteCoalescer {
     pub fn new(db: Db) -> Self {
+        let max_batch = std::env::var("KASANE_WRITE_BATCH")
+            .ok()
+            .and_then(|raw| raw.trim().parse::<usize>().ok())
+            .filter(|n| *n > 0)
+            .unwrap_or(DEFAULT_MAX_BATCH);
+
         Self {
             db,
             lanes: Arc::new(Mutex::new(HashMap::new())),
+            max_batch,
         }
     }
 
@@ -102,47 +113,54 @@ impl WriteCoalescer {
         value: Vec<u8>,
     ) -> Result<(), AppError> {
         let (reply, wait) = oneshot::channel();
-        let submission = Submission {
-            entry: (ids, value),
-            reply,
-        };
-
-        // 送信が失敗するのはワーカーが死んでいるときだけ。作り直して 1 度だけやり直す。
-        if let Err(returned) = self.send(table_id, index, submission) {
-            let submission = returned;
-            self.restart(table_id);
-            self.send(table_id, index, submission).map_err(|_| {
-                AppError::InternalError("write coalescer is not accepting work".to_string())
-            })?;
-        }
+        self.submit(
+            table_id,
+            Submission {
+                entry: (ids, value),
+                index,
+                reply,
+            },
+        )?;
 
         wait.await.map_err(|_| {
             AppError::InternalError("write coalescer dropped the request".to_string())
         })?
     }
 
-    /// 既存のワーカーへ渡す。無ければ起こす。失敗したら要求をそのまま返す。
-    fn send(
-        &self,
-        table_id: TableId,
-        index: Option<TableDataType>,
-        submission: Submission,
-    ) -> Result<(), Submission> {
-        let sender = {
-            let mut lanes = self.lanes.lock().expect("coalescer lanes are poisoned");
-            lanes
-                .entry(table_id)
-                .or_insert_with(|| spawn_worker(self.db.clone(), table_id, index))
-                .clone()
-        };
-        sender.send(submission).map_err(|e| e.0)
-    }
+    /// 担当ワーカーへ渡す。居なければ起こす。
+    ///
+    /// **ロックを持ったまま送る。** ワーカーが降りるのも同じロックの下なので、
+    /// 入れ違いで要求が宙に浮くことがない。送信が失敗するのは、降りたワーカーの
+    /// 入口がまだ残っていた場合だけで、そのときは起こし直して 1 度やり直す。
+    fn submit(&self, table_id: TableId, submission: Submission) -> Result<(), AppError> {
+        let mut lanes = self.lanes.lock().expect("coalescer lanes are poisoned");
+        let mut submission = submission;
 
-    fn restart(&self, table_id: TableId) {
-        self.lanes
-            .lock()
-            .expect("coalescer lanes are poisoned")
-            .remove(&table_id);
+        for _ in 0..2 {
+            let sender = lanes
+                .entry(table_id)
+                .or_insert_with(|| {
+                    spawn_worker(
+                        self.db.clone(),
+                        table_id,
+                        self.max_batch,
+                        Arc::clone(&self.lanes),
+                    )
+                })
+                .clone();
+
+            match sender.send(submission) {
+                Ok(()) => return Ok(()),
+                Err(returned) => {
+                    lanes.remove(&table_id);
+                    submission = returned.0;
+                }
+            }
+        }
+
+        Err(AppError::InternalError(
+            "write coalescer is not accepting work".to_string(),
+        ))
     }
 }
 
@@ -150,35 +168,61 @@ impl WriteCoalescer {
 fn spawn_worker(
     db: Db,
     table_id: TableId,
-    index: Option<TableDataType>,
+    max_batch: usize,
+    lanes: Lanes,
 ) -> mpsc::UnboundedSender<Submission> {
     let (tx, mut rx) = mpsc::unbounded_channel::<Submission>();
 
     tokio::spawn(async move {
-        while let Some(first) = rx.recv().await {
+        loop {
+            let first = match tokio::time::timeout(IDLE_TIMEOUT, rx.recv()).await {
+                Ok(Some(first)) => first,
+                // 入口がすべて消えた。もう届かない。
+                Ok(None) => break,
+                Err(_) => {
+                    // 暇が続いた。自分の枠を外して降りる。`submit` は同じロックを
+                    // 持ったまま送るので、ここで空だと分かれば取りこぼしはない。
+                    let mut lanes = lanes.lock().expect("coalescer lanes are poisoned");
+                    match rx.try_recv() {
+                        Ok(first) => {
+                            drop(lanes);
+                            first
+                        }
+                        Err(_) => {
+                            lanes.remove(&table_id);
+                            break;
+                        }
+                    }
+                }
+            };
+
             // **待たない。** 既に並んでいるぶんだけを取る。空いていれば 1 件で流れ、
             // 混んでいれば前のバッチの処理中に溜まったぶんがここでまとまる。
             let mut batch = vec![first];
-            while batch.len() < max_batch() {
+            while batch.len() < max_batch {
                 match rx.try_recv() {
                     Ok(next) => batch.push(next),
                     Err(_) => break,
                 }
             }
 
-            let entries: Vec<(SpatialIdSet, Vec<u8>)> =
-                batch.iter().map(|s| s.entry.clone()).collect();
+            // 同じテーブルなら索引の指定は全員同じなので、先頭のものを使う。
+            let index = batch[0].index;
+            let (entries, replies): (Vec<_>, Vec<_>) =
+                batch.into_iter().map(|s| (s.entry, s.reply)).unzip();
             let batched = entries.len();
 
+            // `entries` はここで手放す。`Storage::write` はやり直しのために
+            // クロージャごと複製するので、中で複製し直すと二重に写すことになる。
             let result = db
-                .write(async move |w| w.data_insert_many(table_id, index, entries.clone()).await)
+                .write(async move |w| w.data_insert_many(table_id, index, entries).await)
                 .await;
 
             tracing::debug!(%table_id, batched, ok = result.is_ok(), "flushed a write batch");
 
             // 全員へ同じ結果を返す。受け取り手が消えていても続ける。
-            for submission in batch {
-                let _ = submission.reply.send(result.clone());
+            for reply in replies {
+                let _ = reply.send(result.clone());
             }
         }
     });

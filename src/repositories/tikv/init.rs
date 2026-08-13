@@ -1,6 +1,6 @@
 use super::keys::{self, LockScope};
 use super::kv::{self, Reader};
-use super::{TikvDb, TikvRead, TikvWrite, to_app_error};
+use super::{TikvDb, TikvRead, TikvWrite};
 use crate::error::AppError;
 use crate::models::users::{PrivilegeRule, UserRole};
 use crate::repositories::{CatalogRepository, Storage, WriteRepository};
@@ -125,9 +125,8 @@ impl TikvDb {
             ),
         }
 
-        let client = TransactionClient::new_with_config(config.pd_endpoints.clone(), client_config)
-            .await
-            .map_err(to_app_error)?;
+        let client =
+            TransactionClient::new_with_config(config.pd_endpoints.clone(), client_config).await?;
         tracing::info!(
             "connected to TiKV via PD {:?} (tls: {})",
             config.pd_endpoints,

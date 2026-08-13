@@ -9,7 +9,7 @@ use kasane::models::spatial_id::RawSingleId;
 use serde::de::DeserializeOwned;
 use tower::ServiceExt;
 
-use crate::database::table::common::TestApp;
+use crate::common::TestApp;
 
 /// `PUT /tables/{table_name}/data` でデータを挿入し、200 OKを検証してレスポンスを返す。
 ///

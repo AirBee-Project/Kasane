@@ -102,13 +102,13 @@
 //! TiKV 側が検出したデッドロックは [`is_retryable`] が拾ってやり直す。
 
 mod catalog;
-mod data;
 mod gc;
 mod init;
 mod keys;
 mod kv;
 mod query_source;
 mod repository;
+mod tree;
 mod users;
 
 pub use gc::GcConfig;
@@ -192,8 +192,10 @@ fn apply_jitter(base: std::time::Duration) -> std::time::Duration {
     std::time::Duration::from_millis(millis - span + offset)
 }
 
-fn to_app_error(err: tikv_client::Error) -> AppError {
-    AppError::StorageError(err.to_string())
+impl From<tikv_client::Error> for AppError {
+    fn from(err: tikv_client::Error) -> Self {
+        Self::StorageError(err.to_string())
+    }
 }
 
 // --- トランザクションの開き方 ---
@@ -275,7 +277,7 @@ pub(crate) struct NeedsRestart;
 
 impl From<NeedsRestart> for AppError {
     fn from(_: NeedsRestart) -> Self {
-        AppError::InternalError(
+        Self::InternalError(
             "lock declaration escaped the write retry loop (this is a bug in the tikv backend)"
                 .to_string(),
         )
@@ -551,7 +553,10 @@ impl Storage for TikvDb {
 
     #[tracing::instrument(skip_all)]
     async fn query_snapshot(&self) -> Result<Self::QuerySnapshot, AppError> {
-        self.client.current_timestamp().await.map_err(to_app_error)
+        self.client
+            .current_timestamp()
+            .await
+            .map_err(AppError::from)
     }
 
     #[tracing::instrument(skip_all)]
@@ -564,11 +569,7 @@ impl Storage for TikvDb {
         // 書き込みをブロックせず、書き込みにもブロックされない（LMDB と同じ）。
         //
         // トランザクションではなくスナップショットを開く（[`TikvRead::at`] を参照）。
-        let ts = self
-            .client
-            .current_timestamp()
-            .await
-            .map_err(to_app_error)?;
+        let ts = self.client.current_timestamp().await?;
         let r = TikvRead::at(self.client.clone(), ts);
         f(&r).await
     }
@@ -602,10 +603,10 @@ impl Storage for TikvDb {
                 match LockGuard::acquire(&self.client, &locks).await {
                     Ok(guard) => Some(guard),
                     Err(e) if is_retryable(&e) => {
-                        back_off(&mut conflicts, to_app_error(e), &mut last_error).await;
+                        back_off(&mut conflicts, AppError::from(e), &mut last_error).await;
                         continue;
                     }
-                    Err(e) => return Err(to_app_error(e)),
+                    Err(e) => return Err(AppError::from(e)),
                 }
             };
 
@@ -668,10 +669,10 @@ impl Storage for TikvDb {
                 rollback(txn).await;
                 release(guard).await;
                 if is_retryable(&e) {
-                    back_off(&mut conflicts, to_app_error(e), &mut last_error).await;
+                    back_off(&mut conflicts, AppError::from(e), &mut last_error).await;
                     continue;
                 }
-                return Err(to_app_error(e));
+                return Err(AppError::from(e));
             }
 
             let outcome = match result {
@@ -702,14 +703,14 @@ impl Storage for TikvDb {
                 Err(e) if is_one_pc_failure(&e) => {
                     tracing::debug!("TiKV declined one-phase commit; retrying with two-phase");
                     one_pc = false;
-                    last_error = Some(to_app_error(e));
+                    last_error = Some(AppError::from(e));
                     continue;
                 }
                 Err(e) if is_retryable(&e) => {
-                    back_off(&mut conflicts, to_app_error(e), &mut last_error).await;
+                    back_off(&mut conflicts, AppError::from(e), &mut last_error).await;
                     continue;
                 }
-                Err(e) => return Err(to_app_error(e)),
+                Err(e) => return Err(AppError::from(e)),
             }
         }
 

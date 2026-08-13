@@ -7,10 +7,8 @@ use axum::{
 use kasane::models::spatial_id::RawSingleId;
 use tower::ServiceExt;
 
-use crate::database::table::{
-    common::TestApp,
-    data::common::{assert_first_entry, put_data, search_data, to_result_map},
-};
+use crate::common::TestApp;
+use crate::common::data::{assert_first_entry, put_data, search_data, to_result_map};
 
 /// singleIdで指定した空間IDのデータを挿入後に正常に削除できるかを検証する。
 #[tokio::test]

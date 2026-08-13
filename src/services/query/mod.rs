@@ -8,7 +8,7 @@ pub mod value;
 
 use std::collections::{BTreeMap, HashMap};
 
-use kasane_logic::{RangeId, Source};
+use kasane_logic::{Query, RangeId, Source};
 
 use crate::{
     AppState,
@@ -26,7 +26,8 @@ use crate::{
     services::helpers::{data_response, spatial_ids::to_spatial_id_set},
 };
 
-use value::{Decoder, Value, ValueQuery};
+use crate::repositories::traits::DecodeFn;
+use value::Value;
 
 /// 解決済みのテーブルメタデータ表（`(database, table)` -> `Table`）。
 type ResolvedTables = HashMap<(String, String), Table>;
@@ -95,7 +96,7 @@ async fn resolve_tables(
 ///
 /// そのテーブルの `data_type` は `V` として読めなければならない
 /// （`Text` と `Enum` はどちらも文字列として読める）。
-fn build_decoder<V: Value>(table: &Table) -> Result<Decoder<V>, AppError> {
+fn build_decoder<V: Value>(table: &Table) -> Result<DecodeFn<V>, AppError> {
     if !V::accepts(table.data_type) {
         return Err(value::incompatible_source(table, V::type_name()));
     }
@@ -122,10 +123,10 @@ impl QueryNode {
 
         while let Some(node) = stack.pop() {
             let data_type = match node {
-                QueryNode::Source { database, table } => {
+                Self::Source { database, table } => {
                     tables[&(database.clone(), table.clone())].data_type
                 }
-                QueryNode::MapValues { output_type, .. } => *output_type,
+                Self::MapValues { output_type, .. } => *output_type,
                 _ => {
                     stack.extend(node.children());
                     continue;
@@ -157,9 +158,9 @@ impl QueryNode {
         app_state: &AppState,
         tables: &ResolvedTables,
         snapshot: &QuerySnapshot,
-    ) -> Result<ValueQuery<V>, AppError> {
+    ) -> Result<Query<V>, AppError> {
         match self {
-            QueryNode::Source { database, table } => {
+            Self::Source { database, table } => {
                 let meta = &tables[&(database.clone(), table.clone())];
                 let decode = build_decoder::<V>(meta)?;
                 Ok(app_state
@@ -168,23 +169,23 @@ impl QueryNode {
                     .query())
             }
 
-            QueryNode::ShiftX { input, z, index } => Ok(input
+            Self::ShiftX { input, z, index } => Ok(input
                 .translate::<V>(app_state, tables, snapshot)?
                 .shift_x(*z, *index)),
-            QueryNode::ShiftY { input, z, index } => Ok(input
+            Self::ShiftY { input, z, index } => Ok(input
                 .translate::<V>(app_state, tables, snapshot)?
                 .shift_y(*z, *index)),
-            QueryNode::ShiftF { input, z, index } => Ok(input
+            Self::ShiftF { input, z, index } => Ok(input
                 .translate::<V>(app_state, tables, snapshot)?
                 .shift_f(*z, *index)),
 
-            QueryNode::ZoomOut { input, z, policy } => V::zoom_out(
+            Self::ZoomOut { input, z, policy } => V::zoom_out(
                 input.translate::<V>(app_state, tables, snapshot)?,
                 *z,
                 *policy,
             ),
 
-            QueryNode::ExtrudeX {
+            Self::ExtrudeX {
                 input,
                 z,
                 start,
@@ -197,7 +198,7 @@ impl QueryNode {
                 *end,
                 *policy,
             ),
-            QueryNode::ExtrudeY {
+            Self::ExtrudeY {
                 input,
                 z,
                 start,
@@ -210,7 +211,7 @@ impl QueryNode {
                 *end,
                 *policy,
             ),
-            QueryNode::ExtrudeF {
+            Self::ExtrudeF {
                 input,
                 z,
                 start,
@@ -224,7 +225,7 @@ impl QueryNode {
                 *policy,
             ),
 
-            QueryNode::FalloffX {
+            Self::FalloffX {
                 input,
                 z,
                 radius,
@@ -239,7 +240,7 @@ impl QueryNode {
                 (*pattern).into(),
                 *policy,
             ),
-            QueryNode::FalloffY {
+            Self::FalloffY {
                 input,
                 z,
                 radius,
@@ -254,7 +255,7 @@ impl QueryNode {
                 (*pattern).into(),
                 *policy,
             ),
-            QueryNode::FalloffF {
+            Self::FalloffF {
                 input,
                 z,
                 radius,
@@ -270,7 +271,7 @@ impl QueryNode {
                 *policy,
             ),
 
-            QueryNode::Merge {
+            Self::Merge {
                 left,
                 right,
                 default,
@@ -282,7 +283,7 @@ impl QueryNode {
                 *policy,
             ),
 
-            QueryNode::FilterValues { input, condition } => {
+            Self::FilterValues { input, condition } => {
                 let q = input.translate::<V>(app_state, tables, snapshot)?;
                 let parse = |v: &Option<serde_json::Value>| -> Result<Option<V>, AppError> {
                     v.as_ref().map(V::from_json).transpose()
@@ -291,26 +292,22 @@ impl QueryNode {
                     FilterCondition::Equals { value } => q.filter_eq(V::from_json(value)?),
                     FilterCondition::InRange { min, max } => {
                         let start = parse(min)?
-                            .map(core::ops::Bound::Included)
-                            .unwrap_or(core::ops::Bound::Unbounded);
+                            .map_or(core::ops::Bound::Unbounded, core::ops::Bound::Included);
                         let end = parse(max)?
-                            .map(core::ops::Bound::Included)
-                            .unwrap_or(core::ops::Bound::Unbounded);
+                            .map_or(core::ops::Bound::Unbounded, core::ops::Bound::Included);
                         q.filter_in((start, end))
                     }
                     FilterCondition::NotInRange { min, max } => {
                         let start = parse(min)?
-                            .map(core::ops::Bound::Included)
-                            .unwrap_or(core::ops::Bound::Unbounded);
+                            .map_or(core::ops::Bound::Unbounded, core::ops::Bound::Included);
                         let end = parse(max)?
-                            .map(core::ops::Bound::Included)
-                            .unwrap_or(core::ops::Bound::Unbounded);
+                            .map_or(core::ops::Bound::Unbounded, core::ops::Bound::Included);
                         q.filter_not_in((start, end))
                     }
                 })
             }
 
-            QueryNode::MathValues {
+            Self::MathValues {
                 input,
                 operator,
                 operand,
@@ -319,7 +316,7 @@ impl QueryNode {
                 V::apply_math(q, *operator, *operand)
             }
 
-            QueryNode::MapValues {
+            Self::MapValues {
                 input,
                 output_type,
                 mapping,
@@ -366,7 +363,7 @@ fn build_map_values<U: Value, V: Value>(
     snapshot: &QuerySnapshot,
     mapping: &[MappingEntry],
     default: &serde_json::Value,
-) -> Result<ValueQuery<V>, AppError> {
+) -> Result<Query<V>, AppError> {
     let input = input.translate::<U>(app_state, tables, snapshot)?;
 
     let mut lookup: BTreeMap<U, V> = BTreeMap::new();

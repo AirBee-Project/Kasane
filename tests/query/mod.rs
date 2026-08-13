@@ -11,8 +11,8 @@ mod bruno;
 mod routing;
 mod values;
 
-use crate::database::table::common::TestApp;
-use crate::database::table::data::common::put_data;
+use crate::common::TestApp;
+use crate::common::data::put_data;
 
 /// `POST /query` を実行し、`(status, body)` を返す。
 async fn post_query(
@@ -40,15 +40,12 @@ fn single_id(x: i64) -> serde_json::Value {
 
 /// 値辞書 + データ群のレスポンスを、値の合計と件数へ畳み込む。
 fn total_ids(result: &serde_json::Value) -> usize {
-    result["data"]
-        .as_array()
-        .map(|groups| {
-            groups
-                .iter()
-                .map(|g| g["spatialIds"].as_array().map(|a| a.len()).unwrap_or(0))
-                .sum()
-        })
-        .unwrap_or(0)
+    result["data"].as_array().map_or(0, |groups| {
+        groups
+            .iter()
+            .map(|g| g["spatialIds"].as_array().map_or(0, std::vec::Vec::len))
+            .sum()
+    })
 }
 
 /// 出力に現れた値の集合を返す。

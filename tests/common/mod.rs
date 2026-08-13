@@ -1,3 +1,10 @@
+//! テストバイナリ全体で共有するヘルパ。
+//!
+//! `TestApp` は root 権限を全リクエストへ差し込んだルータで、
+//! 認可そのものを試すテスト（`permissions.rs`）以外はこれを使う。
+
+pub mod data;
+
 use axum::{
     Router,
     body::Body,

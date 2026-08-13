@@ -3,8 +3,8 @@ use axum::http::{Request, StatusCode, header};
 
 use tower::ServiceExt;
 
-use crate::database::table::common::TestApp;
-use crate::database::table::data::common::search_data;
+use crate::common::TestApp;
+use crate::common::data::search_data;
 
 /// Group Commit (WriteBatcher) が正しく複数リクエストを並行処理し、
 /// 空間インデックスが破損せずに全データが保存されるかを検証する。
