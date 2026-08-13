@@ -1,29 +1,4 @@
-# 開発・テスト用の周辺サービス一式。**本番構成ではない**（レプリカ 1・PD 1 台・永続化なしの Jaeger）。
-#
-#   起動: docker compose up -d --wait
-#   停止: docker compose down -v
-#
-# 立ち上げたあとは `.env.example` をそのまま `.env` にコピーすれば繋がる。
-# 既定値も同じ宛先を指しているので、`.env` が無くても繋がる。
-#
-#   TiKV (PD)  127.0.0.1:2379   -> KASANE_TIKV_PD_ENDPOINTS
-#   Jaeger UI  http://127.0.0.1:16686
-#   OTLP/HTTP  127.0.0.1:4318   -> OTEL_EXPORTER_OTLP_ENDPOINT
-#
-# ■ TiKV のネットワーク構成について
-#
-# PD はクライアントへ「TiKV ストアの所在」をアドバタイズされたアドレスで教える。
-# そのためホスト側のクライアントとコンテナ間通信の両方から到達できるアドレスを
-# 選ぶ必要がある。ここでは tikv を PD と同じネットワーク名前空間へ相乗りさせ
-# (`network_mode: "service:pd"`)、両者とも 127.0.0.1 でアドバタイズすることで、
-# ホスト（公開ポート経由）からもコンテナ内からも同じアドレスが有効になるようにしている。
-# この構成のため、TiKV 側のポート公開は pd サービスにまとめて記述している。
-#
-# ■ `--wait` が待つのは PD まで
-#
-# healthcheck が見るのは PD の生存だけで、TiKV ストアが PD へ登録され書き込みを
-# 受け付けるまでには数秒の余裕がいる。CI はそこまで明示的に待っている
-# （`.github/workflows/main-merge-tests.yml`）。
+# 開発・テスト用の周辺サービス
 
 services:
   pd:
@@ -31,9 +6,9 @@ services:
     container_name: kasane-pd
     restart: unless-stopped
     ports:
-      - "2379:2379" # PD クライアント API
-      - "20160:20160" # TiKV（名前空間を共有しているためここで公開する）
-      - "20180:20180" # TiKV ステータス
+      - "2379:2379"
+      - "20160:20160"
+      - "20180:20180"
     command:
       - --name=pd
       - --data-dir=/data/pd
@@ -54,7 +29,6 @@ services:
     image: pingcap/tikv:v7.5.1
     container_name: kasane-tikv
     restart: unless-stopped
-    # PD と同じネットワーク名前空間を共有する（上のコメント参照）。
     network_mode: "service:pd"
     depends_on:
       pd:
@@ -66,38 +40,25 @@ services:
       - --advertise-status-addr=127.0.0.1:20180
       - --data-dir=/data/tikv
       - --pd-endpoints=127.0.0.1:2379
-      # スレッド数とメモリをコア数から決めさせない（deployment/ の設定ファイルを参照）。
-      # 既定は CI 用の極小構成。負荷をかけて詰まりを見るときは大きいほうへ差し替える:
-      #   KASANE_TIKV_CONFIG=tikv-large.toml docker compose up -d --wait
-      # 指定するのは **deployment/ の中のファイル名**（パスではない）。
       - --config=/etc/tikv/${KASANE_TIKV_CONFIG:-tikv.toml}
     volumes:
       - tikv-data:/data/tikv
-      # deployment/ をまるごと載せる。設定ファイルを 1 つだけ載せて名前を固定すると、
-      # 「どちらを使うか」がホスト側のパスとコンテナ側のパスに分かれてしまい、
-      # --config を書き換えても効かない（あるいはその逆）という食い違いが起きる。
       - ./deployment:/etc/tikv:ro
-    # TiKV は nofile が閾値未満だと起動時チェックで FATAL になる。Docker の既定は
-    # 環境によって異なり、GitHub Actions では 65536 と足りない。閾値自体も
-    # deployment/tikv.toml で下げているが、こちらは TiKV の推奨に合わせた設定。
     ulimits:
       nofile:
         soft: 1048576
         hard: 1048576
 
-  # OpenTelemetry のトレース受け口と閲覧 UI。
-  # `production` feature でビルドしたときだけアプリがトレースを送る。
   jaeger:
     image: jaegertracing/all-in-one:1.60
     container_name: kasane-jaeger
     restart: unless-stopped
     environment:
-      # OTLP の受信を有効にする（1.35 以降は既定で有効だが、意図を明示しておく）。
       COLLECTOR_OTLP_ENABLED: "true"
     ports:
       - "16686:16686" # Jaeger UI
       - "4317:4317" # OTLP/gRPC
-      - "4318:4318" # OTLP/HTTP（アプリはこちらを使う）
+      - "4318:4318" # OTLP/HTTP
 
 volumes:
   pd-data:
