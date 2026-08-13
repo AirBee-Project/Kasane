@@ -210,22 +210,7 @@ jobs:
           tag_name: v${{ needs.version.outputs.version }}
           generate_release_notes: true
           body: |
-            ### Docker Images
-
-            ストレージバックエンドはビルド時に決まるため、イメージを分けて公開しています。
-            どちらも `linux/amd64` と `linux/arm64` のマルチアーキです。
-
             | バックエンド | イメージ |
             | --- | --- |
-            | LMDB（単一プロセス・組み込み。`latest` はこちら） | `ghcr.io/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}-lmdb` |
-            | TiKV（分散。複数インスタンスで共有可） | `ghcr.io/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}-tikv` |
-
-            ```bash
-            # LMDB
-            docker pull ghcr.io/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}-lmdb
-
-            # TiKV（接続先は KASANE_TIKV_PD_ENDPOINTS で指定）
-            docker pull ghcr.io/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}-tikv
-            ```
-
-            ---
+            | LMDB | `ghcr.io/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}-lmdb` |
+            | TiKV | `ghcr.io/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}-tikv` |

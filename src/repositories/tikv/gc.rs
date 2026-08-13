@@ -26,7 +26,7 @@ use super::{TikvDb, TikvRead, TikvWrite};
 const SWEEP_CHUNK: u32 = 1024;
 
 /// 巨大なテーブルの回収で 1 周が延々と続かないようにする。残りは次の周回で消える。
-const DEFAULT_MAX_CHUNKS_PER_TABLE: usize = 16;
+const MAX_CHUNKS_PER_TABLE: usize = 16;
 
 const DEFAULT_SWEEP_INTERVAL_SECS: u64 = 60;
 
@@ -35,7 +35,7 @@ const DEFAULT_SWEEP_INTERVAL_SECS: u64 = 60;
 /// 息継ぎなしで連投すると悲観ロックとリージョンの資源をこちらが握り続け、投入側が TTL を
 /// 超えて失敗する。データベースを 1 つ消すだけで数万〜数十万キーの回収が走るので、その間
 /// ずっと投入が詰まる。回収は遅れてよいので、こちらを待たせる。
-const DEFAULT_CHUNK_DELAY_MS: u64 = 200;
+const CHUNK_DELAY: Duration = Duration::from_millis(200);
 
 /// **実行中の読み取りより長くすること。**
 ///
@@ -44,29 +44,25 @@ const DEFAULT_CHUNK_DELAY_MS: u64 = 200;
 /// 取ってある（TiDB の既定も 10 分）。
 const DEFAULT_MVCC_RETENTION_SECS: u64 = 600;
 
-/// `gc` は第 1 段階でキー空間全体を走査してロックを解決するので安くはない。
-/// 保持期間より十分短ければよく、頻繁に回す意味はない。
-const DEFAULT_MVCC_INTERVAL_SECS: u64 = 300;
+/// safepoint を進める間隔の下限。`gc` は第 1 段階でキー空間全体を走査するので安くはない。
+const MIN_MVCC_INTERVAL: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone)]
 pub struct GcConfig {
-    /// **ゼロなら MVCC GC を回さない。**
-    pub mvcc_interval: Duration,
+    /// MVCC の古いバージョンを残す時間。**ゼロなら MVCC GC を回さない。**
     pub mvcc_retention: Duration,
-    /// **ゼロなら回収を行わない**（一括投入の間だけ止める用途）。
+    /// 回収の間隔。**ゼロなら回収を行わない**（一括投入の間だけ止める用途）。
     pub interval: Duration,
-    pub chunk_delay: Duration,
-    pub max_chunks_per_table: usize,
+    /// 1 周で 1 テーブルに費やすチャンク数の上限。テスト以外は [`MAX_CHUNKS_PER_TABLE`]。
+    max_chunks_per_table: usize,
+    /// チャンク間の待ち。テスト以外は [`CHUNK_DELAY`]。
+    chunk_delay: Duration,
 }
 
 impl GcConfig {
     pub fn from_env() -> Self {
         use super::init::env_parsed;
         Self {
-            mvcc_interval: Duration::from_secs(env_parsed(
-                "KASANE_TIKV_MVCC_GC_INTERVAL_SECS",
-                DEFAULT_MVCC_INTERVAL_SECS,
-            )),
             mvcc_retention: Duration::from_secs(env_parsed(
                 "KASANE_TIKV_MVCC_GC_RETENTION_SECS",
                 DEFAULT_MVCC_RETENTION_SECS,
@@ -75,25 +71,23 @@ impl GcConfig {
                 "KASANE_TIKV_GC_INTERVAL_SECS",
                 DEFAULT_SWEEP_INTERVAL_SECS,
             )),
-            chunk_delay: Duration::from_millis(env_parsed(
-                "KASANE_TIKV_GC_CHUNK_DELAY_MS",
-                DEFAULT_CHUNK_DELAY_MS,
-            )),
-            max_chunks_per_table: env_parsed(
-                "KASANE_TIKV_GC_MAX_CHUNKS",
-                DEFAULT_MAX_CHUNKS_PER_TABLE,
-            ),
+            max_chunks_per_table: MAX_CHUNKS_PER_TABLE,
+            chunk_delay: CHUNK_DELAY,
         }
+    }
+
+    /// safepoint を進める間隔。保持期間より十分短ければよいので、そこから導出する。
+    fn mvcc_interval(&self) -> Duration {
+        (self.mvcc_retention / 2).max(MIN_MVCC_INTERVAL)
     }
 
     /// テスト用。待たずに一気に回収し、MVCC GC は回さない。
     pub fn eager() -> Self {
         Self {
-            mvcc_interval: Duration::ZERO,
-            mvcc_retention: Duration::from_secs(DEFAULT_MVCC_RETENTION_SECS),
+            mvcc_retention: Duration::ZERO,
             interval: Duration::from_secs(DEFAULT_SWEEP_INTERVAL_SECS),
-            chunk_delay: Duration::ZERO,
             max_chunks_per_table: 64,
+            chunk_delay: Duration::ZERO,
         }
     }
 }
@@ -206,18 +200,19 @@ impl TikvDb {
     /// あちらは「消したテーブルの現行データ」を、こちらは「生きているキーの古い版」を消す。
     /// 片方だけでは容量は下がらない。
     pub fn spawn_gc(&self, config: GcConfig) -> Option<tokio::task::JoinHandle<()>> {
-        if config.mvcc_interval.is_zero() {
+        if config.mvcc_retention.is_zero() {
             tracing::warn!(
-                "MVCC garbage collection is disabled (KASANE_TIKV_MVCC_GC_INTERVAL_SECS=0); \
+                "MVCC garbage collection is disabled (KASANE_TIKV_MVCC_GC_RETENTION_SECS=0); \
                  every version of every key will be kept forever"
             );
             return None;
         }
 
+        let interval = config.mvcc_interval();
         let db = self.clone();
         Some(tokio::spawn(async move {
             loop {
-                tokio::time::sleep(config.mvcc_interval).await;
+                tokio::time::sleep(interval).await;
                 if let Err(e) = db.advance_gc_safepoint(config.mvcc_retention).await {
                     // 進められなくても次の周回で取り返せる。落とす理由はない。
                     tracing::warn!("failed to advance the MVCC gc safepoint: {e}");

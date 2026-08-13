@@ -40,19 +40,21 @@ pub struct TikvSecurity {
 
 impl TikvConfig {
     pub fn from_env() -> Self {
-        Self::from_endpoints(
-            &std::env::var("KASANE_TIKV_PD_ENDPOINTS")
-                .unwrap_or_else(|_| DEFAULT_PD_ENDPOINTS.to_string()),
-        )
+        Self::from_endpoints(&env_str("KASANE_TIKV_PD_ENDPOINTS").unwrap_or_default())
     }
 
+    /// `raw` はカンマ区切り。空白は落とし、空なら既定の 1 台へ繋ぐ。
     pub fn from_endpoints(raw: &str) -> Self {
+        let mut pd_endpoints: Vec<String> = raw
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if pd_endpoints.is_empty() {
+            pd_endpoints.push(DEFAULT_PD_ENDPOINTS.to_string());
+        }
         Self {
-            pd_endpoints: raw
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect(),
+            pd_endpoints,
             security: TikvSecurity::from_env(),
             request_timeout: request_timeout_from_env(),
         }
@@ -61,10 +63,16 @@ impl TikvConfig {
 
 /// 未設定・解析不能なら既定値（LMDB 側の同名関数と対）。
 pub(super) fn env_parsed<T: std::str::FromStr>(name: &str, default: T) -> T {
-    std::env::var(name)
-        .ok()
+    env_str(name)
         .and_then(|s| s.trim().parse().ok())
         .unwrap_or(default)
+}
+
+/// 環境変数を文字列として読む。**空文字は未設定として扱う。**
+///
+/// `.env` に `X=` と書いたときに既定値へ落ちず「空の設定」になるのを防ぐ。
+fn env_str(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|s| !s.trim().is_empty())
 }
 
 /// `0` は「待たない」ではなく設定ミスなので既定へ落とす。
@@ -79,25 +87,35 @@ fn request_timeout_from_env() -> std::time::Duration {
     std::time::Duration::from_secs(secs)
 }
 
+/// TLS 資材のファイル名。ディレクトリ 1 つで指定させるので、名前は固定する。
+const TLS_FILES: [&str; 3] = ["ca.crt", "client.crt", "client.key"];
+
 impl TikvSecurity {
+    /// `KASANE_TIKV_TLS_DIR` に [`TLS_FILES`] が揃っていれば TLS を使う。
+    ///
+    /// パスを 3 つ別々に受け取っていたときは、一部だけ設定すると**黙って平文接続へ落ちた**。
+    /// ディレクトリ 1 つなら、設定したのに TLS にならない状態は「ファイルが無い」だけになり、
+    /// それは警告で名指しできる。
     fn from_env() -> Option<Self> {
-        let path = |name: &str| std::env::var(name).ok().filter(|s| !s.is_empty());
-        match (
-            path("KASANE_TIKV_CA_PATH"),
-            path("KASANE_TIKV_CERT_PATH"),
-            path("KASANE_TIKV_KEY_PATH"),
-        ) {
-            (Some(ca), Some(cert), Some(key)) => Some(Self {
-                ca_path: ca.into(),
-                cert_path: cert.into(),
-                key_path: key.into(),
-            }),
-            (None, None, None) => None,
-            _ => {
-                tracing::warn!("TiKV の TLS 設定が不完全です。");
-                None
-            }
+        let dir = PathBuf::from(env_str("KASANE_TIKV_TLS_DIR")?);
+        let [ca_path, cert_path, key_path] = TLS_FILES.map(|name| dir.join(name));
+
+        if let Some(missing) = [&ca_path, &cert_path, &key_path]
+            .into_iter()
+            .find(|p| !p.is_file())
+        {
+            tracing::warn!(
+                "KASANE_TIKV_TLS_DIR is set but {} is missing; connecting without TLS",
+                missing.display()
+            );
+            return None;
         }
+
+        Some(Self {
+            ca_path,
+            cert_path,
+            key_path,
+        })
     }
 }
 
