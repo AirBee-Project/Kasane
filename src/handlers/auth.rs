@@ -32,7 +32,7 @@ pub async fn login(
     let username = payload.username.clone();
     let stored_hash = app_state
         .db
-        .read(async move |repo| repo.user_meta(&username).await)
+        .read(async move |repo| repo.user_record(&username).await)
         .await?
         .map(|meta| meta.password_hash);
 

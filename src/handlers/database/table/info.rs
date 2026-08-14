@@ -35,15 +35,6 @@ pub async fn table_info(
     Extension(auth_user): Extension<AuthUser>,
     Path((db_name, table_name)): Path<(String, String)>,
 ) -> Result<Json<TableInfoResponse>, AppError> {
-    crate::middleware::auth::check_table(
-        &app_state,
-        &auth_user,
-        &db_name,
-        &table_name,
-        crate::models::users::UserRole::Read,
-    )
-    .await?;
-
-    let res = table_info_service::info(&app_state, &db_name, &table_name).await?;
+    let res = table_info_service::info(&app_state, &auth_user, &db_name, &table_name).await?;
     Ok(Json(res))
 }

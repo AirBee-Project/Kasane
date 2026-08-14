@@ -41,13 +41,15 @@ pub async fn get(
 
             // 「存在しない」より先に判定する（`authorize_resolved` の注記を参照）。
             crate::middleware::auth::authorize_resolved(
+                db,
                 &user,
                 resolved.db_id,
                 resolved.table.as_ref().map(|t| t.id),
                 &db_name,
                 Some(&table_name),
                 UserRole::Read,
-            )?;
+            )
+            .await?;
 
             let table = resolved.table.ok_or_else(|| {
                 tracing::debug!("Table not found: {}", table_name);

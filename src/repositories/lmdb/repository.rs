@@ -1,6 +1,8 @@
 //! 抽象 trait への適合。trait の実装は 1 ブロックにまとめる必要があるので、操作の定義
 //! （モジュール分割）と適合（ここ）を分けている。
 
+use std::collections::{BTreeSet, HashMap};
+
 use kasane_logic::{FlexId, SpatialIdSet};
 
 use crate::error::AppError;
@@ -8,11 +10,11 @@ use crate::models::database::DatabaseInfoResponse;
 use crate::models::database::table::{
     Table, TableConstraints, TableDataType, UpdateTableConstraints,
 };
-use crate::models::id::{DatabaseId, TableId};
-use crate::models::users::{PrivilegeRule, PrivilegeTarget, User, UserMetadata};
+use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
+use crate::models::users::{AclEntry, Grant, Scope, UserRecord};
 use crate::repositories::{CatalogRepository, ReadRepository, ValueGroups, WriteRepository};
 
-use super::{KasaneDbRead, KasaneDbWrite, catalog, users};
+use super::{KasaneDbRead, KasaneDbWrite, catalog};
 
 /// `RwTxn` は `RoTxn` へ Deref するので、読み書きで同じ自由関数を呼べる。
 macro_rules! impl_catalog_repository {
@@ -30,20 +32,49 @@ macro_rules! impl_catalog_repository {
                 catalog::table_id(self.db, &self.$txn, db_id, table_name)
             }
 
-            async fn database_name(&self, db_id: DatabaseId) -> Result<Option<String>, AppError> {
-                catalog::database_name(self.db, &self.$txn, db_id)
+            async fn user_record(&self, username: &str) -> Result<Option<UserRecord>, AppError> {
+                self.db.user_record(&self.$txn, username)
             }
 
-            async fn table_name(&self, table_id: TableId) -> Result<Option<String>, AppError> {
-                catalog::table_name(self.db, &self.$txn, table_id)
+            async fn database_names(
+                &self,
+                ids: &[DatabaseId],
+            ) -> Result<HashMap<DatabaseId, String>, AppError> {
+                catalog::database_names(self.db, &self.$txn, ids)
             }
 
-            async fn user_meta(&self, username: &str) -> Result<Option<UserMetadata>, AppError> {
-                users::user_meta(self.db, &self.$txn, username)
+            async fn table_entries(
+                &self,
+                ids: &[TableId],
+            ) -> Result<HashMap<TableId, (DatabaseId, String)>, AppError> {
+                catalog::table_entries(self.db, &self.$txn, ids)
             }
 
-            async fn table_names(&self, db_id: DatabaseId) -> Result<Vec<String>, AppError> {
-                catalog::table_names(self.db, &self.$txn, db_id)
+            async fn grant_for(
+                &self,
+                principal: PrincipalId,
+                scope: Scope,
+            ) -> Result<Grant, AppError> {
+                self.db.grant_for(&self.$txn, principal, scope)
+            }
+
+            async fn acl_entries(&self, principal: PrincipalId) -> Result<Vec<AclEntry>, AppError> {
+                self.db.acl_entries(&self.$txn, principal)
+            }
+
+            async fn acl_databases(
+                &self,
+                principal: PrincipalId,
+            ) -> Result<BTreeSet<DatabaseId>, AppError> {
+                self.db.acl_databases(&self.$txn, principal)
+            }
+
+            async fn acl_tables_in(
+                &self,
+                principal: PrincipalId,
+                db_id: DatabaseId,
+            ) -> Result<BTreeSet<TableId>, AppError> {
+                self.db.acl_tables_in(&self.$txn, principal, db_id)
             }
         }
     };
@@ -53,12 +84,30 @@ impl_catalog_repository!(KasaneDbRead<'_>, read_txn);
 impl_catalog_repository!(KasaneDbWrite<'_>, write_txn);
 
 impl ReadRepository for KasaneDbRead<'_> {
-    async fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
+    async fn database_info(
+        &self,
+        name: &str,
+    ) -> Result<Option<(DatabaseId, DatabaseInfoResponse)>, AppError> {
         self.database_info_impl(name)
     }
 
     async fn database_list(&self) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
         self.database_list_impl()
+    }
+
+    async fn databases_by_id(
+        &self,
+        ids: &[DatabaseId],
+    ) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
+        self.databases_by_id_impl(ids)
+    }
+
+    async fn tables_by_id(
+        &self,
+        db_id: DatabaseId,
+        ids: &[TableId],
+    ) -> Result<Vec<Table>, AppError> {
+        self.tables_by_id_impl(db_id, ids)
     }
 
     async fn table_info(&self, db_name: &str, table_name: &str) -> Result<Option<Table>, AppError> {
@@ -112,8 +161,12 @@ impl ReadRepository for KasaneDbRead<'_> {
         self.data_filter_range_impl(table_id, data_type, lo, hi)
     }
 
-    async fn get_all_users(&self) -> Result<Vec<User>, AppError> {
-        self.get_all_users_impl()
+    async fn list_users(
+        &self,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<(String, UserRecord)>, AppError> {
+        self.list_users_impl(after, limit)
     }
 }
 
@@ -251,42 +304,40 @@ impl WriteRepository for KasaneDbWrite<'_> {
         self.data_remove_impl(table_id, index, ids)
     }
 
-    async fn create_user(
-        &mut self,
-        username: &str,
-        id: uuid::Uuid,
-        password_hash: String,
-        privileges: &[PrivilegeRule],
-    ) -> Result<(), AppError> {
-        self.create_user_impl(username, id, password_hash, privileges)
-            .await
+    /// 単一ライタなので排他は要らない。書き込みトランザクション自体が唯一の書き手。
+    async fn lock_user(&mut self, _username: &str) -> Result<(), AppError> {
+        Ok(())
     }
 
-    async fn set_password(
+    async fn put_user_record(
         &mut self,
         username: &str,
-        password_hash: String,
+        record: &UserRecord,
     ) -> Result<(), AppError> {
-        self.set_password_impl(username, password_hash).await
+        self.put_user_record_impl(username, record)
     }
 
-    async fn grant_privilege(
+    async fn remove_user_record(&mut self, username: &str) -> Result<(), AppError> {
+        self.remove_user_record_impl(username)
+    }
+
+    async fn acl_put(&mut self, entry: AclEntry, principal: PrincipalId) -> Result<(), AppError> {
+        self.acl_put_impl(entry, principal)
+    }
+
+    async fn acl_remove(
         &mut self,
-        username: &str,
-        rule: &PrivilegeRule,
-    ) -> Result<(), AppError> {
-        self.grant_privilege_impl(username, rule).await
+        principal: PrincipalId,
+        target: DataTarget,
+    ) -> Result<bool, AppError> {
+        self.acl_remove_impl(principal, target)
     }
 
-    async fn revoke_privilege(
-        &mut self,
-        username: &str,
-        target: &PrivilegeTarget,
-    ) -> Result<(), AppError> {
-        self.revoke_privilege_impl(username, target).await
+    async fn acl_remove_principal(&mut self, principal: PrincipalId) -> Result<(), AppError> {
+        self.acl_remove_principal_impl(principal)
     }
 
-    async fn delete_user(&mut self, username: &str) -> Result<(), AppError> {
-        self.delete_user_impl(username).await
+    async fn acl_count(&self, principal: PrincipalId) -> Result<u32, AppError> {
+        self.db.acl_count(&self.write_txn, principal)
     }
 }

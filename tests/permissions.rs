@@ -1616,16 +1616,19 @@ async fn test_missing_table_reports_not_found_consistently() {
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
 
-/// 保存されている生の権限ルール数を数える。
+/// 保存されている生の ACL 行数を数える。
 ///
-/// `GET /users/{u}/privileges` は解決できないルールを隠すため、残留の有無は
-/// API からは観測できない。ここではメタデータを直接読む。
+/// `GET /users/{u}/privileges` は解決できない行を隠すため、残留の有無は API からは
+/// 観測できない。ここでは行を直接数える。
 async fn stored_privilege_count(app_state: &AppState, username: &str) -> usize {
     use kasane::repositories::{CatalogRepository, Storage};
     let username = username.to_string();
     app_state
         .db
-        .read(async move |repo| Ok(repo.require_user_meta(&username).await?.privileges.len()))
+        .read(async move |repo| {
+            let record = repo.require_user_record(&username).await?;
+            Ok(repo.acl_entries(record.id).await?.len())
+        })
         .await
         .unwrap()
 }
@@ -1642,13 +1645,11 @@ async fn delete_table(app: &axum::Router, token: &str, db_name: &str, table_name
 }
 
 #[tokio::test]
-/// 「テーブルの作成 → 権限付与 → 削除」を繰り返しても、削除済みリソースを指すルールが
-/// ユーザーメタデータに累積しないことを検証する。
+/// 「テーブルの作成 → 権限付与 → 削除」を繰り返しても、削除済みリソースを指す行が
+/// 残らないことを検証する。
 ///
-/// 権限の書き込みは常に全置換であり、置換時にすべてのルールが実在するリソースへ
-/// 解決される必要があるため、書き込み直後の残留は必ず 0 件になる。よって残留は
-/// 「直近の置換に含まれていたルールのうち、その後削除されたもの」に限られ、
-/// 繰り返し回数に応じて増えることはない。
+/// 権限は対象ごとの行として持ち、対象を消すときに逆引き索引からその行を落とす。
+/// よって残留は繰り返し回数によらず**常に 0 件**になる。
 async fn test_stale_privileges_do_not_accumulate_over_cycles() {
     let test_app = PermissionTestApp::new();
     let root_token = test_app.root_token().await;
@@ -1670,12 +1671,11 @@ async fn test_stale_privileges_do_not_accumulate_over_cycles() {
         .await;
         delete_table(&test_app.app, &root_token, "churn_db", &table).await;
 
-        // 直前のサイクルで残留したルールは、次の全置換で必ず消える。
-        // 残るのは常に「今回削除した 1 件」だけ。
+        // テーブルの削除がその行を落とすので、残留は 0 件。
         assert_eq!(
             stored_privilege_count(&test_app.app_state, "churner").await,
-            1,
-            "サイクル {} で権限ルールが累積した",
+            0,
+            "サイクル {} で削除済みテーブルを指す行が残った",
             i
         );
     }
@@ -1835,34 +1835,87 @@ async fn test_database_remove_leaves_no_orphan_tables() {
 
 #[tokio::test]
 /// 上限を超える権限ルールが、名前解決を走らせる前に件数だけで拒否されることを検証する。
+///
+/// HTTP 越しではなくリポジトリ層で確かめる。上限ぶんのルールを JSON で送ると本文サイズの
+/// 上限（413）に先に当たってしまい、件数チェックまで届かないため。
 async fn test_privilege_rules_are_capped_before_resolution() {
+    use kasane::models::users::{DataRole, MAX_PRIVILEGES_PER_USER, PrivilegeRule};
+    use kasane::repositories::{CatalogRepository, Storage};
+
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token().await;
 
     // 実在しないデータベースを指すルールを上限超えの件数だけ並べる。
-    // 名前解決が先に走るなら database_not_found が返るはずだが、
-    // 件数チェックが先なので invalid_privilege になる。
-    let privileges: Vec<serde_json::Value> = (0..1001)
-        .map(|i| {
-            serde_json::json!({ "scope": "database", "db_name": format!("ghost_{}", i), "role": "read" })
+    // 名前解決が先に走るなら database_not_found になるはずだが、件数チェックが先なので
+    // invalid_privilege で落ちる。
+    let rules: Vec<PrivilegeRule> = (0..MAX_PRIVILEGES_PER_USER as usize + 1)
+        .map(|i| PrivilegeRule::Database {
+            db_name: format!("ghost_{i}"),
+            role: DataRole::Read,
         })
         .collect();
 
-    let req = Request::builder()
-        .method("POST")
-        .uri("/users")
-        .header("Authorization", format!("Bearer {}", root_token))
-        .header("Content-Type", "application/json")
-        .body(Body::from(
-            serde_json::json!({
-                "username": "hoarder",
-                "password": "password",
-                "privileges": privileges
-            })
-            .to_string(),
-        ))
-        .unwrap();
-    let res = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
-    assert_eq!(json_body(res).await["code"], "invalid_privilege");
+    let err = test_app
+        .app_state
+        .db
+        .read(async move |r| CatalogRepository::resolve_rules(r, &rules).await)
+        .await
+        .expect_err("上限超えが受理された");
+
+    assert!(
+        matches!(err, kasane::error::AppError::InvalidPrivilege { .. }),
+        "件数ではなく名前解決で落ちている: {err:?}"
+    );
+}
+
+#[tokio::test]
+/// `GET /users` が利用者名の辞書順でページングされること。
+///
+/// 1 リクエストの読み取りを利用者数に比例させないための仕組みなので、
+/// 「続きの有無」と「境界の重複・欠落が無いこと」を確かめる。
+async fn test_user_listing_is_paginated() {
+    let test_app = PermissionTestApp::new();
+    let root_token = test_app.root_token().await;
+
+    for i in 0..5 {
+        create_user_and_token(&test_app.app, &root_token, &format!("pager{i}"), false).await;
+    }
+
+    // root + pager0..4 の 6 人を 4 件ずつ辿る。
+    let mut seen: Vec<String> = Vec::new();
+    let mut after: Option<String> = None;
+    loop {
+        let uri = match &after {
+            Some(a) => format!("/users?limit=4&after={a}"),
+            None => "/users?limit=4".to_string(),
+        };
+        let body = json_body(get(&test_app.app, &root_token, &uri).await).await;
+
+        let page = body["users"].as_array().unwrap().clone();
+        assert!(page.len() <= 4, "limit を超えて返している");
+        assert!(!page.is_empty(), "空ページが返った");
+        for user in &page {
+            seen.push(user["username"].as_str().unwrap().to_string());
+        }
+
+        match body.get("next").and_then(|v| v.as_str()) {
+            Some(next) => after = Some(next.to_string()),
+            None => break,
+        }
+    }
+
+    let mut want: Vec<String> = (0..5).map(|i| format!("pager{i}")).collect();
+    want.push("root".to_string());
+    want.sort();
+
+    assert_eq!(seen, want, "ページの境界で重複または欠落がある");
+
+    // 概要に権限そのものは入らない（入れると読み取りが利用者数×保持数に比例する）。
+    let body = json_body(get(&test_app.app, &root_token, "/users?limit=1").await).await;
+    let first = &body["users"][0];
+    assert!(
+        first.get("privileges").is_none(),
+        "一覧に権限が含まれている"
+    );
+    assert!(first.get("username").is_some());
+    assert!(first.get("global_role").is_some());
 }

@@ -22,8 +22,11 @@ pub enum AuthError {
     TokenRevoked,
     /// ユーザーの存在有無を区別せず同一メッセージを返し、ユーザー列挙を防ぐ。
     InvalidCredentials,
-    /// GlobalAdmin 権限が必要な操作を、非管理者が要求した。
-    RequiresGlobalAdmin,
+    /// `global` スコープで一定以上のロールが必要な操作を、満たさない利用者が要求した。
+    ///
+    /// `required` を持つのは、`admin` を求める操作と `manage` で足りる操作を
+    /// クライアントが区別できるようにするため。
+    RequiresGlobalRole { required: UserRole },
     /// 本人または GlobalAdmin のみ許可される操作を、第三者が要求した。
     NotSelfOrAdmin,
     /// 対象データベース（またはその中の特定テーブル）に対する権限が不足している。
@@ -44,7 +47,7 @@ impl AuthError {
             | Self::InvalidToken
             | Self::TokenRevoked
             | Self::InvalidCredentials => StatusCode::UNAUTHORIZED,
-            Self::RequiresGlobalAdmin
+            Self::RequiresGlobalRole { .. }
             | Self::NotSelfOrAdmin
             | Self::InsufficientPrivilege { .. }
             | Self::RootProtected => StatusCode::FORBIDDEN,
@@ -59,7 +62,12 @@ impl AuthError {
             Self::InvalidToken => "invalid_token",
             Self::TokenRevoked => "token_revoked",
             Self::InvalidCredentials => "invalid_credentials",
-            Self::RequiresGlobalAdmin => "requires_global_admin",
+            // `admin` を求める場合だけ従来のコードを保つ。制御面の操作かどうかは
+            // クライアントの分岐で意味が違うので、`manage` で足りる操作と混ぜない。
+            Self::RequiresGlobalRole {
+                required: UserRole::Admin,
+            } => "requires_global_admin",
+            Self::RequiresGlobalRole { .. } => "requires_global_role",
             Self::NotSelfOrAdmin => "not_self_or_admin",
             Self::InsufficientPrivilege { .. } => "insufficient_privilege",
             Self::RootProtected => "root_protected",
@@ -75,7 +83,12 @@ impl fmt::Display for AuthError {
             Self::InvalidToken => write!(f, "Invalid or expired token"),
             Self::TokenRevoked => write!(f, "Authentication token is no longer valid"),
             Self::InvalidCredentials => write!(f, "Invalid username or password"),
-            Self::RequiresGlobalAdmin => write!(f, "Requires GlobalAdmin privileges"),
+            Self::RequiresGlobalRole {
+                required: UserRole::Admin,
+            } => write!(f, "Requires GlobalAdmin privileges"),
+            Self::RequiresGlobalRole { required } => {
+                write!(f, "Requires the global '{:?}' role or higher", required)
+            }
             Self::NotSelfOrAdmin => write!(f, "You can only modify your own account"),
             Self::InsufficientPrivilege {
                 db_name,
@@ -159,6 +172,21 @@ pub enum AppError {
 }
 
 impl AppError {
+    /// 保持できる権限数の上限に達した。付与側と解決側で同じ文言を使う。
+    pub fn too_many_privileges() -> Self {
+        Self::InvalidPrivilege {
+            reason: format!(
+                "a user cannot hold more than {} privileges",
+                crate::models::users::MAX_PRIVILEGES_PER_USER
+            ),
+        }
+    }
+
+    /// 剥奪しようとした対象の権限を持っていない。
+    pub fn no_such_privilege() -> Self {
+        Self::NotFound("The user has no privilege for that target".into())
+    }
+
     fn status(&self) -> StatusCode {
         match self {
             Self::NotFound(_) => StatusCode::NOT_FOUND,

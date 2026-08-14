@@ -56,22 +56,29 @@ async fn resolve_tables(
     refs.dedup();
 
     let requested = refs.clone();
+    let user = user.clone();
+    let for_auth = requested.clone();
+    // 解決と認可を同じ断面で行う。分けると、認可を通した対象と読む対象がずれうる。
     let resolved = app_state
         .db
-        .read(async move |r| r.resolve_tables(&refs).await)
+        .read(async move |r| {
+            let resolved = r.resolve_tables(&refs).await?;
+            // 逆順にすると、権限の無い利用者へ 404 で名前の存在有無を教えることになる。
+            for ((db_name, table_name), entry) in for_auth.iter().zip(&resolved) {
+                crate::middleware::auth::authorize_resolved(
+                    r,
+                    &user,
+                    entry.db_id,
+                    entry.table.as_ref().map(|t| t.id),
+                    db_name,
+                    Some(table_name),
+                    UserRole::Read,
+                )
+                .await?;
+            }
+            Ok(resolved)
+        })
         .await?;
-
-    // 逆順にすると、権限の無い利用者へ 404 で名前の存在有無を教えることになる。
-    for ((db_name, table_name), entry) in requested.iter().zip(&resolved) {
-        crate::middleware::auth::authorize_resolved(
-            user,
-            entry.db_id,
-            entry.table.as_ref().map(|t| t.id),
-            db_name,
-            Some(table_name),
-            UserRole::Read,
-        )?;
-    }
 
     requested
         .into_iter()

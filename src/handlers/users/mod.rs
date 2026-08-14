@@ -1,6 +1,6 @@
 use axum::{
     Extension, Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
 };
 
@@ -9,9 +9,9 @@ use crate::{
     error::AppError,
     middleware::auth::{AuthUser, check_global_admin, check_self_or_admin},
     models::users::{
-        CreateUserRequest, PrivilegeRule, PrivilegeTarget, PrivilegesResponse,
+        CreateUserRequest, ListUsersQuery, PrivilegeRule, PrivilegeTarget, PrivilegesResponse,
         SetDataPrivilegeRequest, SetGlobalPrivilegeRequest, UpdatePasswordRequest,
-        UserInfoResponse,
+        UserInfoResponse, UserListResponse,
     },
     services::users as users_service,
 };
@@ -20,12 +20,13 @@ use crate::{
 ///
 /// **必要な権限**: `global` / `admin`
 ///
-/// ユーザーの一覧を権限つきで取得します。
+/// ユーザーの一覧を利用者名の辞書順で取得します。
 #[utoipa::path(
     get,
     path = "/users",
+    params(ListUsersQuery),
     responses(
-        (status = 200, body = [UserInfoResponse]),
+        (status = 200, body = UserListResponse),
         (status = 401, description = "Unauthorized")
     ),
     security(("bearer_auth" = [])),
@@ -35,9 +36,10 @@ use crate::{
 pub async fn list_users(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
-) -> Result<Json<Vec<UserInfoResponse>>, AppError> {
+    Query(query): Query<ListUsersQuery>,
+) -> Result<Json<UserListResponse>, AppError> {
     check_global_admin(&auth_user)?;
-    let users = users_service::list_users(&app_state).await?;
+    let users = users_service::list_users(&app_state, &query).await?;
     Ok(Json(users))
 }
 

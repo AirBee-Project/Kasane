@@ -1,13 +1,17 @@
 use crate::{
     AppState,
     error::AppError,
+    middleware::auth::authorize_path,
     models::database::table::TableSummary,
+    models::users::{User, UserRole},
     repositories::{Storage, WriteRepository},
 };
 
+#[allow(clippy::too_many_arguments)]
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn table_update(
     state: AppState,
+    user: &User,
     db_name: &str,
     table_name: &str,
     new_name: Option<&str>,
@@ -29,16 +33,19 @@ pub async fn table_update(
     let db_name = db_name.to_string();
     let table_name = table_name.to_string();
     let new_name = new_name.map(str::to_string);
+    let user = user.clone();
 
     let table = state
         .db
         .write(async move |txn| {
+            // 権限はテーブル ID に紐づくので、改名しても権限はそのテーブルに追従する。
+            authorize_path(txn, &user, &db_name, Some(&table_name), UserRole::Manage).await?;
             txn.table_update(
                 &db_name,
                 &table_name,
                 new_name.as_deref(),
-                new_constraints,
-                description,
+                new_constraints.clone(),
+                description.clone(),
                 validate_existing_data,
             )
             .await

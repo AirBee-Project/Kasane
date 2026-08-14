@@ -1,13 +1,10 @@
 //! TiKV 上のシャードツリーを Kasane-Logic のクエリ入力源として見せるアダプタ。
 //!
-//! [`Source::read_subset`] は 1 回のクエリ実行で複数回呼ばれるので、そのたびに新しい
-//! トランザクションを開くと別の `start_ts` で読むことになり、途中で走った書き込みを一部だけ
-//! 見た結果が混ざる。TiKV では複数インスタンスの同時書き込みが通常運用なので、ここを
-//! 固定しないとクエリ結果が引き裂かれる。
+//! [`Source::read_subset`] は 1 回のクエリで複数回呼ばれるので、断面を固定しないと途中で
+//! 走った書き込みを一部だけ見た結果が混ざる。
 //!
-//! ランタイムハンドルを持ち回るのは、[`Source`] が同期 I/F だから。
-//! [`tokio::runtime::Handle::current`] を `read_subset` の中で呼ぶと、実行器が別のスレッド
-//! プール（rayon など）から読みに来たときにランタイム文脈が無くて panic する。
+//! ランタイムハンドルを持ち回るのは、[`tokio::runtime::Handle::current`] を `read_subset` の
+//! 中で呼ぶと、実行器が rayon 側から読みに来たときにランタイム文脈が無くて panic するため。
 
 use kasane_logic::{Error as LogicError, RangeId, SafeValue, Source, WorkingTree};
 use tikv_client::Timestamp;

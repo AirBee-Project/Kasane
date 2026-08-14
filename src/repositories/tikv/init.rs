@@ -4,16 +4,17 @@ use super::keys::{self, LockScope};
 use super::kv::{self, Reader};
 use super::{TikvDb, TikvRead, TikvWrite};
 use crate::error::AppError;
+use crate::models::id::PrincipalId;
 use crate::models::users::{PrivilegeRule, UserRole};
-use crate::repositories::{CatalogRepository, Storage, WriteRepository};
+use crate::repositories::{
+    CatalogRepository, ROOT_USERNAME, SCHEMA_VERSION, Storage, WriteRepository, root_password,
+};
 use crate::services::auth::hash_password;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tikv_client::{Config, TransactionClient};
 
 pub(super) const DEFAULT_PD_ENDPOINTS: &str = "127.0.0.1:2379";
-
-const ROOT_USERNAME: &str = "root";
 
 /// tikv-client の既定 2 秒は短すぎる。これは**すべての**ストア RPC の期限になるが、
 /// 混み合ったノードでは 1024 キーの `batch_get` も数千キーの prewrite も普通に超える。
@@ -153,16 +154,33 @@ impl TikvDb {
     }
 
     async fn ensure_initialized(&self) -> Result<(), AppError> {
-        if self.read(async |r| r.cluster_initialized().await).await? {
-            return Ok(());
+        // 版の確認は他のどの読み書きより先に行う。読み方が違うまま触ると壊れる。
+        let (version, initialized) = self
+            .read(async |r| Ok((r.schema_version().await?, r.cluster_initialized().await?)))
+            .await?;
+
+        match version {
+            Some(SCHEMA_VERSION) => return Ok(()),
+            Some(other) => {
+                return Err(AppError::StorageError(format!(
+                    "この TiKV クラスタは Kasane のディスク形式 v{other} で書かれています\
+                     （このビルドが読めるのは v{SCHEMA_VERSION}）。\
+                     別のクラスタを指すか、鍵空間を作り直してください"
+                )));
+            }
+            // 版を持たないが初期化済み = 権限を利用者レコードに埋めていた頃の形式。
+            None if initialized => {
+                return Err(AppError::StorageError(format!(
+                    "この TiKV クラスタは Kasane の古いディスク形式（v1、権限が利用者\
+                     レコードに同居していた頃）で書かれています。このビルドが読めるのは \
+                     v{SCHEMA_VERSION} です。別のクラスタを指すか、鍵空間を作り直してください"
+                )));
+            }
+            None => {}
         }
 
-        let password = std::env::var("ROOT_PASSWORD")
-            .ok()
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "password".to_string());
-        let hash = hash_password(&password)?;
-        let id = uuid::Uuid::now_v7();
+        let hash = hash_password(&root_password())?;
+        let id = PrincipalId(uuid::Uuid::now_v7());
 
         let created = self
             .write(async move |w| {
@@ -196,13 +214,23 @@ impl<R: Reader> TikvRead<'_, R> {
             .await?
             .is_some())
     }
+
+    pub(super) async fn schema_version(&self) -> Result<Option<u32>, AppError> {
+        let Some(bytes) = kv::get(&self.txn, keys::schema_version()).await? else {
+            return Ok(None);
+        };
+        let raw: [u8; 4] = bytes.as_slice().try_into().map_err(|_| {
+            AppError::StorageError("schema version marker is not four bytes".to_string())
+        })?;
+        Ok(Some(u32::from_le_bytes(raw)))
+    }
 }
 
 impl TikvWrite<'_> {
     async fn initialize_cluster(
         &mut self,
         username: &str,
-        id: uuid::Uuid,
+        id: PrincipalId,
         password_hash: String,
         privileges: &[PrivilegeRule],
     ) -> Result<bool, AppError> {
@@ -215,16 +243,21 @@ impl TikvWrite<'_> {
             return Ok(false);
         }
 
-        let already_seeded = self.user_meta(username).await?.is_some();
+        let already_seeded = self.user_record(username).await?.is_some();
         if !already_seeded {
             self.create_user(username, id, password_hash, privileges)
                 .await?;
         }
 
-        kv::put(
+        kv::put_many(
             &self.txn,
-            keys::cluster_initialized(),
-            MARKER_PRESENT.to_vec(),
+            [
+                (keys::cluster_initialized(), MARKER_PRESENT.to_vec()),
+                (
+                    keys::schema_version(),
+                    SCHEMA_VERSION.to_le_bytes().to_vec(),
+                ),
+            ],
         )
         .await;
         Ok(!already_seeded)

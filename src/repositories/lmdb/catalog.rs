@@ -1,6 +1,8 @@
 //! `_impl` を付けるのは、trait メソッドと同名にすると inherent 側が常に優先されて
 //! trait メソッドを呼べなくなるため（TiKV 実装も同じ規約）。
 
+use std::collections::HashMap;
+
 use heed::BytesDecode;
 use uuid::Uuid;
 
@@ -47,12 +49,46 @@ pub(super) fn database_name(
     Ok(db.database_id_index.get(txn, &db_id)?.map(str::to_string))
 }
 
-pub(super) fn table_name(
+/// 所属データベースも返すのは、権限の描画で「本当にそのデータベースの配下か」を
+/// 確かめられるようにするため。
+pub(super) fn table_entry(
     db: &AppDb,
     txn: &heed::RoTxn<heed::WithoutTls>,
     table_id: TableId,
-) -> Result<Option<String>, AppError> {
-    Ok(db.table_id_index.get(txn, &table_id)?.map(str::to_string))
+) -> Result<Option<(DatabaseId, String)>, AppError> {
+    Ok(db
+        .table_id_index
+        .get(txn, &table_id)?
+        .map(|(db_id, name)| (db_id, name.to_string())))
+}
+
+/// すべて mmap 上の点参照なので束ねる意味はなく、TiKV 実装と入口を揃えるためだけにある。
+pub(super) fn database_names(
+    db: &AppDb,
+    txn: &heed::RoTxn<heed::WithoutTls>,
+    ids: &[DatabaseId],
+) -> Result<HashMap<DatabaseId, String>, AppError> {
+    let mut out = HashMap::with_capacity(ids.len());
+    for &db_id in ids {
+        if let Some(name) = database_name(db, txn, db_id)? {
+            out.insert(db_id, name);
+        }
+    }
+    Ok(out)
+}
+
+pub(super) fn table_entries(
+    db: &AppDb,
+    txn: &heed::RoTxn<heed::WithoutTls>,
+    ids: &[TableId],
+) -> Result<HashMap<TableId, (DatabaseId, String)>, AppError> {
+    let mut out = HashMap::with_capacity(ids.len());
+    for &table_id in ids {
+        if let Some(entry) = table_entry(db, txn, table_id)? {
+            out.insert(table_id, entry);
+        }
+    }
+    Ok(out)
 }
 
 /// 全走査に依存する逆引きは持たず、`tables` のプレフィックススキャンで済ませる。
@@ -78,19 +114,73 @@ pub(super) fn table_names(
 
 impl<'a> KasaneDbRead<'a> {
     #[tracing::instrument(skip_all)]
-    pub fn database_info_impl(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
+    pub fn database_info_impl(
+        &self,
+        name: &str,
+    ) -> Result<Option<(DatabaseId, DatabaseInfoResponse)>, AppError> {
         if name.is_empty() {
             return Ok(None);
         }
-        let db = self.db.databases;
-        if let Some(meta) = db.get(&self.read_txn, name)? {
-            Ok(Some(DatabaseInfoResponse {
-                name: name.to_string(),
-                description: meta.description,
-            }))
-        } else {
-            Ok(None)
+        Ok(self.db.databases.get(&self.read_txn, name)?.map(|meta| {
+            (
+                meta.id,
+                DatabaseInfoResponse {
+                    name: name.to_string(),
+                    description: meta.description,
+                },
+            )
+        }))
+    }
+
+    /// ACL 側から辿った ID で引く。存在しない ID は結果に現れない。
+    #[tracing::instrument(skip_all, fields(ids = ids.len()))]
+    pub fn databases_by_id_impl(
+        &self,
+        ids: &[DatabaseId],
+    ) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
+        let mut out = Vec::with_capacity(ids.len());
+        for &db_id in ids {
+            // 逆引きで名前を得てから本体を引く。名前が本体の鍵なので 2 段になる。
+            let Some(name) = database_name(self.db, &self.read_txn, db_id)? else {
+                continue;
+            };
+            if let Some(meta) = self.db.databases.get(&self.read_txn, name.as_str())? {
+                out.push((
+                    db_id,
+                    DatabaseInfoResponse {
+                        name,
+                        description: meta.description,
+                    },
+                ));
+            }
         }
+        Ok(out)
+    }
+
+    /// このデータベース配下の、指定した ID のテーブルだけ。配下全件は舐めない。
+    #[tracing::instrument(skip_all, fields(ids = ids.len()))]
+    pub fn tables_by_id_impl(
+        &self,
+        db_id: DatabaseId,
+        ids: &[TableId],
+    ) -> Result<Vec<Table>, AppError> {
+        let mut out = Vec::with_capacity(ids.len());
+        for &table_id in ids {
+            let Some((owner, name)) = table_entry(self.db, &self.read_txn, table_id)? else {
+                continue;
+            };
+            if owner != db_id {
+                continue;
+            }
+            if let Some(meta) = self
+                .db
+                .tables
+                .get(&self.read_txn, &(db_id, name.as_str()))?
+            {
+                out.push(Table::from_meta(&name, meta));
+            }
+        }
+        Ok(out)
     }
 
     /// 呼び出し側が権限の絞り込みに使うので、ID を添えて返す。
@@ -174,7 +264,11 @@ impl<'a> KasaneDbWrite<'a> {
             self.table_remove_impl(name, &table_name)?;
         }
 
-        // 権限は ID で保存され ID は再利用されないので、掃除しなくても誤爆しない。
+        // データベーススコープの行を落とす（配下テーブルの行は上のループで消えている）。
+        // ID は再利用されないので取り残しても誤爆はしないが、残すと持ち主に
+        // 「配下のどれかに届く」と見え続けてしまう。
+        self.acl_remove_object_impl(meta.id, None)?;
+
         self.db.databases.delete(&mut self.write_txn, name)?;
         self.db
             .database_id_index
@@ -503,7 +597,7 @@ impl<'a> KasaneDbWrite<'a> {
         db.put(&mut self.write_txn, &(db_meta.id, table_name), &meta)?;
         self.db
             .table_id_index
-            .put(&mut self.write_txn, &id, table_name)?;
+            .put(&mut self.write_txn, &id, &(db_meta.id, table_name))?;
 
         Ok(Table {
             id,
@@ -599,9 +693,11 @@ impl<'a> KasaneDbWrite<'a> {
         let db = self.db.tables;
         if changed_name {
             db.delete(&mut self.write_txn, &(db_meta.id, table_name))?;
-            self.db
-                .table_id_index
-                .put(&mut self.write_txn, &table.id, &table.name)?;
+            self.db.table_id_index.put(
+                &mut self.write_txn,
+                &table.id,
+                &(db_meta.id, table.name.as_str()),
+            )?;
         }
         db.put(&mut self.write_txn, &(db_meta.id, &table.name), &meta)?;
 
@@ -700,6 +796,9 @@ impl<'a> KasaneDbWrite<'a> {
             value_index.delete(&mut self.write_txn, &k)?;
         }
 
+        // このテーブルを指す ACL 行を保持者を問わず落とす。
+        self.acl_remove_object_impl(db_meta.id, Some(table.id))?;
+
         self.db
             .tables
             .delete(&mut self.write_txn, &(db_meta.id, table_name))?;
@@ -777,7 +876,11 @@ impl<'a> KasaneDbWrite<'a> {
             &(copy_db_meta.id, copy_table_name),
             &copy_table_meta,
         )?;
-        db_index.put(&mut self.write_txn, &copy_table_id, copy_table_name)?;
+        db_index.put(
+            &mut self.write_txn,
+            &copy_table_id,
+            &(copy_db_meta.id, copy_table_name),
+        )?;
 
         let tables_data = self
             .db

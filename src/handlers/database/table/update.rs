@@ -2,10 +2,7 @@ use crate::{
     AppState,
     error::AppError,
     middleware::auth::AuthUser,
-    models::{
-        database::table::{TableSummary, UpdateTableRequest},
-        users::UserRole,
-    },
+    models::database::table::{TableSummary, UpdateTableRequest},
     services::database::table::update as table_update_service,
 };
 use axum::{
@@ -51,18 +48,9 @@ pub async fn table_update_handler(
     Path((db_name, table_name)): Path<(String, String)>,
     Json(payload): Json<UpdateTableRequest>,
 ) -> Result<Json<TableSummary>, AppError> {
-    // 権限はテーブル ID に紐づくので、改名しても権限はそのテーブルに追従する。
-    crate::middleware::auth::check_table(
-        &state,
-        &auth_user,
-        &db_name,
-        &table_name,
-        UserRole::Manage,
-    )
-    .await?;
-
     let result = table_update_service::table_update(
         state.clone(),
+        &auth_user,
         &db_name,
         &table_name,
         payload.name.as_deref(),

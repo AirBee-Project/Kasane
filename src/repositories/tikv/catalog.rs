@@ -12,6 +12,7 @@ use crate::models::database::table::{
 use crate::models::database::{DatabaseInfoResponse, DatabaseMetadata};
 use crate::models::id::{DatabaseId, TableId};
 use crate::repositories::ResolvedTable;
+use crate::repositories::encoding::OwnedName;
 
 /// `what` は失敗時の文言のためだけに受け取る。
 pub(super) fn encode<T: serde::Serialize>(what: &str, meta: &T) -> Result<Vec<u8>, AppError> {
@@ -69,38 +70,126 @@ pub(super) async fn table_id<R: Reader>(
     Ok(table_meta(txn, db_id, table_name).await?.map(|m| m.id))
 }
 
-pub(super) async fn database_name<R: Reader>(
+/// **1 回の `batch_get` で引く。** 権限の描画は保持数ぶん名前を要求するので、
+/// 1 件ずつ往復すると権限を多く持つ利用者ほど一覧が重くなる。
+pub(super) async fn database_names<R: Reader>(
     txn: &Readers<R>,
-    db_id: DatabaseId,
-) -> Result<Option<String>, AppError> {
-    match kv::get(txn, keys::database_id_index(db_id)).await? {
-        Some(bytes) => Ok(Some(String::from_utf8(bytes).map_err(|e| {
-            AppError::InternalError(format!("database name is not valid utf-8: {e}"))
-        })?)),
-        None => Ok(None),
+    ids: &[DatabaseId],
+) -> Result<HashMap<DatabaseId, String>, AppError> {
+    if ids.is_empty() {
+        return Ok(HashMap::new());
     }
+    let by_key: BTreeMap<Vec<u8>, DatabaseId> = ids
+        .iter()
+        .map(|&db_id| (keys::database_id_index(db_id), db_id))
+        .collect();
+
+    let mut out = HashMap::with_capacity(ids.len());
+    for (key, bytes) in kv::batch_get(txn, by_key.keys().cloned().collect()).await? {
+        if let Some(&db_id) = by_key.get(&key) {
+            out.insert(
+                db_id,
+                String::from_utf8(bytes).map_err(|e| {
+                    AppError::InternalError(format!("database name is not valid utf-8: {e}"))
+                })?,
+            );
+        }
+    }
+    Ok(out)
 }
 
-pub(super) async fn table_name<R: Reader>(
+pub(super) async fn table_entries<R: Reader>(
     txn: &Readers<R>,
-    table_id: TableId,
-) -> Result<Option<String>, AppError> {
-    match kv::get(txn, keys::table_id_index(table_id)).await? {
-        Some(bytes) => Ok(Some(String::from_utf8(bytes).map_err(|e| {
-            AppError::InternalError(format!("table name is not valid utf-8: {e}"))
-        })?)),
-        None => Ok(None),
+    ids: &[TableId],
+) -> Result<HashMap<TableId, (DatabaseId, String)>, AppError> {
+    if ids.is_empty() {
+        return Ok(HashMap::new());
     }
+    let by_key: BTreeMap<Vec<u8>, TableId> = ids
+        .iter()
+        .map(|&table_id| (keys::table_id_index(table_id), table_id))
+        .collect();
+
+    let mut out = HashMap::with_capacity(ids.len());
+    for (key, bytes) in kv::batch_get(txn, by_key.keys().cloned().collect()).await? {
+        if let Some(&table_id) = by_key.get(&key) {
+            out.insert(
+                table_id,
+                OwnedName::try_from(bytes.as_slice())?.into_parts(),
+            );
+        }
+    }
+    Ok(out)
 }
 
-pub(super) async fn table_names<R: Reader>(
+/// ACL 側から辿った ID でデータベースを引く。
+///
+/// 逆引きで名前を得てから本体を引くので 2 段になるが、どちらの段も 1 回の
+/// `batch_get` に束ねられる（往復は**件数によらず 2 回**）。
+pub(super) async fn databases_by_id<R: Reader>(
+    txn: &Readers<R>,
+    ids: &[DatabaseId],
+) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
+    let names = database_names(txn, ids).await?;
+    if names.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let by_key: BTreeMap<Vec<u8>, DatabaseId> = names
+        .iter()
+        .map(|(&db_id, name)| (keys::database(name), db_id))
+        .collect();
+
+    let mut out = Vec::with_capacity(names.len());
+    for (key, bytes) in kv::batch_get(txn, by_key.keys().cloned().collect()).await? {
+        let Some(&db_id) = by_key.get(&key) else {
+            continue;
+        };
+        let meta: DatabaseMetadata = decode("database", &bytes)?;
+        // 名前が別のデータベースへ付け替わっていたら採らない。
+        if meta.id != db_id {
+            continue;
+        }
+        out.push((
+            db_id,
+            DatabaseInfoResponse {
+                name: names[&db_id].clone(),
+                description: meta.description,
+            },
+        ));
+    }
+    Ok(out)
+}
+
+/// このデータベース配下の、指定した ID のテーブルだけ。配下全件は舐めない。
+pub(super) async fn tables_by_id<R: Reader>(
     txn: &Readers<R>,
     db_id: DatabaseId,
-) -> Result<Vec<String>, AppError> {
-    let keys = kv::scan_prefix_keys(txn, &keys::tables_of(db_id)).await?;
-    keys.iter()
-        .map(|key| keys::table_name_from_key(key).map(str::to_string))
-        .collect()
+    ids: &[TableId],
+) -> Result<Vec<Table>, AppError> {
+    let entries = table_entries(txn, ids).await?;
+
+    let by_key: BTreeMap<Vec<u8>, TableId> = entries
+        .iter()
+        .filter(|(_, (owner, _))| *owner == db_id)
+        .map(|(&table_id, (_, name))| (keys::table(db_id, name), table_id))
+        .collect();
+    if by_key.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut out = Vec::with_capacity(by_key.len());
+    for (key, bytes) in kv::batch_get(txn, by_key.keys().cloned().collect()).await? {
+        let Some(table_id) = by_key.get(&key) else {
+            continue;
+        };
+        let meta: TableMetadata = decode("table", &bytes)?;
+        if meta.id != *table_id {
+            continue;
+        }
+        out.push(Table::from_meta(&entries[table_id].1, meta));
+    }
+    Ok(out)
 }
 
 pub(super) async fn table_info<R: Reader>(
@@ -187,13 +276,16 @@ pub(super) async fn resolve_tables<R: Reader>(
 pub(super) async fn database_info<R: Reader>(
     txn: &Readers<R>,
     name: &str,
-) -> Result<Option<DatabaseInfoResponse>, AppError> {
-    Ok(database_meta(txn, name)
-        .await?
-        .map(|meta| DatabaseInfoResponse {
-            name: name.to_string(),
-            description: meta.description,
-        }))
+) -> Result<Option<(DatabaseId, DatabaseInfoResponse)>, AppError> {
+    Ok(database_meta(txn, name).await?.map(|meta| {
+        (
+            meta.id,
+            DatabaseInfoResponse {
+                name: name.to_string(),
+                description: meta.description,
+            },
+        )
+    }))
 }
 
 pub(super) async fn table_list_by_id<R: Reader>(
@@ -302,8 +394,13 @@ impl TikvWrite<'_> {
         // データベーススコープを保持しているので、この一覧が途中で増えることはない。
         let tables = table_list_by_id(&self.txn, meta.id).await?;
         for table in tables {
-            self.retire_table(meta.id, &table.name, table.id).await;
+            self.retire_table(meta.id, &table.name, table.id).await?;
         }
+
+        // データベーススコープの行を落とす（配下テーブルの行は上のループで消えている）。
+        // ID は再利用されないので取り残しても誤爆はしないが、残すと持ち主に
+        // 「配下のどれかに届く」と見え続けてしまう。
+        self.acl_remove_object_impl(meta.id, None).await?;
 
         kv::delete_many(
             &self.txn,
@@ -488,7 +585,7 @@ impl TikvWrite<'_> {
         kv::put(
             &self.txn,
             keys::table_id_index(id),
-            table_name.as_bytes().to_vec(),
+            OwnedName::new(db_meta.id, table_name).into_bytes(),
         )
         .await;
 
@@ -582,7 +679,7 @@ impl TikvWrite<'_> {
             kv::put(
                 &self.txn,
                 keys::table_id_index(table.id),
-                table.name.as_bytes().to_vec(),
+                OwnedName::new(db_meta.id, &table.name).into_bytes(),
             )
             .await;
         }
@@ -617,7 +714,7 @@ impl TikvWrite<'_> {
                 name: table_name.to_string(),
             })?;
 
-        self.retire_table(db_meta.id, table_name, table.id).await;
+        self.retire_table(db_meta.id, table_name, table.id).await?;
         Ok(())
     }
 
@@ -704,7 +801,7 @@ impl TikvWrite<'_> {
         kv::put(
             &self.txn,
             keys::table_id_index(copy_id),
-            dst_table_name.as_bytes().to_vec(),
+            OwnedName::new(dst_db_id, dst_table_name).into_bytes(),
         )
         .await;
 
@@ -735,7 +832,16 @@ impl TikvWrite<'_> {
     ///
     /// `TableId` は UUIDv7 なので、回収前に飛び込んだ書き込みが残骸を作っても次の掃除で回収
     /// される。
-    async fn retire_table(&mut self, db_id: DatabaseId, table_name: &str, table_id: TableId) {
+    async fn retire_table(
+        &mut self,
+        db_id: DatabaseId,
+        table_name: &str,
+        table_id: TableId,
+    ) -> Result<(), AppError> {
+        // このテーブルを指す ACL 行を保持者を問わず落とす。実体の回収は後からでよいが、
+        // 権限は「消えたテーブルに届いたまま」にしない。
+        self.acl_remove_object_impl(db_id, Some(table_id)).await?;
+
         kv::delete_many(
             &self.txn,
             [
@@ -745,5 +851,6 @@ impl TikvWrite<'_> {
         )
         .await;
         kv::put_many(&self.txn, [super::gc::retire(table_id)]).await;
+        Ok(())
     }
 }

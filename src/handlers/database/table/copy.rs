@@ -1,5 +1,4 @@
 use crate::middleware::auth::AuthUser;
-use crate::models::users::UserRole;
 use axum::Extension;
 use axum::{
     Json,
@@ -47,22 +46,9 @@ pub async fn table_copy(
 ) -> Result<impl IntoResponse, AppError> {
     let dest_db_name = request.copy_db_name.as_deref().unwrap_or(&db_name);
 
-    // 1. コピー元テーブルへの Read 権限
-    crate::middleware::auth::check_table(
-        &app_state,
-        &auth_user,
-        &db_name,
-        &table_name,
-        UserRole::Read,
-    )
-    .await?;
-
-    // 作られるのは新しいテーブルなので、コピー元へのテーブルスコープでは通さない。
-    crate::middleware::auth::check_database(&app_state, &auth_user, dest_db_name, UserRole::Manage)
-        .await?;
-
     let res = table_copy_service::copy(
         &app_state,
+        &auth_user,
         &db_name,
         &table_name,
         dest_db_name,

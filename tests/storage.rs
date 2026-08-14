@@ -33,7 +33,7 @@ async fn write_then_read_through_trait() {
     .await
     .unwrap()
     .expect("committed database should be visible");
-    assert_eq!(info.description.as_deref(), Some("via trait"));
+    assert_eq!(info.1.description.as_deref(), Some("via trait"));
 }
 
 #[tokio::test]
@@ -79,7 +79,7 @@ async fn write_closure_sees_its_own_writes() {
 
 #[tokio::test]
 async fn meta_repository_defaults_work_over_async_lookups() {
-    use kasane::models::users::{DataRole, PrivilegeRule};
+    use kasane::models::users::{AclEntry, DataRole, PrivilegeRule, ResolvedPrivilege};
     use kasane::repositories::CatalogRepository;
 
     let (_tmp, db) = temp_db();
@@ -92,7 +92,7 @@ async fn meta_repository_defaults_work_over_async_lookups() {
 
     // 名前 → ID の解決と、その逆の描画が既定実装を通して往復すること。
     let rendered = Storage::read(&db, async |r| {
-        let stored = CatalogRepository::resolve_privileges(
+        let resolved = CatalogRepository::resolve_rules(
             r,
             &[PrivilegeRule::Database {
                 db_name: "perm_db".into(),
@@ -100,7 +100,16 @@ async fn meta_repository_defaults_work_over_async_lookups() {
             }],
         )
         .await?;
-        CatalogRepository::render_privileges(r, &stored).await
+
+        // 解決した対象を ACL 行の形へ移してから描画する（保存されるのはこの形）。
+        let entries: Vec<AclEntry> = resolved
+            .into_iter()
+            .map(|resolved| match resolved {
+                ResolvedPrivilege::Data { target, role } => AclEntry { target, role },
+                other => panic!("想定外の対象: {other:?}"),
+            })
+            .collect();
+        CatalogRepository::render_privileges(r, None, &entries).await
     })
     .await
     .unwrap();
@@ -112,4 +121,20 @@ async fn meta_repository_defaults_work_over_async_lookups() {
             role: DataRole::Read,
         }]
     );
+}
+
+#[path = "shared/acl_suite.rs"]
+mod acl_suite;
+
+/// ACL 行の保存が仕様どおりか（TiKV 側は `tikv.rs` が同じスイートを回す）。
+#[tokio::test]
+async fn acl_rows_behave_as_specified() {
+    let (_tmp, db) = temp_db();
+    acl_suite::run(&db, "lmdb").await;
+}
+
+#[tokio::test]
+async fn acl_driven_listing_behaves_as_specified() {
+    let (_tmp, db) = temp_db();
+    acl_suite::run_listing(&db, "lmdblist").await;
 }

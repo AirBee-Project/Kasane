@@ -6,7 +6,7 @@ use crate::error::AppError;
 use crate::models::database::DatabaseInfoResponse;
 use crate::models::database::table::{Table, TableDataType};
 use crate::models::id::{DatabaseId, TableId};
-use crate::models::users::User;
+use crate::models::users::{User, UserRecord};
 
 use super::{CatalogRepository, ValueGroups};
 
@@ -23,10 +23,25 @@ pub struct ResolvedTable {
 // `async fn` の Future に `Send` を課さない理由は [`Storage`](super::Storage) を参照。
 #[allow(async_fn_in_trait)]
 pub trait ReadRepository: CatalogRepository {
-    async fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError>;
+    /// **ID も返す。** 呼び出し側が認可のために同じキーをもう一度引かずに済む。
+    async fn database_info(
+        &self,
+        name: &str,
+    ) -> Result<Option<(DatabaseId, DatabaseInfoResponse)>, AppError>;
 
-    /// 呼び出し側が権限の絞り込みに使うので、ID を添えて返す。
+    /// 全データベース。**全体権限を持つ利用者にしか使わない。**
+    ///
+    /// 権限で絞る側は [`databases_by_id`](Self::databases_by_id) を使う。全件取ってから
+    /// 捨てる形だと、権限を持たない対象のコストまで払うことになる。
     async fn database_list(&self) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError>;
+
+    /// ID を指定して引く。ACL 側から辿った一覧の組み立てに使う。
+    ///
+    /// 存在しない ID は結果に現れない。
+    async fn databases_by_id(
+        &self,
+        ids: &[DatabaseId],
+    ) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError>;
 
     async fn table_info(&self, db_name: &str, table_name: &str) -> Result<Option<Table>, AppError>;
 
@@ -43,6 +58,15 @@ pub trait ReadRepository: CatalogRepository {
 
     /// ID を解決済みの呼び出し側が、名前からの引き直しを避けるために使う。
     async fn table_list_by_id(&self, db_id: DatabaseId) -> Result<Vec<Table>, AppError>;
+
+    /// このデータベース配下の、指定した ID のテーブルだけ。
+    ///
+    /// テーブル単位の権限しか持たない利用者の一覧に使う。配下全件を舐めない。
+    async fn tables_by_id(
+        &self,
+        db_id: DatabaseId,
+        ids: &[TableId],
+    ) -> Result<Vec<Table>, AppError>;
 
     async fn table_count(&self, table_id: TableId) -> Result<u64, AppError>;
 
@@ -69,19 +93,27 @@ pub trait ReadRepository: CatalogRepository {
         hi: &[u8],
     ) -> Result<Vec<FlexId>, AppError>;
 
-    async fn get_all_users(&self) -> Result<Vec<User>, AppError>;
+    /// 利用者名の辞書順で 1 ページぶん返す。
+    ///
+    /// `after` より後ろから最大 `limit` 件。全件を持ち回らないのは、1 リクエストの
+    /// 読み取りを利用者数に比例させないため。
+    async fn list_users(
+        &self,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<(String, UserRecord)>, AppError>;
 
     async fn get_user(&self, username: &str) -> Result<Option<User>, AppError> {
         Ok(self
-            .user_meta(username)
+            .user_record(username)
             .await?
-            .map(|meta| User::from_meta(username, meta)))
+            .map(|record| User::from_record(username, record)))
     }
 
     async fn require_user(&self, username: &str) -> Result<User, AppError> {
-        Ok(User::from_meta(
+        Ok(User::from_record(
             username,
-            self.require_user_meta(username).await?,
+            self.require_user_record(username).await?,
         ))
     }
 }

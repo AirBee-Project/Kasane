@@ -12,17 +12,19 @@
 //!   0x07 ‖ table_id(16) ‖ vkey ‖ flex_id -> 値インデックス（値なし）
 //!   0x08 ‖ table_id(16) ‖ flex_id        -> シャードの保持件数（u32 LE）
 //!   0x09 ‖ table_id(16)                  -> 回収待ちテーブル（値に意味なし）
+//!   0x0A ‖ principal ‖ db_id ‖ table_slot -> ACL のロール（1 バイト）
+//!   0x0B ‖ db_id ‖ table_slot ‖ principal -> ACL の逆引き（値に意味なし）
 //!   0x7F ‖ scope ‖ id                    -> ロック専用キー（値を書かない）
 //! ```
 //!
-//! タグが先頭にあると、ある名前空間の全キーが連続した 1 つの範囲に収まる。キー内のバイト
-//! 順序は LMDB と変わらないので、順序保存エンコーディングはそのまま通用する。
+//! タグが先頭なら名前空間の全キーが連続した 1 範囲に収まる。
 
 use kasane_logic::FlexId;
 
 use crate::error::AppError;
-use crate::models::id::{DatabaseId, TableId};
+use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
 use crate::repositories::encoding::UUID_LEN;
+use crate::repositories::encoding::acl::{AclKey, AclRow};
 
 /// 与えたプレフィックスで始まる全キーを覆う範囲の終端（排他）。
 ///
@@ -45,6 +47,10 @@ pub enum Ns {
     ShardCount = 0x08,
     /// 回収待ち行列（`gc.rs` を参照）。
     Garbage = 0x09,
+    /// 権限の行（`encoding::acl` のレイアウト）。
+    Acl = 0x0A,
+    /// 権限の逆引き。対象を消すときに保持者を列挙する。
+    AclByObject = 0x0B,
     /// ロック取得専用。実データは書かない。
     Lock = 0x7F,
 }
@@ -62,9 +68,8 @@ fn with_ns(ns: Ns, rest: &[u8]) -> Vec<u8> {
     key
 }
 
-/// 既定ユーザーの投入は**この印の有無**で判定する。
-///
-/// `root` の有無で判定すると、消した管理者が次の起動で既定パスワードのまま復活してしまう。
+/// 既定ユーザーの投入は**この印の有無**で判定する。`root` の有無で見ると、消した管理者が
+/// 次の起動で既定パスワードのまま復活する。
 pub fn cluster_initialized() -> Vec<u8> {
     with_ns(Ns::Meta, b"initialized")
 }
@@ -108,6 +113,60 @@ pub fn table_id_index(table_id: TableId) -> Vec<u8> {
 /// `0x05 ‖ username`
 pub fn user(username: &str) -> Vec<u8> {
     with_ns(Ns::Users, username.as_bytes())
+}
+
+/// クラスタの初期化済みマーカーと同じ名前空間に置く、ディスク形式の版。
+pub fn schema_version() -> Vec<u8> {
+    with_ns(Ns::Meta, b"schema_version")
+}
+
+// --- ACL ---
+//
+// 鍵の中身は `encoding::acl` の [`AclKey`] が決める（LMDB 実装と同一の並び）。ここは
+// 名前空間タグを被せるだけにして、両バックエンドで並びがずれないようにする。
+
+/// 前向きと逆引きの 2 本。**必ず一組で扱う**（[`AclRow`] を参照）。
+pub fn acl_row(key: AclKey) -> AclRow {
+    let row = key.rows();
+    AclRow {
+        forward: with_ns(Ns::Acl, &row.forward),
+        reverse: with_ns(Ns::AclByObject, &row.reverse),
+    }
+}
+
+/// 引くだけなら前向きの 1 本で足りる。
+pub fn acl(key: AclKey) -> Vec<u8> {
+    with_ns(Ns::Acl, &key.forward())
+}
+
+pub fn acl_owned_by(principal: PrincipalId) -> Vec<u8> {
+    with_ns(Ns::Acl, &AclKey::owned_by(principal))
+}
+
+pub fn acl_owned_by_in(principal: PrincipalId, db_id: DatabaseId) -> Vec<u8> {
+    with_ns(Ns::Acl, &AclKey::owned_by_in(principal, db_id))
+}
+
+pub fn acl_holders_of(target: DataTarget) -> Vec<u8> {
+    with_ns(Ns::AclByObject, &AclKey::holders_of(target))
+}
+
+pub fn acl_holders_in(db_id: DatabaseId) -> Vec<u8> {
+    with_ns(Ns::AclByObject, &AclKey::holders_in(db_id))
+}
+
+pub fn acl_from_key(key: &[u8]) -> Result<AclKey, AppError> {
+    AclKey::decode_forward(strip_tag(key, "acl")?)
+}
+
+pub fn acl_from_reverse_key(key: &[u8]) -> Result<AclKey, AppError> {
+    AclKey::decode_reverse(strip_tag(key, "acl reverse")?)
+}
+
+fn strip_tag<'k>(key: &'k [u8], what: &str) -> Result<&'k [u8], AppError> {
+    key.split_first()
+        .map(|(_tag, body)| body)
+        .ok_or_else(|| AppError::InternalError(format!("{what} key is empty")))
 }
 
 pub fn username_from_key(key: &[u8]) -> Result<&str, AppError> {
@@ -217,8 +276,7 @@ pub fn table_id_from_garbage_key(key: &[u8]) -> Result<TableId, AppError> {
 
 /// テーブルのデータ実体（カタログ項目は含まない）。
 ///
-/// 回収も複製も同じ集合を使うので、名前空間が増えたときに片方だけ追随することがないよう
-/// 1 箇所にまとめてある。
+/// 回収と複製で同じ集合を使う。名前空間が増えたとき片方だけ追随するのを防ぐため。
 pub fn table_data_prefixes(table_id: TableId) -> [Vec<u8>; 3] {
     [
         shards_of(table_id),
@@ -227,13 +285,10 @@ pub fn table_data_prefixes(table_id: TableId) -> [Vec<u8>; 3] {
     ]
 }
 
-/// ロック階層のスコープ。
+/// ロック階層のスコープ。並ぶのは**範囲スキャンから変更を導く操作**だけ。
 ///
-/// ここに並ぶのは**範囲スキャンから変更を導く操作**、つまりキー単位の競合検査ではファントムを
-/// 防げないものだけ（シャードの読み書きは明示ロックを取らない）。
-///
-/// **判別値の並び順に意味がある。** 取得は常にキーのバイト昇順なので、この大小がそのまま
-/// ロック階層の取得順になる。粗い粒度から順に並べること。
+/// **判別値の順に意味がある。** 取得はキーのバイト昇順なので、この大小がロック階層の
+/// 取得順になる。粗い粒度から順に並べること。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum LockScope {
@@ -244,10 +299,9 @@ pub enum LockScope {
     User = 0x03,
 }
 
-/// `0x7F ‖ scope ‖ id`。`id` は対象の識別子そのもの。
+/// `0x7F ‖ scope ‖ id`。`id` は識別子そのもの（ハッシュへ潰さないので衝突しない）。
 ///
-/// 名前をハッシュへ潰さないので、別の名前が同じロックキーへ衝突することがない。このキーには
-/// **値を書かない**――解放は常に rollback なので MVCC のバージョンも作られない。
+/// このキーには**値を書かない**。解放は常に rollback なので MVCC の版も作られない。
 pub fn lock(scope: LockScope, id: &[u8]) -> Vec<u8> {
     let mut rest = Vec::with_capacity(1 + id.len());
     rest.push(scope as u8);

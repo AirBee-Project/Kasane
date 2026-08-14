@@ -1,5 +1,4 @@
 use crate::middleware::auth::AuthUser;
-use crate::models::users::UserRole;
 use crate::services::database::table::data::remove as data_remove_service;
 use crate::{AppState, error::AppError, models::database::table::data::RemoveDataRequest};
 use axum::Extension;
@@ -36,17 +35,9 @@ pub async fn data_remove(
     Path((db_name, table_name)): Path<(String, String)>,
     Json(payload): Json<RemoveDataRequest>,
 ) -> Result<StatusCode, AppError> {
-    crate::middleware::auth::check_table(
-        &app_state,
-        &auth_user,
-        &db_name,
-        &table_name,
-        UserRole::Write,
-    )
-    .await?;
-
     data_remove_service::remove(
         &app_state,
+        &auth_user,
         &db_name,
         &table_name,
         &payload.spatial_ids,

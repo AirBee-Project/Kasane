@@ -10,8 +10,10 @@ use crate::models::database::DatabaseInfoResponse;
 use crate::models::database::table::{
     Table, TableConstraints, TableDataType, UpdateTableConstraints,
 };
-use crate::models::id::{DatabaseId, TableId};
-use crate::models::users::{PrivilegeRule, PrivilegeTarget, User, UserMetadata};
+use std::collections::{BTreeSet, HashMap};
+
+use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
+use crate::models::users::{AclEntry, Grant, Scope, UserRecord};
 use crate::repositories::{CatalogRepository, ReadRepository, ValueGroups, WriteRepository};
 
 use super::kv::Reader;
@@ -33,20 +35,52 @@ macro_rules! impl_catalog_repository {
                 catalog::table_id(&self.txn, db_id, table_name).await
             }
 
-            async fn database_name(&self, db_id: DatabaseId) -> Result<Option<String>, AppError> {
-                catalog::database_name(&self.txn, db_id).await
+            async fn user_record(&self, username: &str) -> Result<Option<UserRecord>, AppError> {
+                users::user_record(&self.txn, username).await
             }
 
-            async fn table_name(&self, table_id: TableId) -> Result<Option<String>, AppError> {
-                catalog::table_name(&self.txn, table_id).await
+            async fn database_names(
+                &self,
+                ids: &[DatabaseId],
+            ) -> Result<HashMap<DatabaseId, String>, AppError> {
+                catalog::database_names(&self.txn, ids).await
             }
 
-            async fn user_meta(&self, username: &str) -> Result<Option<UserMetadata>, AppError> {
-                users::user_meta(&self.txn, username).await
+            async fn table_entries(
+                &self,
+                ids: &[TableId],
+            ) -> Result<HashMap<TableId, (DatabaseId, String)>, AppError> {
+                catalog::table_entries(&self.txn, ids).await
             }
 
-            async fn table_names(&self, db_id: DatabaseId) -> Result<Vec<String>, AppError> {
-                catalog::table_names(&self.txn, db_id).await
+            async fn grant_for(
+                &self,
+                principal: PrincipalId,
+                scope: Scope,
+            ) -> Result<Grant, AppError> {
+                users::grant_for(&self.txn, principal, scope).await
+            }
+
+            async fn acl_entries(
+                &self,
+                principal: PrincipalId,
+            ) -> Result<Vec<AclEntry>, AppError> {
+                users::acl_entries(&self.txn, principal).await
+            }
+
+            async fn acl_databases(
+                &self,
+                principal: PrincipalId,
+            ) -> Result<BTreeSet<DatabaseId>, AppError> {
+                users::acl_databases(&self.txn, principal).await
+            }
+
+            async fn acl_tables_in(
+                &self,
+                principal: PrincipalId,
+                db_id: DatabaseId,
+            ) -> Result<BTreeSet<TableId>, AppError> {
+                users::acl_tables_in(&self.txn, principal, db_id).await
             }
         }
     };
@@ -56,7 +90,10 @@ impl_catalog_repository!(impl<R: Reader> CatalogRepository for TikvRead<'_, R>);
 impl_catalog_repository!(impl CatalogRepository for TikvWrite<'_>);
 
 impl<R: Reader> ReadRepository for TikvRead<'_, R> {
-    async fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
+    async fn database_info(
+        &self,
+        name: &str,
+    ) -> Result<Option<(DatabaseId, DatabaseInfoResponse)>, AppError> {
         catalog::database_info(&self.txn, name).await
     }
 
@@ -81,6 +118,21 @@ impl<R: Reader> ReadRepository for TikvRead<'_, R> {
 
     async fn table_list_by_id(&self, db_id: DatabaseId) -> Result<Vec<Table>, AppError> {
         catalog::table_list_by_id(&self.txn, db_id).await
+    }
+
+    async fn databases_by_id(
+        &self,
+        ids: &[DatabaseId],
+    ) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
+        catalog::databases_by_id(&self.txn, ids).await
+    }
+
+    async fn tables_by_id(
+        &self,
+        db_id: DatabaseId,
+        ids: &[TableId],
+    ) -> Result<Vec<Table>, AppError> {
+        catalog::tables_by_id(&self.txn, db_id, ids).await
     }
 
     async fn table_count(&self, table_id: TableId) -> Result<u64, AppError> {
@@ -116,14 +168,20 @@ impl<R: Reader> ReadRepository for TikvRead<'_, R> {
             .await
     }
 
-    async fn get_all_users(&self) -> Result<Vec<User>, AppError> {
-        self.get_all_users_impl().await
+    async fn list_users(
+        &self,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<(String, UserRecord)>, AppError> {
+        self.list_users_impl(after, limit).await
     }
 }
 
 impl WriteRepository for TikvWrite<'_> {
     async fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
-        catalog::database_info(&self.txn, name).await
+        Ok(catalog::database_info(&self.txn, name)
+            .await?
+            .map(|(_, info)| info))
     }
 
     async fn table_info(&self, db_name: &str, table_name: &str) -> Result<Option<Table>, AppError> {
@@ -254,42 +312,39 @@ impl WriteRepository for TikvWrite<'_> {
         self.data_remove_impl(table_id, index, ids).await
     }
 
-    async fn create_user(
-        &mut self,
-        username: &str,
-        id: uuid::Uuid,
-        password_hash: String,
-        privileges: &[PrivilegeRule],
-    ) -> Result<(), AppError> {
-        self.create_user_impl(username, id, password_hash, privileges)
-            .await
+    async fn lock_user(&mut self, username: &str) -> Result<(), AppError> {
+        self.lock_user_impl(username)
     }
 
-    async fn set_password(
+    async fn put_user_record(
         &mut self,
         username: &str,
-        password_hash: String,
+        record: &UserRecord,
     ) -> Result<(), AppError> {
-        self.set_password_impl(username, password_hash).await
+        self.put_user_record_impl(username, record).await
     }
 
-    async fn grant_privilege(
+    async fn remove_user_record(&mut self, username: &str) -> Result<(), AppError> {
+        self.remove_user_record_impl(username).await
+    }
+
+    async fn acl_put(&mut self, entry: AclEntry, principal: PrincipalId) -> Result<(), AppError> {
+        self.acl_put_impl(entry, principal).await
+    }
+
+    async fn acl_remove(
         &mut self,
-        username: &str,
-        rule: &PrivilegeRule,
-    ) -> Result<(), AppError> {
-        self.grant_privilege_impl(username, rule).await
+        principal: PrincipalId,
+        target: DataTarget,
+    ) -> Result<bool, AppError> {
+        self.acl_remove_impl(principal, target).await
     }
 
-    async fn revoke_privilege(
-        &mut self,
-        username: &str,
-        target: &PrivilegeTarget,
-    ) -> Result<(), AppError> {
-        self.revoke_privilege_impl(username, target).await
+    async fn acl_remove_principal(&mut self, principal: PrincipalId) -> Result<(), AppError> {
+        self.acl_remove_principal_impl(principal).await
     }
 
-    async fn delete_user(&mut self, username: &str) -> Result<(), AppError> {
-        self.delete_user_impl(username).await
+    async fn acl_count(&self, principal: PrincipalId) -> Result<u32, AppError> {
+        users::acl_count(&self.txn, principal).await
     }
 }

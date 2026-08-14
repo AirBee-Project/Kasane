@@ -1,7 +1,17 @@
+//! 認証と認可の入口。
+//!
+//! **認可はカタログを引いたのと同じトランザクションの中で行う。** 認可のためだけに
+//! 読み取りを開くと、直後にサービス層が同じ名前を引き直すことになり、名前の解決が
+//! ネットワーク往復になるバックエンドではその往復が丸ごと二重になる。断面が分かれる
+//! ぶん、判定した対象と操作した対象がずれる隙も生まれる。
+//!
+//! そのため、ここにある関数は `AppState` ではなく**開いているリポジトリ**を受け取り、
+//! 解決した ID を呼び出し側へ返す。
+
 use crate::repositories::{CatalogRepository, ReadRepository, Storage};
 use axum::{extract::Request, http::header, middleware::Next, response::Response};
 
-use crate::models::id::DatabaseId;
+use crate::models::id::{DatabaseId, TableId};
 use crate::models::users::{Scope, User, UserRole};
 use crate::{
     AppState,
@@ -49,6 +59,8 @@ pub async fn require_auth(
     let claims = verify_jwt(token)?;
 
     let sub = claims.sub.clone();
+    // 読むのは利用者レコード 1 件だけ。権限は対象ごとの行なので、保持数によらず
+    // ここのコストは一定になる。
     let user = app_state
         .db
         .read(async move |repo| repo.get_user(&sub).await)
@@ -65,12 +77,14 @@ pub async fn require_auth(
 }
 
 /// 特定のデータベースに紐づかない操作（データベースの作成・削除など）で使う。
+///
+/// ACL にもカタログにも触れない。全体ロールは利用者レコードに埋まっている。
 #[tracing::instrument(skip_all)]
 pub fn check_global_role(user: &User, required: UserRole) -> Result<(), AppError> {
     if user.has_global_role(required) {
         Ok(())
     } else {
-        Err(AuthError::RequiresGlobalAdmin.into())
+        Err(AuthError::RequiresGlobalRole { required }.into())
     }
 }
 
@@ -90,113 +104,108 @@ pub fn check_self_or_admin(user: &User, username: &str) -> Result<(), AppError> 
     }
 }
 
-/// データベース全体に対する操作の認可。テーブル単位のルールでは通らない。
-#[tracing::instrument(skip_all, fields(db_name = %db_name))]
-pub async fn check_database(
-    app_state: &AppState,
-    user: &User,
-    db_name: &str,
-    required: UserRole,
-) -> Result<(), AppError> {
-    check(app_state, user, db_name, None, required, Scope::Database).await
-}
-
-/// テーブル単位のルールしか持たないユーザーも、自分のテーブルへ辿り着けるように通す。
-#[tracing::instrument(skip_all, fields(db_name = %db_name))]
-pub async fn check_database_visible(
-    app_state: &AppState,
-    user: &User,
-    db_name: &str,
-) -> Result<(), AppError> {
-    check(app_state, user, db_name, None, UserRole::Read, Scope::AnyIn).await
-}
-
-/// 特定テーブルに対する操作の認可。
-#[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
-pub async fn check_table(
-    app_state: &AppState,
-    user: &User,
-    db_name: &str,
-    table_name: &str,
-    required: UserRole,
-) -> Result<(), AppError> {
-    check(
-        app_state,
-        user,
-        db_name,
-        Some(table_name),
-        required,
-        Scope::Database,
-    )
-    .await
-}
-
-/// 名前の解決を 1 トランザクションに寄せるので、参照テーブル数で往復が増えない。
-#[tracing::instrument(skip_all)]
-pub async fn check_tables(
-    app_state: &AppState,
-    user: &User,
-    tables: &[(&str, &str)],
-    required: UserRole,
-) -> Result<(), AppError> {
-    if user.has_global_role(required) {
-        return Ok(());
-    }
-
-    let owned: Vec<(String, String)> = tables
-        .iter()
-        .map(|(db, table)| (db.to_string(), table.to_string()))
-        .collect();
-    let scopes = app_state
-        .db
-        .read(async move |repo| {
-            let mut out = Vec::with_capacity(owned.len());
-            for (db_name, table_name) in &owned {
-                out.push(resolve_scope(repo, db_name, Some(table_name), Scope::Database).await?);
-            }
-            Ok(out)
-        })
-        .await?;
-
-    for (&(db_name, table_name), scope) in tables.iter().zip(scopes) {
-        let allowed = scope.is_some_and(|scope| user.can(scope, required));
-        if !allowed {
-            return Err(denied(db_name, Some(table_name), required));
-        }
-    }
-    Ok(())
-}
-
-/// **解決済みの** ID からスコープを組み立てて権限を判定する。カタログを引かない。
+/// 名前を解決し、その結果で認可する。
 ///
-/// [`check_table`] / [`check_tables`] は認可のためだけに名前を引くが、サービス層はその直後に
-/// 同じキーを引く。解決を [`ReadRepository::resolve_tables`] へ 1 回に寄せてその結果で判定
-/// すれば、認可のための往復は 0 になる。
+/// **「存在しない」を返すより先に呼ぶこと。** 逆にすると、権限の無い利用者へ 404 で
+/// 名前の存在有無を教えることになる。データベースが解決できないときに 403 を返すのも
+/// 同じ理由。
 ///
-/// **「存在しない」を返すより先に呼ぶこと。** 逆にすると、権限の無い利用者へ 404 で名前の
-/// 存在有無を教えることになる。`db_id` が `None` のときに 403 を返すのも同じ理由。
-pub fn authorize_resolved(
+/// テーブル名が解決できなければデータベーススコープで判定する。そのデータベースに
+/// 十分な権限を持つ利用者は通過して下位の層が 404 を返せるし、権限のない利用者は
+/// そこでも落ちるので存在有無の手がかりにならない。
+#[tracing::instrument(skip_all, fields(db_name = %db_name))]
+pub async fn authorize_path<R: CatalogRepository>(
+    repo: &R,
     user: &User,
-    db_id: Option<DatabaseId>,
-    table_id: Option<crate::models::id::TableId>,
     db_name: &str,
     table_name: Option<&str>,
     required: UserRole,
 ) -> Result<(), AppError> {
+    // 全体ロールで足りるなら名前も ACL も引かない。
     if user.has_global_role(required) {
         return Ok(());
     }
 
-    // 解決できなければ DB スコープへ落とす（下位の層が 404 を返せるように）。
+    let db_id = repo.database_id(db_name).await?;
+    let table_id = match (db_id, table_name) {
+        (Some(db_id), Some(name)) => repo.table_id(db_id, name).await?,
+        _ => None,
+    };
+    authorize_resolved(repo, user, db_id, table_id, db_name, table_name, required).await
+}
+
+/// **解決済みの** ID から認可する。名前は引き直さない。
+///
+/// 参照するテーブルをまとめて解決したあと（`resolve_tables`）に使う。
+pub async fn authorize_resolved<R: CatalogRepository>(
+    repo: &R,
+    user: &User,
+    db_id: Option<DatabaseId>,
+    table_id: Option<TableId>,
+    db_name: &str,
+    table_name: Option<&str>,
+    required: UserRole,
+) -> Result<(), AppError> {
+    // 解決できなければ ACL を引くまでもなく拒否（下位の層に 404 を出させない）。
     let scope = db_id.map(|db_id| match table_id {
         Some(table_id) => Scope::Table(db_id, table_id),
         None => Scope::Database(db_id),
     });
 
-    if scope.is_some_and(|scope| user.can(scope, required)) {
-        Ok(())
+    match scope {
+        Some(scope) if reaches(repo, user, scope, required).await? => Ok(()),
+        _ => Err(denied(db_name, table_name, required)),
+    }
+}
+
+/// このスコープに `required` 以上で届くか。
+///
+/// 判定そのものは [`User::allows`] にあり、ここは「全体ロールなら ACL を引かない」
+/// という短絡だけを足す。**通す／拒む**を決める側（[`authorize_resolved`]）と
+/// **見える／見えない**で絞る側（一覧）が同じ規則を共有するための入口。
+pub async fn reaches<R: CatalogRepository>(
+    repo: &R,
+    user: &User,
+    scope: Scope,
+    required: UserRole,
+) -> Result<bool, AppError> {
+    if user.has_global_role(required) {
+        return Ok(true);
+    }
+    Ok(user.allows(&repo.grant_for(user.id, scope).await?, required))
+}
+
+/// 「配下のどれかに届けば足りる」判定（存在確認・一覧）。**解決済みの値を受け取る。**
+///
+/// テーブル単位の権限しか持たない利用者も、自分のテーブルへ辿り着けるように通す。
+/// 代わりに [`UserRole::Read`] より上は決して満たさない。
+///
+/// 権限が無ければ 403、権限はあるが存在しなければ 404。この順序が
+/// 「権限の無い利用者へ名前の存在有無を教えない」を保つ。
+///
+/// 引いた結果をそのまま渡す形にしてあるので、呼び出し側は同じキーを 2 度読まない。
+#[tracing::instrument(skip_all, fields(db_name = %db_name))]
+pub async fn visible_database<R: CatalogRepository, T>(
+    repo: &R,
+    user: &User,
+    db_name: &str,
+    found: Option<(DatabaseId, T)>,
+) -> Result<(DatabaseId, T), AppError> {
+    let Some((db_id, value)) = found else {
+        // 全体ロールを持つ利用者にだけ「無い」と教える。
+        return Err(if user.has_global_role(UserRole::Read) {
+            AppError::DatabaseNotFound {
+                name: db_name.to_string(),
+            }
+        } else {
+            denied(db_name, None, UserRole::Read)
+        });
+    };
+
+    if reaches(repo, user, Scope::AnyIn(db_id), UserRole::Read).await? {
+        Ok((db_id, value))
     } else {
-        Err(denied(db_name, table_name, required))
+        Err(denied(db_name, None, UserRole::Read))
     }
 }
 
@@ -207,59 +216,4 @@ fn denied(db_name: &str, table_name: Option<&str>, required: UserRole) -> AppErr
         required,
     }
     .into()
-}
-
-/// 名前から判定対象のスコープを組み立てる。
-///
-/// テーブル名が解決できなければ `db_scope` へフォールバックする。そのデータベースに十分な
-/// 権限を持つ利用者は認可を通過して下位の層が 404 を返せるし、権限のない利用者は `db_scope`
-/// でも落ちるので存在有無の手がかりにならない。
-///
-/// データベース自体が解決できないときは `None`（呼び出し側は 404 ではなく 403 を返す）。
-async fn resolve_scope<R: CatalogRepository>(
-    repo: &R,
-    db_name: &str,
-    table_name: Option<&str>,
-    db_scope: fn(DatabaseId) -> Scope,
-) -> Result<Option<Scope>, AppError> {
-    let Some(db_id) = repo.database_id(db_name).await? else {
-        return Ok(None);
-    };
-    let table_id = match table_name {
-        Some(name) => repo.table_id(db_id, name).await?,
-        None => None,
-    };
-    Ok(Some(match table_id {
-        Some(table_id) => Scope::Table(db_id, table_id),
-        None => db_scope(db_id),
-    }))
-}
-
-/// `Global` ルールだけで足りる場合はカタログを引かずに決着させる。
-async fn check(
-    app_state: &AppState,
-    user: &User,
-    db_name: &str,
-    table_name: Option<&str>,
-    required: UserRole,
-    db_scope: fn(DatabaseId) -> Scope,
-) -> Result<(), AppError> {
-    if user.has_global_role(required) {
-        return Ok(());
-    }
-
-    let owned_db = db_name.to_string();
-    let owned_table = table_name.map(str::to_string);
-    let scope = app_state
-        .db
-        .read(async move |repo| {
-            resolve_scope(repo, &owned_db, owned_table.as_deref(), db_scope).await
-        })
-        .await?;
-
-    if scope.is_some_and(|scope| user.can(scope, required)) {
-        Ok(())
-    } else {
-        Err(denied(db_name, table_name, required))
-    }
 }

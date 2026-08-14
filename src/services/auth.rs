@@ -76,7 +76,7 @@ pub async fn generate_jwt(app_state: &AppState, username: &str) -> Result<String
     let owned = username.to_string();
     let meta = app_state
         .db
-        .read(async move |repo| repo.user_meta(&owned).await)
+        .read(async move |repo| repo.user_record(&owned).await)
         .await?
         .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 

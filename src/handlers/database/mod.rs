@@ -73,8 +73,7 @@ pub async fn database_info(
     Extension(auth_user): Extension<AuthUser>,
     Path(db_name): Path<String>,
 ) -> Result<Json<DatabaseInfoResponse>, AppError> {
-    crate::middleware::auth::check_database_visible(&app_state, &auth_user, &db_name).await?;
-    let res = crate::services::database::info(&app_state, &db_name).await?;
+    let res = crate::services::database::info(&app_state, &auth_user, &db_name).await?;
     Ok(Json(res))
 }
 
@@ -162,10 +161,14 @@ pub async fn database_update(
     Path(db_name): Path<String>,
     Json(request): Json<UpdateDatabaseRequest>,
 ) -> Result<StatusCode, AppError> {
-    crate::middleware::auth::check_database(&app_state, &auth_user, &db_name, UserRole::Manage)
-        .await?;
-    crate::services::database::update(&app_state, &db_name, request.new_name, request.description)
-        .await?;
+    crate::services::database::update(
+        &app_state,
+        &auth_user,
+        &db_name,
+        request.new_name,
+        request.description,
+    )
+    .await?;
     Ok(StatusCode::OK)
 }
 

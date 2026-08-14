@@ -155,7 +155,7 @@ async fn database_lifecycle() {
     // 別トランザクションから見えること（＝コミットされていること）。
     let info = {
         let name = name.clone();
-        db.read(async move |r| r.database_info(&name).await)
+        db.read(async move |r| Ok(r.database_info(&name).await?.map(|(_, info)| info)))
             .await
             .unwrap()
     };
@@ -176,7 +176,7 @@ async fn database_lifecycle() {
 
     let gone = {
         let name = name.clone();
-        db.read(async move |r| r.database_info(&name).await)
+        db.read(async move |r| Ok(r.database_info(&name).await?.map(|(_, info)| info)))
             .await
             .unwrap()
     };
@@ -200,7 +200,7 @@ async fn closure_error_discards_the_transaction() {
 
     let info = {
         let name = name.clone();
-        db.read(async move |r| r.database_info(&name).await)
+        db.read(async move |r| Ok(r.database_info(&name).await?.map(|(_, info)| info)))
             .await
             .unwrap()
     };
@@ -733,8 +733,11 @@ async fn the_default_admin_is_seeded_exactly_once_and_never_resurrected() {
     // 同時接続。どちらも初期化済みマーカーを見て投入しようとする。
     let (a, b) = tokio::join!(connect(), connect());
 
-    let users = a.read(async |r| r.get_all_users().await).await.unwrap();
-    let roots = users.iter().filter(|u| u.username == "root").count();
+    let users = a
+        .read(async |r| r.list_users(None, 1000).await)
+        .await
+        .unwrap();
+    let roots = users.iter().filter(|(name, _)| name == "root").count();
     assert_eq!(roots, 1, "root ユーザーが重複して作られている");
 
     // どちらのインスタンスからも同じ root が見えること。
@@ -763,7 +766,7 @@ async fn the_default_admin_is_seeded_exactly_once_and_never_resurrected() {
         .write(async |w| {
             w.create_user(
                 "root",
-                uuid::Uuid::now_v7(),
+                kasane::models::id::PrincipalId(uuid::Uuid::now_v7()),
                 kasane::services::auth::hash_password("password").unwrap(),
                 &[PrivilegeRule::Global {
                     role: UserRole::Admin,
@@ -895,7 +898,7 @@ async fn user_privileges_roundtrip() {
         db.write(async move |w| {
             w.create_user(
                 &username,
-                uuid::Uuid::now_v7(),
+                kasane::models::id::PrincipalId(uuid::Uuid::now_v7()),
                 "hash".to_string(),
                 &[PrivilegeRule::Database {
                     db_name: name.clone(),
@@ -911,8 +914,9 @@ async fn user_privileges_roundtrip() {
     let rendered = {
         let username = username.clone();
         db.read(async move |r| {
-            let user = r.require_user(&username).await?;
-            r.render_privileges(&user.privileges).await
+            let record = r.require_user_record(&username).await?;
+            let entries = r.acl_entries(record.id).await?;
+            r.render_privileges(record.global_role, &entries).await
         })
         .await
         .unwrap()
@@ -933,4 +937,22 @@ async fn user_privileges_roundtrip() {
     }
 
     drop_db(&db, &name).await;
+}
+
+#[path = "shared/acl_suite.rs"]
+mod acl_suite;
+
+/// ACL 行の保存が仕様どおりか（LMDB 側は `storage.rs` が同じスイートを回す）。
+///
+/// 名前はタグから作るので、同じクラスタに対して他のテストと並行に走ってよい。
+#[tokio::test]
+async fn acl_rows_behave_as_specified() {
+    let db = connect().await;
+    acl_suite::run(&db, &uuid::Uuid::now_v7().simple().to_string()).await;
+}
+
+#[tokio::test]
+async fn acl_driven_listing_behaves_as_specified() {
+    let db = connect().await;
+    acl_suite::run_listing(&db, &uuid::Uuid::now_v7().simple().to_string()).await;
 }

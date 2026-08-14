@@ -1,44 +1,57 @@
 use crate::{
     AppState,
     error::{AppError, AuthError},
+    models::id::PrincipalId,
     models::users::{
-        CreateUserRequest, PrivilegeRule, PrivilegeTarget, UpdatePasswordRequest, UserInfoResponse,
+        CreateUserRequest, ListUsersQuery, PrivilegeRule, PrivilegeTarget, UpdatePasswordRequest,
+        UserInfoResponse, UserListResponse, UserSummary,
     },
     repositories::{CatalogRepository, ReadRepository, Storage, WriteRepository},
     services::auth::hash_password,
 };
 use uuid::Uuid;
 
+/// 1 ページぶんの利用者を返す。**権限そのものは含めない。**
+///
+/// 含めると 1 リクエストの読み取りが「利用者数 × 保持権限数」に比例する。概要だけなら
+/// 利用者レコードを読むだけで済み、ページの大きさにしか比例しない。
 #[tracing::instrument(skip_all)]
-pub async fn list_users(app_state: &AppState) -> Result<Vec<UserInfoResponse>, AppError> {
-    app_state
+pub async fn list_users(
+    app_state: &AppState,
+    query: &ListUsersQuery,
+) -> Result<UserListResponse, AppError> {
+    let limit = query.page_size();
+    let after = query.after.clone();
+
+    // 続きがあるかを知るために 1 件多く引く。
+    let mut page = app_state
         .db
-        .read(async |r| {
-            let mut out = Vec::new();
-            for user in r.get_all_users().await? {
-                out.push(UserInfoResponse {
-                    privileges: r.render_privileges(&user.privileges).await?,
-                    username: user.username,
-                });
-            }
-            Ok(out)
-        })
-        .await
+        .read(async move |r| r.list_users(after.as_deref(), limit + 1).await)
+        .await?;
+
+    let next = (page.len() > limit)
+        .then(|| page.pop())
+        .flatten()
+        .and(page.last().map(|(username, _)| username.clone()));
+
+    Ok(UserListResponse {
+        users: page
+            .into_iter()
+            .map(|(username, record)| UserSummary {
+                username,
+                global_role: record.global_role,
+            })
+            .collect(),
+        next,
+    })
 }
 
 #[tracing::instrument(skip_all, fields(username = %username))]
 pub async fn get_user(app_state: &AppState, username: &str) -> Result<UserInfoResponse, AppError> {
-    let username = username.to_string();
-    app_state
-        .db
-        .read(async move |r| {
-            let user = r.require_user(&username).await?;
-            Ok(UserInfoResponse {
-                privileges: r.render_privileges(&user.privileges).await?,
-                username: user.username,
-            })
-        })
-        .await
+    Ok(UserInfoResponse {
+        privileges: get_privileges(app_state, username).await?,
+        username: username.to_string(),
+    })
 }
 
 #[tracing::instrument(skip_all, fields(username = %username))]
@@ -50,8 +63,9 @@ pub async fn get_privileges(
     app_state
         .db
         .read(async move |r| {
-            let user = r.require_user(&username).await?;
-            r.render_privileges(&user.privileges).await
+            let record = r.require_user_record(&username).await?;
+            let entries = r.acl_entries(record.id).await?;
+            r.render_privileges(record.global_role, &entries).await
         })
         .await
 }
@@ -69,7 +83,7 @@ async fn hash_password_off_thread(password: String) -> Result<String, AppError> 
 
 /// root は削除・権限変更の対象にできない。
 fn require_not_root(username: &str) -> Result<String, AppError> {
-    if username == "root" {
+    if username == crate::repositories::ROOT_USERNAME {
         return Err(AuthError::RootProtected.into());
     }
     Ok(username.to_string())
@@ -80,12 +94,12 @@ pub async fn create_user(app_state: &AppState, req: CreateUserRequest) -> Result
     crate::services::helpers::name_valid::name_valid(&req.username)?;
 
     let hash = hash_password_off_thread(req.password.clone()).await?;
-    let id = Uuid::now_v7();
+    let id = PrincipalId(Uuid::now_v7());
 
     app_state
         .db
         .write(async move |w| {
-            w.create_user(&req.username, id, hash, &req.privileges)
+            w.create_user(&req.username, id, hash.clone(), &req.privileges)
                 .await
         })
         .await
@@ -111,7 +125,7 @@ pub async fn update_password(
 
     app_state
         .db
-        .write(async move |w| w.set_password(&username, hash).await)
+        .write(async move |w| w.set_password(&username, hash.clone()).await)
         .await
 }
 

@@ -30,6 +30,9 @@ use keys::{DbIdAndName, TableIdAndFlexId};
 pub struct AppDb {
     pub env: Env<heed::WithoutTls>,
 
+    /// `"schema_version"` -> ディスク形式の版。開く前にここを確認する。
+    pub meta: Database<Str, heed::types::U32<heed::byteorder::LittleEndian>>,
+
     /// データベース名 -> `DatabaseMetadata`
     pub databases: Database<Str, SerdeBincode<DatabaseMetadata>>,
 
@@ -39,11 +42,25 @@ pub struct AppDb {
     /// `DatabaseId` -> データベース名。権限は ID で保存されるので逆引きが要る。
     pub database_id_index: Database<SerdeBincode<crate::models::id::DatabaseId>, Str>,
 
-    /// `TableId` -> テーブル名
-    pub table_id_index: Database<SerdeBincode<crate::models::id::TableId>, Str>,
+    /// `TableId` -> `(DatabaseId, テーブル名)`
+    ///
+    /// 所属データベースも持つのは、権限の描画で「そのテーブルが本当にそのデータベースの
+    /// 配下か」を確かめられるようにするため。
+    pub table_id_index: Database<SerdeBincode<crate::models::id::TableId>, DbIdAndName>,
 
-    /// ユーザー名 -> `UserMetadata` の JSON
+    /// ユーザー名 -> `UserRecord` の JSON。**権限は入らない**（`acl` を参照）。
     pub users: Database<Str, Str>,
+
+    /// `principal_id ‖ db_id ‖ table_slot` -> ロール 1 バイト
+    ///
+    /// 鍵の並びは `encoding::acl` が決める（TiKV 実装と同一）。固定長なので
+    /// `heed` のコーデックを起こさず生バイトで扱う。
+    pub acl: Database<Bytes, Bytes>,
+
+    /// `db_id ‖ table_slot ‖ principal_id` -> 値なし
+    ///
+    /// 対象を消すときに保持者を列挙するための逆引き。
+    pub acl_by_object: Database<Bytes, Unit>,
 
     /// `(TableId, FlexId)` -> シャードエントリ（`encoding::shard_entry`）
     pub tables_data: Database<TableIdAndFlexId, Bytes>,
