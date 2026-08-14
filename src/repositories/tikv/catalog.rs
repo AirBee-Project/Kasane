@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use super::keys::{self, LockScope};
 use super::kv::{Reader, Readers};
 use super::{TikvRead, TikvWrite, kv};
-use crate::error::AppError;
+use crate::error::{AppError, Resource, Stored};
 use crate::models::database::table::{
     Table, TableConstraints, TableDataType, TableMetadata, UpdateTableConstraints,
 };
@@ -14,18 +14,16 @@ use crate::models::id::{DatabaseId, TableId};
 use crate::repositories::ResolvedTable;
 use crate::repositories::encoding::OwnedName;
 
-/// `what` は失敗時の文言のためだけに受け取る。
-pub(super) fn encode<T: serde::Serialize>(what: &str, meta: &T) -> Result<Vec<u8>, AppError> {
-    serde_json::to_vec(meta)
-        .map_err(|e| AppError::InternalError(format!("failed to encode {what} metadata: {e}")))
+/// `stored` は失敗をどの語彙で報告するかだけに使う（LMDB 側と同じ語彙）。
+pub(super) fn encode<T: serde::Serialize>(stored: Stored, meta: &T) -> Result<Vec<u8>, AppError> {
+    serde_json::to_vec(meta).map_err(|e| AppError::corrupt(stored, e))
 }
 
 pub(super) fn decode<T: serde::de::DeserializeOwned>(
-    what: &str,
+    stored: Stored,
     bytes: &[u8],
 ) -> Result<T, AppError> {
-    serde_json::from_slice(bytes)
-        .map_err(|e| AppError::InternalError(format!("failed to decode {what} metadata: {e}")))
+    serde_json::from_slice(bytes).map_err(|e| AppError::corrupt(stored, e))
 }
 
 pub(super) async fn database_meta<R: Reader>(
@@ -36,7 +34,7 @@ pub(super) async fn database_meta<R: Reader>(
         return Ok(None);
     }
     match kv::get(txn, keys::database(name)).await? {
-        Some(bytes) => Ok(Some(decode("database", &bytes)?)),
+        Some(bytes) => Ok(Some(decode(Stored::DatabaseEntry, &bytes)?)),
         None => Ok(None),
     }
 }
@@ -57,7 +55,7 @@ pub(super) async fn table_meta<R: Reader>(
         return Ok(None);
     }
     match kv::get(txn, keys::table(db_id, table_name)).await? {
-        Some(bytes) => Ok(Some(decode("table", &bytes)?)),
+        Some(bytes) => Ok(Some(decode(Stored::TableEntry, &bytes)?)),
         None => Ok(None),
     }
 }
@@ -89,9 +87,8 @@ pub(super) async fn database_names<R: Reader>(
         if let Some(&db_id) = by_key.get(&key) {
             out.insert(
                 db_id,
-                String::from_utf8(bytes).map_err(|e| {
-                    AppError::InternalError(format!("database name is not valid utf-8: {e}"))
-                })?,
+                String::from_utf8(bytes)
+                    .map_err(|e| AppError::corrupt(Stored::DatabaseEntry, e))?,
             );
         }
     }
@@ -145,7 +142,7 @@ pub(super) async fn databases_by_id<R: Reader>(
         let Some(&db_id) = by_key.get(&key) else {
             continue;
         };
-        let meta: DatabaseMetadata = decode("database", &bytes)?;
+        let meta: DatabaseMetadata = decode(Stored::DatabaseEntry, &bytes)?;
         // 名前が別のデータベースへ付け替わっていたら採らない。
         if meta.id != db_id {
             continue;
@@ -183,7 +180,7 @@ pub(super) async fn tables_by_id<R: Reader>(
         let Some(table_id) = by_key.get(&key) else {
             continue;
         };
-        let meta: TableMetadata = decode("table", &bytes)?;
+        let meta: TableMetadata = decode(Stored::TableEntry, &bytes)?;
         if meta.id != *table_id {
             continue;
         }
@@ -202,9 +199,7 @@ pub(super) async fn table_info<R: Reader>(
     }
     let db_meta = database_meta(txn, db_name)
         .await?
-        .ok_or_else(|| AppError::DatabaseNotFound {
-            name: db_name.to_string(),
-        })?;
+        .ok_or_else(|| Resource::Database.not_found(db_name.to_string()))?;
     Ok(table_meta(txn, db_meta.id, table_name)
         .await?
         .map(|meta| Table::from_meta(table_name, meta)))
@@ -231,7 +226,10 @@ pub(super) async fn resolve_tables<R: Reader>(
     let mut db_ids: HashMap<&str, DatabaseId> = HashMap::new();
     for (key, bytes) in kv::batch_get(txn, db_keys.keys().cloned().collect()).await? {
         if let Some(name) = db_keys.get(&key) {
-            db_ids.insert(name, decode::<DatabaseMetadata>("database", &bytes)?.id);
+            db_ids.insert(
+                name,
+                decode::<DatabaseMetadata>(Stored::DatabaseEntry, &bytes)?.id,
+            );
         }
     }
 
@@ -248,7 +246,7 @@ pub(super) async fn resolve_tables<R: Reader>(
 
     let mut metas: HashMap<Vec<u8>, TableMetadata> = HashMap::new();
     for (key, bytes) in kv::batch_get(txn, table_keys.into_iter().collect()).await? {
-        metas.insert(key, decode("table", &bytes)?);
+        metas.insert(key, decode(Stored::TableEntry, &bytes)?);
     }
 
     // 入力と同じ並びで組み立てる。同じ参照が複数回現れても、引いたのは 1 度きり。
@@ -297,7 +295,7 @@ pub(super) async fn table_list_by_id<R: Reader>(
         .iter()
         .map(|(key, value)| {
             let name = keys::table_name_from_key(key)?;
-            Ok(Table::from_meta(name, decode("table", value)?))
+            Ok(Table::from_meta(name, decode(Stored::TableEntry, value)?))
         })
         .collect()
 }
@@ -312,7 +310,7 @@ impl<R: Reader> TikvRead<'_, R> {
             .iter()
             .map(|(key, value)| {
                 let name = keys::database_name_from_key(key)?;
-                let meta: DatabaseMetadata = decode("database", value)?;
+                let meta: DatabaseMetadata = decode(Stored::DatabaseEntry, value)?;
                 Ok((
                     meta.id,
                     DatabaseInfoResponse {
@@ -326,12 +324,9 @@ impl<R: Reader> TikvRead<'_, R> {
 
     #[tracing::instrument(skip_all, fields(db_name = %db_name))]
     pub(super) async fn table_list_impl(&self, db_name: &str) -> Result<Vec<Table>, AppError> {
-        let db_id =
-            database_id(&self.txn, db_name)
-                .await?
-                .ok_or_else(|| AppError::DatabaseNotFound {
-                    name: db_name.to_string(),
-                })?;
+        let db_id = database_id(&self.txn, db_name)
+            .await?
+            .ok_or_else(|| Resource::Database.not_found(db_name.to_string()))?;
         table_list_by_id(&self.txn, db_id).await
     }
 
@@ -352,16 +347,19 @@ impl TikvWrite<'_> {
         self.require_lock(LockScope::Database, name.as_bytes())?;
 
         if database_meta(&self.txn, name).await?.is_some() {
-            return Err(AppError::DatabaseAlreadyExists {
-                name: name.to_string(),
-            });
+            return Err(Resource::Database.already_exists(name.to_string()));
         }
 
         let meta = DatabaseMetadata {
             id,
             description: description.clone(),
         };
-        kv::put(&self.txn, keys::database(name), encode("database", &meta)?).await;
+        kv::put(
+            &self.txn,
+            keys::database(name),
+            encode(Stored::DatabaseEntry, &meta)?,
+        )
+        .await;
         kv::put(
             &self.txn,
             keys::database_id_index(id),
@@ -378,17 +376,13 @@ impl TikvWrite<'_> {
     #[tracing::instrument(skip_all, fields(db_name = %name))]
     pub(super) async fn database_remove_impl(&mut self, name: &str) -> Result<(), AppError> {
         if name.is_empty() {
-            return Err(AppError::DatabaseNotFound {
-                name: name.to_string(),
-            });
+            return Err(Resource::Database.not_found(name.to_string()));
         }
 
         self.require_lock(LockScope::Database, name.as_bytes())?;
 
         let Some(meta) = database_meta(&self.txn, name).await? else {
-            return Err(AppError::DatabaseNotFound {
-                name: name.to_string(),
-            });
+            return Err(Resource::Database.not_found(name.to_string()));
         };
 
         // データベーススコープを保持しているので、この一覧が途中で増えることはない。
@@ -429,15 +423,11 @@ impl TikvWrite<'_> {
         ])?;
 
         let Some(mut meta) = database_meta(&self.txn, name).await? else {
-            return Err(AppError::DatabaseNotFound {
-                name: name.to_string(),
-            });
+            return Err(Resource::Database.not_found(name.to_string()));
         };
 
         if name != final_new_name && database_meta(&self.txn, final_new_name).await?.is_some() {
-            return Err(AppError::DatabaseAlreadyExists {
-                name: final_new_name.to_string(),
-            });
+            return Err(Resource::Database.already_exists(final_new_name.to_string()));
         }
 
         if let Some(desc) = description {
@@ -456,7 +446,7 @@ impl TikvWrite<'_> {
         kv::put(
             &self.txn,
             keys::database(final_new_name),
-            encode("database", &meta)?,
+            encode(Stored::DatabaseEntry, &meta)?,
         )
         .await;
         Ok(())
@@ -477,14 +467,10 @@ impl TikvWrite<'_> {
 
         let src_meta = database_meta(&self.txn, src_db_name)
             .await?
-            .ok_or_else(|| AppError::DatabaseNotFound {
-                name: src_db_name.to_string(),
-            })?;
+            .ok_or_else(|| Resource::Database.not_found(src_db_name.to_string()))?;
 
         if database_meta(&self.txn, copy_name).await?.is_some() {
-            return Err(AppError::DatabaseAlreadyExists {
-                name: copy_name.to_string(),
-            });
+            return Err(Resource::Database.already_exists(copy_name.to_string()));
         }
 
         let src_tables = table_list_by_id(&self.txn, src_meta.id).await?;
@@ -497,7 +483,7 @@ impl TikvWrite<'_> {
         kv::put(
             &self.txn,
             keys::database(copy_name),
-            encode("database", &copy_meta)?,
+            encode(Stored::DatabaseEntry, &copy_meta)?,
         )
         .await;
         kv::put(
@@ -531,32 +517,25 @@ impl TikvWrite<'_> {
         value_index: bool,
     ) -> Result<Table, AppError> {
         if db_name.is_empty() {
-            return Err(AppError::DatabaseNotFound {
-                name: db_name.to_string(),
-            });
+            return Err(Resource::Database.not_found(db_name.to_string()));
         }
         if table_name.is_empty() {
-            return Err(AppError::InternalError(
-                "Table name cannot be empty".to_string(),
-            ));
+            return Err(AppError::InvalidName {
+                reason: "table name cannot be empty".to_string(),
+            });
         }
 
         self.require_lock(LockScope::Database, db_name.as_bytes())?;
 
-        let db_meta =
-            database_meta(&self.txn, db_name)
-                .await?
-                .ok_or_else(|| AppError::DatabaseNotFound {
-                    name: db_name.to_string(),
-                })?;
+        let db_meta = database_meta(&self.txn, db_name)
+            .await?
+            .ok_or_else(|| Resource::Database.not_found(db_name.to_string()))?;
 
         if table_meta(&self.txn, db_meta.id, table_name)
             .await?
             .is_some()
         {
-            return Err(AppError::TableAlreadyExists {
-                name: table_name.to_string(),
-            });
+            return Err(Resource::Table.already_exists(table_name.to_string()));
         }
 
         let id = TableId(uuid::Uuid::now_v7());
@@ -579,7 +558,7 @@ impl TikvWrite<'_> {
         kv::put(
             &self.txn,
             keys::table(db_meta.id, table_name),
-            encode("table", &meta)?,
+            encode(Stored::TableEntry, &meta)?,
         )
         .await;
         kv::put(
@@ -614,25 +593,18 @@ impl TikvWrite<'_> {
         // 改名はテーブル集合の変更なので排他する（既存データ検証のほうは排他しない）。
         self.require_lock(LockScope::Database, db_name.as_bytes())?;
 
-        let db_meta =
-            database_meta(&self.txn, db_name)
-                .await?
-                .ok_or_else(|| AppError::DatabaseNotFound {
-                    name: db_name.to_string(),
-                })?;
+        let db_meta = database_meta(&self.txn, db_name)
+            .await?
+            .ok_or_else(|| Resource::Database.not_found(db_name.to_string()))?;
         let mut table = table_meta(&self.txn, db_meta.id, table_name)
             .await?
             .map(|meta| Table::from_meta(table_name, meta))
-            .ok_or_else(|| AppError::TableNotFound {
-                name: table_name.to_string(),
-            })?;
+            .ok_or_else(|| Resource::Table.not_found(table_name.to_string()))?;
 
         let changed_name = match new_name {
             Some(nn) if nn != table_name => {
                 if table_meta(&self.txn, db_meta.id, nn).await?.is_some() {
-                    return Err(AppError::TableAlreadyExists {
-                        name: nn.to_string(),
-                    });
+                    return Err(Resource::Table.already_exists(nn.to_string()));
                 }
                 table.name = nn.to_string();
                 true
@@ -686,7 +658,7 @@ impl TikvWrite<'_> {
         kv::put(
             &self.txn,
             keys::table(db_meta.id, &table.name),
-            encode("table", &meta)?,
+            encode(Stored::TableEntry, &meta)?,
         )
         .await;
 
@@ -702,17 +674,12 @@ impl TikvWrite<'_> {
         // シャード実体は論理削除して回収に回すので、テーブル全体の排他は要らない。
         self.require_lock(LockScope::Database, db_name.as_bytes())?;
 
-        let db_meta =
-            database_meta(&self.txn, db_name)
-                .await?
-                .ok_or_else(|| AppError::DatabaseNotFound {
-                    name: db_name.to_string(),
-                })?;
+        let db_meta = database_meta(&self.txn, db_name)
+            .await?
+            .ok_or_else(|| Resource::Database.not_found(db_name.to_string()))?;
         let table = table_meta(&self.txn, db_meta.id, table_name)
             .await?
-            .ok_or_else(|| AppError::TableNotFound {
-                name: table_name.to_string(),
-            })?;
+            .ok_or_else(|| Resource::Table.not_found(table_name.to_string()))?;
 
         self.retire_table(db_meta.id, table_name, table.id).await?;
         Ok(())
@@ -735,29 +702,21 @@ impl TikvWrite<'_> {
 
         let src_db = database_meta(&self.txn, src_db_name)
             .await?
-            .ok_or_else(|| AppError::DatabaseNotFound {
-                name: src_db_name.to_string(),
-            })?;
+            .ok_or_else(|| Resource::Database.not_found(src_db_name.to_string()))?;
         // 存在確認だけ。実体の読み出しは `copy_table_into` が行う。
         table_meta(&self.txn, src_db.id, src_table_name)
             .await?
-            .ok_or_else(|| AppError::TableNotFound {
-                name: src_table_name.to_string(),
-            })?;
+            .ok_or_else(|| Resource::Table.not_found(src_table_name.to_string()))?;
 
         let copy_db = database_meta(&self.txn, copy_db_name)
             .await?
-            .ok_or_else(|| AppError::DatabaseNotFound {
-                name: copy_db_name.to_string(),
-            })?;
+            .ok_or_else(|| Resource::Database.not_found(copy_db_name.to_string()))?;
 
         if table_meta(&self.txn, copy_db.id, copy_table_name)
             .await?
             .is_some()
         {
-            return Err(AppError::TableAlreadyExists {
-                name: copy_table_name.to_string(),
-            });
+            return Err(Resource::Table.already_exists(copy_table_name.to_string()));
         }
 
         self.copy_table_into(src_db.id, src_table_name, copy_db.id, copy_table_name)
@@ -778,9 +737,7 @@ impl TikvWrite<'_> {
     ) -> Result<Table, AppError> {
         let src_meta = table_meta(&self.txn, src_db_id, src_table_name)
             .await?
-            .ok_or_else(|| AppError::TableNotFound {
-                name: src_table_name.to_string(),
-            })?;
+            .ok_or_else(|| Resource::Table.not_found(src_table_name.to_string()))?;
 
         let copy_id = TableId(uuid::Uuid::now_v7());
         let copy_meta = TableMetadata {
@@ -795,7 +752,7 @@ impl TikvWrite<'_> {
         kv::put(
             &self.txn,
             keys::table(dst_db_id, dst_table_name),
-            encode("table", &copy_meta)?,
+            encode(Stored::TableEntry, &copy_meta)?,
         )
         .await;
         kv::put(

@@ -17,7 +17,7 @@ use kasane_logic::{RangeId, SingleId, SpatialIdSet};
 #[ignore]
 fn dynamic_shard_splits_and_reads_back() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let db = initialize_database(tmp.path().to_str().unwrap());
+    let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     let table_id = TableId(uuid::Uuid::now_v7());
 
     // 閾値を超える数の互いに素な FlexId を上半球(f=0)へ挿入する。

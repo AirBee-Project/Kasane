@@ -5,7 +5,7 @@ use heed::{Database, RoTxn, WithoutTls};
 use kasane_logic::{ArchivedSpatialIdMap, FlexId, SpatialIdMap};
 
 use super::keys::TableIdAndFlexId;
-use crate::error::AppError;
+use crate::error::{AppError, Stored};
 use crate::models::id::TableId;
 
 pub use crate::repositories::encoding::shard_entry::{
@@ -183,7 +183,7 @@ pub fn load_leaf_archived<'txn>(
             // SAFETY: 自分の `to_bytes` が書いた mmap 上のバイト列。形式は access が検証する。
             Some(map_bytes) => Ok(Some(
                 unsafe { ArchivedSpatialIdMap::access(map_bytes) }
-                    .map_err(|e| AppError::InternalError(format!("leaf format: {e}")))?,
+                    .map_err(|e| AppError::corrupt(Stored::Shard, e))?,
             )),
             None => Err(AppError::InternalError(
                 "routed to a pointer node".to_string(),
@@ -204,7 +204,7 @@ pub fn load_leaf_map(
         Some(bytes) => match ShardEntry::decode(bytes)? {
             ShardEntry::Leaf(map_bytes) => {
                 unsafe { SpatialIdMap::<Vec<u8>>::from_bytes(&map_bytes) }
-                    .map_err(|e| AppError::InternalError(format!("rkyv deserialize: {e}")))
+                    .map_err(|e| AppError::corrupt(Stored::Shard, e))
             }
             ShardEntry::Pointers(_) => Err(AppError::InternalError(
                 "routed to a pointer node".to_string(),

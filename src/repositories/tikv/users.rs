@@ -11,7 +11,7 @@
 use std::collections::BTreeSet;
 
 use super::keys::{self, LockScope};
-use crate::error::AppError;
+use crate::error::{AppError, Stored};
 use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
 use crate::models::users::{AclEntry, Grant, Scope, UserRecord};
 use crate::repositories::encoding::acl::{AclKey, decode_role};
@@ -25,7 +25,7 @@ pub(super) async fn user_record<R: Reader>(
     username: &str,
 ) -> Result<Option<UserRecord>, AppError> {
     match kv::get(txn, keys::user(username)).await? {
-        Some(bytes) => Ok(Some(decode("user", &bytes)?)),
+        Some(bytes) => Ok(Some(decode(Stored::UserRecord, &bytes)?)),
         None => Ok(None),
     }
 }
@@ -149,7 +149,7 @@ impl<R: Reader> TikvRead<'_, R> {
             .map(|(key, value)| {
                 Ok((
                     keys::username_from_key(key)?.to_string(),
-                    decode("user", value)?,
+                    decode(Stored::UserRecord, value)?,
                 ))
             })
             .collect()
@@ -168,7 +168,12 @@ impl TikvWrite<'_> {
         username: &str,
         record: &UserRecord,
     ) -> Result<(), AppError> {
-        kv::put(&self.txn, keys::user(username), encode("user", record)?).await;
+        kv::put(
+            &self.txn,
+            keys::user(username),
+            encode(Stored::UserRecord, record)?,
+        )
+        .await;
         Ok(())
     }
 

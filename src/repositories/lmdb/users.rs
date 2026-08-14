@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 
 use heed::RoTxn;
 
-use crate::error::AppError;
+use crate::error::{AppError, Stored};
 use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
 use crate::models::users::{AclEntry, Grant, Scope, UserRecord};
 use crate::repositories::encoding::acl::{AclKey, decode_role};
@@ -30,8 +30,7 @@ impl AppDb {
         self.users
             .get(txn, username)?
             .map(|json| {
-                serde_json::from_str(json)
-                    .map_err(|_| AppError::InternalError("Failed to parse user record".into()))
+                serde_json::from_str(json).map_err(|e| AppError::corrupt(Stored::UserRecord, e))
             })
             .transpose()
     }
@@ -156,7 +155,7 @@ impl KasaneDbRead<'_> {
             .map(|item| {
                 let (username, json) = item?;
                 let record = serde_json::from_str(json)
-                    .map_err(|_| AppError::InternalError("Failed to parse user record".into()))?;
+                    .map_err(|e| AppError::corrupt(Stored::UserRecord, e))?;
                 Ok((username.to_string(), record))
             })
             .collect()
@@ -169,8 +168,8 @@ impl KasaneDbWrite<'_> {
         username: &str,
         record: &UserRecord,
     ) -> Result<(), AppError> {
-        let json = serde_json::to_string(record)
-            .map_err(|_| AppError::InternalError("Failed to serialize user record".into()))?;
+        let json =
+            serde_json::to_string(record).map_err(|e| AppError::corrupt(Stored::UserRecord, e))?;
         self.db
             .users
             .put(&mut self.write_txn, username, json.as_str())?;

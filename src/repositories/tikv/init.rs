@@ -159,23 +159,12 @@ impl TikvDb {
             .read(async |r| Ok((r.schema_version().await?, r.cluster_initialized().await?)))
             .await?;
 
+        // LMDB 側と同じ失敗を同じ型で返す（`lmdb::init` を参照）。
         match version {
             Some(SCHEMA_VERSION) => return Ok(()),
-            Some(other) => {
-                return Err(AppError::StorageError(format!(
-                    "この TiKV クラスタは Kasane のディスク形式 v{other} で書かれています\
-                     （このビルドが読めるのは v{SCHEMA_VERSION}）。\
-                     別のクラスタを指すか、鍵空間を作り直してください"
-                )));
-            }
-            // 版を持たないが初期化済み = 権限を利用者レコードに埋めていた頃の形式。
-            None if initialized => {
-                return Err(AppError::StorageError(format!(
-                    "この TiKV クラスタは Kasane の古いディスク形式（v1、権限が利用者\
-                     レコードに同居していた頃）で書かれています。このビルドが読めるのは \
-                     v{SCHEMA_VERSION} です。別のクラスタを指すか、鍵空間を作り直してください"
-                )));
-            }
+            // 版が違う、あるいは版を持たないのに初期化済み（版を刻む前の世代）。
+            Some(_) => return Err(mismatch(version)),
+            None if initialized => return Err(mismatch(version)),
             None => {}
         }
 
@@ -205,6 +194,13 @@ impl TikvDb {
     }
 }
 
+fn mismatch(found: Option<u32>) -> AppError {
+    AppError::SchemaVersionMismatch {
+        found,
+        expected: SCHEMA_VERSION,
+    }
+}
+
 /// 存在するかどうかだけを見るので、値に意味は無い。
 const MARKER_PRESENT: &[u8] = b"1";
 
@@ -220,7 +216,7 @@ impl<R: Reader> TikvRead<'_, R> {
             return Ok(None);
         };
         let raw: [u8; 4] = bytes.as_slice().try_into().map_err(|_| {
-            AppError::StorageError("schema version marker is not four bytes".to_string())
+            AppError::InternalError("schema version marker is not four bytes".to_string())
         })?;
         Ok(Some(u32::from_le_bytes(raw)))
     }

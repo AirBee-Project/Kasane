@@ -15,7 +15,7 @@
 //! `reverse` がデータベース前置なので、データベース削除は 1 プレフィックスで
 //! **データベーススコープ行と配下テーブル行の両方**を列挙できる。
 
-use crate::error::AppError;
+use crate::error::{AppError, Stored};
 use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
 use crate::models::users::DataRole;
 
@@ -118,7 +118,7 @@ pub fn decode_role(value: &[u8]) -> Result<DataRole, AppError> {
     let byte = value
         .first()
         .copied()
-        .ok_or_else(|| AppError::InternalError("acl row has an empty value".to_string()))?;
+        .ok_or_else(|| AppError::corrupt(Stored::AclRow, "role byte is missing"))?;
     DataRole::try_from(byte)
 }
 
@@ -128,11 +128,14 @@ fn concat(parts: [[u8; UUID_LEN]; 3]) -> Vec<u8> {
 
 fn split(key: &[u8], what: &str) -> Result<[[u8; UUID_LEN]; 3], AppError> {
     let bytes: &[u8; AclKey::LEN] = key.try_into().map_err(|_| {
-        AppError::InternalError(format!(
-            "{what} key has the wrong length (expected {}, found {})",
-            AclKey::LEN,
-            key.len()
-        ))
+        AppError::corrupt(
+            Stored::AclRow,
+            format!(
+                "{what} key is {} bytes, expected {}",
+                key.len(),
+                AclKey::LEN
+            ),
+        )
     })?;
     let mut parts = [[0u8; UUID_LEN]; 3];
     for (slot, chunk) in parts.iter_mut().zip(bytes.chunks_exact(UUID_LEN)) {

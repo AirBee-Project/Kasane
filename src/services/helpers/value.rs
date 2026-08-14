@@ -5,7 +5,7 @@
 //! `insert`/`upsert`（格納）も同じ trait を通るので、型ごとの処理を二重に持たない。
 
 use crate::{
-    error::AppError,
+    error::{AppError, Stored},
     for_value_type,
     models::database::table::{TableConstraints, TableDataType},
     services::query::value::Value,
@@ -37,11 +37,12 @@ pub fn restore_value(
         constraints: Option<&TableConstraints>,
     ) -> Result<serde_json::Value, AppError> {
         let decode = V::decoder(constraints)?;
-        decode(bytes)
-            .map(|v| v.to_json())
-            .ok_or_else(|| AppError::InvalidStoredValue {
-                reason: format!("stored bytes are not a valid {}", V::type_name()),
-            })
+        decode(bytes).map(|v| v.to_json()).ok_or_else(|| {
+            AppError::corrupt(
+                Stored::Value,
+                format!("bytes are not a valid {}", V::type_name()),
+            )
+        })
     }
     for_value_type!(expected_type, imp, value, constraints)
 }

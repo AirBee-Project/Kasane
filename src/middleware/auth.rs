@@ -15,7 +15,7 @@ use crate::models::id::{DatabaseId, TableId};
 use crate::models::users::{Scope, User, UserRole};
 use crate::{
     AppState,
-    error::{AppError, AuthError},
+    error::{AppError, AuthError, Resource},
     services::auth::verify_jwt,
 };
 
@@ -194,9 +194,7 @@ pub async fn visible_database<R: CatalogRepository, T>(
     let Some((db_id, value)) = found else {
         // 全体ロールを持つ利用者にだけ「無い」と教える。
         return Err(if user.has_global_role(UserRole::Read) {
-            AppError::DatabaseNotFound {
-                name: db_name.to_string(),
-            }
+            Resource::Database.not_found(db_name.to_string())
         } else {
             denied(db_name, None, UserRole::Read)
         });

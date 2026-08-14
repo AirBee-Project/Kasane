@@ -50,6 +50,19 @@ Authorization: Bearer eyJhb...
 | `insufficient_privilege` | 403 | 対象データベース・テーブルへの権限不足 |
 | `root_protected` | 403 | root ユーザーに対して許可されない操作 |
 | `invalid_privilege` | 400 | 権限ルールが不正（保持数の上限超過など） |
+| `user_not_found` | 404 | 指定した利用者が存在しない |
+| `user_already_exists` | 409 | 同名の利用者が既に存在する |
+| `privilege_not_found` | 404 | 剥奪しようとした対象の権限を持っていない |
+
+サーバー側の失敗は原因で 3 つに分かれます。混ぜないのは、運用時に「直すべき場所」を
+区別できるようにするためです。
+
+| code | HTTP | 意味 |
+| :--- | :--- | :--- |
+| `storage_error` | 500 | ストレージエンジン自身が失敗した（I/O・競合・接続） |
+| `corrupt_storage` | 500 | 読めたバイト列が、書いたときの形式と違う |
+| `schema_version_mismatch` | 500 | ディスク形式の版がこのビルドと合わない |
+| `internal_error` | 500 | このプログラムの不変条件が破れた（バグ） |
 
 ## 2. スコープとロール (Scopes & Roles)
 
@@ -187,3 +200,5 @@ acl_by_object : db_id ‖ table_slot ‖ principal_id  -> 値なし
 ## 7. ディスク形式の版
 
 権限の保存形式は `schema_version` で管理しています（現在 **2**）。版 1（権限が利用者レコードの配列に同居していた形式）のデータを開こうとすると、**黙って読み替えずに起動を止めます**。移行は提供していないので、新しいディレクトリ／クラスタで作り直してください。
+
+両バックエンドとも同じ `AppError::SchemaVersionMismatch` を返します（片方が panic、もう片方が `Result` という食い違いはありません）。

@@ -444,8 +444,10 @@ impl Value for String {
                 mapping
                     .get(self)
                     .map(|id| id.to_be_bytes().to_vec())
-                    .ok_or_else(|| AppError::InvalidStoredValue {
-                        reason: format!("Internal mapping not found for enum value '{self}'"),
+                    .ok_or_else(|| {
+                        AppError::InternalError(format!(
+                            "enum value '{self}' has no id in the constraint mapping"
+                        ))
                     })
             }
             Some(TableConstraints::Text {

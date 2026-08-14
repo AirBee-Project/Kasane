@@ -610,7 +610,7 @@ mod tests {
     fn restart_marker_is_labelled_as_a_bug_when_converted() {
         let err: AppError = NeedsRestart.into();
         let AppError::InternalError(message) = err else {
-            panic!("NeedsRestart は InternalError へ落ちるべき");
+            panic!("NeedsRestart must convert into InternalError");
         };
         assert!(message.contains("bug"), "実装バグと判る文言であること");
     }

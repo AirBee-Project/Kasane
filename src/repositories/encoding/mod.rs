@@ -4,7 +4,7 @@ pub mod acl;
 pub mod shard_entry;
 pub mod value_index;
 
-use crate::error::AppError;
+use crate::error::{AppError, Stored};
 use crate::models::id::DatabaseId;
 
 /// キーへ埋め込む識別子のバイト長。
@@ -64,10 +64,13 @@ impl TryFrom<&[u8]> for OwnedName {
             .get(..UUID_LEN)
             .and_then(|s| s.try_into().ok())
             .ok_or_else(|| {
-                AppError::InternalError("entry is too short to carry a database id".to_string())
+                AppError::corrupt(
+                    Stored::TableEntry,
+                    "entry is too short to carry a database id",
+                )
             })?;
         let name = std::str::from_utf8(&bytes[UUID_LEN..])
-            .map_err(|e| AppError::InternalError(format!("name is not valid utf-8: {e}")))?;
+            .map_err(|e| AppError::corrupt(Stored::TableEntry, e))?;
         Ok(Self::new(DatabaseId::from(id), name))
     }
 }

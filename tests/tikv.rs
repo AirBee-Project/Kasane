@@ -22,7 +22,7 @@ use kasane_logic::{SingleId, SpatialIdSet};
 async fn connect() -> TikvDb {
     TikvDb::connect(TikvConfig::from_env())
         .await
-        .expect("TiKV に接続できない。deployment/tikv/docker-compose.yml を起動しているか確認")
+        .expect("cannot reach TiKV; start the cluster with ")
 }
 
 /// テストごとに衝突しないデータベース名。
@@ -170,7 +170,13 @@ async fn database_lifecycle() {
         db.write(async move |w| w.database_create(&name, None).await)
             .await
     };
-    assert!(matches!(dup, Err(AppError::DatabaseAlreadyExists { .. })));
+    assert!(matches!(
+        dup,
+        Err(AppError::AlreadyExists {
+            resource: kasane::error::Resource::Database,
+            ..
+        })
+    ));
 
     drop_db(&db, &name).await;
 

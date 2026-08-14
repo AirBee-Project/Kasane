@@ -13,7 +13,7 @@ mod write;
 // private な `use` も子孫からは見える。
 use super::kv::{Reader, Readers, ShardValue};
 use super::{TikvRead, TikvWrite, keys, kv};
-use crate::error::AppError;
+use crate::error::{AppError, Stored};
 use crate::models::database::table::TableDataType;
 use crate::models::id::TableId;
 use crate::repositories::encoding::shard_entry::{

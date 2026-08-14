@@ -1,6 +1,6 @@
 use crate::{
     AppState,
-    error::AppError,
+    error::{AppError, Resource},
     middleware::auth::AuthUser,
     models::{
         database::table::data::{GetDataQuery, GetDataResponse, ZoomLevelPolicy},
@@ -53,9 +53,7 @@ pub async fn get(
 
             let table = resolved.table.ok_or_else(|| {
                 tracing::debug!("Table not found: {}", table_name);
-                AppError::TableNotFound {
-                    name: table_name.clone(),
-                }
+                Resource::Table.not_found(table_name.clone())
             })?;
 
             let ids = process_spatial_ids(&spatial_ids, table.max_zoom_level, &zoom_level_policy)?;

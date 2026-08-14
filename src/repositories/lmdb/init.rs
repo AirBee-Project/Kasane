@@ -3,6 +3,7 @@
 use heed::{Env, EnvFlags, EnvOpenOptions};
 use uuid::Uuid;
 
+use crate::error::AppError;
 use crate::models::id::PrincipalId;
 use crate::models::users::{UserRecord, UserRole};
 use crate::repositories::{ROOT_USERNAME, SCHEMA_VERSION, root_password};
@@ -67,8 +68,12 @@ fn open_env(path: &str) -> Env<heed::WithoutTls> {
     }
 }
 
+/// **版が合わなければ [`AppError::SchemaVersionMismatch`] を返す。**
+///
+/// TiKV 側と同じ失敗をここでも同じ型で表す。片方が panic、もう片方が `Result` だと、
+/// 同じ状況の扱いが呼び出し側で揃わない。
 #[tracing::instrument]
-pub fn initialize_database(path: &str) -> AppDb {
+pub fn initialize_database(path: &str) -> Result<AppDb, AppError> {
     tracing::info!("Initializing database at: {}", path);
     std::fs::create_dir_all(path).unwrap();
 
@@ -99,40 +104,29 @@ pub fn initialize_database(path: &str) -> AppDb {
         .unwrap();
 
     // 版の確認は他のどの書き込みより先に行う。読み方が違うまま触ると壊れる。
-    let stored = meta.get(&write_txn, SCHEMA_VERSION_KEY).unwrap();
-    let is_empty = users.is_empty(&write_txn).unwrap();
-    match stored {
+    let found = meta.get(&write_txn, SCHEMA_VERSION_KEY)?;
+    let is_empty = users.is_empty(&write_txn)?;
+    match found {
         Some(SCHEMA_VERSION) => {}
-        Some(other) => panic!(
-            "このディレクトリは Kasane のディスク形式 v{other} で書かれています\
-             （このビルドが読めるのは v{SCHEMA_VERSION}）。\
-             別のディレクトリを指定するか、DATABASE_DIR を新しい場所へ向けてください: {path}"
-        ),
-        // 版を持たないが中身はある = 権限を利用者レコードに埋めていた頃の形式。
-        None if !is_empty => panic!(
-            "このディレクトリは Kasane の古いディスク形式（v1、権限が利用者レコードに\
-             同居していた頃）で書かれています。このビルドが読めるのは v{SCHEMA_VERSION} です。\
-             別のディレクトリを指定するか、DATABASE_DIR を新しい場所へ向けてください: {path}"
-        ),
-        None => {
-            meta.put(&mut write_txn, SCHEMA_VERSION_KEY, &SCHEMA_VERSION)
-                .unwrap();
-        }
+        // 版が違う、あるいは版を持たないのに中身がある（版を刻む前の世代）。
+        Some(_) => return Err(mismatch(found)),
+        None if !is_empty => return Err(mismatch(found)),
+        None => meta.put(&mut write_txn, SCHEMA_VERSION_KEY, &SCHEMA_VERSION)?,
     }
 
     // 単一ライタなので、ここでの「空なら作る」は他プロセスと競合しない。
     if is_empty {
-        tracing::info!("Creating default root user: {}", ROOT_USERNAME);
-        let json = serde_json::to_string(&root_user_record()).unwrap();
-        users
-            .put(&mut write_txn, ROOT_USERNAME, json.as_str())
-            .unwrap();
+        tracing::info!("Creating default root user: {ROOT_USERNAME}");
+        let record = root_user_record()?;
+        let json = serde_json::to_string(&record)
+            .map_err(|e| AppError::corrupt(crate::error::Stored::UserRecord, e))?;
+        users.put(&mut write_txn, ROOT_USERNAME, json.as_str())?;
     }
 
-    write_txn.commit().unwrap();
+    write_txn.commit()?;
     tracing::info!("Database initialized successfully (schema v{SCHEMA_VERSION})");
 
-    AppDb {
+    Ok(AppDb {
         env,
         meta,
         databases,
@@ -144,15 +138,22 @@ pub fn initialize_database(path: &str) -> AppDb {
         acl_by_object,
         tables_data,
         value_index,
+    })
+}
+
+fn mismatch(found: Option<u32>) -> AppError {
+    AppError::SchemaVersionMismatch {
+        found,
+        expected: SCHEMA_VERSION,
     }
 }
 
 /// root は `global` / `admin` だけを持つ。ACL 行は 1 つも要らない。
-fn root_user_record() -> UserRecord {
-    UserRecord {
+fn root_user_record() -> Result<UserRecord, AppError> {
+    Ok(UserRecord {
         id: PrincipalId(Uuid::now_v7()),
-        password_hash: hash_password(&root_password()).unwrap(),
+        password_hash: hash_password(&root_password())?,
         token_version: 0,
         global_role: Some(UserRole::Admin),
-    }
+    })
 }

@@ -48,7 +48,7 @@ pub fn default_target() -> String {
 /// 構築手順をここに閉じることで、呼び出し側に feature 分岐が残らない。
 #[cfg(feature = "backend-lmdb")]
 pub async fn open(target: &str) -> Result<Db, AppError> {
-    Ok(crate::repositories::lmdb::initialize_database(target))
+    crate::repositories::lmdb::initialize_database(target)
 }
 
 #[cfg(feature = "backend-tikv")]

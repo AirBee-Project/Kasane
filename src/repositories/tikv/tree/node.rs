@@ -3,7 +3,7 @@
 use kasane_logic::{ArchivedSpatialIdMap, FlexId, SpatialIdMap};
 use rustc_hash::FxHashMap;
 
-use super::{AppError, Reader, Readers, ShardEntry, ShardValue, TableId, keys, kv};
+use super::{AppError, Reader, Readers, ShardEntry, ShardValue, Stored, TableId, keys, kv};
 
 // --- ノードの読み書き ---
 
@@ -35,7 +35,7 @@ pub(super) fn decode_leaf(
     match ShardEntry::leaf_payload(entry)? {
         // SAFETY: CRC 検証済みのバイト列。形式バージョンは `from_bytes` が検証する。
         Some(map_bytes) => unsafe { SpatialIdMap::<Vec<u8>>::from_bytes(map_bytes) }
-            .map_err(|e| AppError::InternalError(format!("rkyv deserialize: {e}"))),
+            .map_err(|e| AppError::corrupt(Stored::Shard, e)),
         None => Err(AppError::InternalError(
             "routed to a pointer node".to_string(),
         )),
@@ -47,7 +47,7 @@ pub(super) fn archived_leaf(entry: &[u8]) -> Result<ArchivedSpatialIdMap<'_>, Ap
     match ShardEntry::leaf_payload(entry)? {
         // SAFETY: `decode_leaf` と同じ根拠。
         Some(map_bytes) => unsafe { ArchivedSpatialIdMap::access(map_bytes) }
-            .map_err(|e| AppError::InternalError(format!("leaf format: {e}"))),
+            .map_err(|e| AppError::corrupt(Stored::Shard, e)),
         None => Err(AppError::InternalError(
             "routed to a pointer node".to_string(),
         )),

@@ -2,7 +2,7 @@
 
 use kasane_logic::FlexId;
 
-use crate::error::AppError;
+use crate::error::{AppError, Stored};
 
 /// 1 シャードが保持できる [`FlexId`] 数の上限。超えたら分割する。
 ///
@@ -33,15 +33,16 @@ impl ShardEntry {
         match bytes.first() {
             Some(&TAG_LEAF) => {
                 if bytes.len() < LEAF_HEADER_LEN {
-                    return Err(AppError::InternalError("truncated leaf entry".to_string()));
+                    return Err(AppError::corrupt(Stored::Shard, "leaf entry is truncated"));
                 }
                 Ok(Self::Leaf(bytes[LEAF_HEADER_LEN..].to_vec()))
             }
             Some(&TAG_POINTERS) => {
                 let body = &bytes[1..];
                 if !body.len().is_multiple_of(FlexId::ENCODED_LEN) {
-                    return Err(AppError::InternalError(
-                        "invalid pointer node length".to_string(),
+                    return Err(AppError::corrupt(
+                        Stored::Shard,
+                        "pointer node length is not a multiple of a region",
                     ));
                 }
                 let mut regions = Vec::with_capacity(body.len() / FlexId::ENCODED_LEN);
@@ -49,13 +50,11 @@ impl ShardEntry {
                     let mut b = [0u8; FlexId::ENCODED_LEN];
                     b.copy_from_slice(chunk);
                     regions
-                        .push(FlexId::decode(&b).map_err(|e| {
-                            AppError::InternalError(format!("flex_id decode: {e}"))
-                        })?);
+                        .push(FlexId::decode(&b).map_err(|e| AppError::corrupt(Stored::Shard, e))?);
                 }
                 Ok(Self::Pointers(regions))
             }
-            _ => Err(AppError::InternalError("empty shard entry".to_string())),
+            _ => Err(AppError::corrupt(Stored::Shard, "entry is empty")),
         }
     }
 
@@ -72,14 +71,14 @@ impl ShardEntry {
         match entry.first() {
             Some(&TAG_LEAF) => {
                 if entry.len() < LEAF_HEADER_LEN {
-                    return Err(AppError::InternalError("truncated leaf entry".to_string()));
+                    return Err(AppError::corrupt(Stored::Shard, "leaf entry is truncated"));
                 }
                 let mut b = [0u8; 4];
                 b.copy_from_slice(&entry[1..LEAF_HEADER_LEN]);
                 Ok(Some(u32::from_le_bytes(b)))
             }
             Some(&TAG_POINTERS) => Ok(None),
-            _ => Err(AppError::InternalError("empty shard entry".to_string())),
+            _ => Err(AppError::corrupt(Stored::Shard, "entry is empty")),
         }
     }
 
@@ -103,7 +102,7 @@ impl ShardEntry {
                 Self::Pointers(children) => Ok(Some(children)),
                 Self::Leaf(_) => unreachable!("tag は POINTERS"),
             },
-            _ => Err(AppError::InternalError("empty shard entry".to_string())),
+            _ => Err(AppError::corrupt(Stored::Shard, "entry is empty")),
         }
     }
 
@@ -112,12 +111,12 @@ impl ShardEntry {
         match entry.first() {
             Some(&TAG_LEAF) => {
                 if entry.len() < LEAF_HEADER_LEN {
-                    return Err(AppError::InternalError("truncated leaf entry".to_string()));
+                    return Err(AppError::corrupt(Stored::Shard, "leaf entry is truncated"));
                 }
                 Ok(Some(&entry[LEAF_HEADER_LEN..]))
             }
             Some(&TAG_POINTERS) => Ok(None),
-            _ => Err(AppError::InternalError("empty shard entry".to_string())),
+            _ => Err(AppError::corrupt(Stored::Shard, "entry is empty")),
         }
     }
 }

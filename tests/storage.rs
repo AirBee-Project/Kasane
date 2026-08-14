@@ -11,7 +11,7 @@ use kasane::repositories::{ReadRepository, Storage, WriteRepository};
 
 fn temp_db() -> (tempfile::TempDir, kasane::repositories::lmdb::AppDb) {
     let tmp = tempfile::TempDir::new().unwrap();
-    let db = initialize_database(tmp.path().to_str().unwrap());
+    let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     (tmp, db)
 }
 

@@ -41,7 +41,7 @@ pub fn init_telemetry() -> Option<opentelemetry_sdk::trace::SdkTracerProvider> {
             .with_endpoint(&endpoint)
             .with_headers(http_headers)
             .build()
-            .expect("OTLP(HTTP) Exporterの構築に失敗しました");
+            .expect("failed to build the OTLP (HTTP) exporter");
 
         let mut attributes = vec![
             opentelemetry::KeyValue::new("service.namespace", "database"),

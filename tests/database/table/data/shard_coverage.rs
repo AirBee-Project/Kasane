@@ -10,7 +10,7 @@ use kasane_logic::{SingleId, SpatialIdSet};
 #[test]
 fn insert_into_empty_region_after_split_is_not_lost() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let db = initialize_database(tmp.path().to_str().unwrap());
+    let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     let table_id = TableId(uuid::Uuid::now_v7());
     let dt = TableDataType::Text;
 

@@ -149,7 +149,7 @@ fn verify(
 #[ignore = "heavy: ~thousands of random ops across split/merge"]
 fn randomized_model_matches_oracle() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let db = initialize_database(tmp.path().to_str().unwrap());
+    let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     let table_id = TableId(uuid::Uuid::now_v7());
     let dt = TableDataType::Int;
 

@@ -6,7 +6,7 @@
 
 use crate::{
     AppState,
-    error::AppError,
+    error::{AppError, Resource},
     middleware::auth::authorize_resolved,
     models::database::table::Table,
     models::users::{User, UserRole},
@@ -41,9 +41,9 @@ pub async fn resolve_authorized_table<R: ReadRepository>(
     )
     .await?;
 
-    resolved.table.ok_or_else(|| AppError::TableNotFound {
-        name: table_name.to_string(),
-    })
+    resolved
+        .table
+        .ok_or_else(|| Resource::Table.not_found(table_name.to_string()))
 }
 
 /// 読み取りを 1 つ開いて [`resolve_authorized_table`] を行う。

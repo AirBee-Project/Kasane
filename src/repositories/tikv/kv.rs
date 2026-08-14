@@ -13,7 +13,7 @@ use tikv_client::{BoundRange, Snapshot, Timestamp, Transaction, TransactionClien
 use tokio::sync::{Mutex, MutexGuard};
 
 use super::keys;
-use crate::error::AppError;
+use crate::error::{AppError, Stored};
 use crate::models::id::TableId;
 use crate::repositories::encoding::shard_entry::ShardEntry;
 
@@ -211,7 +211,7 @@ impl LazyTxn {
                     .await?,
             );
         }
-        Ok(self.txn.as_mut().expect("直前に開いた"))
+        Ok(self.txn.as_mut().expect("just opened above"))
     }
 
     /// 取り出した後は [`Drop`] の対象が無くなるので、後始末は呼び出し側の責任になる。
@@ -695,14 +695,15 @@ impl TryFrom<Vec<u8>> for ShardValue {
 
     fn try_from(framed: Vec<u8>) -> Result<Self, AppError> {
         if framed.len() < FRAME_HEADER_LEN {
-            return Err(AppError::StorageError(
-                "shard value is shorter than its frame header".to_string(),
+            return Err(AppError::corrupt(
+                Stored::Shard,
+                "value is shorter than its frame header",
             ));
         }
         let expected = u32::from_le_bytes(
             framed[..FRAME_HEADER_LEN]
                 .try_into()
-                .expect("FRAME_HEADER_LEN バイトある"),
+                .expect("at least FRAME_HEADER_LEN bytes"),
         );
         let actual = crc32fast::hash(&framed[FRAME_HEADER_LEN..]);
         if actual != expected {
@@ -847,9 +848,10 @@ pub(super) async fn table_flex_id_count<R: Reader>(
     let entries = scan_prefix(txn, &keys::shard_counts_of(table_id)).await?;
     let mut total = 0u64;
     for (_, value) in entries {
-        let bytes: [u8; 4] = value.as_slice().try_into().map_err(|_| {
-            AppError::StorageError("shard count entry is not four bytes".to_string())
-        })?;
+        let bytes: [u8; 4] = value
+            .as_slice()
+            .try_into()
+            .map_err(|_| AppError::corrupt(Stored::Shard, "count entry is not four bytes"))?;
         total += u32::from_le_bytes(bytes) as u64;
     }
     Ok(total)

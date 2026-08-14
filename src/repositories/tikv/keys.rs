@@ -21,7 +21,7 @@
 
 use kasane_logic::FlexId;
 
-use crate::error::AppError;
+use crate::error::{AppError, Stored};
 use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
 use crate::repositories::encoding::UUID_LEN;
 use crate::repositories::encoding::acl::{AclKey, AclRow};
@@ -98,11 +98,10 @@ pub fn tables_of(db_id: DatabaseId) -> Vec<u8> {
 
 pub fn table_name_from_key(key: &[u8]) -> Result<&str, AppError> {
     let head = 1 + UUID_LEN;
-    if key.len() < head {
-        return Err(AppError::InternalError("table key too short".to_string()));
-    }
-    std::str::from_utf8(&key[head..])
-        .map_err(|e| AppError::InternalError(format!("table name is not valid utf-8: {e}")))
+    let body = key
+        .get(head..)
+        .ok_or_else(|| AppError::corrupt(Stored::TableEntry, "key is too short to carry a name"))?;
+    std::str::from_utf8(body).map_err(|e| AppError::corrupt(Stored::TableEntry, e))
 }
 
 /// `0x04 ‖ table_id`
@@ -156,43 +155,40 @@ pub fn acl_holders_in(db_id: DatabaseId) -> Vec<u8> {
 }
 
 pub fn acl_from_key(key: &[u8]) -> Result<AclKey, AppError> {
-    AclKey::decode_forward(strip_tag(key, "acl")?)
+    AclKey::decode_forward(strip_tag(key, Stored::AclRow)?)
 }
 
 pub fn acl_from_reverse_key(key: &[u8]) -> Result<AclKey, AppError> {
-    AclKey::decode_reverse(strip_tag(key, "acl reverse")?)
+    AclKey::decode_reverse(strip_tag(key, Stored::AclRow)?)
 }
 
-fn strip_tag<'k>(key: &'k [u8], what: &str) -> Result<&'k [u8], AppError> {
+/// 名前空間タグを剥がす。空のキーはここで弾く。
+fn strip_tag(key: &[u8], stored: Stored) -> Result<&[u8], AppError> {
     key.split_first()
         .map(|(_tag, body)| body)
-        .ok_or_else(|| AppError::InternalError(format!("{what} key is empty")))
+        .ok_or_else(|| AppError::corrupt(stored, "key is empty"))
 }
 
 pub fn username_from_key(key: &[u8]) -> Result<&str, AppError> {
-    name_after_tag(key, "username")
+    name_after_tag(key, Stored::UserRecord)
 }
 
 pub fn database_name_from_key(key: &[u8]) -> Result<&str, AppError> {
-    name_after_tag(key, "database name")
+    name_after_tag(key, Stored::DatabaseEntry)
 }
 
 /// 添字だけで剥がすと、想定外の短いキーが来たときに panic になる。
-fn name_after_tag<'k>(key: &'k [u8], what: &str) -> Result<&'k str, AppError> {
-    let body = key
-        .split_first()
-        .map(|(_tag, body)| body)
-        .ok_or_else(|| AppError::InternalError(format!("{what} key is empty")))?;
-    std::str::from_utf8(body)
-        .map_err(|e| AppError::InternalError(format!("{what} is not valid utf-8: {e}")))
+fn name_after_tag(key: &[u8], stored: Stored) -> Result<&str, AppError> {
+    let body = strip_tag(key, stored)?;
+    std::str::from_utf8(body).map_err(|e| AppError::corrupt(stored, e))
 }
 
 /// シャードと値インデックスのキーはどちらも `タグ ‖ table_id ‖ …` なので、テーブルの複製では
 /// この部分だけを付け替えれば残りをそのまま流用できる。
 pub fn replace_leading_id(key: &mut [u8], id: TableId) -> Result<(), AppError> {
-    let slot = key.get_mut(1..1 + UUID_LEN).ok_or_else(|| {
-        AppError::InternalError("key is too short to carry a table id".to_string())
-    })?;
+    let slot = key
+        .get_mut(1..1 + UUID_LEN)
+        .ok_or_else(|| AppError::corrupt(Stored::Shard, "key is too short to carry a table id"))?;
     slot.copy_from_slice(&id.into_bytes());
     Ok(())
 }
@@ -218,12 +214,12 @@ pub fn region_from_shard_key(key: &[u8]) -> Result<FlexId, AppError> {
         .get(1 + UUID_LEN..)
         .and_then(|tail| tail.try_into().ok())
         .ok_or_else(|| {
-            AppError::InternalError(format!(
-                "shard key has an unexpected length (expected {expected}, found {})",
-                key.len()
-            ))
+            AppError::corrupt(
+                Stored::Shard,
+                format!("key is {} bytes, expected {expected}", key.len()),
+            )
         })?;
-    FlexId::decode(bytes).map_err(|e| AppError::InternalError(format!("flex_id decode: {e}")))
+    FlexId::decode(bytes).map_err(|e| AppError::corrupt(Stored::Shard, e))
 }
 
 pub fn shards_of(table_id: TableId) -> Vec<u8> {
@@ -269,7 +265,7 @@ pub fn table_id_from_garbage_key(key: &[u8]) -> Result<TableId, AppError> {
         .get(1..1 + UUID_LEN)
         .and_then(|id| id.try_into().ok())
         .ok_or_else(|| {
-            AppError::InternalError("garbage key is too short to carry a table id".to_string())
+            AppError::corrupt(Stored::Garbage, "key is too short to carry a table id")
         })?;
     Ok(TableId(uuid::Uuid::from_bytes(bytes)))
 }
@@ -323,7 +319,7 @@ pub fn value_index_scan_bounds(
         // 上限が無い（値側が全部 0xFF）なら、名前空間の終端で止める。
         Some(match end {
             Some(end) => with_ns(Ns::ValueIndex, &end),
-            None => prefix_end(&Ns::ValueIndex.prefix()).expect("0x07 は 0xFF ではない"),
+            None => prefix_end(&Ns::ValueIndex.prefix()).expect("0x07 is not 0xFF"),
         }),
     )
 }

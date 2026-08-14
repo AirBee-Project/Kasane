@@ -8,7 +8,7 @@ use kasane_logic::{Query, RangeId, Source};
 
 use crate::{
     AppState,
-    error::AppError,
+    error::{AppError, Resource},
     for_value_type,
     models::{
         database::table::{
@@ -84,9 +84,9 @@ async fn resolve_tables(
         .into_iter()
         .zip(resolved)
         .map(|((db_name, table_name), entry)| {
-            let table = entry.table.ok_or_else(|| AppError::TableNotFound {
-                name: format!("{db_name}.{table_name}"),
-            })?;
+            let table = entry
+                .table
+                .ok_or_else(|| Resource::Table.not_found(format!("{db_name}.{table_name}")))?;
             Ok(((db_name, table_name), table))
         })
         .collect()

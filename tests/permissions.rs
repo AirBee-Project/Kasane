@@ -20,7 +20,7 @@ impl PermissionTestApp {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let temp_dir = tempfile::TempDir::new().unwrap();
-        let db = lmdb_backend::initialize_database(temp_dir.path().to_str().unwrap());
+        let db = lmdb_backend::initialize_database(temp_dir.path().to_str().unwrap()).unwrap();
 
         let app_state = AppState::new(db);
         // We DO NOT inject the root token automatically here.

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use heed::BytesDecode;
 use uuid::Uuid;
 
-use crate::error::AppError;
+use crate::error::{AppError, Resource, Stored};
 use crate::models::database::table::{Table, TableConstraints, TableDataType, TableMetadata};
 use crate::models::database::{DatabaseInfoResponse, DatabaseMetadata};
 use crate::models::id::{DatabaseId, TableId};
@@ -106,7 +106,7 @@ pub(super) fn table_names(
     {
         let (k_bytes, _) = item?;
         let (_, name) = DbIdAndName::bytes_decode(k_bytes)
-            .map_err(|e| AppError::InternalError(format!("Failed to decode table key: {e}")))?;
+            .map_err(|e| AppError::corrupt(Stored::TableEntry, e))?;
         names.push(name.to_string());
     }
     Ok(names)
@@ -223,9 +223,7 @@ impl<'a> KasaneDbWrite<'a> {
         description: Option<String>,
     ) -> Result<DatabaseInfoResponse, AppError> {
         if self.database_info_impl(name)?.is_some() {
-            return Err(AppError::DatabaseAlreadyExists {
-                name: name.to_string(),
-            });
+            return Err(Resource::Database.already_exists(name.to_string()));
         }
 
         let id = Uuid::now_v7();
@@ -249,14 +247,10 @@ impl<'a> KasaneDbWrite<'a> {
     #[tracing::instrument(skip_all)]
     pub fn database_remove_impl(&mut self, name: &str) -> Result<(), AppError> {
         if name.is_empty() {
-            return Err(AppError::DatabaseNotFound {
-                name: name.to_string(),
-            });
+            return Err(Resource::Database.not_found(name.to_string()));
         }
         let Some(meta) = self.db.databases.get(&self.write_txn, name)? else {
-            return Err(AppError::DatabaseNotFound {
-                name: name.to_string(),
-            });
+            return Err(Resource::Database.not_found(name.to_string()));
         };
 
         // 別のトランザクションで列挙すると、隙間に作られたテーブルが削除対象から漏れる。
@@ -295,18 +289,14 @@ impl<'a> KasaneDbWrite<'a> {
             if let Some(meta) = db.get(&self.write_txn, name)? {
                 meta
             } else {
-                return Err(AppError::DatabaseNotFound {
-                    name: name.to_string(),
-                });
+                return Err(Resource::Database.not_found(name.to_string()));
             }
         };
 
         if name != final_new_name {
             let db = self.db.databases;
             if db.get(&self.write_txn, final_new_name)?.is_some() {
-                return Err(AppError::DatabaseAlreadyExists {
-                    name: final_new_name.to_string(),
-                });
+                return Err(Resource::Database.already_exists(final_new_name.to_string()));
             }
         }
 
@@ -336,15 +326,11 @@ impl<'a> KasaneDbWrite<'a> {
         let src_db_meta = {
             let db = self.db.databases;
             db.get(&self.write_txn, src_db_name)?
-                .ok_or_else(|| AppError::DatabaseNotFound {
-                    name: src_db_name.to_string(),
-                })?
+                .ok_or_else(|| Resource::Database.not_found(src_db_name.to_string()))?
         };
 
         if self.database_info_impl(copy_name)?.is_some() {
-            return Err(AppError::DatabaseAlreadyExists {
-                name: copy_name.to_string(),
-            });
+            return Err(Resource::Database.already_exists(copy_name.to_string()));
         }
 
         let copy_db_id = crate::models::id::DatabaseId(Uuid::now_v7());
@@ -423,9 +409,7 @@ impl<'a> KasaneDbRead<'a> {
             if let Some(m) = db.get(&self.read_txn, db_name)? {
                 m
             } else {
-                return Err(AppError::DatabaseNotFound {
-                    name: db_name.to_string(),
-                });
+                return Err(Resource::Database.not_found(db_name.to_string()));
             }
         };
 
@@ -439,11 +423,8 @@ impl<'a> KasaneDbRead<'a> {
 
     #[tracing::instrument(skip_all, fields(db_name = %db_name))]
     pub fn table_list_impl(&self, db_name: &str) -> Result<Vec<Table>, AppError> {
-        let db_id = database_id(self.db, &self.read_txn, db_name)?.ok_or_else(|| {
-            AppError::DatabaseNotFound {
-                name: db_name.to_string(),
-            }
-        })?;
+        let db_id = database_id(self.db, &self.read_txn, db_name)?
+            .ok_or_else(|| Resource::Database.not_found(db_name.to_string()))?;
         self.table_list_by_id_impl(db_id)
     }
 
@@ -512,9 +493,7 @@ impl<'a> KasaneDbWrite<'a> {
             if let Some(m) = db.get(&self.write_txn, db_name)? {
                 m
             } else {
-                return Err(AppError::DatabaseNotFound {
-                    name: db_name.to_string(),
-                });
+                return Err(Resource::Database.not_found(db_name.to_string()));
             }
         };
 
@@ -539,30 +518,24 @@ impl<'a> KasaneDbWrite<'a> {
         value_index: bool,
     ) -> Result<Table, AppError> {
         if db_name.is_empty() {
-            return Err(AppError::DatabaseNotFound {
-                name: db_name.to_string(),
-            });
+            return Err(Resource::Database.not_found(db_name.to_string()));
         }
         if table_name.is_empty() {
-            return Err(AppError::InternalError(
-                "Table name cannot be empty".to_string(),
-            ));
+            return Err(AppError::InvalidName {
+                reason: "table name cannot be empty".to_string(),
+            });
         }
         let db_meta = {
             let db = self.db.databases;
             if let Some(m) = db.get(&self.write_txn, db_name)? {
                 m
             } else {
-                return Err(AppError::DatabaseNotFound {
-                    name: db_name.to_string(),
-                });
+                return Err(Resource::Database.not_found(db_name.to_string()));
             }
         };
 
         if self.table_info_impl(db_name, table_name)?.is_some() {
-            return Err(AppError::TableAlreadyExists {
-                name: table_name.to_string(),
-            });
+            return Err(Resource::Table.already_exists(table_name.to_string()));
         }
 
         let db_index = self.db.table_id_index;
@@ -623,24 +596,18 @@ impl<'a> KasaneDbWrite<'a> {
         let db_meta = {
             let db = self.db.databases;
             db.get(&self.write_txn, db_name)?
-                .ok_or_else(|| AppError::DatabaseNotFound {
-                    name: db_name.to_string(),
-                })?
+                .ok_or_else(|| Resource::Database.not_found(db_name.to_string()))?
         };
 
         let mut table = {
             self.table_info_impl(db_name, table_name)?
-                .ok_or_else(|| AppError::TableNotFound {
-                    name: table_name.to_string(),
-                })?
+                .ok_or_else(|| Resource::Table.not_found(table_name.to_string()))?
         };
 
         let changed_name = if let Some(nn) = new_name {
             if nn != table_name {
                 if self.table_info_impl(db_name, nn)?.is_some() {
-                    return Err(AppError::TableAlreadyExists {
-                        name: nn.to_string(),
-                    });
+                    return Err(Resource::Table.already_exists(nn.to_string()));
                 }
                 table.name = nn.to_string();
                 true
@@ -723,9 +690,7 @@ impl<'a> KasaneDbWrite<'a> {
                 ShardEntry::Leaf(map_bytes) => {
                     let map =
                         unsafe { kasane_logic::SpatialIdMap::<Vec<u8>>::from_bytes(&map_bytes) }
-                            .map_err(|e| {
-                                AppError::InternalError(format!("rkyv deserialize: {}", e))
-                            })?;
+                            .map_err(|e| AppError::corrupt(Stored::Shard, e))?;
                     for (_, stored_val) in map.iter() {
                         let bytes = stored_val.as_slice();
                         let restored_json = crate::services::helpers::value::restore_value(
@@ -751,18 +716,14 @@ impl<'a> KasaneDbWrite<'a> {
         let table = match self.table_info_impl(db_name, table_name)? {
             Some(t) => t,
             None => {
-                return Err(AppError::TableNotFound {
-                    name: table_name.to_string(),
-                });
+                return Err(Resource::Table.not_found(table_name.to_string()));
             }
         };
 
         let db_meta = {
             let db = self.db.databases;
             db.get(&self.write_txn, db_name)?
-                .ok_or_else(|| AppError::DatabaseNotFound {
-                    name: db_name.to_string(),
-                })?
+                .ok_or_else(|| Resource::Database.not_found(db_name.to_string()))?
         };
 
         // 反復中に削除できないので、キーを集めてから削除する。
@@ -820,25 +781,19 @@ impl<'a> KasaneDbWrite<'a> {
         let src_db_meta = {
             let db = self.db.databases;
             db.get(&self.write_txn, src_db_name)?
-                .ok_or_else(|| AppError::DatabaseNotFound {
-                    name: src_db_name.to_string(),
-                })?
+                .ok_or_else(|| Resource::Database.not_found(src_db_name.to_string()))?
         };
 
         let src_table_meta = {
             let db = self.db.tables;
             db.get(&self.write_txn, &(src_db_meta.id, src_table_name))?
-                .ok_or_else(|| AppError::TableNotFound {
-                    name: src_table_name.to_string(),
-                })?
+                .ok_or_else(|| Resource::Table.not_found(src_table_name.to_string()))?
         };
 
         let copy_db_meta = {
             let db = self.db.databases;
             db.get(&self.write_txn, copy_db_name)?
-                .ok_or_else(|| AppError::DatabaseNotFound {
-                    name: copy_db_name.to_string(),
-                })?
+                .ok_or_else(|| Resource::Database.not_found(copy_db_name.to_string()))?
         };
 
         let db_tables = self.db.tables;
@@ -846,9 +801,7 @@ impl<'a> KasaneDbWrite<'a> {
             .get(&self.write_txn, &(copy_db_meta.id, copy_table_name))?
             .is_some()
         {
-            return Err(AppError::TableAlreadyExists {
-                name: copy_table_name.to_string(),
-            });
+            return Err(Resource::Table.already_exists(copy_table_name.to_string()));
         }
 
         crate::services::helpers::name_valid::name_valid(copy_table_name)?;

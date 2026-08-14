@@ -28,7 +28,7 @@ fn xs(flex_ids: &[kasane_logic::FlexId]) -> HashSet<u32> {
 #[ignore]
 fn value_filter_eq_and_range_after_split() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let db = initialize_database(tmp.path().to_str().unwrap());
+    let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     let table_id = TableId(uuid::Uuid::now_v7());
     let dt = TableDataType::Int;
 
@@ -62,7 +62,7 @@ fn value_filter_eq_and_range_after_split() {
 #[test]
 fn value_filter_reflects_overwrite_and_remove() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let db = initialize_database(tmp.path().to_str().unwrap());
+    let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     let table_id = TableId(uuid::Uuid::now_v7());
     let dt = TableDataType::Int;
     let id = SingleId::new(20, 0, 100, 0).unwrap();
@@ -124,7 +124,7 @@ fn value_filter_reflects_overwrite_and_remove() {
 #[test]
 fn text_range_filter_keeps_values_that_prefix_the_upper_bound() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let db = initialize_database(tmp.path().to_str().unwrap());
+    let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     let table_id = TableId(uuid::Uuid::now_v7());
     let dt = TableDataType::Text;
 
@@ -184,7 +184,7 @@ fn text_range_filter_keeps_values_that_prefix_the_upper_bound() {
 #[test]
 fn writes_without_indexing_leave_the_value_index_empty() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let db = initialize_database(tmp.path().to_str().unwrap());
+    let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     let indexed = TableId(uuid::Uuid::now_v7());
     let plain = TableId(uuid::Uuid::now_v7());
     let dt = TableDataType::Int;

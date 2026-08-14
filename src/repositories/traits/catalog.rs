@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use crate::error::AppError;
+use crate::error::{AppError, Resource};
 use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
 use crate::models::users::{
     AclEntry, Grant, MAX_PRIVILEGES_PER_USER, PrivilegeRule, PrivilegeTarget, ResolvedPrivilege,
@@ -81,15 +81,13 @@ pub trait CatalogRepository {
     async fn require_database_id(&self, name: &str) -> Result<DatabaseId, AppError> {
         self.database_id(name)
             .await?
-            .ok_or_else(|| AppError::DatabaseNotFound {
-                name: name.to_string(),
-            })
+            .ok_or_else(|| Resource::Database.not_found(name.to_string()))
     }
 
     async fn require_user_record(&self, username: &str) -> Result<UserRecord, AppError> {
         self.user_record(username)
             .await?
-            .ok_or_else(|| AppError::NotFound("User not found".into()))
+            .ok_or_else(|| Resource::User.not_found(username))
     }
 
     /// 剥奪はロールを問わないので、対象キーだけを返す。
@@ -104,11 +102,10 @@ pub trait CatalogRepository {
                 table_name,
             } => {
                 let db_id = self.require_database_id(db_name).await?;
-                let table_id = self.table_id(db_id, table_name).await?.ok_or_else(|| {
-                    AppError::TableNotFound {
-                        name: table_name.clone(),
-                    }
-                })?;
+                let table_id = self
+                    .table_id(db_id, table_name)
+                    .await?
+                    .ok_or_else(|| Resource::Table.not_found(table_name.clone()))?;
                 ResolvedTarget::Data(DataTarget::table(db_id, table_id))
             }
         })
@@ -127,11 +124,10 @@ pub trait CatalogRepository {
                 role,
             } => {
                 let db_id = self.require_database_id(db_name).await?;
-                let table_id = self.table_id(db_id, table_name).await?.ok_or_else(|| {
-                    AppError::TableNotFound {
-                        name: table_name.clone(),
-                    }
-                })?;
+                let table_id = self
+                    .table_id(db_id, table_name)
+                    .await?
+                    .ok_or_else(|| Resource::Table.not_found(table_name.clone()))?;
                 ResolvedPrivilege::Data {
                     target: DataTarget::table(db_id, table_id),
                     role: *role,

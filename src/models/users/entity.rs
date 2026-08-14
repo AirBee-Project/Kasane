@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::error::AppError;
+use crate::error::{AppError, Stored};
 use crate::models::id::{DataTarget, PrincipalId};
 
 /// 保存される利用者の内部表現。
@@ -76,9 +76,10 @@ impl TryFrom<u8> for DataRole {
             1 => Ok(Self::Read),
             2 => Ok(Self::Write),
             3 => Ok(Self::Manage),
-            _ => Err(AppError::InternalError(format!(
-                "acl row has an unknown role: {byte}"
-            ))),
+            _ => Err(AppError::corrupt(
+                Stored::AclRow,
+                format!("unknown role byte {byte}"),
+            )),
         }
     }
 }

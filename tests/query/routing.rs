@@ -13,7 +13,7 @@ use kasane_logic::{RangeId, SingleId, SpatialIdSet};
 #[test]
 fn range_routing_reaches_the_same_leaves_as_id_routing() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let db = initialize_database(tmp.path().to_str().unwrap());
+    let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     let table_id = TableId(uuid::Uuid::now_v7());
 
     // 4 FlexId を個別のトランザクションで書き込む（API 経由と同じ形）。
@@ -68,7 +68,7 @@ fn table_source_read_subset_returns_all_flex_ids() {
     use std::sync::Arc;
 
     let tmp = tempfile::TempDir::new().unwrap();
-    let db = initialize_database(tmp.path().to_str().unwrap());
+    let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     let table_id = TableId(uuid::Uuid::now_v7());
 
     for i in 0..4u32 {

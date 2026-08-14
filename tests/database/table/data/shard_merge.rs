@@ -33,7 +33,7 @@ fn shard_stats(db: &kasane::repositories::lmdb::AppDb, table_id: TableId) -> (us
 #[test]
 fn siblings_merge_after_mass_remove() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let db = initialize_database(tmp.path().to_str().unwrap());
+    let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     let table_id = TableId(uuid::Uuid::now_v7());
     let dt = TableDataType::Text;
 

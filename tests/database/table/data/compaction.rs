@@ -80,7 +80,7 @@ fn read_rect(
 #[test]
 fn compaction_roundtrip_and_index_cleanup() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let db = initialize_database(tmp.path().to_str().unwrap());
+    let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     let table_id = TableId(uuid::Uuid::now_v7());
     let dt = TableDataType::Int;
 

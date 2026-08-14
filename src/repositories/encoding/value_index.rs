@@ -1,6 +1,6 @@
 //! 値インデックスのキー組み立てと順序保存エンコード。
 
-use crate::error::AppError;
+use crate::error::{AppError, Stored};
 use crate::models::{database::table::TableDataType, id::TableId};
 use kasane_logic::FlexId;
 
@@ -43,13 +43,11 @@ pub fn make_prefix(table_id: TableId, vkey: &[u8]) -> Vec<u8> {
 
 pub fn flexid_from_key(key: &[u8]) -> Result<FlexId, AppError> {
     if key.len() < UUID_LEN + FlexId::ENCODED_LEN {
-        return Err(AppError::InternalError(
-            "value_index key too short".to_string(),
-        ));
+        return Err(AppError::corrupt(Stored::ValueIndex, "key is too short"));
     }
     let mut bytes = [0u8; FlexId::ENCODED_LEN];
     bytes.copy_from_slice(&key[key.len() - FlexId::ENCODED_LEN..]);
-    FlexId::decode(&bytes).map_err(|e| AppError::InternalError(format!("flex_id decode: {e}")))
+    FlexId::decode(&bytes).map_err(|e| AppError::corrupt(Stored::ValueIndex, e))
 }
 
 /// `lo_vkey` 〜 `hi_vkey`（両端含む）を覆う `(下限（含む）, 上限（排他）)`。
@@ -93,9 +91,7 @@ pub fn range_scan_bounds(
 /// ので、呼び出し側はこれを境界と直接比べて絞り直す。
 pub fn vkey_from_key(key: &[u8]) -> Result<&[u8], AppError> {
     if key.len() < UUID_LEN + FlexId::ENCODED_LEN {
-        return Err(AppError::InternalError(
-            "value_index key too short".to_string(),
-        ));
+        return Err(AppError::corrupt(Stored::ValueIndex, "key is too short"));
     }
     Ok(&key[UUID_LEN..key.len() - FlexId::ENCODED_LEN])
 }

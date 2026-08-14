@@ -2,7 +2,7 @@
 
 use kasane_logic::SpatialIdSet;
 
-use crate::error::AppError;
+use crate::error::{AppError, Resource};
 use crate::models::database::DatabaseInfoResponse;
 use crate::models::database::table::{
     Table, TableConstraints, TableDataType, UpdateTableConstraints,
@@ -166,7 +166,7 @@ pub trait WriteRepository: CatalogRepository {
         self.lock_user(username).await?;
 
         if self.user_record(username).await?.is_some() {
-            return Err(AppError::Conflict("User already exists".to_string()));
+            return Err(Resource::User.already_exists(username));
         }
 
         let mut record = UserRecord {
@@ -250,7 +250,7 @@ pub trait WriteRepository: CatalogRepository {
         match target {
             ResolvedTarget::Global => {
                 if record.global_role.take().is_none() {
-                    return Err(AppError::no_such_privilege());
+                    return Err(AppError::PrivilegeNotFound);
                 }
                 self.put_user_record(username, &record).await
             }
@@ -258,7 +258,7 @@ pub trait WriteRepository: CatalogRepository {
                 if self.acl_remove(record.id, target).await? {
                     Ok(())
                 } else {
-                    Err(AppError::no_such_privilege())
+                    Err(AppError::PrivilegeNotFound)
                 }
             }
         }
