@@ -4,7 +4,6 @@ use axum::{
 };
 
 use crate::middleware::auth::AuthUser;
-use crate::models::users::UserRole;
 use crate::{AppState, error::AppError, services::database::table::remove as table_remove_service};
 use axum::Extension;
 
@@ -33,13 +32,6 @@ pub async fn remove_table(
     Extension(auth_user): Extension<AuthUser>,
     Path((db_name, table_name)): Path<(String, String)>,
 ) -> Result<StatusCode, AppError> {
-    crate::middleware::auth::check_table(
-        &app_state,
-        &auth_user,
-        &db_name,
-        &table_name,
-        UserRole::Manage,
-    )?;
-    table_remove_service::remove(&app_state, &db_name, &table_name).await?;
+    table_remove_service::remove(&app_state, &auth_user, &db_name, &table_name).await?;
     Ok(StatusCode::NO_CONTENT)
 }

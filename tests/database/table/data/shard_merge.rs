@@ -5,17 +5,15 @@
 
 use std::collections::HashSet;
 
-use kasane::db_init::initialize_database;
 use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
-use kasane::repositories::database::table::data::shard::{
-    MAX_FLEX_ID_PER_SHARD, MERGE_FLEX_ID_THRESHOLD,
-};
-use kasane::repositories::{KasaneDbRead, KasaneDbWrite};
+use kasane::repositories::lmdb::initialize_database;
+use kasane::repositories::lmdb::shard::{MAX_FLEX_ID_PER_SHARD, MERGE_FLEX_ID_THRESHOLD};
+use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
 use kasane_logic::{RangeId, SingleId, SpatialIdSet};
 
 /// このテーブルのシャードキー数と、ポインタノードの有無を返す。
-fn shard_stats(db: &kasane::db_init::AppDb, table_id: TableId) -> (usize, bool) {
+fn shard_stats(db: &kasane::repositories::lmdb::AppDb, table_id: TableId) -> (usize, bool) {
     let rtxn = db.env.read_txn().unwrap();
     let mut key_count = 0usize;
     let mut has_pointer = false;
@@ -35,7 +33,7 @@ fn shard_stats(db: &kasane::db_init::AppDb, table_id: TableId) -> (usize, bool) 
 #[test]
 fn siblings_merge_after_mass_remove() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let db = initialize_database(tmp.path().to_str().unwrap());
+    let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     let table_id = TableId(uuid::Uuid::now_v7());
     let dt = TableDataType::Text;
 
@@ -47,7 +45,7 @@ fn siblings_merge_after_mass_remove() {
         for i in 0..n {
             ids.insert(SingleId::new(20, 0, i * 4, 0).unwrap());
         }
-        w.data_insert(table_id, dt, ids, b"v").unwrap();
+        w.data_insert_impl(table_id, Some(dt), ids, b"v").unwrap();
         w.commit().unwrap();
     }
     let (key_count, has_pointer) = shard_stats(&db, table_id);
@@ -65,7 +63,7 @@ fn siblings_merge_after_mass_remove() {
         for i in 0..keep_from {
             ids.insert(SingleId::new(20, 0, i * 4, 0).unwrap());
         }
-        w.data_remove(table_id, dt, ids).unwrap();
+        w.data_remove_impl(table_id, Some(dt), ids).unwrap();
         w.commit().unwrap();
     }
 
@@ -77,14 +75,14 @@ fn siblings_merge_after_mass_remove() {
     );
     assert!(!has_pointer, "no pointer node should remain after merge");
 
-    // 4. table_count が残数と一致、かつ残りの全セルが読めること。
+    // 4. table_count が残数と一致、かつ残りの全 FlexId が読めること。
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
     let remaining = (n - keep_from) as u64;
-    assert_eq!(r.table_count(table_id).unwrap(), remaining);
+    assert_eq!(r.table_count_impl(table_id).unwrap(), remaining);
 
     let mut query = SpatialIdSet::new();
     query.insert(RangeId::new(20, [0, 0], [keep_from * 4, (n - 1) * 4], [0, 0]).unwrap());
-    let got = r.data_get(table_id, query, None).unwrap();
+    let got = r.data_get_impl(table_id, query, None).unwrap();
     let mut xs: HashSet<u32> = HashSet::new();
     for (value, flex_ids) in got {
         assert_eq!(value, b"v".to_vec());
@@ -95,5 +93,8 @@ fn siblings_merge_after_mass_remove() {
         }
     }
     let expected: HashSet<u32> = (keep_from..n).map(|i| i * 4).collect();
-    assert_eq!(xs, expected, "remaining cells must be readable after merge");
+    assert_eq!(
+        xs, expected,
+        "remaining flex_ids must be readable after merge"
+    );
 }

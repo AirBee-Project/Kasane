@@ -5,8 +5,8 @@ use axum::{
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-use crate::database::table::common::TestApp;
-use crate::database::table::data::common::put_data;
+use crate::common::TestApp;
+use crate::common::data::put_data;
 
 async fn get_table_count(test_app: &TestApp, table_name: &str) -> u64 {
     let req = Request::builder()
@@ -27,7 +27,7 @@ async fn get_table_count(test_app: &TestApp, table_name: &str) -> u64 {
 #[tokio::test]
 /// データの挿入・更新・削除に伴い、テーブルの count が正しく増減するかを検証する。
 async fn test_table_count_dynamic() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "count_test_table", "Int", 25)
@@ -74,7 +74,7 @@ async fn test_table_count_dynamic() {
     let count = get_table_count(&test_app, "count_test_table").await;
     assert_eq!(count, 2, "Count should remain 2 after overwrite");
 
-    // range を使って範囲で挿入（例: z=21 のセルを 4 つ追加）
+    // range を使って範囲で挿入（例: z=21 の FlexId を 4 つ追加）
     let range_id_query = serde_json::json!([{ "z": 21, "f": [0,0], "x": [1000, 1001], "y": [1000, 1001], "type": "rangeId" }]);
     put_data(
         &test_app,
@@ -86,7 +86,7 @@ async fn test_table_count_dynamic() {
     let count = get_table_count(&test_app, "count_test_table").await;
     assert_eq!(
         count, 3,
-        "Count should be 3 after adding 4 cells via range (merged into 1 parent block)"
+        "Count should be 3 after adding 4 flex_ids via range (merged into 1 parent block)"
     );
 
     // 1件目のデータを削除

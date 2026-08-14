@@ -40,16 +40,10 @@ pub async fn data_get(
     Query(query): Query<GetDataQuery>,
     Json(payload): Json<GetDataRequest>,
 ) -> Result<Json<crate::models::database::table::data::GetDataResponse>, AppError> {
-    crate::middleware::auth::check_table(
-        &app_state,
-        &auth_user,
-        &db_name,
-        &table_name,
-        crate::models::users::UserRole::Read,
-    )?;
-
+    // 認可はサービス層の解決と同じ読み取りで行う。別途呼ぶとカタログを 2 度引く。
     let result = data_get_service::get(
         &app_state,
+        &auth_user,
         &db_name,
         &table_name,
         &payload.spatial_ids,

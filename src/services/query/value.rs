@@ -6,6 +6,7 @@ use kasane_logic::{
     merge_policy::{Average, Difference, KeepExisting, Max, Min, Overwrite, Sum},
 };
 
+use crate::repositories::traits::DecodeFn;
 use crate::{
     error::AppError,
     models::{
@@ -13,12 +14,6 @@ use crate::{
         query::MergePolicyKind,
     },
 };
-
-/// 値型 `V` に対するクエリ AST。
-pub type ValueQuery<V> = Query<V>;
-
-/// 格納バイト列を値へ復元するデコーダ。`None` を返したセルは結果から除外される。
-pub type Decoder<V> = Arc<dyn Fn(&[u8]) -> Option<V> + Send + Sync>;
 
 #[macro_export]
 macro_rules! for_value_type {
@@ -101,25 +96,19 @@ fn check_range<T: PartialOrd + std::fmt::Display>(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Value
-// ---------------------------------------------------------------------------
+// --- Value ---
 
 /// アプリで扱える値型。格納・復元・JSON 変換・クエリ演算を型ごとに引き受ける。
 pub trait Value: SafeValue + Ord + 'static {
     /// エラーメッセージ用の型名。
     fn type_name() -> &'static str;
 
-    /// この `data_type` の格納値を `Self` として解釈できるか。
-    ///
-    /// `for_value_type!` の分岐と一致させる（`Text` と `Enum` はともに `String`）。
+    /// `for_value_type!` の分岐と一致させること（`Text` と `Enum` はともに `String`）。
     fn accepts(data_type: TableDataType) -> bool;
 
-    /// このテーブルの格納バイト列を `Self` へ復元するデコーダを返す。
-    ///
-    /// `Enum` のように復元に制約情報（ID→文字列の対応）が要る型もあるため制約を受け取り、
-    /// 逆引き表などの前計算を 1 度だけ行ったクロージャを返す。`None` を返したセルは除外。
-    fn decoder(constraints: Option<&TableConstraints>) -> Result<Decoder<Self>, AppError>;
+    /// 制約を受け取るのは `Enum` の復元に ID → 文字列の対応が要るため。逆引き表の前計算を
+    /// 1 度だけ行ったクロージャを返す。`None` を返した FlexId は結果から除外される。
+    fn decoder(constraints: Option<&TableConstraints>) -> Result<DecodeFn<Self>, AppError>;
 
     /// `Self` を格納バイト列へ符号化する（`constraints` の範囲・選択肢検証込み）。
     fn encode(&self, constraints: Option<&TableConstraints>) -> Result<Vec<u8>, AppError>;
@@ -130,88 +119,82 @@ pub trait Value: SafeValue + Ord + 'static {
     /// リクエスト中のリテラル（挿入値・フィルタ境界・merge の既定値）から作る。
     fn from_json(value: &serde_json::Value) -> Result<Self, AppError>;
 
-    fn zoom_out(
-        q: ValueQuery<Self>,
-        z: u8,
-        p: MergePolicyKind,
-    ) -> Result<ValueQuery<Self>, AppError>;
+    fn zoom_out(q: Query<Self>, z: u8, p: MergePolicyKind) -> Result<Query<Self>, AppError>;
 
     fn extrude_x(
-        q: ValueQuery<Self>,
+        q: Query<Self>,
         z: u8,
         start: u32,
         end: u32,
         p: MergePolicyKind,
-    ) -> Result<ValueQuery<Self>, AppError>;
+    ) -> Result<Query<Self>, AppError>;
 
     fn extrude_y(
-        q: ValueQuery<Self>,
+        q: Query<Self>,
         z: u8,
         start: u32,
         end: u32,
         p: MergePolicyKind,
-    ) -> Result<ValueQuery<Self>, AppError>;
+    ) -> Result<Query<Self>, AppError>;
 
     fn extrude_f(
-        q: ValueQuery<Self>,
+        q: Query<Self>,
         z: u8,
         start: i32,
         end: i32,
         p: MergePolicyKind,
-    ) -> Result<ValueQuery<Self>, AppError>;
+    ) -> Result<Query<Self>, AppError>;
 
     fn merge(
-        lhs: ValueQuery<Self>,
-        rhs: ValueQuery<Self>,
+        lhs: Query<Self>,
+        rhs: Query<Self>,
         default: Self,
         p: MergePolicyKind,
-    ) -> Result<ValueQuery<Self>, AppError>;
+    ) -> Result<Query<Self>, AppError>;
 
     /// 値の減衰。値の乗除算を要するため、既定では非対応。
     fn falloff_x(
-        _q: ValueQuery<Self>,
+        _q: Query<Self>,
         _z: u8,
         _r: u32,
         _direction: Option<kasane_logic::spatial_id::helpers::Side>,
         _pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
         _p: MergePolicyKind,
-    ) -> Result<ValueQuery<Self>, AppError> {
+    ) -> Result<Query<Self>, AppError> {
         Err(unsupported_op("falloffX", Self::type_name()))
     }
     fn falloff_y(
-        _q: ValueQuery<Self>,
+        _q: Query<Self>,
         _z: u8,
         _r: u32,
         _direction: Option<kasane_logic::spatial_id::helpers::Side>,
         _pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
         _p: MergePolicyKind,
-    ) -> Result<ValueQuery<Self>, AppError> {
+    ) -> Result<Query<Self>, AppError> {
         Err(unsupported_op("falloffY", Self::type_name()))
     }
     fn falloff_f(
-        _q: ValueQuery<Self>,
+        _q: Query<Self>,
         _z: u8,
         _r: u32,
         _direction: Option<kasane_logic::spatial_id::helpers::Side>,
         _pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
         _p: MergePolicyKind,
-    ) -> Result<ValueQuery<Self>, AppError> {
+    ) -> Result<Query<Self>, AppError> {
         Err(unsupported_op("falloffF", Self::type_name()))
     }
 
     /// 四則演算。既定では非対応。
     fn apply_math(
-        _q: ValueQuery<Self>,
+        _q: Query<Self>,
         _op: crate::models::query::MathOperator,
         _operand: crate::models::query::MathOperand,
-    ) -> Result<ValueQuery<Self>, AppError> {
+    ) -> Result<Query<Self>, AppError> {
         Err(unsupported_op("math operation", Self::type_name()))
     }
 }
 
-// ---------------------------------------------------------------------------
-// ポリシーのディスパッチ（値 -> 型）
-// ---------------------------------------------------------------------------
+// --- ポリシーのディスパッチ（値 -> 型） ---
 
 /// 全型で使えるポリシー（`Ord` があればよい）。
 macro_rules! dispatch_ord {
@@ -241,53 +224,47 @@ macro_rules! dispatch_full {
     };
 }
 
-// ---------------------------------------------------------------------------
-// op 生成マクロ
-// ---------------------------------------------------------------------------
+// --- op 生成マクロ ---
 
 /// 演算子メソッド群を、指定のポリシーディスパッチで生成する。
 macro_rules! impl_ops {
     ($ty:ty, $dispatch:ident) => {
-        fn zoom_out(
-            q: ValueQuery<Self>,
-            z: u8,
-            p: MergePolicyKind,
-        ) -> Result<ValueQuery<Self>, AppError> {
+        fn zoom_out(q: Query<Self>, z: u8, p: MergePolicyKind) -> Result<Query<Self>, AppError> {
             $dispatch!($ty, q, zoom_out(z), p)
         }
         fn extrude_x(
-            q: ValueQuery<Self>,
+            q: Query<Self>,
             z: u8,
             start: u32,
             end: u32,
             p: MergePolicyKind,
-        ) -> Result<ValueQuery<Self>, AppError> {
+        ) -> Result<Query<Self>, AppError> {
             $dispatch!($ty, q, extrude_x(z, start, end), p)
         }
         fn extrude_y(
-            q: ValueQuery<Self>,
+            q: Query<Self>,
             z: u8,
             start: u32,
             end: u32,
             p: MergePolicyKind,
-        ) -> Result<ValueQuery<Self>, AppError> {
+        ) -> Result<Query<Self>, AppError> {
             $dispatch!($ty, q, extrude_y(z, start, end), p)
         }
         fn extrude_f(
-            q: ValueQuery<Self>,
+            q: Query<Self>,
             z: u8,
             start: i32,
             end: i32,
             p: MergePolicyKind,
-        ) -> Result<ValueQuery<Self>, AppError> {
+        ) -> Result<Query<Self>, AppError> {
             $dispatch!($ty, q, extrude_f(z, start, end), p)
         }
         fn merge(
-            lhs: ValueQuery<Self>,
-            rhs: ValueQuery<Self>,
+            lhs: Query<Self>,
+            rhs: Query<Self>,
             default: Self,
             p: MergePolicyKind,
-        ) -> Result<ValueQuery<Self>, AppError> {
+        ) -> Result<Query<Self>, AppError> {
             $dispatch!($ty, lhs, merge(rhs, default), p)
         }
     };
@@ -297,41 +274,39 @@ macro_rules! impl_ops {
 macro_rules! impl_falloff {
     ($ty:ty, $dispatch:ident) => {
         fn falloff_x(
-            q: ValueQuery<Self>,
+            q: Query<Self>,
             z: u8,
             r: u32,
             direction: Option<kasane_logic::spatial_id::helpers::Side>,
             pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
             p: MergePolicyKind,
-        ) -> Result<ValueQuery<Self>, AppError> {
+        ) -> Result<Query<Self>, AppError> {
             $dispatch!($ty, q, falloff_x(z, r, direction, pattern), p)
         }
         fn falloff_y(
-            q: ValueQuery<Self>,
+            q: Query<Self>,
             z: u8,
             r: u32,
             direction: Option<kasane_logic::spatial_id::helpers::Side>,
             pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
             p: MergePolicyKind,
-        ) -> Result<ValueQuery<Self>, AppError> {
+        ) -> Result<Query<Self>, AppError> {
             $dispatch!($ty, q, falloff_y(z, r, direction, pattern), p)
         }
         fn falloff_f(
-            q: ValueQuery<Self>,
+            q: Query<Self>,
             z: u8,
             r: u32,
             direction: Option<kasane_logic::spatial_id::helpers::Side>,
             pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
             p: MergePolicyKind,
-        ) -> Result<ValueQuery<Self>, AppError> {
+        ) -> Result<Query<Self>, AppError> {
             $dispatch!($ty, q, falloff_f(z, r, direction, pattern), p)
         }
     };
 }
 
-// ---------------------------------------------------------------------------
-// 数値型
-// ---------------------------------------------------------------------------
+// --- 数値型 ---
 
 impl Value for i64 {
     fn type_name() -> &'static str {
@@ -342,9 +317,9 @@ impl Value for i64 {
         data_type == TableDataType::Int
     }
 
-    fn decoder(_constraints: Option<&TableConstraints>) -> Result<Decoder<Self>, AppError> {
+    fn decoder(_constraints: Option<&TableConstraints>) -> Result<DecodeFn<Self>, AppError> {
         Ok(Arc::new(|bytes: &[u8]| {
-            <[u8; 8]>::try_from(bytes).ok().map(i64::from_be_bytes)
+            <[u8; 8]>::try_from(bytes).ok().map(Self::from_be_bytes)
         }))
     }
 
@@ -372,10 +347,10 @@ impl Value for i64 {
     impl_falloff!(i64, dispatch_full);
 
     fn apply_math(
-        q: ValueQuery<Self>,
+        q: Query<Self>,
         op: crate::models::query::MathOperator,
         operand: crate::models::query::MathOperand,
-    ) -> Result<ValueQuery<Self>, AppError> {
+    ) -> Result<Query<Self>, AppError> {
         use crate::models::query::{MathOperand, MathOperator};
         match operand {
             MathOperand::Int(i_op) => match op {
@@ -388,12 +363,12 @@ impl Value for i64 {
                             reason: "Division by zero".to_string(),
                         });
                     }
-                    Ok(q.map_values(move |v| v.checked_div(i_op).unwrap_or(i64::MAX)))
+                    Ok(q.map_values(move |v| v.checked_div(i_op).unwrap_or(Self::MAX)))
                 }
             },
             MathOperand::Float(f_op) => {
-                if f_op.fract() == 0.0 && f_op >= (i64::MIN as f64) && f_op <= (i64::MAX as f64) {
-                    let i_op = f_op as i64;
+                if f_op.fract() == 0.0 && f_op >= (Self::MIN as f64) && f_op <= (Self::MAX as f64) {
+                    let i_op = f_op as Self;
                     return Self::apply_math(q, op, MathOperand::Int(i_op));
                 }
 
@@ -405,19 +380,19 @@ impl Value for i64 {
                 match op {
                     MathOperator::Add => Ok(q.map_values(move |v| {
                         let res = (v as f64) + f_op;
-                        if res.is_nan() { 0 } else { res.round() as i64 }
+                        if res.is_nan() { 0 } else { res.round() as Self }
                     })),
                     MathOperator::Subtract => Ok(q.map_values(move |v| {
                         let res = (v as f64) - f_op;
-                        if res.is_nan() { 0 } else { res.round() as i64 }
+                        if res.is_nan() { 0 } else { res.round() as Self }
                     })),
                     MathOperator::Multiply => Ok(q.map_values(move |v| {
                         let res = (v as f64) * f_op;
-                        if res.is_nan() { 0 } else { res.round() as i64 }
+                        if res.is_nan() { 0 } else { res.round() as Self }
                     })),
                     MathOperator::Divide => Ok(q.map_values(move |v| {
                         let res = (v as f64) / f_op;
-                        if res.is_nan() { 0 } else { res.round() as i64 }
+                        if res.is_nan() { 0 } else { res.round() as Self }
                     })),
                 }
             }
@@ -425,9 +400,7 @@ impl Value for i64 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// 非数値型
-// ---------------------------------------------------------------------------
+// --- 非数値型 ---
 
 impl Value for String {
     fn type_name() -> &'static str {
@@ -439,10 +412,10 @@ impl Value for String {
     }
 
     /// `Enum`（制約あり）は ID→文字列の対応表から、それ以外は UTF-8 として復元する。
-    fn decoder(constraints: Option<&TableConstraints>) -> Result<Decoder<Self>, AppError> {
+    fn decoder(constraints: Option<&TableConstraints>) -> Result<DecodeFn<Self>, AppError> {
         if let Some(TableConstraints::Enum { mapping, .. }) = constraints {
             // 格納は u16 ID なので、ID -> 文字列の逆引きを 1 度だけ作る。
-            let reverse: HashMap<u16, String> =
+            let reverse: HashMap<u16, Self> =
                 mapping.iter().map(|(k, &v)| (v, k.clone())).collect();
             Ok(Arc::new(move |bytes: &[u8]| {
                 let id = u16::from_be_bytes(<[u8; 2]>::try_from(bytes).ok()?);
@@ -450,7 +423,9 @@ impl Value for String {
             }))
         } else {
             Ok(Arc::new(|bytes: &[u8]| {
-                core::str::from_utf8(bytes).ok().map(|s| s.to_string())
+                core::str::from_utf8(bytes)
+                    .ok()
+                    .map(std::string::ToString::to_string)
             }))
         }
     }
@@ -469,8 +444,10 @@ impl Value for String {
                 mapping
                     .get(self)
                     .map(|id| id.to_be_bytes().to_vec())
-                    .ok_or_else(|| AppError::InvalidStoredValue {
-                        reason: format!("Internal mapping not found for enum value '{self}'"),
+                    .ok_or_else(|| {
+                        AppError::InternalError(format!(
+                            "enum value '{self}' has no id in the constraint mapping"
+                        ))
                     })
             }
             Some(TableConstraints::Text {
@@ -505,7 +482,7 @@ impl Value for String {
     fn from_json(value: &serde_json::Value) -> Result<Self, AppError> {
         value
             .as_str()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .ok_or_else(|| type_mismatch(value, JsonValueType::String))
     }
 
@@ -521,7 +498,7 @@ impl Value for bool {
         data_type == TableDataType::Boolean
     }
 
-    fn decoder(_constraints: Option<&TableConstraints>) -> Result<Decoder<Self>, AppError> {
+    fn decoder(_constraints: Option<&TableConstraints>) -> Result<DecodeFn<Self>, AppError> {
         Ok(Arc::new(|bytes: &[u8]| match bytes {
             [0] => Some(false),
             [1] => Some(true),
@@ -556,7 +533,7 @@ impl Value for () {
         data_type == TableDataType::Presence
     }
 
-    fn decoder(_constraints: Option<&TableConstraints>) -> Result<Decoder<Self>, AppError> {
+    fn decoder(_constraints: Option<&TableConstraints>) -> Result<DecodeFn<Self>, AppError> {
         // 格納は 0 バイト。存在すれば値は常に「無」。
         Ok(Arc::new(
             |bytes: &[u8]| if bytes.is_empty() { Some(()) } else { None },

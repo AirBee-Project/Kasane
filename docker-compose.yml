@@ -1,0 +1,65 @@
+# 開発・テスト用の周辺サービス
+
+services:
+  pd:
+    image: pingcap/pd:v7.5.1
+    container_name: kasane-pd
+    restart: unless-stopped
+    ports:
+      - "2379:2379"
+      - "20160:20160"
+      - "20180:20180"
+    command:
+      - --name=pd
+      - --data-dir=/data/pd
+      - --client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://127.0.0.1:2379
+      - --peer-urls=http://0.0.0.0:2380
+      - --advertise-peer-urls=http://127.0.0.1:2380
+      - --initial-cluster=pd=http://127.0.0.1:2380
+    volumes:
+      - pd-data:/data/pd
+    healthcheck:
+      test: ["CMD", "/pd-ctl", "-u", "http://127.0.0.1:2379", "health"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  tikv:
+    image: pingcap/tikv:v7.5.1
+    container_name: kasane-tikv
+    restart: unless-stopped
+    network_mode: "service:pd"
+    depends_on:
+      pd:
+        condition: service_healthy
+    command:
+      - --addr=0.0.0.0:20160
+      - --advertise-addr=127.0.0.1:20160
+      - --status-addr=0.0.0.0:20180
+      - --advertise-status-addr=127.0.0.1:20180
+      - --data-dir=/data/tikv
+      - --pd-endpoints=127.0.0.1:2379
+      - --config=/etc/tikv/${KASANE_TIKV_CONFIG:-tikv.toml}
+    volumes:
+      - tikv-data:/data/tikv
+      - ./deployment:/etc/tikv:ro
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    container_name: kasane-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "4317:4317" # OTLP/gRPC
+      - "4318:4318" # OTLP/HTTP
+
+volumes:
+  pd-data:
+  tikv-data:

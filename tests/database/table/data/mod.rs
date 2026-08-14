@@ -1,9 +1,8 @@
-pub mod common;
 pub mod compaction;
 pub mod concurrency;
 pub mod get;
 pub mod insert;
-pub mod model;
+pub mod model_based;
 pub mod remove;
 pub mod shard_coverage;
 pub mod shard_merge;

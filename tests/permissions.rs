@@ -1,8 +1,12 @@
+//! LMDB バックエンド向けの結合テスト。TiKV バックエンドのビルドでは対象外。
+#![cfg(feature = "backend-lmdb")]
+
 use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode},
 };
-use kasane::{AppState, db_init, kasane};
+use kasane::repositories::lmdb as lmdb_backend;
+use kasane::{AppState, kasane};
 
 use tower::ServiceExt;
 
@@ -16,9 +20,9 @@ impl PermissionTestApp {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let temp_dir = tempfile::TempDir::new().unwrap();
-        let db = db_init::initialize_database(temp_dir.path().to_str().unwrap());
+        let db = lmdb_backend::initialize_database(temp_dir.path().to_str().unwrap()).unwrap();
 
-        let app_state = AppState { db };
+        let app_state = AppState::new(db);
         // We DO NOT inject the root token automatically here.
         // The tests will need to explicitly send the Authorization header.
         let app = kasane(app_state.clone());
@@ -31,8 +35,10 @@ impl PermissionTestApp {
     }
 
     /// 現在のDB状態に基づく有効なrootトークンを発行する。
-    fn root_token(&self) -> String {
-        kasane::services::auth::generate_jwt(&self.app_state, "root").unwrap()
+    async fn root_token(&self) -> String {
+        kasane::services::auth::generate_jwt(&self.app_state, "root")
+            .await
+            .unwrap()
     }
 }
 
@@ -194,7 +200,7 @@ async fn status_and_code(res: axum::response::Response) -> (StatusCode, String) 
 /// 認証・認可に関する各種エラーコードが正しく構造化されて返されるかを検証する。
 async fn test_auth_error_codes_are_structured() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     // DB を1つ作っておく（権限不足コードの確認用）
     let req = Request::builder()
@@ -292,7 +298,7 @@ async fn test_auth_error_codes_are_structured() {
 /// Global Adminがデータベースを作成できるかを検証する。
 async fn test_global_admin_privileges() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     let admin_token = create_user_and_token(&test_app.app, &root_token, "admin_user", true).await;
 
@@ -312,7 +318,7 @@ async fn test_global_admin_privileges() {
 /// Manage権限を持つユーザーがDB作成はできず、テーブル作成はできるかを検証する。
 async fn test_manage_privileges() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     // Create a DB using root
     let req = Request::builder()
@@ -363,7 +369,7 @@ async fn test_manage_privileges() {
 /// Write権限を持つユーザーがテーブル作成はできず、データ挿入はできるかを検証する。
 async fn test_write_privileges() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     // Create DB & Table using root
     let req = Request::builder()
@@ -418,7 +424,7 @@ async fn test_write_privileges() {
 /// Read権限を持つユーザーがデータ挿入はできず、データ取得はできるかを検証する。
 async fn test_read_privileges() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     // Setup DB, Table and Data with root
     let req = Request::builder()
@@ -482,7 +488,7 @@ async fn test_read_privileges() {
 /// データベース一覧および詳細取得が、ユーザーの権限に応じて正しくフィルタリングされるかを検証する。
 async fn test_database_list_and_info_authorization() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     // root creates two databases
     for name in ["visible_db", "hidden_db"] {
@@ -558,7 +564,7 @@ async fn test_database_list_and_info_authorization() {
 #[tokio::test]
 async fn test_manage_user_can_set_privileges() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     // 1. データベースを作成する
     let req = Request::builder()
@@ -616,7 +622,7 @@ async fn test_manage_user_can_set_privileges() {
 /// 権限を持たないユーザーがデータベース内のデータにアクセスできないかを検証する。
 async fn test_no_privileges() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     // Setup DB, Table with root
     let req = Request::builder()
@@ -660,7 +666,7 @@ async fn test_no_privileges() {
 /// 一部のソースにしか権限が無い場合は、他のソースにデータがあっても 403 で拒否されなければならない。
 async fn test_query_authorization() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     // Setup two DBs, each with a table and data, using root.
     for (db, table) in [("db_a", "t_a"), ("db_b", "t_b")] {
@@ -764,7 +770,7 @@ async fn token_is_valid(app: &axum::Router, token: &str) -> bool {
 /// パスワード変更時に、既存のセッション（トークン）が失効し再ログインが要求されるかを検証する。
 async fn test_password_change_revokes_tokens() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     let user_token = create_user_and_token(&test_app.app, &root_token, "rotate_user", false).await;
     assert!(token_is_valid(&test_app.app, &user_token).await);
@@ -787,7 +793,7 @@ async fn test_password_change_revokes_tokens() {
 /// 管理者権限の剥奪時にトークンが失効し、rootの権限は変更できないことを検証する。
 async fn test_admin_demotion_and_root_protection() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     // 管理者ユーザーを作成
     let admin_token = create_user_and_token(&test_app.app, &root_token, "demo_admin", true).await;
@@ -853,7 +859,7 @@ async fn test_admin_demotion_and_root_protection() {
 /// ユーザー削除後に同名ユーザーを再作成した場合、旧ユーザーのトークンが無効になるかを検証する。
 async fn test_username_reuse_rejects_old_token() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     // ユーザーを作成しトークンを取得
     let old_token = create_user_and_token(&test_app.app, &root_token, "reuse_user", false).await;
@@ -880,7 +886,7 @@ async fn test_username_reuse_rejects_old_token() {
 /// 未ログインの場合は 401 (missing_token) で拒否されること。
 async fn test_get_system_info() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     // 1. 未ログイン（ヘッダーなし）→ 401 Unauthorized (missing_token)
     let req = Request::builder()
@@ -912,7 +918,7 @@ async fn test_get_system_info() {
 /// GET /users/{username} のエンドポイントが、本人またはGlobal Adminのみに許可されているかを検証する。
 async fn test_get_user_info_authorization() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     // ユーザーA（一般ユーザー）を作成
     let user_a_token = create_user_and_token(&test_app.app, &root_token, "user_a", false).await;
@@ -970,7 +976,7 @@ async fn test_get_user_info_authorization() {
 /// データベースのリネーム、コピー、およびテーブルコピーにおける権限検証をテストする。
 async fn test_copy_and_rename_permissions() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     // 1. データベース src_db を作成し、一般ユーザー user_a に Read 権限、user_b に Manage 権限を付与する。
     let req = Request::builder()
@@ -1130,7 +1136,7 @@ async fn get(app: &axum::Router, token: &str, uri: &str) -> axum::response::Resp
 /// 新しいデータベースに効かないことを検証する（権限は名前ではなく ID に紐づく）。
 async fn test_privileges_do_not_survive_delete_and_recreate() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     create_db(&test_app.app, &root_token, "target_db").await;
     let user_token = create_user_and_token(&test_app.app, &root_token, "grantee", false).await;
@@ -1164,7 +1170,7 @@ async fn test_privileges_do_not_survive_delete_and_recreate() {
 /// データベースを改名しても権限が追従することを検証する。
 async fn test_privileges_follow_database_rename() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     create_db(&test_app.app, &root_token, "before_db").await;
     let user_token = create_user_and_token(&test_app.app, &root_token, "follower", false).await;
@@ -1195,7 +1201,7 @@ async fn test_privileges_follow_database_rename() {
 /// 別の権限であることを検証する。
 async fn test_global_manage_is_not_server_admin() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     create_db(&test_app.app, &root_token, "shared_db").await;
     let token = create_user_and_token(&test_app.app, &root_token, "data_manager", false).await;
@@ -1228,7 +1234,7 @@ async fn test_global_manage_is_not_server_admin() {
 /// 実行時の検証ではなくデシリアライズの時点で弾かれる（他のスキーマ違反と同じ 422）。
 async fn test_admin_role_is_rejected_outside_global_scope() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     create_db(&test_app.app, &root_token, "scoped_db").await;
     create_table(&test_app.app, &root_token, "scoped_db", "scoped_table").await;
@@ -1257,7 +1263,7 @@ async fn test_admin_role_is_rejected_outside_global_scope() {
 /// （タイポの黙殺と、将来作られる同名オブジェクトへの事前付与の両方を防ぐ）。
 async fn test_privileges_on_unknown_targets_are_rejected() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     create_db(&test_app.app, &root_token, "real_db").await;
     create_user_and_token(&test_app.app, &root_token, "typo_user", false).await;
@@ -1300,7 +1306,7 @@ async fn test_privileges_on_unknown_targets_are_rejected() {
 /// 対象がパスのキーなので、同一対象に複数のルールが並ぶこと自体が表現できない。
 async fn test_setting_same_target_twice_replaces_the_rule() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     create_db(&test_app.app, &root_token, "dup_db").await;
     create_user_and_token(&test_app.app, &root_token, "dup_user", false).await;
@@ -1317,7 +1323,7 @@ async fn test_setting_same_target_twice_replaces_the_rule() {
 /// 同じ対象への再設定によるロールの降格が実際に効くことを検証する。
 async fn test_role_downgrade_takes_effect() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     create_db(&test_app.app, &root_token, "demote_db").await;
     let token = create_user_and_token(&test_app.app, &root_token, "demoted", false).await;
@@ -1346,7 +1352,7 @@ async fn test_role_downgrade_takes_effect() {
 /// 対象ごとの操作なら、そもそも現在の一覧を知らずに書けるのでその事故が起きない。
 async fn test_operations_on_distinct_targets_do_not_interfere() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     create_db(&test_app.app, &root_token, "db_one").await;
     create_db(&test_app.app, &root_token, "db_two").await;
@@ -1370,7 +1376,7 @@ async fn test_operations_on_distinct_targets_do_not_interfere() {
 /// 剥奪はロールを問わず対象ごと落ちること、権限が無ければ 404 になることを検証する。
 async fn test_revoke_targets_the_object_not_the_role() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     create_db(&test_app.app, &root_token, "rev_db").await;
     create_user_and_token(&test_app.app, &root_token, "revokee", false).await;
@@ -1395,7 +1401,7 @@ async fn test_revoke_targets_the_object_not_the_role() {
 /// テーブルスコープの Manage が、そのテーブル以外を作る踏み台にならないことを検証する。
 async fn test_table_scope_manage_cannot_create_other_tables() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     create_db(&test_app.app, &root_token, "box_db").await;
     create_table(&test_app.app, &root_token, "box_db", "scratch").await;
@@ -1442,7 +1448,7 @@ async fn test_table_scope_manage_cannot_create_other_tables() {
 /// データベース一覧・テーブル一覧に現れ、かつ他のテーブルは見えない。
 async fn test_table_scope_user_can_discover_own_table() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     create_db(&test_app.app, &root_token, "visible_db").await;
     create_db(&test_app.app, &root_token, "hidden_db").await;
@@ -1502,7 +1508,7 @@ async fn test_table_scope_user_can_discover_own_table() {
 /// テーブルスコープの権限しか無くても、そのテーブルだけを参照するクエリは実行できる。
 async fn test_query_authorization_is_table_scoped() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     create_db(&test_app.app, &root_token, "q_db").await;
     create_table(&test_app.app, &root_token, "q_db", "allowed").await;
@@ -1558,7 +1564,7 @@ async fn test_query_authorization_is_table_scoped() {
 /// 「テーブルが無い」と伝わらなければならない。
 async fn test_missing_table_reports_not_found_consistently() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     create_db(&test_app.app, &root_token, "consistent_db").await;
     let token = create_user_and_token(&test_app.app, &root_token, "dbmanager", false).await;
@@ -1610,15 +1616,20 @@ async fn test_missing_table_reports_not_found_consistently() {
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
 
-/// 保存されている生の権限ルール数を数える。
+/// 保存されている生の ACL 行数を数える。
 ///
-/// `GET /users/{u}/privileges` は解決できないルールを隠すため、残留の有無は
-/// API からは観測できない。ここではメタデータを直接読む。
-fn stored_privilege_count(app_state: &AppState, username: &str) -> usize {
-    use kasane::repositories::MetaRead;
+/// `GET /users/{u}/privileges` は解決できない行を隠すため、残留の有無は API からは
+/// 観測できない。ここでは行を直接数える。
+async fn stored_privilege_count(app_state: &AppState, username: &str) -> usize {
+    use kasane::repositories::{CatalogRepository, Storage};
+    let username = username.to_string();
     app_state
         .db
-        .read(|repo| Ok(repo.require_user_meta(username)?.privileges.len()))
+        .read(async move |repo| {
+            let record = repo.require_user_record(&username).await?;
+            Ok(repo.acl_entries(record.id).await?.len())
+        })
+        .await
         .unwrap()
 }
 
@@ -1634,16 +1645,14 @@ async fn delete_table(app: &axum::Router, token: &str, db_name: &str, table_name
 }
 
 #[tokio::test]
-/// 「テーブルの作成 → 権限付与 → 削除」を繰り返しても、削除済みリソースを指すルールが
-/// ユーザーメタデータに累積しないことを検証する。
+/// 「テーブルの作成 → 権限付与 → 削除」を繰り返しても、削除済みリソースを指す行が
+/// 残らないことを検証する。
 ///
-/// 権限の書き込みは常に全置換であり、置換時にすべてのルールが実在するリソースへ
-/// 解決される必要があるため、書き込み直後の残留は必ず 0 件になる。よって残留は
-/// 「直近の置換に含まれていたルールのうち、その後削除されたもの」に限られ、
-/// 繰り返し回数に応じて増えることはない。
+/// 権限は対象ごとの行として持ち、対象を消すときに逆引き索引からその行を落とす。
+/// よって残留は繰り返し回数によらず**常に 0 件**になる。
 async fn test_stale_privileges_do_not_accumulate_over_cycles() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     create_db(&test_app.app, &root_token, "churn_db").await;
     create_user_and_token(&test_app.app, &root_token, "churner", false).await;
@@ -1662,12 +1671,11 @@ async fn test_stale_privileges_do_not_accumulate_over_cycles() {
         .await;
         delete_table(&test_app.app, &root_token, "churn_db", &table).await;
 
-        // 直前のサイクルで残留したルールは、次の全置換で必ず消える。
-        // 残るのは常に「今回削除した 1 件」だけ。
+        // テーブルの削除がその行を落とすので、残留は 0 件。
         assert_eq!(
-            stored_privilege_count(&test_app.app_state, "churner"),
-            1,
-            "サイクル {} で権限ルールが累積した",
+            stored_privilege_count(&test_app.app_state, "churner").await,
+            0,
+            "サイクル {} で削除済みテーブルを指す行が残った",
             i
         );
     }
@@ -1685,7 +1693,7 @@ async fn test_stale_privileges_do_not_accumulate_over_cycles() {
 /// 権限として機能することを検証する。
 async fn test_global_read_can_read_everything_but_write_nothing() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     create_db(&test_app.app, &root_token, "alpha_db").await;
     create_db(&test_app.app, &root_token, "beta_db").await;
@@ -1782,11 +1790,11 @@ async fn test_global_read_can_read_everything_but_write_nothing() {
 }
 
 /// `table_id_index` に残っているテーブルの総数。到達不能になったテーブルの検出に使う。
+///
+/// ストレージ内部の索引を直接数えるため、抽象 API ではなく LMDB のハンドルを直接使う。
 fn indexed_table_count(app_state: &AppState) -> usize {
-    app_state
-        .db
-        .read(|repo| Ok(repo.db.table_id_index.len(&repo.read_txn)? as usize))
-        .unwrap()
+    let rtxn = app_state.db.env.read_txn().unwrap();
+    app_state.db.table_id_index.len(&rtxn).unwrap() as usize
 }
 
 #[tokio::test]
@@ -1796,7 +1804,7 @@ fn indexed_table_count(app_state: &AppState) -> usize {
 /// 親を失って到達不能なまま残る。ここでは削除の完全性そのものを固定する。
 async fn test_database_remove_leaves_no_orphan_tables() {
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
+    let root_token = test_app.root_token().await;
 
     create_db(&test_app.app, &root_token, "doomed_db").await;
     create_db(&test_app.app, &root_token, "kept_db").await;
@@ -1827,34 +1835,87 @@ async fn test_database_remove_leaves_no_orphan_tables() {
 
 #[tokio::test]
 /// 上限を超える権限ルールが、名前解決を走らせる前に件数だけで拒否されることを検証する。
+///
+/// HTTP 越しではなくリポジトリ層で確かめる。上限ぶんのルールを JSON で送ると本文サイズの
+/// 上限（413）に先に当たってしまい、件数チェックまで届かないため。
 async fn test_privilege_rules_are_capped_before_resolution() {
+    use kasane::models::users::{DataRole, MAX_PRIVILEGES_PER_USER, PrivilegeRule};
+    use kasane::repositories::{CatalogRepository, Storage};
+
     let test_app = PermissionTestApp::new();
-    let root_token = test_app.root_token();
 
     // 実在しないデータベースを指すルールを上限超えの件数だけ並べる。
-    // 名前解決が先に走るなら database_not_found が返るはずだが、
-    // 件数チェックが先なので invalid_privilege になる。
-    let privileges: Vec<serde_json::Value> = (0..1001)
-        .map(|i| {
-            serde_json::json!({ "scope": "database", "db_name": format!("ghost_{}", i), "role": "read" })
+    // 名前解決が先に走るなら database_not_found になるはずだが、件数チェックが先なので
+    // invalid_privilege で落ちる。
+    let rules: Vec<PrivilegeRule> = (0..MAX_PRIVILEGES_PER_USER as usize + 1)
+        .map(|i| PrivilegeRule::Database {
+            db_name: format!("ghost_{i}"),
+            role: DataRole::Read,
         })
         .collect();
 
-    let req = Request::builder()
-        .method("POST")
-        .uri("/users")
-        .header("Authorization", format!("Bearer {}", root_token))
-        .header("Content-Type", "application/json")
-        .body(Body::from(
-            serde_json::json!({
-                "username": "hoarder",
-                "password": "password",
-                "privileges": privileges
-            })
-            .to_string(),
-        ))
-        .unwrap();
-    let res = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
-    assert_eq!(json_body(res).await["code"], "invalid_privilege");
+    let err = test_app
+        .app_state
+        .db
+        .read(async move |r| CatalogRepository::resolve_rules(r, &rules).await)
+        .await
+        .expect_err("上限超えが受理された");
+
+    assert!(
+        matches!(err, kasane::error::AppError::InvalidPrivilege { .. }),
+        "件数ではなく名前解決で落ちている: {err:?}"
+    );
+}
+
+#[tokio::test]
+/// `GET /users` が利用者名の辞書順でページングされること。
+///
+/// 1 リクエストの読み取りを利用者数に比例させないための仕組みなので、
+/// 「続きの有無」と「境界の重複・欠落が無いこと」を確かめる。
+async fn test_user_listing_is_paginated() {
+    let test_app = PermissionTestApp::new();
+    let root_token = test_app.root_token().await;
+
+    for i in 0..5 {
+        create_user_and_token(&test_app.app, &root_token, &format!("pager{i}"), false).await;
+    }
+
+    // root + pager0..4 の 6 人を 4 件ずつ辿る。
+    let mut seen: Vec<String> = Vec::new();
+    let mut after: Option<String> = None;
+    loop {
+        let uri = match &after {
+            Some(a) => format!("/users?limit=4&after={a}"),
+            None => "/users?limit=4".to_string(),
+        };
+        let body = json_body(get(&test_app.app, &root_token, &uri).await).await;
+
+        let page = body["users"].as_array().unwrap().clone();
+        assert!(page.len() <= 4, "limit を超えて返している");
+        assert!(!page.is_empty(), "空ページが返った");
+        for user in &page {
+            seen.push(user["username"].as_str().unwrap().to_string());
+        }
+
+        match body.get("next").and_then(|v| v.as_str()) {
+            Some(next) => after = Some(next.to_string()),
+            None => break,
+        }
+    }
+
+    let mut want: Vec<String> = (0..5).map(|i| format!("pager{i}")).collect();
+    want.push("root".to_string());
+    want.sort();
+
+    assert_eq!(seen, want, "ページの境界で重複または欠落がある");
+
+    // 概要に権限そのものは入らない（入れると読み取りが利用者数×保持数に比例する）。
+    let body = json_body(get(&test_app.app, &root_token, "/users?limit=1").await).await;
+    let first = &body["users"][0];
+    assert!(
+        first.get("privileges").is_none(),
+        "一覧に権限が含まれている"
+    );
+    assert!(first.get("username").is_some());
+    assert!(first.get("global_role").is_some());
 }

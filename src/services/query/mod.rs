@@ -1,18 +1,14 @@
-//! `/query` の実行。
-//!
-//! Kasane 側の DSL（[`QueryNode`]）を Kasane-Logic の AST（`Query`）へ翻訳し、
-//! 最適化と実行は Kasane-Logic に委ねる。入力源はテーブルごとの
-//! [`TableSource`] で、対象領域に必要な範囲だけを LMDB から読む（遅延評価）。
+//! `/query` の実行。翻訳だけを担い、最適化と実行は Kasane-Logic に委ねる。
 
 pub mod value;
 
 use std::collections::{BTreeMap, HashMap};
 
-use kasane_logic::{RangeId, Source};
+use kasane_logic::{Query, RangeId, Source};
 
 use crate::{
     AppState,
-    error::AppError,
+    error::{AppError, Resource},
     for_value_type,
     models::{
         database::table::{
@@ -20,49 +16,84 @@ use crate::{
             data::{GetDataQuery, GetDataResponse, OutputFormat},
         },
         query::{ExecuteQueryRequest, FilterCondition, MappingEntry, QueryNode},
+        users::{User, UserRole},
     },
-    repositories::database::table::data::query_source::TableSource,
+    repositories::{ReadRepository, Storage},
     services::helpers::{data_response, spatial_ids::to_spatial_id_set},
 };
 
-use value::{Decoder, Value, ValueQuery};
+use crate::repositories::traits::DecodeFn;
+use value::Value;
 
 /// 解決済みのテーブルメタデータ表（`(database, table)` -> `Table`）。
 type ResolvedTables = HashMap<(String, String), Table>;
 
-/// AST が参照する全テーブルを解決する。
-fn resolve_tables(app_state: &AppState, node: &QueryNode) -> Result<ResolvedTables, AppError> {
-    let refs = node.sources();
-    if refs.is_empty() {
+/// このクエリが読む断面。全ソースで共有する（[`Storage::query_snapshot`] を参照）。
+type QuerySnapshot = <crate::backend::Db as Storage>::QuerySnapshot;
+
+/// AST が参照する全テーブルを解決し、同時に読み取り権限を検査する。
+///
+/// 1 回の読み取りにまとめるのは、認可とメタデータ取得が同じキーを引く二重取得をなくすため。
+/// 名前の解決が 1 件ずつ往復になるバックエンドでは、参照テーブル数ぶんの往復が丸ごと消える。
+async fn resolve_tables(
+    app_state: &AppState,
+    user: &User,
+    node: &QueryNode,
+) -> Result<ResolvedTables, AppError> {
+    let sources = node.sources();
+    if sources.is_empty() {
         return Err(AppError::ConstraintViolation {
             reason: "query must reference at least one source table".to_string(),
         });
     }
 
-    let mut tables: ResolvedTables = HashMap::new();
-    app_state.db.read(|r| {
-        for (db_name, table_name) in &refs {
-            let key = (db_name.to_string(), table_name.to_string());
-            if tables.contains_key(&key) {
-                continue;
+    // 同じテーブルを複数箇所で参照するクエリはよくある。重複を落としてから引く。
+    let mut refs: Vec<(String, String)> = sources
+        .iter()
+        .map(|(db_name, table_name)| (db_name.to_string(), table_name.to_string()))
+        .collect();
+    refs.sort_unstable();
+    refs.dedup();
+
+    let requested = refs.clone();
+    let user = user.clone();
+    let for_auth = requested.clone();
+    // 解決と認可を同じ断面で行う。分けると、認可を通した対象と読む対象がずれうる。
+    let resolved = app_state
+        .db
+        .read(async move |r| {
+            let resolved = r.resolve_tables(&refs).await?;
+            // 逆順にすると、権限の無い利用者へ 404 で名前の存在有無を教えることになる。
+            for ((db_name, table_name), entry) in for_auth.iter().zip(&resolved) {
+                crate::middleware::auth::authorize_resolved(
+                    r,
+                    &user,
+                    entry.db_id,
+                    entry.table.as_ref().map(|t| t.id),
+                    db_name,
+                    Some(table_name),
+                    UserRole::Read,
+                )
+                .await?;
             }
-            let table =
-                r.table_info(db_name, table_name)?
-                    .ok_or_else(|| AppError::TableNotFound {
-                        name: format!("{db_name}.{table_name}"),
-                    })?;
-            tables.insert(key, table);
-        }
-        Ok(())
-    })?;
-    Ok(tables)
+            Ok(resolved)
+        })
+        .await?;
+
+    requested
+        .into_iter()
+        .zip(resolved)
+        .map(|((db_name, table_name), entry)| {
+            let table = entry
+                .table
+                .ok_or_else(|| Resource::Table.not_found(format!("{db_name}.{table_name}")))?;
+            Ok(((db_name, table_name), table))
+        })
+        .collect()
 }
 
-/// テーブルの格納値をクエリの値型 `V` へ復元するデコーダを組み立てる。
-///
-/// そのテーブルの `data_type` は `V` として読めなければならない
-/// （`Text` と `Enum` はどちらも文字列として読める）。
-fn build_decoder<V: Value>(table: &Table) -> Result<Decoder<V>, AppError> {
+/// そのテーブルの `data_type` は `V` として読める必要がある（`Text` と `Enum` は同じ）。
+fn build_decoder<V: Value>(table: &Table) -> Result<DecodeFn<V>, AppError> {
     if !V::accepts(table.data_type) {
         return Err(value::incompatible_source(table, V::type_name()));
     }
@@ -72,9 +103,8 @@ fn build_decoder<V: Value>(table: &Table) -> Result<Decoder<V>, AppError> {
 impl QueryNode {
     /// クエリ結果の値型を推論（または明示指定から決定）する。
     ///
-    /// 全ソースの `data_type` が一致していればそれを採用する。一致しない場合は、
-    /// 同じ値型として読める組合せ（`Text` と `Enum`）であっても推論はしないので、
-    /// `value_type` の明示を要求する。
+    /// 全ソースの `data_type` が一致していればそれを採用する。同じ値型として読める組合せ
+    /// （`Text` と `Enum`）でも推論はせず、`value_type` の明示を要求する。
     fn resolve_value_type(
         &self,
         tables: &ResolvedTables,
@@ -89,10 +119,10 @@ impl QueryNode {
 
         while let Some(node) = stack.pop() {
             let data_type = match node {
-                QueryNode::Source { database, table } => {
+                Self::Source { database, table } => {
                     tables[&(database.clone(), table.clone())].data_type
                 }
-                QueryNode::MapValues { output_type, .. } => *output_type,
+                Self::MapValues { output_type, .. } => *output_type,
                 _ => {
                     stack.extend(node.children());
                     continue;
@@ -123,75 +153,75 @@ impl QueryNode {
         &self,
         app_state: &AppState,
         tables: &ResolvedTables,
-    ) -> Result<ValueQuery<V>, AppError> {
+        snapshot: &QuerySnapshot,
+    ) -> Result<Query<V>, AppError> {
         match self {
-            QueryNode::Source { database, table } => {
+            Self::Source { database, table } => {
                 let meta = &tables[&(database.clone(), table.clone())];
                 let decode = build_decoder::<V>(meta)?;
-                Ok(TableSource::<V>::new(
-                    app_state.db.env.clone(),
-                    app_state.db.tables_data,
-                    meta.id,
-                    decode,
-                )
-                .query())
+                Ok(app_state
+                    .db
+                    .table_source::<V>(meta.id, decode, snapshot.clone())
+                    .query())
             }
 
-            QueryNode::ShiftX { input, z, index } => {
-                Ok(input.translate::<V>(app_state, tables)?.shift_x(*z, *index))
-            }
-            QueryNode::ShiftY { input, z, index } => {
-                Ok(input.translate::<V>(app_state, tables)?.shift_y(*z, *index))
-            }
-            QueryNode::ShiftF { input, z, index } => {
-                Ok(input.translate::<V>(app_state, tables)?.shift_f(*z, *index))
-            }
+            Self::ShiftX { input, z, index } => Ok(input
+                .translate::<V>(app_state, tables, snapshot)?
+                .shift_x(*z, *index)),
+            Self::ShiftY { input, z, index } => Ok(input
+                .translate::<V>(app_state, tables, snapshot)?
+                .shift_y(*z, *index)),
+            Self::ShiftF { input, z, index } => Ok(input
+                .translate::<V>(app_state, tables, snapshot)?
+                .shift_f(*z, *index)),
 
-            QueryNode::ZoomOut { input, z, policy } => {
-                V::zoom_out(input.translate::<V>(app_state, tables)?, *z, *policy)
-            }
+            Self::ZoomOut { input, z, policy } => V::zoom_out(
+                input.translate::<V>(app_state, tables, snapshot)?,
+                *z,
+                *policy,
+            ),
 
-            QueryNode::ExtrudeX {
+            Self::ExtrudeX {
                 input,
                 z,
                 start,
                 end,
                 policy,
             } => V::extrude_x(
-                input.translate::<V>(app_state, tables)?,
+                input.translate::<V>(app_state, tables, snapshot)?,
                 *z,
                 *start,
                 *end,
                 *policy,
             ),
-            QueryNode::ExtrudeY {
+            Self::ExtrudeY {
                 input,
                 z,
                 start,
                 end,
                 policy,
             } => V::extrude_y(
-                input.translate::<V>(app_state, tables)?,
+                input.translate::<V>(app_state, tables, snapshot)?,
                 *z,
                 *start,
                 *end,
                 *policy,
             ),
-            QueryNode::ExtrudeF {
+            Self::ExtrudeF {
                 input,
                 z,
                 start,
                 end,
                 policy,
             } => V::extrude_f(
-                input.translate::<V>(app_state, tables)?,
+                input.translate::<V>(app_state, tables, snapshot)?,
                 *z,
                 *start,
                 *end,
                 *policy,
             ),
 
-            QueryNode::FalloffX {
+            Self::FalloffX {
                 input,
                 z,
                 radius,
@@ -199,14 +229,14 @@ impl QueryNode {
                 direction,
                 policy,
             } => V::falloff_x(
-                input.translate::<V>(app_state, tables)?,
+                input.translate::<V>(app_state, tables, snapshot)?,
                 *z,
                 *radius,
                 direction.map(Into::into),
                 (*pattern).into(),
                 *policy,
             ),
-            QueryNode::FalloffY {
+            Self::FalloffY {
                 input,
                 z,
                 radius,
@@ -214,14 +244,14 @@ impl QueryNode {
                 direction,
                 policy,
             } => V::falloff_y(
-                input.translate::<V>(app_state, tables)?,
+                input.translate::<V>(app_state, tables, snapshot)?,
                 *z,
                 *radius,
                 direction.map(Into::into),
                 (*pattern).into(),
                 *policy,
             ),
-            QueryNode::FalloffF {
+            Self::FalloffF {
                 input,
                 z,
                 radius,
@@ -229,7 +259,7 @@ impl QueryNode {
                 direction,
                 policy,
             } => V::falloff_f(
-                input.translate::<V>(app_state, tables)?,
+                input.translate::<V>(app_state, tables, snapshot)?,
                 *z,
                 *radius,
                 direction.map(Into::into),
@@ -237,20 +267,20 @@ impl QueryNode {
                 *policy,
             ),
 
-            QueryNode::Merge {
+            Self::Merge {
                 left,
                 right,
                 default,
                 policy,
             } => V::merge(
-                left.translate::<V>(app_state, tables)?,
-                right.translate::<V>(app_state, tables)?,
+                left.translate::<V>(app_state, tables, snapshot)?,
+                right.translate::<V>(app_state, tables, snapshot)?,
                 V::from_json(default)?,
                 *policy,
             ),
 
-            QueryNode::FilterValues { input, condition } => {
-                let q = input.translate::<V>(app_state, tables)?;
+            Self::FilterValues { input, condition } => {
+                let q = input.translate::<V>(app_state, tables, snapshot)?;
                 let parse = |v: &Option<serde_json::Value>| -> Result<Option<V>, AppError> {
                     v.as_ref().map(V::from_json).transpose()
                 };
@@ -258,44 +288,37 @@ impl QueryNode {
                     FilterCondition::Equals { value } => q.filter_eq(V::from_json(value)?),
                     FilterCondition::InRange { min, max } => {
                         let start = parse(min)?
-                            .map(core::ops::Bound::Included)
-                            .unwrap_or(core::ops::Bound::Unbounded);
+                            .map_or(core::ops::Bound::Unbounded, core::ops::Bound::Included);
                         let end = parse(max)?
-                            .map(core::ops::Bound::Included)
-                            .unwrap_or(core::ops::Bound::Unbounded);
+                            .map_or(core::ops::Bound::Unbounded, core::ops::Bound::Included);
                         q.filter_in((start, end))
                     }
                     FilterCondition::NotInRange { min, max } => {
                         let start = parse(min)?
-                            .map(core::ops::Bound::Included)
-                            .unwrap_or(core::ops::Bound::Unbounded);
+                            .map_or(core::ops::Bound::Unbounded, core::ops::Bound::Included);
                         let end = parse(max)?
-                            .map(core::ops::Bound::Included)
-                            .unwrap_or(core::ops::Bound::Unbounded);
+                            .map_or(core::ops::Bound::Unbounded, core::ops::Bound::Included);
                         q.filter_not_in((start, end))
                     }
                 })
             }
 
-            QueryNode::MathValues {
+            Self::MathValues {
                 input,
                 operator,
                 operand,
             } => {
-                let q = input.translate::<V>(app_state, tables)?;
+                let q = input.translate::<V>(app_state, tables, snapshot)?;
                 V::apply_math(q, *operator, *operand)
             }
 
-            QueryNode::MapValues {
+            Self::MapValues {
                 input,
                 output_type,
                 mapping,
                 default,
             } => {
-                // `output_type` は宣言だけで終わらせず、実際に組み立てる値型 `V` と
-                // 一致することを検証する。多くの場合 `V` はリクエストの `value_type`
-                // など、この式より外側で決まった型がそのまま流れてくるため、
-                // `output_type` が実際には無視される余地がある。
+                // 検証しないと `output_type` が黙って無視されうる。
                 if !V::accepts(*output_type) {
                     return Err(AppError::ConstraintViolation {
                         reason: format!(
@@ -313,6 +336,7 @@ impl QueryNode {
                     input.as_ref(),
                     app_state,
                     tables,
+                    snapshot,
                     mapping,
                     default
                 )
@@ -321,18 +345,16 @@ impl QueryNode {
     }
 }
 
-/// `MapValues` を、入力側 `U` から出力側 `V` への写像として組み立てる。
-///
-/// 対応表は JSON リテラルなので、ここで一度だけ `U`/`V` へ解釈しておき、
-/// セルごとの評価では引き当てるだけにする。
+/// 対応表を一度だけ `U`/`V` へ解釈しておき、FlexId ごとの評価では引き当てるだけにする。
 fn build_map_values<U: Value, V: Value>(
     input: &QueryNode,
     app_state: &AppState,
     tables: &ResolvedTables,
+    snapshot: &QuerySnapshot,
     mapping: &[MappingEntry],
     default: &serde_json::Value,
-) -> Result<ValueQuery<V>, AppError> {
-    let input = input.translate::<U>(app_state, tables)?;
+) -> Result<Query<V>, AppError> {
+    let input = input.translate::<U>(app_state, tables, snapshot)?;
 
     let mut lookup: BTreeMap<U, V> = BTreeMap::new();
     for entry in mapping {
@@ -363,28 +385,34 @@ fn build_map_values<U: Value, V: Value>(
 }
 
 /// クエリを実行し、対象空間IDの値を返す。
+#[tracing::instrument(skip_all)]
 pub async fn execute(
     app_state: &AppState,
+    user: &User,
     request: ExecuteQueryRequest,
     query_params: &GetDataQuery,
 ) -> Result<GetDataResponse, AppError> {
+    // 解決はトランザクション境界を跨ぐのでここで済ませ、評価だけを blocking へ渡す。
+    let tables = resolve_tables(app_state, user, &request.query).await?;
+
+    // 領域ごとに取り直すと、途中の書き込みを一部だけ見た結果が混ざる。
+    let snapshot = app_state.db.query_snapshot().await?;
+
     let app_state = app_state.clone();
     let format = query_params.format;
     let limit = query_params.limit;
 
-    // LMDB 読み取りと演算はいずれも同期ブロッキング処理のため、async ワーカーを塞がない。
+    // クエリ演算は同期ブロッキング処理のため、async ワーカーを塞がない。
     let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || -> Result<GetDataResponse, AppError> {
         span.in_scope(|| {
-            let tables = resolve_tables(&app_state, &request.query)?;
             let value_type = request
                 .query
                 .resolve_value_type(&tables, request.value_type)?;
 
             // 作業木は単一の値型で組まれるため、ここで値型ごとに単型化する。
-            // Enum は格納こそ ID だが、クエリ上は選択肢の文字列（String）として扱う。
             for_value_type!(
-                value_type, run, &app_state, &request, &tables, format, limit
+                value_type, run, &app_state, &request, &tables, &snapshot, format, limit
             )
         })
     })
@@ -396,15 +424,13 @@ fn run<V: Value>(
     app_state: &AppState,
     request: &ExecuteQueryRequest,
     tables: &ResolvedTables,
+    snapshot: &QuerySnapshot,
     format: OutputFormat,
     limit: Option<usize>,
 ) -> Result<GetDataResponse, AppError> {
     let targets = to_spatial_id_set(&request.spatial_ids)?;
 
-    // 要求された空間IDそのものを評価境界にする。
-    //
-    // 外接矩形1つにまとめる手もあるが、`bounding_box()` は全セルを覆う保証が無く
-    // 取りこぼしが起きる。個々の領域を渡せば正確で、無関係な領域を読まずに済む。
+    // 外接矩形 1 つにまとめると `bounding_box()` が全 FlexId を覆わず取りこぼす。
     let bounds: Vec<RangeId> = targets.iter().map(|id| RangeId::from(&id)).collect();
     if bounds.is_empty() {
         // 対象領域が空。クエリを走らせるまでもない。
@@ -412,42 +438,41 @@ fn run<V: Value>(
         return data_response::build(empty, format, limit, |v| Ok(v.to_json()));
     }
 
-    let ast = request.query.translate::<V>(app_state, tables)?;
+    // --- フェーズ 1: DSL → kasane-logic AST の翻訳 ---
+    let ast = tracing::info_span!("query.translate", source_tables = tables.len())
+        .in_scope(|| request.query.translate::<V>(app_state, tables, snapshot))?;
+
     tracing::debug!(
         "Executing query over {} source table(s), {} target region(s)",
         tables.len(),
         bounds.len()
     );
 
-    // 対象領域をまとめて1回だけ評価し、結果を要求空間IDで絞る。
-    // 空間ID1件ずつ `get()` を回すとクエリが件数分再実行されてしまう。
-    let optimized = ast.optimize();
-    let cells = optimized
-        .run_within(bounds)
-        .map_err(AppError::LogicError)?
+    // --- フェーズ 2: クエリ最適化 ---
+    let optimized = tracing::info_span!("query.optimize").in_scope(|| ast.optimize());
+
+    // まとめて 1 回だけ評価する。空間 ID 1 件ずつだとクエリが件数分再実行される。
+    let flex_ids = tracing::info_span!("query.run_within", target_regions = bounds.len())
+        .in_scope(|| optimized.run_within(bounds).map_err(AppError::LogicError))?
         .into_iter()
         .filter(|(flex_id, _)| targets.get(flex_id).next().is_some());
 
-    let by_value = group_by_value(cells, limit);
+    let by_value = group_by_value(flex_ids, limit);
     data_response::build(by_value, format, limit, |v| Ok(v.to_json()))
 }
 
-/// セル列を値ごとにグループ化する（レスポンスは値辞書 + 空間ID群の形）。
+/// FlexId 列を値ごとにグループ化する。
 ///
-/// `limit` が指定されている場合、保持するセルを `limit` 件までに抑える。
-/// 本来は値の昇順に並べて上位 `limit` 件を返すべきだが、高速化のため順序を問わず
-/// `limit` 件に達した時点で短絡評価（打ち切り）を行う。
-///
-/// `singleId` 形式では 1 つの `FlexId` が複数セルへ展開されるので、`limit` 件の
-/// `FlexId` を残せば出力は必ず `limit` 件以上に届く（不足しない）。
+/// `limit` は値の昇順で上位を返すのが本来だが、高速化のため順序を問わず打ち切る。
+/// `singleId` 形式では 1 つの `FlexId` が複数へ展開されるので、出力が不足することはない。
 fn group_by_value<V: Value>(
-    cells: impl Iterator<Item = (kasane_logic::FlexId, V)>,
+    flex_ids: impl Iterator<Item = (kasane_logic::FlexId, V)>,
     limit: Option<usize>,
 ) -> BTreeMap<V, Vec<kasane_logic::FlexId>> {
     let mut by_value: BTreeMap<V, Vec<kasane_logic::FlexId>> = BTreeMap::new();
     let mut held = 0usize;
 
-    for (flex_id, value) in cells {
+    for (flex_id, value) in flex_ids {
         by_value.entry(value).or_default().push(flex_id);
         held += 1;
 

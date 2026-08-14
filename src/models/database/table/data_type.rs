@@ -17,6 +17,20 @@ pub enum TableDataType {
     Presence = 5,
 }
 
+impl TableDataType {
+    /// 格納バイト列の長さが、この型では常に一定か。
+    ///
+    /// 値インデックスのキーは値を可変長のまま連結するので、型の幅が一定なときだけ範囲
+    /// スキャンの境界がそのまま正確な境界になる。可変長は `Text` だけ。
+    pub fn has_fixed_width_value(self) -> bool {
+        match self {
+            // i64 = 8 / 真偽値 = 1 / Enum は選択肢 ID（u16）/ Presence は値なし。
+            Self::Int | Self::Boolean | Self::Enum | Self::Presence => true,
+            Self::Text => false,
+        }
+    }
+}
+
 /// テーブルの値に対する制約。
 ///
 /// `type` フィールドで制約の種類を指定する。指定できる種類は対象のデータ型に依存する。
@@ -69,18 +83,153 @@ fn is_zero(num: &u16) -> bool {
 impl From<TableDataType> for JsonValueType {
     fn from(value: TableDataType) -> Self {
         match value {
-            TableDataType::Text | TableDataType::Enum => JsonValueType::String,
-            TableDataType::Int => JsonValueType::Number,
-            TableDataType::Boolean => JsonValueType::Bool,
-            TableDataType::Presence => JsonValueType::Null,
+            TableDataType::Text | TableDataType::Enum => Self::String,
+            TableDataType::Int => Self::Number,
+            TableDataType::Boolean => Self::Bool,
+            TableDataType::Presence => Self::Null,
         }
     }
 }
 
 impl TableConstraints {
+    /// `Enum` の選択肢に未割り当ての ID を振る。
+    ///
+    /// 割り当て規則は**保存される値そのもの**なので、バックエンドごとに持たせるとストレージ間で
+    /// 値の意味がずれる。
+    pub fn with_enum_ids(
+        data_type: TableDataType,
+        constraints: Option<Self>,
+    ) -> Result<Option<Self>, String> {
+        let mut actual = constraints;
+        if data_type != TableDataType::Enum {
+            return Ok(actual);
+        }
+        match &mut actual {
+            Some(Self::Enum {
+                choices,
+                mapping,
+                next_id,
+            }) => {
+                for c in choices.iter() {
+                    if !mapping.contains_key(c) {
+                        if *next_id == u16::MAX {
+                            return Err("Enum choices reached maximum limit (65535)".to_string());
+                        }
+                        if *next_id == 0 {
+                            *next_id = 1;
+                        }
+                        mapping.insert(c.clone(), *next_id);
+                        *next_id += 1;
+                    }
+                }
+                Ok(actual)
+            }
+            _ => Err("Enum type requires 'choices' constraint".to_string()),
+        }
+    }
+
+    /// 既存値を残したまま指定されたフィールドだけを差し替える。
+    ///
+    /// `Enum` は選択肢の増減を反映したうえで [`with_enum_ids`](Self::with_enum_ids) と同じ
+    /// 規則で ID を振る。
+    pub fn merged_with(
+        data_type: TableDataType,
+        current: Option<&Self>,
+        update: super::UpdateTableConstraints,
+    ) -> Result<Option<Self>, String> {
+        use super::UpdateTableConstraints as Update;
+
+        match (data_type, update) {
+            (
+                TableDataType::Text,
+                Update::Text {
+                    min_length,
+                    max_length,
+                },
+            ) => {
+                let (mut cur_min, mut cur_max) = match current {
+                    Some(Self::Text {
+                        min_length,
+                        max_length,
+                    }) => (*min_length, *max_length),
+                    _ => (None, None),
+                };
+                if let Some(v) = min_length {
+                    cur_min = v;
+                }
+                if let Some(v) = max_length {
+                    cur_max = v;
+                }
+                Ok(Some(Self::Text {
+                    min_length: cur_min,
+                    max_length: cur_max,
+                }))
+            }
+            (TableDataType::Int, Update::Int { min, max }) => {
+                let (mut cur_min, mut cur_max) = match current {
+                    Some(Self::Int { min, max }) => (*min, *max),
+                    _ => (None, None),
+                };
+                if let Some(v) = min {
+                    cur_min = v;
+                }
+                if let Some(v) = max {
+                    cur_max = v;
+                }
+                Ok(Some(Self::Int {
+                    min: cur_min,
+                    max: cur_max,
+                }))
+            }
+            (
+                TableDataType::Enum,
+                Update::Enum {
+                    choices,
+                    add_choices,
+                    remove_choices,
+                },
+            ) => {
+                let (mut cur_choices, mapping, next_id) = match current {
+                    Some(Self::Enum {
+                        choices,
+                        mapping,
+                        next_id,
+                    }) => (choices.clone(), mapping.clone(), *next_id),
+                    _ => (Vec::new(), std::collections::HashMap::new(), 1),
+                };
+                if let Some(new_choices) = choices {
+                    cur_choices = new_choices;
+                }
+                if let Some(adds) = add_choices {
+                    for add in adds {
+                        if !cur_choices.contains(&add) {
+                            cur_choices.push(add);
+                        }
+                    }
+                }
+                if let Some(removes) = remove_choices {
+                    cur_choices.retain(|c| !removes.contains(c));
+                }
+                // ID の割り当ては新規作成時と同じ規則を通す。
+                Self::with_enum_ids(
+                    TableDataType::Enum,
+                    Some(Self::Enum {
+                        choices: cur_choices,
+                        mapping,
+                        next_id,
+                    }),
+                )
+            }
+            (TableDataType::Presence, _) => {
+                Err("Presence type cannot have constraints".to_string())
+            }
+            (_, _) => Err("Constraint type does not match data type".to_string()),
+        }
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            TableConstraints::Text {
+            Self::Text {
                 min_length,
                 max_length,
             } => {
@@ -93,7 +242,7 @@ impl TableConstraints {
                     ));
                 }
             }
-            TableConstraints::Int { min, max } => {
+            Self::Int { min, max } => {
                 if let (Some(min), Some(max)) = (min, max)
                     && min > max
                 {
@@ -103,7 +252,7 @@ impl TableConstraints {
                     ));
                 }
             }
-            TableConstraints::Enum { choices, .. } => {
+            Self::Enum { choices, .. } => {
                 for c in choices {
                     if c.is_empty() {
                         return Err("Enum choice cannot be empty".to_string());

@@ -1,11 +1,16 @@
 use crate::{
     AppState,
     error::AppError,
+    middleware::auth::authorize_path,
     models::database::table::{CreateTableRequest, Table},
+    models::users::{User, UserRole},
+    repositories::{Storage, WriteRepository},
 };
 
+#[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn create(
     app_state: &AppState,
+    user: &User,
     db_name: &str,
     table_name: &str,
     req: CreateTableRequest,
@@ -25,25 +30,25 @@ pub async fn create(
     // max_zoom_levelの検証
     kasane_logic::ZoomLevel::new(req.max_zoom_level)?;
 
-    let app_state = app_state.clone();
     let db_name = db_name.to_string();
     let table_name = table_name.to_string();
+    let user = user.clone();
 
-    let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || {
-        span.in_scope(|| {
-            app_state.db.write(|db| {
-                db.table_create(
-                    &db_name,
-                    &table_name,
-                    req.data_type,
-                    req.max_zoom_level,
-                    req.constraints,
-                    req.description,
-                )
-            })
+    app_state
+        .db
+        .write(async move |db| {
+            // 作るのは新しいテーブルなので、判定はデータベーススコープで行う。
+            authorize_path(db, &user, &db_name, None, UserRole::Manage).await?;
+            db.table_create(
+                &db_name,
+                &table_name,
+                req.data_type,
+                req.max_zoom_level,
+                req.constraints.clone(),
+                req.description.clone(),
+                req.value_index,
+            )
+            .await
         })
-    })
-    .await
-    .map_err(|e| AppError::InternalError(e.to_string()))?
+        .await
 }

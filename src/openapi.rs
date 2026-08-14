@@ -16,7 +16,8 @@ use crate::models::database::{
 use crate::models::spatial_id::SpatialId;
 use crate::models::users::{
     CreateUserRequest, DataRole, PrivilegeRule, PrivilegesResponse, SetDataPrivilegeRequest,
-    SetGlobalPrivilegeRequest, UpdatePasswordRequest, UserInfoResponse, UserRole,
+    SetGlobalPrivilegeRequest, UpdatePasswordRequest, UserInfoResponse, UserListResponse, UserRole,
+    UserSummary,
 };
 
 /// `bearer_auth` セキュリティスキーム（JWT Bearer）を OpenAPI コンポーネントに登録する。
@@ -113,6 +114,8 @@ const PRIVILEGE_LEGEND: &str = r#"
         // Users
         CreateUserRequest,
         UserInfoResponse,
+        UserListResponse,
+        UserSummary,
         UpdatePasswordRequest,
         SetGlobalPrivilegeRequest,
         SetDataPrivilegeRequest,

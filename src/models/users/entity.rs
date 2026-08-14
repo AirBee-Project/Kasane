@@ -1,93 +1,48 @@
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+use utoipa::ToSchema;
 
-use crate::models::id::{DatabaseId, TableId};
+use crate::error::{AppError, Stored};
+use crate::models::id::{DataTarget, PrincipalId};
 
-/// LMDB の `users` テーブルに保存されるユーザーの内部表現。
+/// 保存される利用者の内部表現。
 ///
-/// 過去バージョン（`is_global_admin` フィールドを持つ形式）とは非互換。
-/// `deny_unknown_fields` を付けているため、旧形式のレコードは黙って
-/// デフォルト値に落ちるのではなくパースエラーとして表面化する。
+/// **権限ルールはここに入らない。** 対象ごとに独立した ACL 行として持つ（[`AclEntry`]）。
+/// 認証ミドルウェアが毎リクエスト読むのはこのレコードなので、保持する権限の数に
+/// よらず一定の大きさに保つ必要がある。
+///
+/// `deny_unknown_fields` を付けているので、非互換なレコードは黙ってデフォルト値へ落ちず
+/// パースエラーとして表面化する。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct UserMetadata {
-    pub id: Uuid,
+pub struct UserRecord {
+    pub id: PrincipalId,
     pub password_hash: String,
-    /// トークンの世代番号。
+    /// トークンの世代番号。JWT に埋めた値と一致しないトークンは無効。
     ///
-    /// パスワード変更のように発行済みトークンを即座に失効させたい操作のたびに
-    /// インクリメントする。JWT に埋め込んだ値と一致しないトークンは無効として扱う。
-    ///
-    /// 権限の変更ではインクリメントしない。認証ミドルウェアが毎リクエスト
-    /// ユーザーを読み直しており、権限変更は次のリクエストから即座に反映されるため。
+    /// 発行済みトークンを即座に失効させたい操作（パスワード変更など）で進める。権限変更で
+    /// 進めないのは、認証ミドルウェアが毎リクエストこのレコードを読み直しているため。
     pub token_version: u64,
-    /// 保存されている権限ルール。データベース名・テーブル名ではなく ID を保持する。
+    /// サーバー全体に対するロール。利用者ごとに高々 1 つなので行にせず埋め込む。
     ///
-    /// 1 つの対象につき高々 1 件。件数は [`MAX_PRIVILEGE_RULES`] で頭打ちにしている。
-    pub privileges: Vec<StoredPrivilege>,
+    /// ここに置くと [`has_global_role`](super::User::has_global_role) が I/O ゼロになり、
+    /// 全体権限で通る要求はカタログにも ACL にも触れずに決着する。
+    pub global_role: Option<UserRole>,
 }
 
-/// 1 ユーザーが保持できる権限ルールの上限。
+/// 1 利用者が保持できる ACL 行の上限。
 ///
-/// 認証ミドルウェアが毎リクエストこの配列を含む JSON を読んでパースするため、
-/// 際限なく増えるとリクエスト全体のレイテンシに響く。付与は対象ごとの追加なので、
-/// 明示的な上限が無いと運用次第でいくらでも伸びうる。
-pub const MAX_PRIVILEGE_RULES: usize = 1000;
+/// 行が独立したので配列を舐める必要は無くなったが、上限そのものは残す。無制限だと
+/// 権限一覧の描画と、対象を消すときの逆引き削除が青天井になる。
+pub const MAX_PRIVILEGES_PER_USER: u32 = 50_000;
 
-/// 保存形式の権限ルール。
+/// ACL の 1 行。保存形式では名前ではなく UUID で持つ。
 ///
-/// データベース名・テーブル名は改名・削除・再作成で意味が変わるため、
-/// 権限は必ず UUID（[`DatabaseId`] / [`TableId`]）で保持する。これにより
-///
-/// - 改名しても権限はオブジェクトに追従する
-/// - 削除して同名で作り直しても新しい UUID になるので、旧権限は決して一致しない
-///
-/// API 上の表現は名前ベースの [`PrivilegeRule`](crate::models::users::PrivilegeRule) で、
-/// 付与時に名前 → ID、取得時に ID → 名前へ解決する。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "scope", rename_all = "snake_case")]
-pub enum StoredPrivilege {
-    /// サーバー全体に対する権限。
-    Global { role: UserRole },
-    /// 特定のデータベース配下すべてに対する権限。
-    Database { db_id: DatabaseId, role: DataRole },
-    /// 特定のテーブル 1 つに対する権限。
-    Table {
-        db_id: DatabaseId,
-        table_id: TableId,
-        role: DataRole,
-    },
-}
-
-impl StoredPrivilege {
-    pub fn role(&self) -> UserRole {
-        match self {
-            StoredPrivilege::Global { role } => *role,
-            StoredPrivilege::Database { role, .. } | StoredPrivilege::Table { role, .. } => {
-                UserRole::from(*role)
-            }
-        }
-    }
-
-    /// このルールが適用される対象。ロールを含まないので、付与の upsert と
-    /// 剥奪の照合をどちらもこのキーで行える。
-    pub fn target(&self) -> StoredTarget {
-        match *self {
-            StoredPrivilege::Global { .. } => StoredTarget::Global,
-            StoredPrivilege::Database { db_id, .. } => StoredTarget::Database(db_id),
-            StoredPrivilege::Table { table_id, .. } => StoredTarget::Table(table_id),
-        }
-    }
-}
-
-/// 解決済みの適用対象。1 ユーザーの権限ルールはこのキーで一意になる。
-///
-/// テーブルは `TableId` だけで一意に定まるため、`DatabaseId` は含めない。
+/// 名前は改名・削除・再作成で意味が変わる。UUID なら改名しても権限が追従し、同名で
+/// 作り直しても新しい UUID になるので旧権限は決して一致しない。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StoredTarget {
-    Global,
-    Database(DatabaseId),
-    Table(TableId),
+pub struct AclEntry {
+    pub target: DataTarget,
+    pub role: DataRole,
 }
 
 /// データ面のロール。データベース・テーブルスコープで指定できるのはこの 3 つだけ。
@@ -103,6 +58,46 @@ pub enum DataRole {
     Read = 1,
     Write = 2,
     Manage = 3,
+}
+
+/// ACL 行の値は 1 バイト。serde を通さないのは、1 バイトのために形式の取り決めを
+/// 増やす意味が無いため。
+impl From<DataRole> for u8 {
+    fn from(role: DataRole) -> Self {
+        role as u8
+    }
+}
+
+impl TryFrom<u8> for DataRole {
+    type Error = AppError;
+
+    fn try_from(byte: u8) -> Result<Self, AppError> {
+        match byte {
+            1 => Ok(Self::Read),
+            2 => Ok(Self::Write),
+            3 => Ok(Self::Manage),
+            _ => Err(AppError::corrupt(
+                Stored::AclRow,
+                format!("unknown role byte {byte}"),
+            )),
+        }
+    }
+}
+
+/// `admin` はデータ面に存在しないので、絞り込みは失敗しうる。
+impl TryFrom<UserRole> for DataRole {
+    type Error = AppError;
+
+    fn try_from(role: UserRole) -> Result<Self, AppError> {
+        match role {
+            UserRole::Read => Ok(Self::Read),
+            UserRole::Write => Ok(Self::Write),
+            UserRole::Manage => Ok(Self::Manage),
+            UserRole::Admin => Err(AppError::InvalidPrivilege {
+                reason: "the admin role can only be granted on the global scope".to_string(),
+            }),
+        }
+    }
 }
 
 /// 権限の強さ。数値が大きいほど強く、上位は下位をすべて含む。
@@ -124,9 +119,21 @@ pub enum UserRole {
 impl From<DataRole> for UserRole {
     fn from(role: DataRole) -> Self {
         match role {
-            DataRole::Read => UserRole::Read,
-            DataRole::Write => UserRole::Write,
-            DataRole::Manage => UserRole::Manage,
+            DataRole::Read => Self::Read,
+            DataRole::Write => Self::Write,
+            DataRole::Manage => Self::Manage,
         }
     }
+}
+
+/// 一覧で 1 利用者について返す概要。
+///
+/// 権限そのものを含めないのは、一覧のページあたりの読み取りを利用者数に比例させない
+/// ため。詳細は `GET /users/{username}/privileges` で引く。
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UserSummary {
+    #[schema(example = "example_user")]
+    pub username: String,
+    /// サーバー全体のロール。持たなければ `null`。
+    pub global_role: Option<UserRole>,
 }

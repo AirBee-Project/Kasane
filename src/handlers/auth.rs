@@ -1,4 +1,4 @@
-use crate::repositories::MetaRead;
+use crate::repositories::{CatalogRepository, Storage};
 use axum::{Json, extract::State};
 
 use crate::{
@@ -29,31 +29,35 @@ pub async fn login(
     State(app_state): State<AppState>,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, AppError> {
+    let username = payload.username.clone();
+    let stored_hash = app_state
+        .db
+        .read(async move |repo| repo.user_record(&username).await)
+        .await?
+        .map(|meta| meta.password_hash);
+
+    // argon2 の検証は CPU バウンドなのでブロッキングタスクへ逃がす。
+    let password = payload.password.clone();
     let span = tracing::Span::current();
-    let token = tokio::task::spawn_blocking(move || -> Result<String, AppError> {
+    let verified = tokio::task::spawn_blocking(move || -> Result<bool, AppError> {
         let _guard = span.enter();
-        let meta = app_state
-            .db
-            .read(|repo| repo.user_meta(&payload.username))?;
-
-        let meta = match meta {
-            Some(meta) => meta,
+        match &stored_hash {
+            Some(hash) => verify_password(&password, hash),
             None => {
-                // ユーザーが存在しなくても実在時と同等の計算コストをかけ、
-                // 応答時間差によるユーザー列挙を防ぐ。
-                dummy_verify_password(&payload.password);
-                return Err(AuthError::InvalidCredentials.into());
+                // 実在時と同等の計算コストをかけ、応答時間差でのユーザー列挙を防ぐ。
+                dummy_verify_password(&password);
+                Ok(false)
             }
-        };
-
-        if !verify_password(&payload.password, &meta.password_hash)? {
-            return Err(AuthError::InvalidCredentials.into());
         }
-
-        generate_jwt(&app_state, &payload.username)
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))??;
+
+    if !verified {
+        return Err(AuthError::InvalidCredentials.into());
+    }
+
+    let token = generate_jwt(&app_state, &payload.username).await?;
 
     Ok(Json(LoginResponse { token }))
 }

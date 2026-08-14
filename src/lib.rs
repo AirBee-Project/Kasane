@@ -1,6 +1,6 @@
 use crate::routes::create_router;
 
-pub mod db_init;
+pub mod backend;
 pub mod error;
 pub mod handlers;
 pub mod middleware;
@@ -11,9 +11,19 @@ pub mod routes;
 pub mod services;
 pub mod telemetry;
 
+/// リクエスト間で共有する状態。
 #[derive(Clone)]
 pub struct AppState {
-    pub db: db_init::AppDb,
+    pub db: backend::Db,
+    /// 同じテーブルへの同時書き込みを 1 トランザクションへ畳む。
+    pub writes: services::database::table::data::coalesce::WriteCoalescer,
+}
+
+impl AppState {
+    pub fn new(db: backend::Db) -> Self {
+        let writes = services::database::table::data::coalesce::WriteCoalescer::new(db.clone());
+        Self { db, writes }
+    }
 }
 
 pub fn kasane(app_state: AppState) -> axum::Router {

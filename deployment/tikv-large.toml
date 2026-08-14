@@ -1,0 +1,37 @@
+[server]
+grpc-concurrency = 4
+
+[storage]
+scheduler-worker-pool-size = 4
+reserve-space = "0KB"
+reserve-raft-space = "0KB"
+
+[storage.block-cache]
+capacity = "2GB"
+
+[raftstore]
+store-pool-size = 2
+apply-pool-size = 2
+
+[readpool.unified]
+min-thread-count = 2
+max-thread-count = 8
+
+[readpool.storage]
+use-unified-pool = true
+
+[readpool.coprocessor]
+use-unified-pool = true
+
+[pessimistic-txn]
+pipelined = true
+in-memory = true
+
+[rocksdb]
+max-background-jobs = 8
+max-sub-compactions = 2
+max-open-files = 4096
+
+[raftdb]
+max-background-jobs = 4
+max-open-files = 4096

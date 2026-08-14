@@ -4,12 +4,11 @@ pub mod privilege;
 pub mod request;
 pub mod response;
 
-pub use domain::User;
-pub use entity::{
-    DataRole, MAX_PRIVILEGE_RULES, StoredPrivilege, StoredTarget, UserMetadata, UserRole,
-};
-pub use privilege::{PrivilegeRule, PrivilegeTarget, Scope};
+pub use domain::{Grant, User};
+pub use entity::{AclEntry, DataRole, MAX_PRIVILEGES_PER_USER, UserRecord, UserRole, UserSummary};
+pub use privilege::{PrivilegeRule, PrivilegeTarget, ResolvedPrivilege, ResolvedTarget, Scope};
 pub use request::{
-    CreateUserRequest, SetDataPrivilegeRequest, SetGlobalPrivilegeRequest, UpdatePasswordRequest,
+    CreateUserRequest, ListUsersQuery, SetDataPrivilegeRequest, SetGlobalPrivilegeRequest,
+    UpdatePasswordRequest,
 };
-pub use response::{PrivilegesResponse, UserInfoResponse};
+pub use response::{PrivilegesResponse, UserInfoResponse, UserListResponse};

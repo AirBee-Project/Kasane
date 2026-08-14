@@ -1,7 +1,6 @@
-//! 「値ごとにグループ化された空間ID群」を API のレスポンス形へ整形する共通処理。
+//! 「値ごとにグループ化された空間ID群」を API のレスポンス形へ整形する。
 //!
-//! `search`（格納値をそのまま返す）と `query`（クエリの計算結果を返す）は、値の作り方こそ
-//! 違うものの出力形は同一（値辞書 + 空間ID群）なので、整形はここに一本化する。
+//! `search` と `query` は値の作り方こそ違うが出力形は同一なので、整形を一本化する。
 
 use kasane_logic::{AllowedIntervals, FlexId, SpatialId as _, SpatialIdSet};
 
@@ -16,13 +15,7 @@ use crate::{
     },
 };
 
-/// 値ごとにグループ化された結果を、指定フォーマットのレスポンスへ整形する。
-///
-/// # Arguments
-/// - `groups`  - `(値, その値を持つ FlexId 群)` の列
-/// - `format`  - 空間IDの出力形式
-/// - `limit`   - 出力する空間IDの上限（`None` なら無制限）
-/// - `to_json` - 値を JSON へ変換する関数。格納バイト列の復元や数値変換はここで行う
+/// `to_json` は値を JSON へ変換する。格納バイト列の復元や数値変換はそこで行う。
 pub fn build<V, F>(
     groups: impl IntoIterator<Item = (V, Vec<FlexId>)>,
     format: OutputFormat,
@@ -35,13 +28,7 @@ where
     Ok(match format {
         OutputFormat::SingleId => {
             let (dictionary, data) = build_groups(groups, limit, to_json, |flex_ids, left| {
-                // 値グループ全体を SpatialIdSet へまとめ、range_ids_in で（空間はそのSegmentの
-                // 自然な粒度を保ったまま）時間だけ暦の単位（AllowedIntervals::calendar）に
-                // 結合し直してから、各領域を single_ids で展開する。
-                //
-                // flat_single_ids_in は使わない：あちらは Set 全体の最大ズームへ空間側も
-                // 強制的に均してしまい、本来1エントリで表せる粗いブロックまで最深セル単位へ
-                // 分解してしまう（例: 917件で済むはずが4242件に膨れる）。
+                // `flat_single_ids_in` は空間側も最大ズームへ均す（917 件 → 4242 件）。
                 let set: SpatialIdSet = flex_ids.into_iter().collect();
                 let mut out = Vec::new();
                 'ranges: for range_id in set.range_ids_in(AllowedIntervals::calendar()) {
@@ -133,11 +120,9 @@ where
 
 /// 値辞書と、出力ID型 `I` のデータ群を組み立てる。
 ///
-/// フォーマット差は `expand`（値グループの `FlexId` 群を出力ID列へ変換しつつ上限を消費する）
-/// だけに閉じ込め、辞書付番・上限判定・空グループの除去はここで共通化する。
-///
-/// `expand` はグループ全体（`Vec<FlexId>`）を受け取る。`SingleId`/`RangeId` は時間方向の
-/// 結合（coalescing）に値グループ全体が必要なため、`FlexId` 単位の処理はできない。
+/// フォーマット差は `expand` だけに閉じ込め、辞書付番・上限判定・空グループの除去を共通化する。
+/// `expand` がグループ全体を受け取るのは、`SingleId`/`RangeId` の時間方向の結合に値グループ
+/// 全体が要るため。
 fn build_groups<V, I, F, E>(
     groups: impl IntoIterator<Item = (V, Vec<FlexId>)>,
     limit: Option<usize>,
@@ -155,9 +140,7 @@ where
     for (value, flex_ids) in groups {
         let spatial_ids = expand(flex_ids, &mut limit_left);
 
-        // 辞書へ載せるのは、実際に出力される空間IDを持つ値だけ。
-        // 先に push すると、`limit` を使い切って `data` に載らなかったグループの値が
-        // どこからも参照されない辞書エントリとしてレスポンスに残ってしまう。
+        // 先に push すると、`limit` で `data` に載らなかった値が孤立した辞書項目として残る。
         if !spatial_ids.is_empty() {
             let value_ref = dictionary.len();
             dictionary.push(to_json(&value)?);

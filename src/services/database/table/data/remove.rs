@@ -1,30 +1,31 @@
 use crate::{
     AppState,
     error::AppError,
+    models::users::{User, UserRole},
     models::{database::table::data::ZoomLevelPolicy, spatial_id::SpatialId},
-    services::helpers::spatial_ids::process_spatial_ids,
+    repositories::{Storage, WriteRepository},
+    services::helpers::{authorize::authorized_table, spatial_ids::process_spatial_ids},
 };
 
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn remove(
     app_state: &AppState,
+    user: &User,
     db_name: &str,
     table_name: &str,
     spatial_ids: &[SpatialId],
     zoom_level_policy: &ZoomLevelPolicy,
 ) -> Result<(), AppError> {
-    // 失敗し得るユーザ入力検証はバッチ投入前に済ませる（insert と同様）。
-    let table = app_state
-        .db
-        .read(|r| r.table_info(db_name, table_name))?
-        .ok_or_else(|| AppError::TableNotFound {
-            name: table_name.to_string(),
-        })?;
+    let table = authorized_table(app_state, user, db_name, table_name, UserRole::Write).await?;
 
+    // 失敗し得るユーザ入力検証はバッチ投入前に済ませる（insert と同様）。
     let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
 
     app_state
         .db
-        .batch_data_remove(table.id, table.data_type, ids)
+        .write(async move |w| {
+            w.data_remove(table.id, table.value_indexing(), ids.clone())
+                .await
+        })
         .await
 }

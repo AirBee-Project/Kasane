@@ -5,12 +5,12 @@ use axum::{
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-use crate::database::table::common::TestApp;
+use crate::common::TestApp;
 
 #[tokio::test]
 /// テーブル情報が正しく取得できることを検証する。
 async fn test_table_info_success() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     test_app
@@ -38,7 +38,7 @@ async fn test_table_info_success() {
 #[tokio::test]
 /// 存在しないテーブルの情報取得リクエストが404エラーとなることを検証する。
 async fn test_table_info_not_found() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
 
     test_app.create_database("test_db").await;
     test_app

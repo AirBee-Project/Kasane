@@ -1,3 +1,6 @@
+//! LMDB バックエンド向けの結合テスト。TiKV バックエンドのビルドでは対象外。
+#![cfg(feature = "backend-lmdb")]
+
 use kasane::models::spatial_id::{RawFlexId, RawRangeId, SpatialId};
 use kasane::services::helpers::spatial_ids::to_spatial_id_set;
 
@@ -42,7 +45,7 @@ fn omitting_y_covers_the_whole_axis() {
 }
 
 #[test]
-/// f は符号付き軸なので、全域はズーム 0 の 2 セル（-1 と 0）になる。
+/// f は符号付き軸なので、全域はズーム 0 の 2 FlexId （-1 と 0）になる。
 fn omitting_f_covers_both_signs() {
     let omitted = to_spatial_id_set(&[range(3, None, Some([2, 2]), Some([2, 2]))]).unwrap();
     let explicit = to_spatial_id_set(&[flex(0, -1, 3, 2, 3, 2), flex(0, 0, 3, 2, 3, 2)]).unwrap();

@@ -11,8 +11,8 @@ mod bruno;
 mod routing;
 mod values;
 
-use crate::database::table::common::TestApp;
-use crate::database::table::data::common::put_data;
+use crate::common::TestApp;
+use crate::common::data::put_data;
 
 /// `POST /query` を実行し、`(status, body)` を返す。
 async fn post_query(
@@ -40,15 +40,12 @@ fn single_id(x: i64) -> serde_json::Value {
 
 /// 値辞書 + データ群のレスポンスを、値の合計と件数へ畳み込む。
 fn total_ids(result: &serde_json::Value) -> usize {
-    result["data"]
-        .as_array()
-        .map(|groups| {
-            groups
-                .iter()
-                .map(|g| g["spatialIds"].as_array().map(|a| a.len()).unwrap_or(0))
-                .sum()
-        })
-        .unwrap_or(0)
+    result["data"].as_array().map_or(0, |groups| {
+        groups
+            .iter()
+            .map(|g| g["spatialIds"].as_array().map_or(0, std::vec::Vec::len))
+            .sum()
+    })
 }
 
 /// 出力に現れた値の集合を返す。
@@ -71,7 +68,7 @@ fn values(result: &serde_json::Value) -> Vec<i64> {
 /// 演算子を挟まない素通しクエリが、格納した値をそのまま返す。
 #[tokio::test]
 async fn query_source_only_returns_stored_values() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table", "Int", 25)
@@ -99,10 +96,10 @@ async fn query_source_only_returns_stored_values() {
     assert_eq!(values(&result), vec![42]);
 }
 
-/// shiftX で値が隣のセルへ移動する（元の位置には現れない）。
+/// shiftX で値が隣の FlexId へ移動する（元の位置には現れない）。
 #[tokio::test]
 async fn query_shift_x_moves_values() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table", "Int", 25)
@@ -146,7 +143,7 @@ async fn query_shift_x_moves_values() {
 /// merge で2つのテーブル（別データベース）を1つのクエリで合成できる。
 #[tokio::test]
 async fn query_merge_across_two_databases() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table", "Int", 25)
@@ -201,10 +198,10 @@ async fn query_merge_across_two_databases() {
 ///
 /// 細かいテーブル(zoom25)のズームレベルで問い合わせても弾かれず（旧実装は最も粗いテーブルに
 /// 合わせていたため、デフォルトの `Error` policy で 400 になっていた）、
-/// 粗いテーブル(zoom20)はその領域を内包するセルの値として正しく寄与する。
+/// 粗いテーブル(zoom20)はその領域を内包する FlexId の値として正しく寄与する。
 #[tokio::test]
 async fn query_uses_finest_table_resolution() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "fine_table", "Int", 25)
@@ -214,7 +211,7 @@ async fn query_uses_finest_table_resolution() {
         .create_table("coarse_db", "coarse_table", "Int", 20)
         .await;
 
-    // 細かいテーブルへ zoom25 のセルへ 10 を置く。
+    // 細かいテーブルへ zoom25 の FlexId へ 10 を置く。
     let fine_id =
         serde_json::json!({ "z": 25, "f": 0, "x": 620000, "y": 500000, "type": "singleId" });
     put_data(
@@ -224,7 +221,7 @@ async fn query_uses_finest_table_resolution() {
     )
     .await;
 
-    // 粗いテーブルへ、その zoom25 セルをちょうど内包する zoom20 の親セル
+    // 粗いテーブルへ、その zoom25 FlexId をちょうど内包する zoom20 の親 FlexId
     // (620000 >> 5 = 19375, 500000 >> 5 = 15625) へ 5 を置く。
     let coarse_id =
         serde_json::json!({ "z": 20, "f": 0, "x": 19375, "y": 15625, "type": "singleId" });
@@ -258,7 +255,7 @@ async fn query_uses_finest_table_resolution() {
     )
     .await;
 
-    // 400 にならず、細かいズームレベルで 10 + (内包する粗いセルの) 5 = 15 が返る。
+    // 400 にならず、細かいズームレベルで 10 + (内包する粗い FlexId の) 5 = 15 が返る。
     assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(values(&result), vec![15]);
 }
@@ -266,7 +263,7 @@ async fn query_uses_finest_table_resolution() {
 /// data_type が異なるテーブルを混在させると 400 で拒否される。
 #[tokio::test]
 async fn query_rejects_mixed_data_types() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "int_table", "Int", 25)
@@ -297,7 +294,7 @@ async fn query_rejects_mixed_data_types() {
 /// 存在しないテーブルを参照すると 404。
 #[tokio::test]
 async fn query_missing_table_returns_404() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     let (status, _) = post_query(

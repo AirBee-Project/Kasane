@@ -5,12 +5,12 @@ use axum::{
 use serde_json::Value;
 use tower::ServiceExt;
 
-use crate::database::table::common::TestApp;
+use crate::common::TestApp;
 
 #[tokio::test]
 /// テーブルの名前を正常に変更できるかを検証する。
 async fn test_update_table_name_success() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     let create_body = serde_json::json!({
@@ -66,7 +66,7 @@ async fn test_update_table_name_success() {
 #[tokio::test]
 /// テーブルの制約を正常に追加できるかを検証する。
 async fn test_update_table_constraints_success() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     let create_body = serde_json::json!({
@@ -111,7 +111,7 @@ async fn test_update_table_constraints_success() {
 #[tokio::test]
 /// 既存のデータが新しい制約に違反する場合、更新が拒否されることを検証する。
 async fn test_update_table_constraints_with_existing_data_violation() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     // 制約なしで作成
@@ -186,7 +186,7 @@ async fn test_update_table_constraints_with_existing_data_violation() {
 #[tokio::test]
 /// 制約の型がテーブルのデータ型と一致しない場合、拒否されることを検証する。
 async fn test_update_table_constraints_type_mismatch() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     let create_body = serde_json::json!({
@@ -223,7 +223,7 @@ async fn test_update_table_constraints_type_mismatch() {
 #[tokio::test]
 /// テーブルのdescription更新が正常に行えるかを検証する。
 async fn test_update_table_description_success() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     let create_body = serde_json::json!({
@@ -333,7 +333,7 @@ async fn test_update_table_description_success() {
 #[tokio::test]
 /// テーブルのdescription更新で4096文字を超える場合にエラーになるかを検証する。
 async fn test_update_table_description_too_long() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     let create_body = serde_json::json!({

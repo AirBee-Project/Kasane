@@ -6,21 +6,25 @@ Kasaneは空間IDとそこに紐づいた値を管理するためのデータベ
 `.env` を置くか、CLI 引数で指定して起動できます。
 
 ```bash
-cargo run -- --database-path default.kasane --port 3000
+cargo run -- --database-path default_kasane_db --port 3000
 ```
 
-`.env` を使う場合は、プロジェクトルートに次のように置きます。
+`--database-path` が何を指すかはビルド時に選ばれたバックエンドによります（LMDB はデータ
+ディレクトリ、TiKV は PD エンドポイントのカンマ区切り）。省略時は `.env` の値が使われます。
 
-```env
-FILE=default.kasane
-PORT=3000
-LOG_MODE=kasane=info,tower_http=info
+`.env` を使う場合は、`.env.example` をコピーしてください。**環境変数の一覧と既定値は
+`.env.example` に集約してあります。**
+
+```bash
+cp .env.example .env
 ```
 
-起動すると、実際に待ち受けている URL と使用中のデータベースファイル名が表示されます。
-ログは `LOG_MODE` で設定できます。未指定の場合は `kasane=info,tower_http=info` が使われます。
+起動すると、実際に待ち受けている URL と接続先が表示されます。
 
-`LOG_MODE` には、`tracing-subscriber` の `EnvFilter` と同じフィルタ式を指定できます。1つの `LOG_MODE` には、カンマ区切りで複数の指示を並べられます。
+## ログ
+
+ログのレベルは `RUST_LOG` で設定します。未指定の場合は `.env.example` に載せてある既定が
+使われます。`tracing-subscriber` の `EnvFilter` と同じフィルタ式を、カンマ区切りで並べられます。
 
 - `debug` のような全体レベル指定
 - `kasane=debug` のような対象別の指定
@@ -32,4 +36,6 @@ LOG_MODE=kasane=info,tower_http=info
 
 指定できるレベルは `error`、`warn`、`info`、`debug`、`trace`、`off` です。
 
-たとえば、全体を詳しく見たい場合は `LOG_MODE=debug`、Kasane だけ詳細にしたい場合は `LOG_MODE=kasane=debug`、HTTP 周りを少し抑えたい場合は `LOG_MODE=kasane=info,tower_http=warn` のように指定できます。
+たとえば、全体を詳しく見たい場合は `RUST_LOG=debug`、Kasane だけ詳細にしたい場合は
+`RUST_LOG=kasane=debug`、HTTP 周りを少し抑えたい場合は `RUST_LOG=kasane=info,tower_http=warn`
+のように指定できます。出力形式は `KASANE_LOG_FORMAT` で `plain` / `json` を選べます。

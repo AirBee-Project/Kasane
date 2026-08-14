@@ -1,87 +1,99 @@
 use crate::{
     AppState,
     error::AppError,
+    middleware::auth::{authorize_path, visible_database},
     models::database::DatabaseInfoResponse,
-    models::users::{Scope, User, UserRole},
+    models::users::{User, UserRole},
+    repositories::{CatalogRepository, ReadRepository, Storage, WriteRepository},
 };
 
-pub async fn info(app_state: &AppState, name: &str) -> Result<DatabaseInfoResponse, AppError> {
-    match app_state.db.read(|r| r.database_info(name))? {
-        Some(info) => Ok(info),
-        None => Err(AppError::DatabaseNotFound {
-            name: name.to_string(),
-        }),
-    }
+/// 認可と取得を 1 回の読み取りにまとめる。本体は 1 度しか引かない。
+#[tracing::instrument(skip_all, fields(db_name = %name))]
+pub async fn info(
+    app_state: &AppState,
+    user: &User,
+    name: &str,
+) -> Result<DatabaseInfoResponse, AppError> {
+    let owned = name.to_string();
+    let user = user.clone();
+    app_state
+        .db
+        .read(async move |r| {
+            let found = r.database_info(&owned).await?;
+            Ok(visible_database(r, &user, &owned, found).await?.1)
+        })
+        .await
 }
 
-/// データベース一覧を取得する。
+/// 配下のどれかに Read 以上で到達できるデータベースだけを返す。
 ///
-/// 配下のどれかに Read 以上で到達できるデータベースだけを返す。テーブル単位の権限しか
-/// 持たないユーザーにも、そのテーブルを含むデータベースは見える（見えないと自分の
-/// テーブルへ辿り着く手段が無くなるため）。
+/// テーブル単位の権限しか持たないユーザーにもそのテーブルを含むデータベースが見えるのは、
+/// 見えないと自分のテーブルへ辿り着く手段が無くなるため。
+///
+/// **絞り込みは権限の側から行う。** 全データベースを列挙してから捨てる形だと、権限を
+/// 1 つも持たない対象の読み取りとフィルタ計算まで払うことになり、データベース数に
+/// 比例して重くなる。全体ロールを持つ利用者だけは全件が対象なので、そちらは列挙する。
+#[tracing::instrument(skip_all)]
 pub async fn list(
     app_state: &AppState,
     user: &User,
 ) -> Result<Vec<DatabaseInfoResponse>, AppError> {
-    app_state.db.read(|r| {
-        Ok(r.database_list()?
-            .into_iter()
-            .filter(|(db_id, _)| user.can(Scope::AnyIn(*db_id), UserRole::Read))
-            .map(|(_, info)| info)
-            .collect())
-    })
+    let user = user.clone();
+    app_state
+        .db
+        .read(async move |r| {
+            if user.has_global_role(UserRole::Read) {
+                return Ok(r
+                    .database_list()
+                    .await?
+                    .into_iter()
+                    .map(|(_, info)| info)
+                    .collect());
+            }
+
+            let db_ids: Vec<_> = r.acl_databases(user.id).await?.into_iter().collect();
+            Ok(r.databases_by_id(&db_ids)
+                .await?
+                .into_iter()
+                .map(|(_, info)| info)
+                .collect())
+        })
+        .await
 }
 
+#[tracing::instrument(skip_all, fields(db_name = %name))]
 pub async fn create(
     app_state: &AppState,
     name: &str,
     description: Option<String>,
 ) -> Result<DatabaseInfoResponse, AppError> {
     crate::services::helpers::name_valid::name_valid(name)?;
-    if let Some(desc) = &description
-        && desc.chars().count() > crate::models::database::MAX_DESCRIPTION_LENGTH
-    {
-        return Err(AppError::InvalidName {
-            reason: format!(
-                "Description cannot exceed {} characters",
-                crate::models::database::MAX_DESCRIPTION_LENGTH
-            ),
-        });
-    }
+    check_description(description.as_deref())?;
 
-    let app_state = app_state.clone();
     let name = name.to_string();
-
-    let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || {
-        span.in_scope(|| {
-            app_state
-                .db
-                .write(|db| db.database_create(&name, description))
-        })
-    })
-    .await
-    .map_err(|e| AppError::InternalError(e.to_string()))?
+    app_state
+        .db
+        .write(async move |w| w.database_create(&name, description.clone()).await)
+        .await
 }
 
-/// データベースを配下のテーブルごと削除する。
-///
-/// 列挙と削除の分割は [`KasaneDbWrite::database_remove`](crate::repositories::KasaneDbWrite)
-/// 側で 1 つの書き込みトランザクションに閉じてある。
+/// 列挙と削除は [`WriteRepository::database_remove`] 側で 1 トランザクションに閉じてある。
+#[tracing::instrument(skip_all, fields(db_name = %name))]
 pub async fn remove(app_state: &AppState, name: &str) -> Result<(), AppError> {
-    let app_state = app_state.clone();
     let name = name.to_string();
-
-    let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || {
-        span.in_scope(|| app_state.db.write(|db| db.database_remove(&name)))
-    })
-    .await
-    .map_err(|e| AppError::InternalError(e.to_string()))?
+    app_state
+        .db
+        .write(async move |w| w.database_remove(&name).await)
+        .await
 }
 
+/// 認可を書き込みトランザクションの中で行う。
+///
+/// 判定した対象と書き換える対象が同じであることが、断面が 1 つであることから従う。
+#[tracing::instrument(skip_all, fields(db_name = %name))]
 pub async fn update(
     app_state: &AppState,
+    user: &User,
     name: &str,
     new_name: Option<String>,
     description: Option<Option<String>>,
@@ -89,51 +101,45 @@ pub async fn update(
     if let Some(new_n) = &new_name {
         crate::services::helpers::name_valid::name_valid(new_n)?;
     }
-    if let Some(Some(desc)) = &description
-        && desc.chars().count() > crate::models::database::MAX_DESCRIPTION_LENGTH
-    {
-        return Err(AppError::InvalidName {
-            reason: format!(
-                "Description cannot exceed {} characters",
-                crate::models::database::MAX_DESCRIPTION_LENGTH
-            ),
-        });
+    if let Some(desc) = &description {
+        check_description(desc.as_deref())?;
     }
 
-    let app_state = app_state.clone();
     let name = name.to_string();
-
-    let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || {
-        span.in_scope(|| {
-            app_state
-                .db
-                .write(|db| db.database_update(&name, new_name, description))
+    let user = user.clone();
+    app_state
+        .db
+        .write(async move |w| {
+            authorize_path(w, &user, &name, None, UserRole::Manage).await?;
+            w.database_update(&name, new_name.clone(), description.clone())
+                .await
         })
-    })
-    .await
-    .map_err(|e| AppError::InternalError(e.to_string()))?
+        .await
 }
 
-/// データベースを複製する。
-///
-/// この操作は `global` スコープの Manage 以上を要求する。そのロールは複製先を含む
-/// すべてのデータベースに届くので、呼び出し元へ個別に権限を付け直す必要はない。
+/// `global` の Manage 以上を要求する。そのロールは複製先にも届くので権限の付け直しは不要。
+#[tracing::instrument(skip_all, fields(db_name = %name, copy_name = %copy_name))]
 pub async fn copy(
     app_state: &AppState,
     name: &str,
     copy_name: &str,
 ) -> Result<DatabaseInfoResponse, AppError> {
-    let app_state = app_state.clone();
     let name = name.to_string();
     let copy_name = copy_name.to_string();
+    app_state
+        .db
+        .write(async move |w| w.database_copy(&name, &copy_name).await)
+        .await
+}
 
-    let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || {
-        span.in_scope(|| app_state.db.write(|db| db.database_copy(&name, &copy_name)))
-    })
-    .await
-    .map_err(|e| AppError::InternalError(e.to_string()))?
+fn check_description(description: Option<&str>) -> Result<(), AppError> {
+    let limit = crate::models::database::MAX_DESCRIPTION_LENGTH;
+    match description {
+        Some(desc) if desc.chars().count() > limit => Err(AppError::InvalidName {
+            reason: format!("Description cannot exceed {limit} characters"),
+        }),
+        _ => Ok(()),
+    }
 }
 
 pub mod table;

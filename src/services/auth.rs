@@ -1,4 +1,4 @@
-use crate::repositories::MetaRead;
+use crate::repositories::{CatalogRepository, Storage};
 use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -9,7 +9,7 @@ use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::AppState;
-use crate::error::{AppError, AuthError};
+use crate::error::{AppError, AuthError, Resource};
 use crate::models::auth::Claims;
 
 /// プロセス全体で共有する JWT 署名鍵。
@@ -72,11 +72,13 @@ pub fn dummy_verify_password(password: &str) {
 
 /// 指定ユーザーの最新メタデータ（UUID・トークン世代）を読み込み、JWT を発行する。
 #[tracing::instrument(skip_all, fields(username = %username))]
-pub fn generate_jwt(app_state: &AppState, username: &str) -> Result<String, AppError> {
+pub async fn generate_jwt(app_state: &AppState, username: &str) -> Result<String, AppError> {
+    let owned = username.to_string();
     let meta = app_state
         .db
-        .read(|repo| repo.user_meta(username))?
-        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+        .read(async move |repo| repo.user_record(&owned).await)
+        .await?
+        .ok_or_else(|| Resource::User.not_found(username))?;
 
     let expiration = SystemTime::now()
         .duration_since(UNIX_EPOCH)

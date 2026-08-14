@@ -1,11 +1,11 @@
-use crate::database::table::common::TestApp;
-use crate::database::table::data::common::{put_data, search_data, to_result_map};
+use crate::common::TestApp;
+use crate::common::data::{put_data, search_data, to_result_map};
 use kasane::models::spatial_id::RawSingleId;
 
 #[tokio::test]
 /// 複数の空間IDを一度に指定してデータを検索・取得できることを検証する。
 async fn test_table_data_get_multiple() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
 
     let table_name = "get_table";
     test_app.create_database("test_db").await;
@@ -71,9 +71,9 @@ use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 #[tokio::test]
-/// RangeIdとFlexIdでのレスポンスフォーマットを検証する。
+/// RangeIdと FlexId でのレスポンスフォーマットを検証する。
 async fn test_table_data_get_format_options() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
 
     let table_name = "get_table_formats";
     test_app.create_database("test_db").await;

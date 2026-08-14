@@ -2,29 +2,24 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use super::entity::{DataRole, UserRole};
-use crate::models::id::{DatabaseId, TableId};
+use crate::models::id::{DataTarget, DatabaseId, TableId};
 
-/// 認可判定の対象。どのルールが効くかはスコープごとに違う。
-#[derive(Debug, Clone, Copy)]
+/// 認可判定の対象。どの ACL 行を読むかはこれで決まり、結果は
+/// [`Grant`](super::Grant) として返る。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
-    /// データベース全体に対する操作（改名・DB 単位の設定変更・新規テーブル作成など）。
-    /// テーブル単位のルールでは満たせない。
+    /// データベース全体に対する操作。テーブル単位の行では満たせない。
     Database(DatabaseId),
     /// 特定のテーブル 1 つに対する操作。
     Table(DatabaseId, TableId),
-    /// データベース配下のどれかにアクセスできれば足りる操作（存在確認・一覧）。
-    /// テーブル単位のルールしか持たないユーザーでも通す。
-    ///
-    /// 「配下のどれか」で足りるのは閲覧のためだけなので、このスコープは
-    /// [`UserRole::Read`] より上を満たすことはない（[`User::can`](crate::models::users::User::can) 参照）。
+    /// 配下のどれかに届けば足りる操作（存在確認・一覧）。
     AnyIn(DatabaseId),
 }
 
 /// API 上の権限ルール表現。
 ///
-/// 保存形式（[`StoredPrivilege`](super::entity::StoredPrivilege)）は UUID ベースだが、
-/// 外部にはデータベース名・テーブル名で見せる。付与時に名前 → ID を解決し、
-/// 存在しない名前は 404 で弾く。
+/// 保存形式（ACL 行）は UUID ベースだが、外部にはデータベース名・テーブル名で見せる。
+/// 付与時に名前 → ID を解決し、存在しない名前は 404 で弾く。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "scope", rename_all = "snake_case")]
 pub enum PrivilegeRule {
@@ -49,6 +44,26 @@ pub enum PrivilegeRule {
     },
 }
 
+impl PrivilegeRule {
+    /// ロールを除いた適用対象。同じ対象への重複指定を検出するのに使う。
+    pub fn target(&self) -> PrivilegeTarget {
+        match self {
+            Self::Global { .. } => PrivilegeTarget::Global,
+            Self::Database { db_name, .. } => PrivilegeTarget::Database {
+                db_name: db_name.clone(),
+            },
+            Self::Table {
+                db_name,
+                table_name,
+                ..
+            } => PrivilegeTarget::Table {
+                db_name: db_name.clone(),
+                table_name: table_name.clone(),
+            },
+        }
+    }
+}
+
 /// 権限の適用対象（ロールを含まない）。
 ///
 /// サブリソースのパスから組み立てる。剥奪はロールを問わず対象ごと落とすので、
@@ -60,13 +75,30 @@ pub enum PrivilegeTarget {
     Table { db_name: String, table_name: String },
 }
 
-impl PrivilegeRule {
-    pub fn role(&self) -> UserRole {
-        match self {
-            PrivilegeRule::Global { role } => *role,
-            PrivilegeRule::Database { role, .. } | PrivilegeRule::Table { role, .. } => {
-                UserRole::from(*role)
-            }
+/// 名前を ID へ解決した [`PrivilegeTarget`]。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum ResolvedTarget {
+    Global,
+    /// ACL 行として保存される対象。
+    Data(DataTarget),
+}
+
+/// 名前を ID へ解決した [`PrivilegeRule`]。
+///
+/// **スコープごとにロールの型が違う。** `global` だけが `admin` を持ちえて、データ面は
+/// [`DataRole`] しか持ちえない。この区別を解決後も型で保つので、保存する直前に
+/// 「`admin` ではないこと」を実行時へ確かめ直す必要が無い。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResolvedPrivilege {
+    Global(UserRole),
+    Data { target: DataTarget, role: DataRole },
+}
+
+impl ResolvedPrivilege {
+    pub fn target(&self) -> ResolvedTarget {
+        match *self {
+            Self::Global(_) => ResolvedTarget::Global,
+            Self::Data { target, .. } => ResolvedTarget::Data(target),
         }
     }
 }

@@ -3,14 +3,14 @@ use axum::http::{Request, StatusCode, header};
 
 use tower::ServiceExt;
 
-use crate::database::table::common::TestApp;
-use crate::database::table::data::common::search_data;
+use crate::common::TestApp;
+use crate::common::data::search_data;
 
 /// Group Commit (WriteBatcher) が正しく複数リクエストを並行処理し、
 /// 空間インデックスが破損せずに全データが保存されるかを検証する。
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_table_data_concurrent_group_commit() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table", "Int", 25)
@@ -98,7 +98,7 @@ async fn test_table_data_concurrent_group_commit() {
 /// そもそもバッチへ投入されず、正常リクエストは全て commit される。
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_invalid_request_does_not_abort_valid_batch() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
     test_app
         .create_table("test_db", "test_table", "Int", 25)

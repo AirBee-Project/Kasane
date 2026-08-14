@@ -1,5 +1,4 @@
 use crate::middleware::auth::AuthUser;
-use crate::models::users::UserRole;
 use crate::{AppState, models::database::table::data::InsertDataRequest};
 use crate::{error::AppError, services::database::table::data::upsert as data_upsert_service};
 use axum::Extension;
@@ -39,16 +38,9 @@ pub async fn data_upsert(
     Path((db_name, table_name)): Path<(String, String)>,
     Json(payload): Json<InsertDataRequest>,
 ) -> Result<StatusCode, AppError> {
-    crate::middleware::auth::check_table(
-        &app_state,
-        &auth_user,
-        &db_name,
-        &table_name,
-        UserRole::Write,
-    )?;
-
     data_upsert_service::upsert(
         &app_state,
+        &auth_user,
         &db_name,
         &table_name,
         &payload.spatial_ids,

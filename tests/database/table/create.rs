@@ -5,12 +5,12 @@ use axum::{
 use serde_json::Value;
 use tower::ServiceExt;
 
-use crate::database::table::common::TestApp;
+use crate::common::TestApp;
 
 #[tokio::test]
 /// テーブルの正常な作成と取得を検証する。
 async fn test_create_table_success() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     let create_body = serde_json::json!({
@@ -55,7 +55,7 @@ async fn test_create_table_success() {
 #[tokio::test]
 /// 同名テーブルの作成が競合エラーとなり、既存のテーブルが保持されることを検証する。
 async fn test_create_table_conflict() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     test_app
@@ -100,7 +100,7 @@ async fn test_create_table_conflict() {
 #[tokio::test]
 /// max_zoom_level がシステム上限(30)を超える場合は 400 で拒否され、テーブルは作成されない。
 async fn test_create_table_max_zoom_level_too_large() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     let create_body = serde_json::json!({
@@ -132,7 +132,7 @@ async fn test_create_table_max_zoom_level_too_large() {
 #[tokio::test]
 /// max_zoom_level の境界値 30（システム上限）は許可される。
 async fn test_create_table_max_zoom_level_boundary_ok() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     let create_body = serde_json::json!({
@@ -155,7 +155,7 @@ async fn test_create_table_max_zoom_level_boundary_ok() {
 #[tokio::test]
 /// ENUM型のテーブル作成時に、選択肢の文字列長さが制限(最大255文字、空文字禁止)に従っているか検証する。
 async fn test_create_table_enum_choice_length_limits() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     // 1. 256文字の選択肢（エラーになるべき）
@@ -225,7 +225,7 @@ async fn test_create_table_enum_choice_length_limits() {
 #[tokio::test]
 /// テーブルのdescription付与が正常に行えるかを検証する。
 async fn test_create_table_description() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     let create_body = serde_json::json!({
@@ -263,7 +263,7 @@ async fn test_create_table_description() {
 #[tokio::test]
 /// テーブルのdescriptionが4096文字を超える場合にエラーになるかを検証する。
 async fn test_create_table_description_too_long() {
-    let test_app = TestApp::new();
+    let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
     let long_desc = "a".repeat(kasane::models::database::MAX_DESCRIPTION_LENGTH + 1);

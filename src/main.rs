@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use clap::Parser;
-use kasane::{AppState, db_init, kasane};
+use kasane::{AppState, backend, kasane};
 
 #[cfg(feature = "production")]
 #[global_allocator]
@@ -10,15 +10,13 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
 struct Args {
-    #[arg(long, default_value_t = default_database_path())]
+    /// ストレージの接続先。何を指すかはビルド時に選ばれたバックエンドによる
+    /// （LMDB はデータディレクトリ、TiKV は PD エンドポイントのカンマ区切り）。
+    #[arg(long, default_value_t = backend::default_target())]
     database_path: String,
 
     #[arg(long, default_value_t = default_port())]
     port: u16,
-}
-
-fn default_database_path() -> String {
-    std::env::var("DATABASE_DIR").unwrap_or_else(|_| "default_kasane_db".to_string())
 }
 
 fn default_port() -> u16 {
@@ -63,15 +61,20 @@ async fn main() {
     kasane::telemetry::init_telemetry();
 
     let args = Args::parse();
-    let db = db_init::initialize_database(&args.database_path);
 
-    let app = kasane(AppState { db });
+    // バックエンドはビルド時に 1 つへ確定している（kasane::backend を参照）。
+    let db = backend::open(&args.database_path)
+        .await
+        .expect("failed to open the storage backend");
+
+    let app = kasane(AppState::new(db));
 
     let address = SocketAddr::from(([0, 0, 0, 0], args.port));
     let listener = tokio::net::TcpListener::bind(address).await.unwrap();
     tracing::info!(
-        "Kasane is running on http://{} (database: {})",
+        "Kasane is running on http://{} (backend: {}, target: {})",
         listener.local_addr().unwrap(),
+        backend::NAME,
         args.database_path,
     );
     axum::serve(listener, app)
