@@ -120,6 +120,7 @@ impl Storage for AppDb {
         Ok(std::sync::Arc::new(std::sync::Mutex::new(txn)))
     }
 
+    #[tracing::instrument(skip_all)]
     async fn read<T, F>(&self, f: F) -> Result<T, AppError>
     where
         F: for<'a, 'b> AsyncFnOnce(&'a Self::Read<'b>) -> Result<T, AppError> + Send + 'static,
@@ -129,15 +130,19 @@ impl Storage for AppDb {
         let handle = tokio::runtime::Handle::current();
         // blocking タスクは呼び出し元のスパンを引き継がないので、明示的に渡す。
         let span = tracing::Span::current();
-        tokio::task::spawn_blocking(move || {
+        let start = std::time::Instant::now();
+        let result = tokio::task::spawn_blocking(move || {
             let _guard = span.enter();
             let r = KasaneDbRead::new(db.env.read_txn()?, &db);
             handle.block_on(f(&r))
         })
         .await
-        .map_err(|e| AppError::InternalError(e.to_string()))?
+        .map_err(|e| AppError::InternalError(e.to_string()))?;
+        crate::telemetry::metrics::read_transaction(start.elapsed().as_secs_f64());
+        result
     }
 
+    #[tracing::instrument(skip_all)]
     async fn write<T, F>(&self, f: F) -> Result<T, AppError>
     where
         F: for<'a, 'b> AsyncFnOnce(&'a mut Self::Write<'b>) -> Result<T, AppError>
@@ -149,7 +154,8 @@ impl Storage for AppDb {
         let db = self.clone();
         let handle = tokio::runtime::Handle::current();
         let span = tracing::Span::current();
-        tokio::task::spawn_blocking(move || {
+        let start = std::time::Instant::now();
+        let result = tokio::task::spawn_blocking(move || {
             let _guard = span.enter();
             let mut w = KasaneDbWrite::new(db.env.write_txn()?, &db);
             // 単一ライタなので競合でのやり直しは起きない。エラー時は drop で abort される。
@@ -158,6 +164,13 @@ impl Storage for AppDb {
             Ok(out)
         })
         .await
-        .map_err(|e| AppError::InternalError(e.to_string()))?
+        .map_err(|e| AppError::InternalError(e.to_string()))?;
+
+        crate::telemetry::metrics::write_transaction(start.elapsed().as_secs_f64());
+        crate::telemetry::metrics::write_attempt(match &result {
+            Ok(_) => crate::telemetry::metrics::WriteOutcome::Committed,
+            Err(_) => crate::telemetry::metrics::WriteOutcome::Failed,
+        });
+        result
     }
 }
