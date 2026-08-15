@@ -11,6 +11,15 @@ use crate::{
     services::query::value::Value,
 };
 
+/// 格納 1 件あたりの許容バイト数の上限。
+///
+/// 1 つの値は挿入対象の空間 ID 1 件につき 1 回複製されて葉へ書かれるので、上限を設けないと
+/// 空間的にまとまった ID 群への一括挿入だけで、葉のバイト数上限
+/// （[`crate::repositories::encoding::shard_entry::MAX_SHARD_BYTES`]）をたった 1 件の値で
+/// 超えうる。件数 1 の葉は幾何分割してもバイト数が縮まらないため、ここでの上限がその
+/// 前提（件数 1 の葉は必ず上限内に収まる）を保証している。
+pub const MAX_STORED_VALUE_BYTES: usize = 256 * 1024;
+
 /// JSON の値を、テーブルのデータ型に基づいて解釈し、格納バイト列へ変換する（制約検証込み）。
 pub fn interpret_value(
     expected_type: TableDataType,
@@ -23,7 +32,17 @@ pub fn interpret_value(
     ) -> Result<Vec<u8>, AppError> {
         V::from_json(value)?.encode(constraints)
     }
-    for_value_type!(expected_type, imp, &value, constraints)
+    let encoded = for_value_type!(expected_type, imp, &value, constraints)?;
+    if encoded.len() > MAX_STORED_VALUE_BYTES {
+        return Err(AppError::ConstraintViolation {
+            reason: format!(
+                "encoded value is {} bytes, which exceeds the maximum of {} bytes",
+                encoded.len(),
+                MAX_STORED_VALUE_BYTES
+            ),
+        });
+    }
+    Ok(encoded)
 }
 
 /// 格納バイト列を、テーブルのデータ型に基づいて JSON 値へ復元する。

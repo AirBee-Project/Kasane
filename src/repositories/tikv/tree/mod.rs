@@ -17,7 +17,7 @@ use crate::error::{AppError, Stored};
 use crate::models::database::table::TableDataType;
 use crate::models::id::TableId;
 use crate::repositories::encoding::shard_entry::{
-    MAX_FLEX_ID_PER_SHARD, MERGE_FLEX_ID_THRESHOLD, ShardEntry,
+    MAX_SHARD_BYTES, MERGE_FLEX_ID_THRESHOLD, ShardEntry, shard_needs_split,
 };
 use crate::repositories::encoding::value_index;
 

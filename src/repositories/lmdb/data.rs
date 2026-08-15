@@ -9,7 +9,7 @@ use crate::models::database::table::TableDataType;
 use crate::models::id::TableId;
 use crate::repositories::ValueGroups;
 use crate::repositories::encoding::shard_entry::{
-    MAX_FLEX_ID_PER_SHARD, MERGE_FLEX_ID_THRESHOLD, ShardEntry,
+    MAX_SHARD_BYTES, MERGE_FLEX_ID_THRESHOLD, ShardEntry, shard_needs_split,
 };
 use crate::repositories::encoding::value_index;
 
@@ -379,7 +379,10 @@ impl<'a> KasaneDbWrite<'a> {
             shard::find_parent_pointer(&self.db.tables_data, &self.write_txn, table_id, &region)?
         {
             // 子のいずれかがポインタノードなら、このレベルは統合しない。
+            // バイト数も見るのは、件数は少なくても値が大きい葉同士を統合して
+            // MAX_SHARD_BYTES 超の葉を作ってしまわないため。
             let mut combined = 0usize;
+            let mut combined_bytes = 0usize;
             let mut mergeable = true;
             for cr in &child_regions {
                 // 空領域のキーはそもそも存在しない。
@@ -390,7 +393,8 @@ impl<'a> KasaneDbWrite<'a> {
                 match ShardEntry::leaf_count(bytes)? {
                     Some(count) => {
                         combined += count as usize;
-                        if combined > MERGE_FLEX_ID_THRESHOLD {
+                        combined_bytes += bytes.len();
+                        if combined > MERGE_FLEX_ID_THRESHOLD || combined_bytes > MAX_SHARD_BYTES {
                             mergeable = false;
                             break;
                         }
@@ -555,12 +559,17 @@ impl<'a> KasaneDbWrite<'a> {
     ) -> Result<(), AppError> {
         let key = (table_id, region);
 
-        if !map.should_split_shard(MAX_FLEX_ID_PER_SHARD) {
-            if map.is_empty() {
-                self.db.tables_data.delete(&mut self.write_txn, &key)?;
-            } else {
-                self.put_leaf(table_id, &region, &map)?;
-            }
+        if map.is_empty() {
+            self.db.tables_data.delete(&mut self.write_txn, &key)?;
+            return Ok(());
+        }
+
+        let bytes = map
+            .to_bytes()
+            .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
+
+        if !shard_needs_split(map.count(), bytes.len()) {
+            self.put_leaf_bytes(table_id, &region, map.count() as u32, &bytes)?;
             return Ok(());
         }
 
@@ -606,8 +615,11 @@ impl<'a> KasaneDbWrite<'a> {
             out.push(cr);
             return Ok(());
         }
-        if !cm.should_split_shard(MAX_FLEX_ID_PER_SHARD) {
-            self.put_leaf(table_id, &cr, &cm)?;
+        let bytes = cm
+            .to_bytes()
+            .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
+        if !shard_needs_split(cm.count(), bytes.len()) {
+            self.put_leaf_bytes(table_id, &cr, cm.count() as u32, &bytes)?;
             out.push(cr);
             return Ok(());
         }
@@ -643,10 +655,21 @@ impl<'a> KasaneDbWrite<'a> {
         let bytes = map
             .to_bytes()
             .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
+        self.put_leaf_bytes(table_id, region, map.count() as u32, &bytes)
+    }
+
+    /// 呼び出し元で分割要否の判定用に既に直列化済みのバイト列を、二重に直列化せず保存する。
+    fn put_leaf_bytes(
+        &mut self,
+        table_id: TableId,
+        region: &FlexId,
+        count: u32,
+        bytes: &[u8],
+    ) -> Result<(), AppError> {
         self.db.tables_data.put(
             &mut self.write_txn,
             &(table_id, *region),
-            &ShardEntry::encode_leaf(map.count() as u32, &bytes),
+            &ShardEntry::encode_leaf(count, bytes),
         )?;
         Ok(())
     }

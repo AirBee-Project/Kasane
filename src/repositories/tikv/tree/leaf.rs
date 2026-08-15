@@ -10,7 +10,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use super::node::decode_leaf;
 use super::routing::RoutedLeaf;
 use super::{
-    AppError, MAX_FLEX_ID_PER_SHARD, ShardEntry, ShardValue, TableDataType, TableId, keys, kv,
+    AppError, ShardEntry, ShardValue, TableDataType, TableId, keys, kv, shard_needs_split,
     value_index,
 };
 
@@ -128,19 +128,24 @@ pub(super) fn apply_leaf(
     store_shard(table_id, leaf.region, map, out)
 }
 
-/// 変更後のリーフを保存する。過大なら分割し、空なら削除する。
+/// 変更後のリーフを保存する。過大（件数またはバイト数）なら分割し、空なら削除する。
 fn store_shard(
     table_id: TableId,
     region: FlexId,
     map: SpatialIdMap<Vec<u8>>,
     out: &mut Vec<kv::Mutation>,
 ) -> Result<(), AppError> {
-    if !map.should_split_shard(MAX_FLEX_ID_PER_SHARD) {
-        if map.is_empty() {
-            out.extend(kv::shard_deletions(table_id, &region));
-        } else {
-            put_leaf(table_id, &region, &map, out)?;
-        }
+    if map.is_empty() {
+        out.extend(kv::shard_deletions(table_id, &region));
+        return Ok(());
+    }
+
+    let bytes = map
+        .to_bytes()
+        .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
+
+    if !shard_needs_split(map.count(), bytes.len()) {
+        put_leaf_bytes(table_id, &region, map.count() as u32, &bytes, out)?;
         return Ok(());
     }
 
@@ -175,8 +180,11 @@ fn emit_child(
         covers.push(cr);
         return Ok(());
     }
-    if !cm.should_split_shard(MAX_FLEX_ID_PER_SHARD) {
-        put_leaf(table_id, &cr, &cm, out)?;
+    let bytes = cm
+        .to_bytes()
+        .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
+    if !shard_needs_split(cm.count(), bytes.len()) {
+        put_leaf_bytes(table_id, &cr, cm.count() as u32, &bytes, out)?;
         covers.push(cr);
         return Ok(());
     }
@@ -214,10 +222,21 @@ fn put_leaf(
     let bytes = map
         .to_bytes()
         .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
+    put_leaf_bytes(table_id, region, map.count() as u32, &bytes, out)
+}
+
+/// 呼び出し元で分割要否の判定用に既に直列化済みのバイト列を、二重に直列化せず保存する。
+fn put_leaf_bytes(
+    table_id: TableId,
+    region: &FlexId,
+    count: u32,
+    bytes: &[u8],
+    out: &mut Vec<kv::Mutation>,
+) -> Result<(), AppError> {
     out.extend(kv::shard_mutations(
         table_id,
         region,
-        &ShardEntry::encode_leaf(map.count() as u32, &bytes),
+        &ShardEntry::encode_leaf(count, bytes),
     )?);
     Ok(())
 }
