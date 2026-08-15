@@ -163,6 +163,7 @@ impl KasaneDbRead<'_> {
 }
 
 impl KasaneDbWrite<'_> {
+    #[tracing::instrument(skip_all, fields(username = %username))]
     pub(super) fn put_user_record_impl(
         &mut self,
         username: &str,
@@ -176,11 +177,13 @@ impl KasaneDbWrite<'_> {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(username = %username))]
     pub(super) fn remove_user_record_impl(&mut self, username: &str) -> Result<(), AppError> {
         self.db.users.delete(&mut self.write_txn, username)?;
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(principal = %principal))]
     pub(super) fn acl_put_impl(
         &mut self,
         entry: AclEntry,
@@ -196,6 +199,7 @@ impl KasaneDbWrite<'_> {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(principal = %principal))]
     pub(super) fn acl_remove_impl(
         &mut self,
         principal: PrincipalId,
@@ -211,6 +215,7 @@ impl KasaneDbWrite<'_> {
     ///
     /// 逆引きがデータベース前置なので、`target` がデータベースを指すときは
     /// **データベーススコープの行と配下テーブルの行が同じ 1 プレフィックスに入る**。
+    #[tracing::instrument(skip_all, fields(db_id = %db_id, table_id = ?table_id))]
     pub(super) fn acl_remove_object_impl(
         &mut self,
         db_id: DatabaseId,
@@ -225,6 +230,7 @@ impl KasaneDbWrite<'_> {
         self.delete_acl_rows(&victims)
     }
 
+    #[tracing::instrument(skip_all, fields(principal = %principal))]
     pub(super) fn acl_remove_principal_impl(
         &mut self,
         principal: PrincipalId,

@@ -672,6 +672,7 @@ impl<'a> KasaneDbWrite<'a> {
         Ok(table)
     }
 
+    #[tracing::instrument(skip_all, fields(table_id = %table_id))]
     fn validate_table_existing_data(
         &self,
         table_id: crate::models::id::TableId,

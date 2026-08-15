@@ -123,6 +123,7 @@ pub(super) async fn table_entries<R: Reader>(
 ///
 /// 逆引きで名前を得てから本体を引くので 2 段になるが、どちらの段も 1 回の
 /// `batch_get` に束ねられる（往復は**件数によらず 2 回**）。
+#[tracing::instrument(skip_all, fields(ids = ids.len()))]
 pub(super) async fn databases_by_id<R: Reader>(
     txn: &Readers<R>,
     ids: &[DatabaseId],
@@ -159,6 +160,7 @@ pub(super) async fn databases_by_id<R: Reader>(
 }
 
 /// このデータベース配下の、指定した ID のテーブルだけ。配下全件は舐めない。
+#[tracing::instrument(skip_all, fields(db_id = %db_id, ids = ids.len()))]
 pub(super) async fn tables_by_id<R: Reader>(
     txn: &Readers<R>,
     db_id: DatabaseId,
@@ -189,6 +191,7 @@ pub(super) async fn tables_by_id<R: Reader>(
     Ok(out)
 }
 
+#[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub(super) async fn table_info<R: Reader>(
     txn: &Readers<R>,
     db_name: &str,
@@ -207,6 +210,7 @@ pub(super) async fn table_info<R: Reader>(
 
 /// 往復は**参照数によらず 2 回**。データベース名の解決なしにテーブルキーを組み立てられない
 /// ので段は分かれるが、同じ段の中では 1 回の `batch_get` に束ねられる。
+#[tracing::instrument(skip_all, fields(refs = refs.len()))]
 pub(super) async fn resolve_tables<R: Reader>(
     txn: &Readers<R>,
     refs: &[(String, String)],
@@ -271,6 +275,7 @@ pub(super) async fn resolve_tables<R: Reader>(
         .collect())
 }
 
+#[tracing::instrument(skip_all, fields(db_name = %name))]
 pub(super) async fn database_info<R: Reader>(
     txn: &Readers<R>,
     name: &str,
@@ -286,6 +291,7 @@ pub(super) async fn database_info<R: Reader>(
     }))
 }
 
+#[tracing::instrument(skip_all, fields(db_id = %db_id))]
 pub(super) async fn table_list_by_id<R: Reader>(
     txn: &Readers<R>,
     db_id: DatabaseId,

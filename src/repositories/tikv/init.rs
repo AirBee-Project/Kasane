@@ -153,6 +153,7 @@ impl TikvDb {
         Ok(db)
     }
 
+    #[tracing::instrument(skip_all)]
     async fn ensure_initialized(&self) -> Result<(), AppError> {
         // 版の確認は他のどの読み書きより先に行う。読み方が違うまま触ると壊れる。
         let (version, initialized) = self
@@ -223,6 +224,7 @@ impl<R: Reader> TikvRead<'_, R> {
 }
 
 impl TikvWrite<'_> {
+    #[tracing::instrument(skip_all, fields(username = %username))]
     async fn initialize_cluster(
         &mut self,
         username: &str,

@@ -163,6 +163,7 @@ impl TikvWrite<'_> {
             .map_err(AppError::from)
     }
 
+    #[tracing::instrument(skip_all, fields(username = %username))]
     pub(super) async fn put_user_record_impl(
         &mut self,
         username: &str,
@@ -177,11 +178,13 @@ impl TikvWrite<'_> {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(username = %username))]
     pub(super) async fn remove_user_record_impl(&mut self, username: &str) -> Result<(), AppError> {
         kv::delete(&self.txn, keys::user(username)).await;
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(principal = %principal))]
     pub(super) async fn acl_put_impl(
         &mut self,
         entry: AclEntry,
@@ -199,6 +202,7 @@ impl TikvWrite<'_> {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(principal = %principal))]
     pub(super) async fn acl_remove_impl(
         &mut self,
         principal: PrincipalId,
@@ -214,6 +218,7 @@ impl TikvWrite<'_> {
     ///
     /// 逆引きがデータベース前置なので、`table_id` が `None` のときは
     /// **データベーススコープの行と配下テーブルの行が同じ 1 プレフィックスに入る**。
+    #[tracing::instrument(skip_all, fields(db_id = %db_id, table_id = ?table_id))]
     pub(super) async fn acl_remove_object_impl(
         &mut self,
         db_id: DatabaseId,
@@ -233,6 +238,7 @@ impl TikvWrite<'_> {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(principal = %principal))]
     pub(super) async fn acl_remove_principal_impl(
         &mut self,
         principal: PrincipalId,
