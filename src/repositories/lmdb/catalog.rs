@@ -592,7 +592,6 @@ impl<'a> KasaneDbWrite<'a> {
         new_name: Option<&str>,
         new_constraints: Option<Option<crate::models::database::table::UpdateTableConstraints>>,
         description: Option<Option<String>>,
-        validate_existing_data: bool,
     ) -> Result<Table, AppError> {
         let db_meta = {
             let db = self.db.databases;
@@ -636,13 +635,11 @@ impl<'a> KasaneDbWrite<'a> {
 
             table.constraints = new_c;
 
-            if validate_existing_data {
-                self.validate_table_existing_data(
-                    table.id,
-                    table.data_type,
-                    table.constraints.as_ref(),
-                )?;
-            }
+            self.validate_table_existing_data(
+                table.id,
+                table.data_type,
+                table.constraints.as_ref(),
+            )?;
         }
 
         if let Some(desc) = description {

@@ -236,16 +236,8 @@ impl WriteRepository for KasaneDbWrite<'_> {
         new_name: Option<&str>,
         new_constraints: Option<Option<UpdateTableConstraints>>,
         description: Option<Option<String>>,
-        validate_existing_data: bool,
     ) -> Result<Table, AppError> {
-        self.table_update_impl(
-            db_name,
-            table_name,
-            new_name,
-            new_constraints,
-            description,
-            validate_existing_data,
-        )
+        self.table_update_impl(db_name, table_name, new_name, new_constraints, description)
     }
 
     async fn table_remove(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError> {

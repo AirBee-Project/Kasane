@@ -66,7 +66,6 @@ pub trait WriteRepository: CatalogRepository {
         new_name: Option<&str>,
         new_constraints: Option<Option<UpdateTableConstraints>>,
         description: Option<Option<String>>,
-        validate_existing_data: bool,
     ) -> Result<Table, AppError>;
 
     async fn table_remove(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError>;
