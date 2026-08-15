@@ -56,13 +56,22 @@ pub fn create_router(app_state: AppState) -> Router {
     let mut router = Router::new()
         .merge(auth_router)
         .merge(protected_router)
-        .merge(openapi::routes());
+        .merge(openapi::routes())
+        // `route_layer` なので、実際にどれかのルートへ一致したリクエストだけが通る
+        // （`MatchedPath` を使うのはそのため。ヘルスチェックの取りこぼしなどは
+        // 一致しないので計測に乗らない）。ビルド／環境を問わず常に張る:
+        // 本番以外では `telemetry::metrics::*` が無コストな no-op になるだけなので、
+        // 「本番だけ計測される」という分岐を運用側に持たせない。
+        .route_layer(middleware::from_fn(crate::middleware::metrics::record));
 
     // OpenTelemetryが有効な場合のみミドルウェアを追加する
     #[cfg(feature = "production")]
     if std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").is_ok() {
-        router =
-            router.route_layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default());
+        router = router
+            .route_layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default())
+            // スパンが作られる**前**に `url.scheme` を補いたいので、この層のさらに外側
+            // （後から `route_layer` した層ほど外側 = 先に実行される）に置く。
+            .route_layer(middleware::from_fn(crate::middleware::scheme::normalize));
     }
 
     router.with_state(app_state)

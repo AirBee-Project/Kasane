@@ -26,25 +26,20 @@ fn default_port() -> u16 {
         .unwrap_or(5172)
 }
 
-#[cfg(feature = "production")]
-struct TracerShutdownGuard(Option<opentelemetry_sdk::trace::SdkTracerProvider>);
+/// 落ちるときに必ずテレメトリを送り切るための番人。
+///
+/// バッチ処理は溜めてから送るので、ここを通さないと最後のリクエストが丸ごと消える。
+struct TelemetryGuard(kasane::telemetry::Providers);
 
-#[cfg(feature = "production")]
-impl Drop for TracerShutdownGuard {
+impl Drop for TelemetryGuard {
     fn drop(&mut self) {
-        let Some(provider) = self.0.take() else {
-            return;
-        };
-
-        let result = match tokio::runtime::Handle::try_current() {
+        // マルチスレッドランタイムの中から同期的に flush するとワーカーを塞ぐので、
+        // ブロッキング可能な文脈へ移してから待つ。
+        match tokio::runtime::Handle::try_current() {
             Ok(handle) if handle.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread => {
-                tokio::task::block_in_place(|| provider.shutdown())
+                tokio::task::block_in_place(|| self.0.shutdown());
             }
-            _ => provider.shutdown(),
-        };
-
-        if let Err(e) = result {
-            eprintln!("Failed to shutdown TracerProvider: {:?}", e);
+            _ => self.0.shutdown(),
         }
     }
 }
@@ -55,10 +50,7 @@ async fn main() {
     dotenvy::dotenv().ok();
 
     // ログおよびテレメトリの初期化
-    #[cfg(feature = "production")]
-    let _tracer_provider = TracerShutdownGuard(kasane::telemetry::init_telemetry());
-    #[cfg(not(feature = "production"))]
-    kasane::telemetry::init_telemetry();
+    let _telemetry = TelemetryGuard(kasane::telemetry::init_telemetry());
 
     let args = Args::parse();
 
@@ -70,17 +62,26 @@ async fn main() {
     let app = kasane(AppState::new(db));
 
     let address = SocketAddr::from(([0, 0, 0, 0], args.port));
-    let listener = tokio::net::TcpListener::bind(address).await.unwrap();
+    let listener = match tokio::net::TcpListener::bind(address).await {
+        Ok(listener) => listener,
+        // ポート衝突は運用で普通に起きる。バックトレース付きの panic ではなく理由を出す。
+        Err(e) => {
+            tracing::error!("cannot listen on {address}: {e}");
+            std::process::exit(1);
+        }
+    };
     tracing::info!(
         "Kasane is running on http://{} (backend: {}, target: {})",
-        listener.local_addr().unwrap(),
+        address,
         backend::NAME,
         args.database_path,
     );
-    axum::serve(listener, app)
+    if let Err(e) = axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await
-        .unwrap();
+    {
+        tracing::error!("the HTTP server stopped with an error: {e}");
+    }
 }
 
 async fn shutdown_signal() {

@@ -349,11 +349,19 @@ impl Storage for TikvDb {
         T: Send + 'static,
     {
         // ロックを取らないので、書き込みをブロックせず書き込みにもブロックされない。
+        let start = std::time::Instant::now();
         let ts = self.client.current_timestamp().await?;
         let r = TikvRead::at(self.client.clone(), ts);
-        f(&r).await
+        let result = f(&r).await;
+        crate::telemetry::metrics::read_transaction(start.elapsed().as_secs_f64());
+        result
     }
 
+    /// リトライは競合が前提の制御フローなので、試行ごとにスパンは張らない
+    /// （張ると輻輳時に大量の子スパンが生まれる）。代わりに [`WriteOutcome`]
+    /// 別の計器へ数える。全体の所要時間はリトライぶんも含めて 1 回だけ記録する。
+    ///
+    /// [`WriteOutcome`]: crate::telemetry::metrics::WriteOutcome
     #[tracing::instrument(skip_all)]
     async fn write<T, F>(&self, f: F) -> Result<T, AppError>
     where
@@ -363,6 +371,30 @@ impl Storage for TikvDb {
             + 'static,
         T: Send + 'static,
     {
+        use crate::telemetry::metrics::{WriteOutcome, write_attempt};
+        let start = std::time::Instant::now();
+        let outcome = self.write_retrying(f).await;
+        crate::telemetry::metrics::write_transaction(start.elapsed().as_secs_f64());
+        write_attempt(if outcome.is_ok() {
+            WriteOutcome::Committed
+        } else {
+            WriteOutcome::Failed
+        });
+        outcome
+    }
+}
+
+impl TikvDb {
+    async fn write_retrying<T, F>(&self, f: F) -> Result<T, AppError>
+    where
+        F: for<'a, 'b> AsyncFnOnce(&'a mut TikvWrite<'b>) -> Result<T, AppError>
+            + Clone
+            + Send
+            + 'static,
+        T: Send + 'static,
+    {
+        use crate::telemetry::metrics::{WriteOutcome, write_attempt};
+
         let mut locks: BTreeSet<Vec<u8>> = BTreeSet::new();
         // 数えるのは競合だけ。ロック不足での巻き戻しは相手を待っているわけではない。
         let mut retry = Retry::default();
@@ -418,11 +450,14 @@ impl Storage for TikvDb {
                 locks.extend(newly_required);
                 // 古い読みが原因のときだけ待つ。ロック不足なら次の周回は必ず前進する。
                 if was_stale {
+                    write_attempt(WriteOutcome::Stale);
                     let reason = AppError::Conflict(
                         "read a stale view of the shard tree; retrying with a newer snapshot"
                             .to_string(),
                     );
                     retry.back_off(reason).await;
+                } else {
+                    write_attempt(WriteOutcome::LockDeclared);
                 }
                 continue;
             }
@@ -431,6 +466,7 @@ impl Storage for TikvDb {
                 rollback(txn).await;
                 LockGuard::release(guard).await;
                 if is_retryable(&e) {
+                    write_attempt(WriteOutcome::Conflict);
                     retry.back_off(AppError::from(e)).await;
                     continue;
                 }
@@ -448,6 +484,7 @@ impl Storage for TikvDb {
                     LockGuard::release(guard).await;
                     if conflicted {
                         // 競合で弾かれただけなので、新しいトランザクションでやり直す。
+                        write_attempt(WriteOutcome::Conflict);
                         retry.back_off(app_err).await;
                         continue;
                     }
@@ -467,6 +504,7 @@ impl Storage for TikvDb {
                     continue;
                 }
                 Err(e) if is_retryable(&e) => {
+                    write_attempt(WriteOutcome::Conflict);
                     retry.back_off(AppError::from(e)).await;
                     continue;
                 }

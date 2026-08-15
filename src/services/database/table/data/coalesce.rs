@@ -190,6 +190,7 @@ fn spawn_worker(
             let (entries, replies): (Vec<_>, Vec<_>) =
                 batch.into_iter().map(|s| (s.entry, s.reply)).unzip();
             let batched = entries.len();
+            crate::telemetry::metrics::write_batch(batched);
 
             // `Storage::write` はやり直しのためにクロージャごと複製するので、手放しておく。
             let result = db

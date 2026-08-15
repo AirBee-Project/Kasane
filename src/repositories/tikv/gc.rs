@@ -151,6 +151,7 @@ impl TikvDb {
     ///
     /// **自前で回す必要がある。** TiDB を伴う構成ではその GC worker が safepoint を進めるが、
     /// **TiKV を直接使う構成では誰も進めない**ので、放っておくと全バージョンが永久に残る。
+    #[tracing::instrument(skip_all)]
     async fn advance_gc_safepoint(&self, retention: Duration) -> Result<(), AppError> {
         use tikv_client::TimestampExt;
 
@@ -221,7 +222,10 @@ impl TikvDb {
                 tokio::time::sleep(config.interval).await;
                 match db.sweep_retired_tables(&config).await {
                     Ok(0) => {}
-                    Ok(n) => tracing::info!("reclaimed {n} key(s) from retired tables"),
+                    Ok(n) => {
+                        crate::telemetry::metrics::gc_reclaimed(n);
+                        tracing::info!("reclaimed {n} key(s) from retired tables");
+                    }
                     Err(e) => tracing::warn!("failed to reclaim retired tables: {e}"),
                 }
             }
