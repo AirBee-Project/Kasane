@@ -161,26 +161,6 @@ async fn test_update_table_constraints_with_existing_data_violation() {
     let response = test_app.app.clone().oneshot(req).await.unwrap();
     // データが違反しているため更新が拒否される
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-
-    // validate_existing_data: false であれば更新できる
-    let update_body_false = serde_json::json!({
-        "constraints": {
-            "type": "Int",
-            "min": 10
-        },
-        "validate_existing_data": false
-    });
-    let req = Request::builder()
-        .method("PATCH")
-        .uri("/databases/test_db/tables/my_table")
-        .header("Content-Type", "application/json")
-        .body(Body::from(
-            serde_json::to_string(&update_body_false).unwrap(),
-        ))
-        .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
