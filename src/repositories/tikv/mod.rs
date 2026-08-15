@@ -587,7 +587,7 @@ mod tests {
             Error::ResolveLockError(Vec::new()),
         ])));
 
-        let expired = Error::KeyError(Box::new(tikv_client::proto::kvrpcpb::KeyError {
+        let expired = Error::KeyError(Box::new(tikv_client::ProtoKeyError {
             commit_ts_expired: Some(Default::default()),
             ..Default::default()
         }));
@@ -595,7 +595,7 @@ mod tests {
             is_retryable(&expired),
             "TTL 切れ（commit_ts_expired）がやり直し対象から漏れている"
         );
-        let vanished = Error::KeyError(Box::new(tikv_client::proto::kvrpcpb::KeyError {
+        let vanished = Error::KeyError(Box::new(tikv_client::ProtoKeyError {
             txn_not_found: Some(Default::default()),
             ..Default::default()
         }));
@@ -605,7 +605,7 @@ mod tests {
         );
 
         // 競合でも寿命切れでもない `KeyError` は拾わない（無限にやり直さないため）。
-        let other = Error::KeyError(Box::new(tikv_client::proto::kvrpcpb::KeyError {
+        let other = Error::KeyError(Box::new(tikv_client::ProtoKeyError {
             already_exist: Some(Default::default()),
             ..Default::default()
         }));
