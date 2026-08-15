@@ -25,7 +25,7 @@ argon2 = "0.5.3"
 jsonwebtoken = { version = "10.4.0", features = ["rust_crypto"] }
 rand_core = { version = "0.6.4", features = ["getrandom"] }
 heed = { version = "0.22.1", optional = true }
-tikv-client = { version = "0.3", optional = true }
+tikv-client = { version = "0.4", optional = true }
 # TiKV に保存するシャード値の完全性検証（src/repositories/tikv/kv.rs）。
 crc32fast = { version = "1", optional = true }
 rayon = "1.12"

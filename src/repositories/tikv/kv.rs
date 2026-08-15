@@ -7,8 +7,7 @@ use std::sync::Arc;
 
 use kasane_logic::FlexId;
 use rustc_hash::FxHashSet;
-pub(super) use tikv_client::proto::kvrpcpb::Mutation;
-use tikv_client::proto::kvrpcpb::{Assertion, Op};
+pub(super) use tikv_client::transaction::Mutation;
 use tikv_client::{BoundRange, Snapshot, Timestamp, Transaction, TransactionClient};
 use tokio::sync::{Mutex, MutexGuard};
 
@@ -221,8 +220,14 @@ impl LazyTxn {
 
     fn stage(&mut self, mutations: impl IntoIterator<Item = Mutation>) {
         for m in mutations {
-            let value = (m.op != Op::Del as i32).then_some(m.value);
-            self.pending.insert(m.key, value);
+            match m {
+                Mutation::Put(key, value) => {
+                    self.pending.insert(key.into(), Some(value));
+                }
+                Mutation::Delete(key) => {
+                    self.pending.insert(key.into(), None);
+                }
+            }
         }
     }
 
@@ -408,21 +413,11 @@ pub(super) async fn delete_many(txn: &Readers<LazyTxn>, keys: impl IntoIterator<
 }
 
 pub(super) fn put_mutation(key: Vec<u8>, value: Vec<u8>) -> Mutation {
-    Mutation {
-        op: Op::Put as i32,
-        key,
-        value,
-        assertion: Assertion::None as i32,
-    }
+    Mutation::Put(key.into(), value)
 }
 
 pub(super) fn delete_mutation(key: Vec<u8>) -> Mutation {
-    Mutation {
-        op: Op::Del as i32,
-        key,
-        value: Vec::new(),
-        assertion: Assertion::None as i32,
-    }
+    Mutation::Delete(key.into())
 }
 
 /// 存在しないキーは結果に現れない。
