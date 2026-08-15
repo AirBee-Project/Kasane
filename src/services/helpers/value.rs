@@ -21,6 +21,14 @@ use crate::{
 pub const MAX_STORED_VALUE_BYTES: usize = 256 * 1024;
 
 /// JSON の値を、テーブルのデータ型に基づいて解釈し、格納バイト列へ変換する（制約検証込み）。
+///
+/// **サイズ上限（[`MAX_STORED_VALUE_BYTES`]）はここでは検証しない。** この関数はテーブルの
+/// 制約変更時の既存データ再検証（`validate_existing_data`）からも呼ばれる。上限は「これから
+/// 新しく書き込む値」に対する保存エンジン側の安全装置であり、テーブルが宣言する制約とは別物
+/// なので、ここに混ぜると「上限を設ける前から格納されていた値」を持つテーブルで、サイズと
+/// 無関係な制約変更（例えば Int の min/max だけの変更）まで失敗するようになってしまう。
+/// 新規書き込み経路（`services::database::table::data::insert` / `upsert`）は、この関数の
+/// 直後に必ず [`enforce_max_stored_size`] を呼ぶこと。
 pub fn interpret_value(
     expected_type: TableDataType,
     constraints: Option<&TableConstraints>,
@@ -32,7 +40,13 @@ pub fn interpret_value(
     ) -> Result<Vec<u8>, AppError> {
         V::from_json(value)?.encode(constraints)
     }
-    let encoded = for_value_type!(expected_type, imp, &value, constraints)?;
+    for_value_type!(expected_type, imp, &value, constraints)
+}
+
+/// 新規に書き込む値のバイト数が [`MAX_STORED_VALUE_BYTES`] を超えていないか検証する。
+///
+/// [`interpret_value`] とは別関数にしてある理由はそちらのドキュメントを参照。
+pub fn enforce_max_stored_size(encoded: &[u8]) -> Result<(), AppError> {
     if encoded.len() > MAX_STORED_VALUE_BYTES {
         return Err(AppError::ConstraintViolation {
             reason: format!(
@@ -42,7 +56,7 @@ pub fn interpret_value(
             ),
         });
     }
-    Ok(encoded)
+    Ok(())
 }
 
 /// 格納バイト列を、テーブルのデータ型に基づいて JSON 値へ復元する。

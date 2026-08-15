@@ -84,7 +84,12 @@ fn shard_splits_on_byte_size_even_with_few_entries() {
     for (got_value, flex_ids) in got {
         for flex_id in flex_ids {
             for sid in flex_id.single_ids() {
-                assert_eq!(got_value, value_for(sid.x()), "value mismatch at x={}", sid.x());
+                assert_eq!(
+                    got_value,
+                    value_for(sid.x()),
+                    "value mismatch at x={}",
+                    sid.x()
+                );
                 xs.insert(sid.x());
             }
         }

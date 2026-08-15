@@ -5,7 +5,9 @@ use crate::{
     models::{database::table::data::ZoomLevelPolicy, spatial_id::SpatialId},
     repositories::{Storage, WriteRepository},
     services::helpers::{
-        authorize::authorized_table, spatial_ids::process_spatial_ids, value::interpret_value,
+        authorize::authorized_table,
+        spatial_ids::process_spatial_ids,
+        value::{enforce_max_stored_size, interpret_value},
     },
 };
 
@@ -24,6 +26,7 @@ pub async fn upsert(
 
     // 失敗し得るユーザ入力検証はバッチ投入前に済ませる（insert と同様）。
     let value = interpret_value(table.data_type, table.constraints.as_ref(), value)?;
+    enforce_max_stored_size(&value)?;
     let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
 
     app_state

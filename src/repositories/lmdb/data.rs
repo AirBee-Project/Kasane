@@ -9,7 +9,7 @@ use crate::models::database::table::TableDataType;
 use crate::models::id::TableId;
 use crate::repositories::ValueGroups;
 use crate::repositories::encoding::shard_entry::{
-    MAX_SHARD_BYTES, MERGE_FLEX_ID_THRESHOLD, ShardEntry, shard_needs_split,
+    MAX_FLEX_ID_PER_SHARD, MAX_SHARD_BYTES, MERGE_FLEX_ID_THRESHOLD, ShardEntry, shard_needs_split,
 };
 use crate::repositories::encoding::value_index;
 
@@ -564,13 +564,15 @@ impl<'a> KasaneDbWrite<'a> {
             return Ok(());
         }
 
-        let bytes = map
-            .to_bytes()
-            .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
-
-        if !shard_needs_split(map.count(), bytes.len()) {
-            self.put_leaf_bytes(table_id, &region, map.count() as u32, &bytes)?;
-            return Ok(());
+        let count = map.count();
+        if count <= MAX_FLEX_ID_PER_SHARD {
+            let bytes = map
+                .to_bytes()
+                .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
+            if !shard_needs_split(count, bytes.len()) {
+                self.put_leaf_bytes(table_id, &region, count as u32, &bytes)?;
+                return Ok(());
+            }
         }
 
         // 分割が必要 → パス圧縮した被覆子領域を構築し、親をポインタノードにする。
@@ -615,13 +617,16 @@ impl<'a> KasaneDbWrite<'a> {
             out.push(cr);
             return Ok(());
         }
-        let bytes = cm
-            .to_bytes()
-            .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
-        if !shard_needs_split(cm.count(), bytes.len()) {
-            self.put_leaf_bytes(table_id, &cr, cm.count() as u32, &bytes)?;
-            out.push(cr);
-            return Ok(());
+        let count = cm.count();
+        if count <= MAX_FLEX_ID_PER_SHARD {
+            let bytes = cm
+                .to_bytes()
+                .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
+            if !shard_needs_split(count, bytes.len()) {
+                self.put_leaf_bytes(table_id, &cr, count as u32, &bytes)?;
+                out.push(cr);
+                return Ok(());
+            }
         }
         // 1 段だけ覗いて、退化分割か実分割かを決める。
         let ((clo_r, clo), (chi_r, chi)) = cm

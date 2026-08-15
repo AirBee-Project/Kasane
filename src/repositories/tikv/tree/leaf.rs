@@ -10,8 +10,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use super::node::decode_leaf;
 use super::routing::RoutedLeaf;
 use super::{
-    AppError, ShardEntry, ShardValue, TableDataType, TableId, keys, kv, shard_needs_split,
-    value_index,
+    AppError, MAX_FLEX_ID_PER_SHARD, ShardEntry, ShardValue, TableDataType, TableId, keys, kv,
+    shard_needs_split, value_index,
 };
 
 /// 値を借用ではなく所有で持つのは、この操作ごと blocking タスクへ move するため。
@@ -129,6 +129,10 @@ pub(super) fn apply_leaf(
 }
 
 /// 変更後のリーフを保存する。過大（件数またはバイト数）なら分割し、空なら削除する。
+///
+/// 件数だけで分割が確定する（従来からの、大半を占める）場合は直列化しない。バイト数を見る
+/// ために毎回 `to_bytes` してから捨てるのは、この関数がロックを持ったまま呼ばれる分だけ
+/// 無駄が大きい。
 fn store_shard(
     table_id: TableId,
     region: FlexId,
@@ -140,13 +144,15 @@ fn store_shard(
         return Ok(());
     }
 
-    let bytes = map
-        .to_bytes()
-        .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
-
-    if !shard_needs_split(map.count(), bytes.len()) {
-        put_leaf_bytes(table_id, &region, map.count() as u32, &bytes, out)?;
-        return Ok(());
+    let count = map.count();
+    if count <= MAX_FLEX_ID_PER_SHARD {
+        let bytes = map
+            .to_bytes()
+            .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
+        if !shard_needs_split(count, bytes.len()) {
+            put_leaf_bytes(table_id, &region, count as u32, &bytes, out)?;
+            return Ok(());
+        }
     }
 
     // 子へ他者が到達する経路は無い（親をポインタノードにするのがこの処理自身）。
@@ -180,13 +186,16 @@ fn emit_child(
         covers.push(cr);
         return Ok(());
     }
-    let bytes = cm
-        .to_bytes()
-        .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
-    if !shard_needs_split(cm.count(), bytes.len()) {
-        put_leaf_bytes(table_id, &cr, cm.count() as u32, &bytes, out)?;
-        covers.push(cr);
-        return Ok(());
+    let count = cm.count();
+    if count <= MAX_FLEX_ID_PER_SHARD {
+        let bytes = cm
+            .to_bytes()
+            .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
+        if !shard_needs_split(count, bytes.len()) {
+            put_leaf_bytes(table_id, &cr, count as u32, &bytes, out)?;
+            covers.push(cr);
+            return Ok(());
+        }
     }
 
     // 1 段だけ覗いて、退化分割か実分割かを決める。
