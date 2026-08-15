@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 
 use heed::BytesDecode;
+use kasane_logic::FlexId;
 use uuid::Uuid;
 
 use crate::error::{AppError, Resource, Stored};
@@ -844,7 +845,13 @@ impl<'a> KasaneDbWrite<'a> {
         let mut data_to_insert = Vec::new();
         for iter in tables_data.prefix_iter(&self.write_txn, src_prefix.as_slice())? {
             let (k_bytes, v_bytes) = iter?;
-            if k_bytes.len() == 30 {
+            // シャード本体のキーは `table_id(16) ‖ FlexId` の固定長。ルーティングノードも
+            // リーフも同じ長さなので、これで両方拾える（`ShardEntry` 側のタグで区別する）。
+            //
+            // 以前は `FlexId::ENCODED_LEN` を 14 決め打ちしていたため、`temporal_id`
+            // feature（23 バイト）を有効にしたビルドでは 1 件も一致せず、コピーが常に
+            // 空になっていた。
+            if k_bytes.len() == 16 + FlexId::ENCODED_LEN {
                 let mut dest_k_bytes = k_bytes.to_vec();
                 dest_k_bytes[0..16].copy_from_slice(&copy_table_id.into_bytes());
                 data_to_insert.push((dest_k_bytes, v_bytes.to_vec()));

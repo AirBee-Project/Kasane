@@ -44,6 +44,10 @@ default = ["backend-lmdb"]
 backend-lmdb = ["dep:heed"]
 backend-tikv = ["dep:tikv-client", "dep:crc32fast"]
 
+# DB互換性フィクスチャ（tests/gen_db_compat_fixture.rs）を手動生成するときだけ立てる。
+# 通常のテスト実行（CI 含む）では立てないので、生成器は自動では走らない。
+gen-fixtures = []
+
 production = [
     "axum-tracing-opentelemetry",
     "opentelemetry",
