@@ -17,7 +17,6 @@ pub async fn table_update(
     new_name: Option<&str>,
     new_constraints: Option<Option<crate::models::database::table::UpdateTableConstraints>>,
     description: Option<Option<String>>,
-    validate_existing_data: bool,
 ) -> Result<TableSummary, AppError> {
     if let Some(Some(desc)) = &description
         && desc.chars().count() > crate::models::database::MAX_DESCRIPTION_LENGTH
@@ -46,7 +45,6 @@ pub async fn table_update(
                 new_name.as_deref(),
                 new_constraints.clone(),
                 description.clone(),
-                validate_existing_data,
             )
             .await
         })

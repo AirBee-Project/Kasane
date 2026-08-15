@@ -594,7 +594,6 @@ impl TikvWrite<'_> {
         new_name: Option<&str>,
         new_constraints: Option<Option<UpdateTableConstraints>>,
         description: Option<Option<String>>,
-        validate_existing_data: bool,
     ) -> Result<Table, AppError> {
         // 改名はテーブル集合の変更なので排他する（既存データ検証のほうは排他しない）。
         self.require_lock(LockScope::Database, db_name.as_bytes())?;
@@ -633,10 +632,8 @@ impl TikvWrite<'_> {
             }
             table.constraints = new_c;
 
-            if validate_existing_data {
-                self.validate_existing_data(table.id, table.data_type, table.constraints.as_ref())
-                    .await?;
-            }
+            self.validate_existing_data(table.id, table.data_type, table.constraints.as_ref())
+                .await?;
         }
 
         if let Some(desc) = description {

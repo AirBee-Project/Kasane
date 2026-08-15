@@ -26,10 +26,6 @@ pub struct CreateTableRequest {
     pub value_index: bool,
 }
 
-fn default_validate_existing_data() -> bool {
-    true
-}
-
 // 書き込みクロージャはやり直しで複数回呼ばれうるので、`Clone` が要る。
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 #[serde(tag = "type")]
@@ -68,13 +64,7 @@ pub struct UpdateTableRequest {
     #[serde(default, deserialize_with = "crate::models::helpers::double_option")]
     #[schema(value_type = Option<UpdateTableConstraints>, example = json!({"type": "Int", "min": 0, "max": 100}))]
     pub constraints: Option<Option<UpdateTableConstraints>>,
-    /// 既存データが新しい制約を満たしているか検証するかどうか。
-    ///
-    /// - `true` (デフォルト): 既存データが新しい制約に違反している場合、更新を却下してエラー (400) を返します。
-    /// - `false`: 既存データの走査をスキップして即座に変更を適用します。高速に変更できますが、制約に適合しない不整合なデータが残るリスクがあります。
-    #[serde(default = "default_validate_existing_data")]
-    #[schema(example = true, default = true)]
-    pub validate_existing_data: bool,
+
     #[serde(default, deserialize_with = "crate::models::helpers::double_option")]
     #[schema(value_type = Option<String>, example = "更新されたテーブルの説明文です")]
     pub description: Option<Option<String>>,
