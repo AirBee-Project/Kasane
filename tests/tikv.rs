@@ -962,3 +962,45 @@ async fn acl_driven_listing_behaves_as_specified() {
     let db = connect().await;
     acl_suite::run_listing(&db, &uuid::Uuid::now_v7().simple().to_string()).await;
 }
+
+#[path = "shared/db_compat.rs"]
+mod db_compat;
+
+/// **現行スキーマ版で書かれた生バイト列が、今のコードでも記録どおりに読めること。**
+///
+/// LMDB 側の `db_compat_lmdb` と違い、ここでは「版が違うフィクスチャを注入して
+/// `SchemaVersionMismatch` を確かめる」検証はしない。TiKV の版マーカー
+/// （`cluster_initialized` / `schema_version`）はクラスタ全体で 1 つしかなく、この
+/// バイナリの全テストが 1 クラスタを共有しているため、それを書き換えると他の並行
+/// テストの前提まで壊れてしまう。版チェックの分岐そのもの（形は LMDB 側と同じ）は
+/// `db_compat_lmdb` が確認しているので、ここでは現行版のデータ往復だけを見る。
+#[tokio::test]
+async fn current_schema_fixture_stays_readable() {
+    let fixtures = db_compat::load_all_fixtures("tikv");
+    let Some(fixture) = fixtures
+        .into_iter()
+        .find(|f| f.schema_version == kasane::repositories::SCHEMA_VERSION)
+    else {
+        eprintln!(
+            "tests/fixtures/db_compat/tikv/v{}/fixture.json が無いのでスキップする。\
+             gen_db_compat_fixture で生成してコミットすること",
+            kasane::repositories::SCHEMA_VERSION
+        );
+        return;
+    };
+
+    let config = kasane::repositories::tikv::TikvConfig::from_env();
+    let raw = tikv_client::TransactionClient::new(config.pd_endpoints.clone())
+        .await
+        .expect("cannot open a raw client to TiKV");
+    db_compat::load_tikv(&raw, &fixture.entries).await;
+
+    let db = connect().await;
+    let actual = db_compat::read_actual(&db).await;
+    assert_eq!(
+        actual, fixture.expected,
+        "v{} のフィクスチャを読んだ結果が記録と食い違っている。意図した変更なら \
+         SCHEMA_VERSION を上げること",
+        fixture.schema_version
+    );
+}
