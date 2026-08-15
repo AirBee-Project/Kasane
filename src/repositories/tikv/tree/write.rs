@@ -9,7 +9,8 @@ use super::leaf::{BatchWrite, LeafOp, apply_leaf, merge_children};
 use super::node::archived_leaf;
 use super::routing::{ParentMap, RoutedLeaf, Routing, route_leaves_batched};
 use super::{
-    AppError, MERGE_FLEX_ID_THRESHOLD, ShardEntry, TableDataType, TableId, TikvWrite, keys, kv,
+    AppError, MAX_SHARD_BYTES, MERGE_FLEX_ID_THRESHOLD, ShardEntry, TableDataType, TableId,
+    TikvWrite, keys, kv,
 };
 
 impl TikvWrite<'_> {
@@ -185,7 +186,11 @@ impl TikvWrite<'_> {
             };
 
             // 子のいずれかがポインタノードなら、このレベルは統合しない。
+            // バイト数も見るのは、件数は少なくても値が大きい葉同士を統合して
+            // MAX_SHARD_BYTES 超の葉を作ってしまわないため（バイト数は既にロックで
+            // 手元にある `entry()` の長さで取れるので、新たな読み出しは要らない）。
             let mut combined = 0usize;
+            let mut combined_bytes = 0usize;
             let mut mergeable = true;
             for cr in &child_regions {
                 // 空領域のキーはそもそも存在しない。
@@ -195,7 +200,8 @@ impl TikvWrite<'_> {
                 match ShardEntry::leaf_count(value.entry())? {
                     Some(count) => {
                         combined += count as usize;
-                        if combined > MERGE_FLEX_ID_THRESHOLD {
+                        combined_bytes += value.entry().len();
+                        if combined > MERGE_FLEX_ID_THRESHOLD || combined_bytes > MAX_SHARD_BYTES {
                             mergeable = false;
                             break;
                         }

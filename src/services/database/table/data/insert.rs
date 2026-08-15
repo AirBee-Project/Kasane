@@ -4,7 +4,9 @@ use crate::{
     models::users::{User, UserRole},
     models::{database::table::data::ZoomLevelPolicy, spatial_id::SpatialId},
     services::helpers::{
-        authorize::authorized_table, spatial_ids::process_spatial_ids, value::interpret_value,
+        authorize::authorized_table,
+        spatial_ids::process_spatial_ids,
+        value::{enforce_max_stored_size, interpret_value},
     },
 };
 
@@ -24,6 +26,7 @@ pub async fn insert(
 
     // 不正リクエストが同一バッチ内の正常なリクエストを巻き添えにしないため。
     let value = interpret_value(table.data_type, table.constraints.as_ref(), value)?;
+    enforce_max_stored_size(&value)?;
     let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
 
     // 1 件ずつ別トランザクションで書くと、同じリーフを何度も書き直しロックを奪い合う。

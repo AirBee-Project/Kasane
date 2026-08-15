@@ -23,6 +23,14 @@ pub(super) const DEFAULT_PD_ENDPOINTS: &str = "127.0.0.1:2379";
 /// 20 秒なので、その近辺まで伸ばして詰まりの検出は HTTP/2 の keep-alive に任せる。
 const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 30;
 
+/// tikv-client 既定の 4MiB はシャード側の上限（[`MAX_SHARD_BYTES`]）を意識したものではない。
+/// 内部のバッチ分割で 1 RPC あたりのバイト量は既に `SHARD_BATCH_BYTE_BUDGET` 前後に
+/// 収めているが、gRPC 側の受信上限はそれとは独立な多重防御として、余裕を持たせた値へ
+/// 引き上げておく。
+///
+/// [`MAX_SHARD_BYTES`]: crate::repositories::encoding::shard_entry::MAX_SHARD_BYTES
+const DEFAULT_GRPC_MAX_DECODING_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
+
 /// TiKV への接続設定。
 #[derive(Debug, Clone)]
 pub struct TikvConfig {
@@ -30,6 +38,8 @@ pub struct TikvConfig {
     pub security: Option<TikvSecurity>,
     /// 既定は `DEFAULT_REQUEST_TIMEOUT_SECS`。
     pub request_timeout: std::time::Duration,
+    /// 既定は `DEFAULT_GRPC_MAX_DECODING_MESSAGE_SIZE`。
+    pub grpc_max_decoding_message_size: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +68,10 @@ impl TikvConfig {
             pd_endpoints,
             security: TikvSecurity::from_env(),
             request_timeout: request_timeout_from_env(),
+            grpc_max_decoding_message_size: env_parsed(
+                "KASANE_TIKV_GRPC_MAX_DECODING_MESSAGE_SIZE",
+                DEFAULT_GRPC_MAX_DECODING_MESSAGE_SIZE,
+            ),
         }
     }
 }
@@ -123,7 +137,9 @@ impl TikvSecurity {
 impl TikvDb {
     #[tracing::instrument(skip_all, fields(pd_endpoints = ?config.pd_endpoints))]
     pub async fn connect(config: TikvConfig) -> Result<Self, AppError> {
-        let mut client_config = Config::default().with_timeout(config.request_timeout);
+        let mut client_config = Config::default()
+            .with_timeout(config.request_timeout)
+            .with_grpc_max_decoding_message_size(config.grpc_max_decoding_message_size);
         match &config.security {
             Some(sec) => {
                 client_config = client_config.with_security(

@@ -840,3 +840,38 @@ async fn test_table_data_insert_presence_failure() {
     let response = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+/// 格納バイト数の上限（`MAX_STORED_VALUE_BYTES`）を超える値の挿入が拒否されることを検証する。
+///
+/// 1 つの値は挿入対象の空間 ID ごとに複製されて葉へ書かれるので、上限が無いと 1 回の挿入
+/// だけでシャードのバイト数上限を超えうる（詳細は
+/// `kasane::services::helpers::value::MAX_STORED_VALUE_BYTES` のコメントを参照）。
+async fn test_table_data_insert_value_exceeds_max_size() {
+    let test_app = TestApp::new().await;
+    test_app.create_database("test_db").await;
+    test_app
+        .create_table("test_db", "text_table", "Text", 25)
+        .await;
+
+    let single_id_query =
+        serde_json::json!([{ "z": 20, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
+
+    // MAX_STORED_VALUE_BYTES (256 KiB) を超える文字列。
+    let oversized_value = "a".repeat(257 * 1024);
+
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/databases/test_db/tables/text_table/data")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            serde_json::to_string(
+                &serde_json::json!({ "value": oversized_value, "spatial_ids": single_id_query }),
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}

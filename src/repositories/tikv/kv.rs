@@ -14,7 +14,7 @@ use tokio::sync::{Mutex, MutexGuard};
 use super::keys;
 use crate::error::{AppError, Stored};
 use crate::models::id::TableId;
-use crate::repositories::encoding::shard_entry::ShardEntry;
+use crate::repositories::encoding::shard_entry::{MAX_SHARD_BYTES, ShardEntry};
 
 /// 1 回のスキャンで取り出す件数。TiKV は 1 リクエストの上限があるため分割して読む。
 const SCAN_BATCH: u32 = 512;
@@ -23,7 +23,18 @@ const SCAN_BATCH: u32 = 512;
 ///
 /// 同じテーブルのシャードキーは 1 リージョンに集まりやすく、そのまま渡すと gRPC の
 /// メッセージサイズ上限に触れる。分割してもキーの昇順は保たれる。
+///
+/// カタログ・ACL など小さな値専用。シャード値は [`SHARD_BATCH_KEYS`] を使う。
 const BATCH_KEYS: usize = 1024;
+
+/// シャード値専用の 1 リクエストあたり件数上限。
+///
+/// シャードの葉は 1 件で最大 [`MAX_SHARD_BYTES`] ある。[`BATCH_KEYS`] のまま使うと
+/// 1 RPC が数百 MB に膨らみ、gRPC のメッセージサイズ上限（受信側でも設定される）に
+/// 触れうる。1 RPC あたりのバイト量を [`SHARD_BATCH_BYTE_BUDGET`] 以下に抑える件数へ
+/// 落とす。
+const SHARD_BATCH_BYTE_BUDGET: usize = 4 * 1024 * 1024;
+const SHARD_BATCH_KEYS: usize = SHARD_BATCH_BYTE_BUDGET / MAX_SHARD_BYTES;
 
 /// 1 チャンクが既にリージョン単位で内部並行化されているので、ここを大きくしても
 /// 増えるのは同時に飛ぶリクエスト数と手元に載る応答の量だけ。
@@ -269,8 +280,10 @@ impl LazyTxn {
         // キーは昇順で渡ってくる。分割しても順序は保たれる。
         let mut locked: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
         let all_keys = keys.clone();
+        // 常にシャードキーだけを受け取る（唯一の呼び出し元は `lock_shards`）ので、
+        // カタログ用の `BATCH_KEYS` ではなく `SHARD_BATCH_KEYS` で刻む。
         while !keys.is_empty() {
-            let rest = keys.split_off(keys.len().min(BATCH_KEYS));
+            let rest = keys.split_off(keys.len().min(SHARD_BATCH_KEYS));
             let result = self.open().await?.batch_get_for_update(keys).await;
             let pairs = result.map_err(|e| self.note(e))?;
             locked.extend(pairs.into_iter().map(|kv| (Vec::from(kv.0), kv.1)));
@@ -427,25 +440,45 @@ pub(super) async fn batch_get<R: Reader>(
     txn: &Readers<R>,
     keys: Vec<Vec<u8>>,
 ) -> Result<Vec<(Vec<u8>, Vec<u8>)>, AppError> {
+    batch_get_chunked(txn, keys, BATCH_KEYS).await
+}
+
+/// シャード値専用。値が大きいので [`SHARD_BATCH_KEYS`] でより細かく刻む。
+pub(super) async fn batch_get_shards<R: Reader>(
+    txn: &Readers<R>,
+    keys: Vec<Vec<u8>>,
+) -> Result<Vec<(Vec<u8>, ShardValue)>, AppError> {
+    batch_get_chunked(txn, keys, SHARD_BATCH_KEYS)
+        .await?
+        .into_iter()
+        .map(|(key, framed)| Ok((key, ShardValue::try_from(framed)?)))
+        .collect()
+}
+
+async fn batch_get_chunked<R: Reader>(
+    txn: &Readers<R>,
+    keys: Vec<Vec<u8>>,
+    chunk_size: usize,
+) -> Result<Vec<(Vec<u8>, Vec<u8>)>, AppError> {
     if keys.is_empty() {
         return Ok(Vec::new());
     }
-    if keys.len() > BATCH_KEYS
+    if keys.len() > chunk_size
         && let Some(fanout) = &txn.fanout
     {
-        return batch_get_fanned_out(fanout, keys).await;
+        return batch_get_fanned_out(fanout, keys, chunk_size).await;
     }
 
     let mut txn = txn.lock().await;
     // 収まる場合はそのまま渡す（`chunks(..).to_vec()` だとキー列を丸ごと複製する）。
-    if keys.len() <= BATCH_KEYS {
+    if keys.len() <= chunk_size {
         return txn.read_many(keys).await.map_err(AppError::from);
     }
 
     let mut rest = keys;
     let mut out = Vec::new();
     while !rest.is_empty() {
-        let tail = rest.split_off(rest.len().min(BATCH_KEYS));
+        let tail = rest.split_off(rest.len().min(chunk_size));
         out.extend(txn.read_many(rest).await?);
         rest = tail;
     }
@@ -460,10 +493,11 @@ pub(super) async fn batch_get<R: Reader>(
 async fn batch_get_fanned_out(
     fanout: &Fanout,
     keys: Vec<Vec<u8>>,
+    chunk_size: usize,
 ) -> Result<Vec<(Vec<u8>, Vec<u8>)>, AppError> {
     type ChunkResult = Result<Vec<(Vec<u8>, Vec<u8>)>, tikv_client::Error>;
 
-    let mut chunks = keys.chunks(BATCH_KEYS).map(<[Vec<u8>]>::to_vec);
+    let mut chunks = keys.chunks(chunk_size).map(<[Vec<u8>]>::to_vec);
     let mut running: tokio::task::JoinSet<ChunkResult> = tokio::task::JoinSet::new();
     let mut out = Vec::new();
     let mut failure: Option<AppError> = None;
@@ -515,9 +549,10 @@ fn range_from(start: Vec<u8>, end: Option<&[u8]>) -> BoundRange {
 
 /// 読み切ったなら `None`、続きがあるなら次のバッチの開始位置。
 ///
-/// **判定は生の取得件数で行う。** 未送信の変更を重ねるのは読み切ったあと。
-fn next_cursor(last_key: &[u8], fetched: usize) -> Option<Vec<u8>> {
-    if fetched < SCAN_BATCH as usize {
+/// **判定は生の取得件数で行う。** 未送信の変更を重ねるのは読み切ったあと。`batch` は
+/// そのスキャンで実際に指定した 1 リクエストあたりの上限（呼び出し元ごとに異なる）。
+fn next_cursor(last_key: &[u8], fetched: usize, batch: usize) -> Option<Vec<u8>> {
+    if fetched < batch {
         return None;
     }
     let mut cursor = last_key.to_vec();
@@ -530,19 +565,30 @@ pub(super) async fn scan_prefix<R: Reader>(
     txn: &Readers<R>,
     prefix: &[u8],
 ) -> Result<Vec<(Vec<u8>, Vec<u8>)>, AppError> {
+    scan_prefix_with_batch(txn, prefix, SCAN_BATCH).await
+}
+
+/// `batch` はシャード値なら [`SHARD_BATCH_KEYS`]、それ以外は [`SCAN_BATCH`]。
+async fn scan_prefix_with_batch<R: Reader>(
+    txn: &Readers<R>,
+    prefix: &[u8],
+    batch: u32,
+) -> Result<Vec<(Vec<u8>, Vec<u8>)>, AppError> {
     let end = keys::prefix_end(prefix);
     let mut cursor = Some(prefix.to_vec());
     let mut out: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
 
     while let Some(start) = cursor {
-        let batch = {
+        let fetched_batch = {
             let mut txn = txn.lock().await;
-            txn.read_range(range_from(start, end.as_deref()), SCAN_BATCH)
+            txn.read_range(range_from(start, end.as_deref()), batch)
                 .await?
         };
-        let fetched = batch.len();
-        out.extend(batch);
-        cursor = out.last().and_then(|(key, _)| next_cursor(key, fetched));
+        let fetched = fetched_batch.len();
+        out.extend(fetched_batch);
+        cursor = out
+            .last()
+            .and_then(|(key, _)| next_cursor(key, fetched, batch as usize));
     }
 
     let staged = txn.lock().await.staged_range(prefix, end.as_deref());
@@ -577,7 +623,9 @@ pub(super) async fn scan_keys_range<R: Reader>(
         };
         let fetched = batch.len();
         out.extend(batch);
-        cursor = out.last().and_then(|key| next_cursor(key, fetched));
+        cursor = out
+            .last()
+            .and_then(|key| next_cursor(key, fetched, SCAN_BATCH as usize));
     }
 
     let staged = txn.lock().await.staged_range(&start, end.as_deref());
@@ -852,22 +900,11 @@ pub(super) async fn table_flex_id_count<R: Reader>(
     Ok(total)
 }
 
-pub(super) async fn batch_get_shards<R: Reader>(
-    txn: &Readers<R>,
-    keys: Vec<Vec<u8>>,
-) -> Result<Vec<(Vec<u8>, ShardValue)>, AppError> {
-    batch_get(txn, keys)
-        .await?
-        .into_iter()
-        .map(|(key, framed)| Ok((key, ShardValue::try_from(framed)?)))
-        .collect()
-}
-
 pub(super) async fn scan_shard_prefix<R: Reader>(
     txn: &Readers<R>,
     prefix: &[u8],
 ) -> Result<Vec<(Vec<u8>, ShardValue)>, AppError> {
-    scan_prefix(txn, prefix)
+    scan_prefix_with_batch(txn, prefix, SHARD_BATCH_KEYS as u32)
         .await?
         .into_iter()
         .map(|(key, framed)| Ok((key, ShardValue::try_from(framed)?)))

@@ -16,6 +16,21 @@ pub const MAX_FLEX_ID_PER_SHARD: usize = 256;
 /// 兄弟シャードの合算件数がこの値以下になったら 1 つへ統合する。
 pub const MERGE_FLEX_ID_THRESHOLD: usize = MAX_FLEX_ID_PER_SHARD / 2;
 
+/// 1 シャードが保持できるバイト数の上限。件数が [`MAX_FLEX_ID_PER_SHARD`] 以下でも、値が
+/// 大きければこちらで分割する。
+///
+/// 1 件あたりの値は [`crate::services::helpers::value::MAX_STORED_VALUE_BYTES`] で頭打ちにして
+/// あるので、件数 1 の葉がこの上限を超えることは無い（[`shard_needs_split`] の `count > 1` は
+/// その前提を保険として残しているだけ）。
+pub const MAX_SHARD_BYTES: usize = 512 * 1024;
+
+/// 葉を分割すべきか。件数・バイト数のどちらかが上限を超えたら分割する。
+///
+/// 件数 1 の葉は幾何分割しても縮まらないので対象から外す（分割不能な巨大値での無限再帰を防ぐ）。
+pub fn shard_needs_split(entry_count: usize, encoded_len: usize) -> bool {
+    entry_count > 1 && (entry_count > MAX_FLEX_ID_PER_SHARD || encoded_len > MAX_SHARD_BYTES)
+}
+
 const TAG_LEAF: u8 = 0;
 const TAG_POINTERS: u8 = 1;
 
