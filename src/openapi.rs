@@ -20,11 +20,7 @@ use crate::models::users::{
     UserSummary,
 };
 
-/// `bearer_auth` セキュリティスキーム（JWT Bearer）を OpenAPI コンポーネントに登録する。
-///
-/// 各エンドポイントの `security(("bearer_auth" = []))` 宣言はこのスキーム定義を
-/// 参照するため、これが無いと仕様が不完全になり Swagger UI の Authorize も
-/// 機能しない。
+/// JWT Bearerを OpenAPI コンポーネントに登録する
 struct SecurityAddon;
 
 impl utoipa::Modify for SecurityAddon {
@@ -44,7 +40,7 @@ impl utoipa::Modify for SecurityAddon {
     }
 }
 
-/// 権限モデルの説明。
+/// 権限の説明
 const PRIVILEGE_LEGEND: &str = r#"
 ## 権限について
 `スコープ` / `ロール` の形式で表します。
@@ -84,7 +80,7 @@ const PRIVILEGE_LEGEND: &str = r#"
         crate::handlers::database::table::remove::remove_table,
         crate::handlers::database::table::update::table_update_handler,
         crate::handlers::database::table::copy::table_copy,
-        // Data: …/data → …/data/search
+        // Data
         crate::handlers::database::table::data::insert::data_insert,
         crate::handlers::database::table::data::remove::data_remove,
         crate::handlers::database::table::data::upsert::data_upsert,
