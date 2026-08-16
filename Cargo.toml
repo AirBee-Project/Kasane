@@ -6,7 +6,6 @@ default-run = "kasane"
 
 [dependencies]
 axum = { version = "0.8.9", features = ["macros"] }
-clap = { version = "4.6", features = ["derive"] }
 dotenvy = "0.15"
 kasane-logic = { git = "https://github.com/AirBee-Project/Kasane-Logic.git", features = ["persist", "temporal_id"] }
 tokio = { version = "1.52", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }

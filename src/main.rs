@@ -1,23 +1,9 @@
-use std::net::SocketAddr;
-
-use clap::Parser;
 use kasane::{AppState, backend, kasane};
+use std::net::SocketAddr;
 
 #[cfg(feature = "production")]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
-#[derive(Debug, Parser)]
-#[command(author, version, about)]
-struct Args {
-    /// ストレージの接続先。何を指すかはビルド時に選ばれたバックエンドによる
-    /// （LMDB はデータディレクトリ、TiKV は PD エンドポイントのカンマ区切り）。
-    #[arg(long, default_value_t = backend::default_target())]
-    database_path: String,
-
-    #[arg(long, default_value_t = default_port())]
-    port: u16,
-}
 
 fn default_port() -> u16 {
     std::env::var("PORT")
@@ -52,16 +38,17 @@ async fn main() {
     // ログおよびテレメトリの初期化
     let _telemetry = TelemetryGuard(kasane::telemetry::init_telemetry());
 
-    let args = Args::parse();
+    let database_path = backend::default_target();
+    let port = default_port();
 
     // バックエンドはビルド時に 1 つへ確定している（kasane::backend を参照）。
-    let db = backend::open(&args.database_path)
+    let db = backend::open(&database_path)
         .await
         .expect("failed to open the storage backend");
 
     let app = kasane(AppState::new(db));
 
-    let address = SocketAddr::from(([0, 0, 0, 0], args.port));
+    let address = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = match tokio::net::TcpListener::bind(address).await {
         Ok(listener) => listener,
         // ポート衝突は運用で普通に起きる。バックトレース付きの panic ではなく理由を出す。
@@ -74,7 +61,7 @@ async fn main() {
         "Kasane is running on http://{} (backend: {}, target: {})",
         address,
         backend::NAME,
-        args.database_path,
+        database_path,
     );
     if let Err(e) = axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
