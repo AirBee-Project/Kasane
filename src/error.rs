@@ -1,14 +1,11 @@
 //! エラーの語彙。
 //!
-//! 500 になる失敗は原因で 3 つに分ける。混ぜると、運用時に「直すべき場所」が判らなくなる。
-//!
-//! - [`AppError::StorageError`] — ストレージエンジン自身が失敗した（I/O、競合、接続）。
-//! - [`AppError::Corrupt`] — エンジンはバイト列を返したが、書いたときの形式と違う。
+//! - [`AppError::StorageError`] — ストレージエンジンのエラー。
+//! - [`AppError::Corrupt`] — ストレージはバイト列を返したが。
 //! - [`AppError::InternalError`] — このプログラムの不変条件が破れた（バグ）。
-//!
-//! **文言はすべて英語で書く。** バックエンドごとに別の言い回しを足さないよう、
-//! 資源名と壊れた対象は [`Resource`] / [`Stored`] の語彙から組み立てる。
 
+use crate::models::database::table::JsonValueType;
+use crate::models::users::UserRole;
 use axum::{
     Json,
     http::StatusCode,
@@ -17,17 +14,14 @@ use axum::{
 use serde_json::json;
 use std::fmt;
 
-use crate::models::database::table::JsonValueType;
-use crate::models::users::UserRole;
-
-/// エラーが指す資源の種類。
-///
-/// 「見つからない」「既にある」はどの資源でも同じ形なので、資源ごとに変種を作らず
-/// これで区別する。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// エラーが指すリソースの種類
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum Resource {
+    #[error("Database")]
     Database,
+    #[error("Table")]
     Table,
+    #[error("User")]
     User,
 }
 
@@ -46,9 +40,7 @@ impl Resource {
         }
     }
 
-    /// `(見つからない, 既にある)` の機械可読コード。
-    ///
-    /// 資源名から組み立てると `&'static str` にできないので、対にして 1 箇所で持つ。
+    /// 代表的なリソースに対する `(見つからない, 既にある)` の語句
     const fn codes(self) -> (&'static str, &'static str) {
         match self {
             Self::Database => ("database_not_found", "database_already_exists"),
@@ -58,82 +50,74 @@ impl Resource {
     }
 }
 
-impl fmt::Display for Resource {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Database => "Database",
-            Self::Table => "Table",
-            Self::User => "User",
-        })
-    }
-}
-
 /// 読み出したバイト列が壊れていた対象。
 ///
 /// **両バックエンドで同じ語彙を使う。** その場で文言を書くと、同じ壊れ方が実装ごとに
 /// 違うメッセージになる。細かい壊れ方は [`AppError::Corrupt`] の `detail` が持つ。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum Stored {
     /// 利用者レコード（鍵・値のどちらも）。
+    #[error("user record")]
     UserRecord,
     /// データベースのメタデータと ID 逆引き。
+    #[error("database entry")]
     DatabaseEntry,
     /// テーブルのメタデータと ID 逆引き。
+    #[error("table entry")]
     TableEntry,
     /// ACL の行（鍵・ロールバイトのどちらも）。
+    #[error("acl row")]
     AclRow,
     /// シャードの鍵・本体・件数。
+    #[error("shard")]
     Shard,
     /// 値インデックスの鍵。
+    #[error("value index entry")]
     ValueIndex,
     /// 回収待ち行列の項目。
+    #[error("garbage entry")]
     Garbage,
     /// 格納された値を、テーブルが宣言した型として読めなかった。
+    #[error("stored value")]
     Value,
 }
 
-impl fmt::Display for Stored {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::UserRecord => "user record",
-            Self::DatabaseEntry => "database entry",
-            Self::TableEntry => "table entry",
-            Self::AclRow => "acl row",
-            Self::Shard => "shard",
-            Self::ValueIndex => "value index entry",
-            Self::Garbage => "garbage entry",
-            Self::Value => "stored value",
-        })
-    }
-}
-
 /// 認証 (Authentication) や認可 (Authorization) に関する失敗。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum AuthError {
     /// `Authorization` ヘッダが存在しない。
+    #[error("Missing Authorization header")]
     MissingToken,
     /// `Authorization` ヘッダの形式が不正（`Bearer ` で始まらない、非 ASCII 等）。
+    #[error("Invalid Authorization header format")]
     MalformedHeader,
     /// JWT の署名検証・期限などに失敗した。
+    #[error("Invalid or expired token")]
     InvalidToken,
     /// ユーザーが存在しないのか `uid`/`ver` 不一致なのかは、外部へ区別を返さない。
+    #[error("Authentication token is no longer valid")]
     TokenRevoked,
     /// ユーザーの存在有無を区別せず同一メッセージを返し、ユーザー列挙を防ぐ。
+    #[error("Invalid username or password")]
     InvalidCredentials,
     /// `global` スコープで一定以上のロールが必要な操作を、満たさない利用者が要求した。
     ///
     /// `required` を持つのは、`admin` を求める操作と `manage` で足りる操作を
     /// クライアントが区別できるようにするため。
+    #[error("{}", match required { UserRole::Admin => "Requires GlobalAdmin privileges".to_string(), req => format!("Requires the global '{req:?}' role or higher") })]
     RequiresGlobalRole { required: UserRole },
     /// 本人または GlobalAdmin のみ許可される操作を、第三者が要求した。
+    #[error("You can only modify your own account")]
     NotSelfOrAdmin,
     /// 対象データベース（またはその中の特定テーブル）に対する権限が不足している。
+    #[error("{}", match table_name { Some(t) => format!("Insufficient privileges for table '{db_name}.{t}' (requires {required:?})"), None => format!("Insufficient privileges for database '{db_name}' (requires {required:?})") })]
     InsufficientPrivilege {
         db_name: String,
         table_name: Option<String>,
         required: UserRole,
     },
     /// root ユーザーに対して許可されない操作（削除・権限変更など）。
+    #[error("This operation is not allowed on the root user")]
     RootProtected,
 }
 
@@ -173,106 +157,63 @@ impl AuthError {
     }
 }
 
-impl fmt::Display for AuthError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::MissingToken => write!(f, "Missing Authorization header"),
-            Self::MalformedHeader => write!(f, "Invalid Authorization header format"),
-            Self::InvalidToken => write!(f, "Invalid or expired token"),
-            Self::TokenRevoked => write!(f, "Authentication token is no longer valid"),
-            Self::InvalidCredentials => write!(f, "Invalid username or password"),
-            Self::RequiresGlobalRole {
-                required: UserRole::Admin,
-            } => write!(f, "Requires GlobalAdmin privileges"),
-            Self::RequiresGlobalRole { required } => {
-                write!(f, "Requires the global '{required:?}' role or higher")
-            }
-            Self::NotSelfOrAdmin => write!(f, "You can only modify your own account"),
-            Self::InsufficientPrivilege {
-                db_name,
-                table_name: Some(table_name),
-                required,
-            } => write!(
-                f,
-                "Insufficient privileges for table '{db_name}.{table_name}' (requires {required:?})"
-            ),
-            Self::InsufficientPrivilege {
-                db_name, required, ..
-            } => write!(
-                f,
-                "Insufficient privileges for database '{db_name}' (requires {required:?})"
-            ),
-            Self::RootProtected => {
-                write!(f, "This operation is not allowed on the root user")
-            }
-        }
-    }
-}
-
-/// `Clone` なのは、1 つのコミット結果をバッチ全員へ配るため（`coalesce` を参照）。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum AppError {
     /// 認証・認可に関する失敗（[`AuthError`] を参照）。
-    Auth(AuthError),
+    #[error("Authentication error: {0}")]
+    Auth(#[from] AuthError),
 
     // --- 要求が通らない（4xx） ---
-    NotFound {
-        resource: Resource,
-        name: String,
-    },
-    AlreadyExists {
-        resource: Resource,
-        name: String,
-    },
+    #[error("{resource} '{name}' not found")]
+    NotFound { resource: Resource, name: String },
+    #[error("{resource} '{name}' already exists")]
+    AlreadyExists { resource: Resource, name: String },
     /// 剥奪しようとした対象の権限を、その利用者が持っていない。
     ///
     /// 対象はリクエストのパスにあるので、ここには載せない。
+    #[error("The user holds no privilege for that target")]
     PrivilegeNotFound,
     /// 権限ルールの内容が不正（同一対象へのロール矛盾、保持数の上限超過など）。
-    InvalidPrivilege {
-        reason: String,
-    },
-    InvalidName {
-        reason: String,
-    },
-    InvalidSpatialId {
-        reason: String,
-    },
+    #[error("Invalid privilege rule: {reason}")]
+    InvalidPrivilege { reason: String },
+    #[error("Invalid name: {reason}")]
+    InvalidName { reason: String },
+    #[error("Invalid Spatial ID: {reason}")]
+    InvalidSpatialId { reason: String },
+    #[error("Value type mismatch: expected {expected:?}, got {actual:?}")]
     ValueTypeMismatch {
         actual: JsonValueType,
         expected: JsonValueType,
     },
-    NumericValueOutOfRange {
-        actual: String,
-        expected: String,
-    },
-    ConstraintViolation {
-        reason: String,
-    },
+    #[error("Numeric value out of range: expected {expected}, got {actual}")]
+    NumericValueOutOfRange { actual: String, expected: String },
+    #[error("Constraint violation: {reason}")]
+    ConstraintViolation { reason: String },
+    #[error("Zoom level policy violation: expected max {max_zoom_level}, got {input_zoom_level}")]
     ZoomLevelPolicy {
         max_zoom_level: u8,
         input_zoom_level: u8,
     },
-    LogicError(kasane_logic::Error),
+    #[error("Logic error: {0}")]
+    LogicError(#[from] kasane_logic::Error),
     /// 同時実行または要求同士の食い違いで通せなかった。
+    #[error("Conflict: {0}")]
     Conflict(String),
 
     // --- サーバー側の失敗（5xx）。原因で 3 つに分ける（モジュールの説明を参照） ---
     /// ディスク形式の版がこのビルドと合わない。`found` が `None` なら版を持たない世代。
-    SchemaVersionMismatch {
-        found: Option<u32>,
-        expected: u32,
-    },
+    #[error("{}", match found { Some(found) => format!("On-disk schema version {found} is not supported by this build (it reads version {expected}); point the server at a fresh location"), None => format!("On-disk data predates schema versioning and is not supported by this build (it reads version {expected}); point the server at a fresh location") })]
+    SchemaVersionMismatch { found: Option<u32>, expected: u32 },
     /// 保存されていたバイト列が読めない。
-    Corrupt {
-        stored: Stored,
-        detail: String,
-    },
+    #[error("Corrupt {stored}: {detail}")]
+    Corrupt { stored: Stored, detail: String },
     /// ストレージエンジン自身が失敗した。
     ///
     /// feature で差し替えられるよう、具体的なエラー型は持ち込まずメッセージへ落とす。
+    #[error("Storage error: {0}")]
     StorageError(String),
     /// このプログラムの不変条件が破れた（バグ）。
+    #[error("Internal error: {0}")]
     InternalError(String),
 }
 
@@ -339,82 +280,9 @@ impl AppError {
     }
 }
 
-impl fmt::Display for AppError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Auth(e) => write!(f, "Authentication error: {e}"),
-            Self::NotFound { resource, name } => write!(f, "{resource} '{name}' not found"),
-            Self::AlreadyExists { resource, name } => {
-                write!(f, "{resource} '{name}' already exists")
-            }
-            Self::PrivilegeNotFound => {
-                write!(f, "The user holds no privilege for that target")
-            }
-            Self::InvalidPrivilege { reason } => write!(f, "Invalid privilege rule: {reason}"),
-            Self::InvalidName { reason } => write!(f, "Invalid name: {reason}"),
-            Self::InvalidSpatialId { reason } => write!(f, "Invalid Spatial ID: {reason}"),
-            Self::ValueTypeMismatch { actual, expected } => {
-                write!(
-                    f,
-                    "Value type mismatch: expected {expected:?}, got {actual:?}"
-                )
-            }
-            Self::NumericValueOutOfRange { actual, expected } => {
-                write!(
-                    f,
-                    "Numeric value out of range: expected {expected}, got {actual}"
-                )
-            }
-            Self::ConstraintViolation { reason } => write!(f, "Constraint violation: {reason}"),
-            Self::ZoomLevelPolicy {
-                max_zoom_level,
-                input_zoom_level,
-            } => write!(
-                f,
-                "Zoom level policy violation: expected max {max_zoom_level}, got {input_zoom_level}"
-            ),
-            Self::LogicError(error) => write!(f, "Logic error: {error}"),
-            Self::Conflict(msg) => write!(f, "Conflict: {msg}"),
-            Self::SchemaVersionMismatch {
-                found: Some(found),
-                expected,
-            } => write!(
-                f,
-                "On-disk schema version {found} is not supported by this build \
-                 (it reads version {expected}); point the server at a fresh location"
-            ),
-            Self::SchemaVersionMismatch {
-                found: None,
-                expected,
-            } => write!(
-                f,
-                "On-disk data predates schema versioning and is not supported by this build \
-                 (it reads version {expected}); point the server at a fresh location"
-            ),
-            Self::Corrupt { stored, detail } => write!(f, "Corrupt {stored}: {detail}"),
-            Self::StorageError(msg) => write!(f, "Storage error: {msg}"),
-            Self::InternalError(msg) => write!(f, "Internal error: {msg}"),
-        }
-    }
-}
-
-impl std::error::Error for AppError {}
-
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let body = Json(json!({ "error": self.to_string(), "code": self.code() }));
         (self.status(), body).into_response()
-    }
-}
-
-impl From<AuthError> for AppError {
-    fn from(error: AuthError) -> Self {
-        Self::Auth(error)
-    }
-}
-
-impl From<kasane_logic::Error> for AppError {
-    fn from(value: kasane_logic::Error) -> Self {
-        Self::LogicError(value)
     }
 }

@@ -15,7 +15,6 @@ pub mod telemetry;
 #[derive(Clone)]
 pub struct AppState {
     pub db: backend::Db,
-    /// 同じテーブルへの同時書き込みを 1 トランザクションへ畳む。
     pub writes: services::database::table::data::coalesce::WriteCoalescer,
 }
 

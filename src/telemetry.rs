@@ -1,9 +1,3 @@
-//! OpenTelemetry の初期化。トレース・メトリクス・ログの 3 信号を OTLP で送る。
-//!
-//! **設定は OTel の環境変数仕様に従う。** 独自の解釈を足すと、ベンダのドキュメント
-//! どおりに設定したのに動かない、という事故になる（実際、以前はエンドポイントに
-//! `/v1/traces` を自分で書く必要があった）。
-
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[cfg(feature = "production")]
@@ -11,136 +5,8 @@ mod otel {
     use opentelemetry::{KeyValue, global};
     use opentelemetry_sdk::{
         Resource, logs::SdkLoggerProvider, metrics::SdkMeterProvider,
-        propagation::TraceContextPropagator, trace::Sampler, trace::SdkTracerProvider,
+        propagation::TraceContextPropagator, trace::SdkTracerProvider,
     };
-
-    /// 既定のサービス名。`OTEL_SERVICE_NAME` で上書きできる。
-    const DEFAULT_SERVICE_NAME: &str = "kasane";
-
-    /// 仕様以前から使っていたリソース属性の環境変数。
-    ///
-    /// `OTEL_RESOURCE_ATTRIBUTES` が正道だが、既存の配備が壊れないよう対応表として残す。
-    const LEGACY_RESOURCE_VARS: &[(&str, &str)] = &[
-        ("CLOUD_REGION", "cloud.region"),
-        ("CLOUD_AVAILABILITY_ZONE", "cloud.availability_zone"),
-        ("CLOUD_PROVIDER", "cloud.provider"),
-        ("DEPLOYMENT_ENVIRONMENT_NAME", "deployment.environment.name"),
-        ("HOST_NAME", "host.name"),
-    ];
-
-    fn env(name: &str) -> Option<String> {
-        std::env::var(name).ok().filter(|v| !v.trim().is_empty())
-    }
-
-    /// `k=v,k=v` を分解する。値は仕様どおり percent-decode する。
-    fn key_values(raw: &str) -> impl Iterator<Item = (String, String)> + '_ {
-        raw.split(',').filter_map(|pair| {
-            let (k, v) = pair.split_once('=')?;
-            let decode = |s: &str| {
-                percent_encoding::percent_decode_str(s.trim())
-                    .decode_utf8_lossy()
-                    .into_owned()
-            };
-            Some((decode(k), decode(v)))
-        })
-    }
-
-    /// OTLP のエンドポイントを**仕様どおり**に解決する。
-    ///
-    /// - `OTEL_EXPORTER_OTLP_<SIGNAL>_ENDPOINT` があればそのまま使う（パス込みが正）
-    /// - 無ければ `OTEL_EXPORTER_OTLP_ENDPOINT` に `/v1/<signal>` を足す
-    ///
-    /// ベンダのドキュメントは前者を書かず `https://otlp.example.net` だけを示すことが
-    /// 多い。パスを足さずに投げると 404 になるので、ここで吸収する。
-    fn endpoint(signal: &str) -> Option<String> {
-        let specific = format!("OTEL_EXPORTER_OTLP_{}_ENDPOINT", signal.to_uppercase());
-        resolve_endpoint(env(&specific), env("OTEL_EXPORTER_OTLP_ENDPOINT"), signal)
-    }
-
-    /// 環境から切り離した本体。組み合わせが多いので単体で試験する。
-    fn resolve_endpoint(
-        specific: Option<String>,
-        base: Option<String>,
-        signal: &str,
-    ) -> Option<String> {
-        if let Some(url) = specific {
-            return Some(url);
-        }
-        let base = base?;
-        let base = base.trim_end_matches('/');
-        // 既に信号のパスが付いていれば二重に足さない（従来の設定との互換）。
-        if base.ends_with(&format!("/v1/{signal}")) {
-            return Some(base.to_string());
-        }
-        Some(format!("{base}/v1/{signal}"))
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-
-        fn resolve(specific: Option<&str>, base: Option<&str>) -> Option<String> {
-            resolve_endpoint(
-                specific.map(str::to_string),
-                base.map(str::to_string),
-                "traces",
-            )
-        }
-
-        /// ベンダのドキュメントどおり（パス無し）でも信号のパスが付くこと。
-        #[test]
-        fn generic_endpoint_gains_the_signal_path() {
-            assert_eq!(
-                resolve(None, Some("https://otlp.example.net")).as_deref(),
-                Some("https://otlp.example.net/v1/traces")
-            );
-            assert_eq!(
-                resolve(None, Some("https://otlp.example.net/")).as_deref(),
-                Some("https://otlp.example.net/v1/traces")
-            );
-        }
-
-        /// 既にパスを書いてある従来の設定を壊さないこと。
-        #[test]
-        fn an_explicit_signal_path_is_not_doubled() {
-            assert_eq!(
-                resolve(None, Some("https://otlp.example.net/v1/traces")).as_deref(),
-                Some("https://otlp.example.net/v1/traces")
-            );
-        }
-
-        /// 信号別の変数はそのまま使う（パスを足さない）。
-        #[test]
-        fn the_signal_specific_variable_wins_verbatim() {
-            assert_eq!(
-                resolve(Some("https://a.example/custom"), Some("https://b.example")).as_deref(),
-                Some("https://a.example/custom")
-            );
-        }
-
-        #[test]
-        fn nothing_configured_means_no_export() {
-            assert_eq!(resolve(None, None), None);
-        }
-
-        #[test]
-        fn headers_and_attributes_are_percent_decoded() {
-            let kv: Vec<_> = key_values("api%2Dkey=abc%20123,plain=v").collect();
-            assert_eq!(
-                kv,
-                vec![
-                    ("api-key".to_string(), "abc 123".to_string()),
-                    ("plain".to_string(), "v".to_string())
-                ]
-            );
-        }
-    }
-
-    fn headers() -> std::collections::HashMap<String, String> {
-        env("OTEL_EXPORTER_OTLP_HEADERS")
-            .map(|raw| key_values(&raw).collect())
-            .unwrap_or_default()
-    }
 
     fn resource() -> Resource {
         let mut attributes: Vec<KeyValue> = vec![
@@ -148,51 +14,20 @@ mod otel {
             KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
         ];
 
-        if let Some(raw) = env("OTEL_RESOURCE_ATTRIBUTES") {
-            attributes.extend(key_values(&raw).map(|(k, v)| KeyValue::new(k, v)));
-        }
-        for (var, key) in LEGACY_RESOURCE_VARS {
-            if let Some(value) = env(var) {
-                attributes.push(KeyValue::new(*key, value));
+        if let Ok(raw) = std::env::var("OTEL_RESOURCE_ATTRIBUTES") {
+            for pair in raw.split(',') {
+                if let Some((k, v)) = pair.split_once('=') {
+                    attributes.push(KeyValue::new(k.trim().to_string(), v.trim().to_string()));
+                }
             }
         }
 
         Resource::builder_empty()
             .with_service_name(
-                env("OTEL_SERVICE_NAME").unwrap_or_else(|| DEFAULT_SERVICE_NAME.into()),
+                std::env::var("OTEL_SERVICE_NAME").unwrap_or_else(|_| "kasane".into()),
             )
             .with_attributes(attributes)
             .build()
-    }
-
-    /// `OTEL_TRACES_SAMPLER` / `OTEL_TRACES_SAMPLER_ARG` を仕様どおりに解釈する。
-    ///
-    /// 既定は全件収集。取りこぼしを減らすことを優先し、間引きは明示設定に任せる。
-    fn sampler() -> Sampler {
-        let ratio = || {
-            env("OTEL_TRACES_SAMPLER_ARG")
-                .and_then(|v| v.parse::<f64>().ok())
-                .unwrap_or(1.0)
-        };
-        match env("OTEL_TRACES_SAMPLER").as_deref() {
-            // 仕様上の既定値。
-            None | Some("parentbased_always_on") => {
-                Sampler::ParentBased(Box::new(Sampler::AlwaysOn))
-            }
-            Some("always_on") => Sampler::AlwaysOn,
-            Some("always_off") => Sampler::AlwaysOff,
-            Some("traceidratio") => Sampler::TraceIdRatioBased(ratio()),
-            Some("parentbased_always_off") => Sampler::ParentBased(Box::new(Sampler::AlwaysOff)),
-            Some("parentbased_traceidratio") => {
-                Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(ratio())))
-            }
-            Some(other) => {
-                tracing::warn!(
-                    "unknown OTEL_TRACES_SAMPLER value '{other}'; falling back to always_on"
-                );
-                Sampler::AlwaysOn
-            }
-        }
     }
 
     /// 立ち上げた各プロバイダ。終了時にまとめて flush する。
@@ -226,12 +61,10 @@ mod otel {
     }
 
     pub fn tracer_provider() -> Option<SdkTracerProvider> {
-        use opentelemetry_otlp::{SpanExporter, WithExportConfig, WithHttpConfig};
+        use opentelemetry_otlp::SpanExporter;
 
         let exporter = SpanExporter::builder()
             .with_http()
-            .with_endpoint(endpoint("traces")?)
-            .with_headers(headers())
             .build()
             .expect("failed to build the OTLP (HTTP) span exporter");
 
@@ -240,7 +73,6 @@ mod otel {
 
         let provider = SdkTracerProvider::builder()
             .with_span_processor(processor)
-            .with_sampler(sampler())
             .with_resource(resource())
             .build();
 
@@ -257,13 +89,11 @@ mod otel {
     /// クラッシュし、その周期以降メトリクスが一切送られなくなっていた）。トレースの
     /// `BatchSpanProcessor` と同じ理由で同じ対処をする。
     pub fn meter_provider() -> Option<SdkMeterProvider> {
-        use opentelemetry_otlp::{MetricExporter, WithExportConfig, WithHttpConfig};
+        use opentelemetry_otlp::MetricExporter;
         use opentelemetry_sdk::metrics::periodic_reader_with_async_runtime::PeriodicReader;
 
         let exporter = MetricExporter::builder()
             .with_http()
-            .with_endpoint(endpoint("metrics")?)
-            .with_headers(headers())
             .build()
             .expect("failed to build the OTLP (HTTP) metric exporter");
 
@@ -279,13 +109,11 @@ mod otel {
 
     /// [`meter_provider`] と同じ理由で `Tokio` 束縛の [`BatchLogProcessor`] を使う。
     pub fn logger_provider() -> Option<SdkLoggerProvider> {
-        use opentelemetry_otlp::{LogExporter, WithExportConfig, WithHttpConfig};
+        use opentelemetry_otlp::LogExporter;
         use opentelemetry_sdk::logs::log_processor_with_async_runtime::BatchLogProcessor;
 
         let exporter = LogExporter::builder()
             .with_http()
-            .with_endpoint(endpoint("logs")?)
-            .with_headers(headers())
             .build()
             .expect("failed to build the OTLP (HTTP) log exporter");
 
@@ -318,6 +146,24 @@ impl Providers {
     pub fn shutdown(&self) {}
 }
 
+/// 落ちるときに必ずテレメトリを送り切るための番人。
+///
+/// バッチ処理は溜めてから送るので、ここを通さないと最後のリクエストが丸ごと消える。
+pub struct TelemetryGuard(Providers);
+
+impl Drop for TelemetryGuard {
+    fn drop(&mut self) {
+        // マルチスレッドランタイムの中から同期的に flush するとワーカーを塞ぐので、
+        // ブロッキング可能な文脈へ移してから待つ。
+        match tokio::runtime::Handle::try_current() {
+            Ok(handle) if handle.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread => {
+                tokio::task::block_in_place(|| self.0.shutdown());
+            }
+            _ => self.0.shutdown(),
+        }
+    }
+}
+
 fn env_filter() -> EnvFilter {
     EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         EnvFilter::new(
@@ -331,7 +177,7 @@ fn json_logs() -> bool {
 }
 
 #[cfg(feature = "production")]
-pub fn init_telemetry() -> Providers {
+pub fn init_telemetry() -> TelemetryGuard {
     otel::set_propagator();
 
     let providers = Providers {
@@ -365,11 +211,11 @@ pub fn init_telemetry() -> Providers {
         registry.with(tracing_subscriber::fmt::layer()).init();
     }
 
-    providers
+    TelemetryGuard(providers)
 }
 
 #[cfg(not(feature = "production"))]
-pub fn init_telemetry() -> Providers {
+pub fn init_telemetry() -> TelemetryGuard {
     let registry = Registry::default().with(env_filter());
 
     if json_logs() {
@@ -380,7 +226,7 @@ pub fn init_telemetry() -> Providers {
         registry.with(tracing_subscriber::fmt::layer()).init();
     }
 
-    Providers
+    TelemetryGuard(Providers)
 }
 
 /// アプリ固有の計器。
