@@ -9,28 +9,17 @@ mod otel {
     };
 
     fn resource() -> Resource {
-        let mut attributes: Vec<KeyValue> = vec![
-            KeyValue::new("service.namespace", "database"),
-            KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
-        ];
-
-        if let Ok(raw) = std::env::var("OTEL_RESOURCE_ATTRIBUTES") {
-            for pair in raw.split(',') {
-                if let Some((k, v)) = pair.split_once('=') {
-                    attributes.push(KeyValue::new(k.trim().to_string(), v.trim().to_string()));
-                }
-            }
-        }
-
-        Resource::builder_empty()
+        Resource::builder()
             .with_service_name(
                 std::env::var("OTEL_SERVICE_NAME").unwrap_or_else(|_| "kasane".into()),
             )
-            .with_attributes(attributes)
+            .with_attributes([
+                KeyValue::new("service.namespace", "database"),
+                KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
+            ])
             .build()
     }
 
-    /// 立ち上げた各プロバイダ。終了時にまとめて flush する。
     #[derive(Default)]
     pub struct Providers {
         pub tracer: Option<SdkTracerProvider>,
@@ -39,8 +28,6 @@ mod otel {
     }
 
     impl Providers {
-        /// **バッファに残ったぶんを送り切る。** 短命なプロセスではここを通さないと
-        /// 最後のリクエストが丸ごと消える。
         pub fn shutdown(&self) {
             if let Some(p) = &self.tracer
                 && let Err(e) = p.shutdown()
@@ -68,11 +55,8 @@ mod otel {
             .build()
             .expect("failed to build the OTLP (HTTP) span exporter");
 
-        let processor = opentelemetry_sdk::trace::span_processor_with_async_runtime::
-            BatchSpanProcessor::builder(exporter, opentelemetry_sdk::runtime::Tokio).build();
-
         let provider = SdkTracerProvider::builder()
-            .with_span_processor(processor)
+            .with_batch_exporter(exporter)
             .with_resource(resource())
             .build();
 
@@ -80,26 +64,16 @@ mod otel {
         Some(provider)
     }
 
-    /// **`Tokio` 束縛の周期リーダーを使うこと。**
-    ///
-    /// 既定の `PeriodicReader` は専用の OS スレッドでエクスポートを回すが、この
-    /// バイナリの OTLP(HTTP) エクスポータ（`reqwest`）は非同期処理に Tokio のリアクタを
-    /// 要求する。Tokio の外側で呼ぶと "there is no reactor running" で panic する
-    /// （実際に踏んだ： 60 秒おきのエクスポートがバックグラウンドスレッドの上で
-    /// クラッシュし、その周期以降メトリクスが一切送られなくなっていた）。トレースの
-    /// `BatchSpanProcessor` と同じ理由で同じ対処をする。
     pub fn meter_provider() -> Option<SdkMeterProvider> {
         use opentelemetry_otlp::MetricExporter;
-        use opentelemetry_sdk::metrics::periodic_reader_with_async_runtime::PeriodicReader;
 
         let exporter = MetricExporter::builder()
             .with_http()
             .build()
             .expect("failed to build the OTLP (HTTP) metric exporter");
 
-        let reader = PeriodicReader::builder(exporter, opentelemetry_sdk::runtime::Tokio).build();
         let provider = SdkMeterProvider::builder()
-            .with_reader(reader)
+            .with_periodic_exporter(exporter)
             .with_resource(resource())
             .build();
 
@@ -107,22 +81,17 @@ mod otel {
         Some(provider)
     }
 
-    /// [`meter_provider`] と同じ理由で `Tokio` 束縛の [`BatchLogProcessor`] を使う。
     pub fn logger_provider() -> Option<SdkLoggerProvider> {
         use opentelemetry_otlp::LogExporter;
-        use opentelemetry_sdk::logs::log_processor_with_async_runtime::BatchLogProcessor;
 
         let exporter = LogExporter::builder()
             .with_http()
             .build()
             .expect("failed to build the OTLP (HTTP) log exporter");
 
-        let processor =
-            BatchLogProcessor::builder(exporter, opentelemetry_sdk::runtime::Tokio).build();
-
         Some(
             SdkLoggerProvider::builder()
-                .with_log_processor(processor)
+                .with_batch_exporter(exporter)
                 .with_resource(resource())
                 .build(),
         )
@@ -146,15 +115,10 @@ impl Providers {
     pub fn shutdown(&self) {}
 }
 
-/// 落ちるときに必ずテレメトリを送り切るための番人。
-///
-/// バッチ処理は溜めてから送るので、ここを通さないと最後のリクエストが丸ごと消える。
 pub struct TelemetryGuard(Providers);
 
 impl Drop for TelemetryGuard {
     fn drop(&mut self) {
-        // マルチスレッドランタイムの中から同期的に flush するとワーカーを塞ぐので、
-        // ブロッキング可能な文脈へ移してから待つ。
         match tokio::runtime::Handle::try_current() {
             Ok(handle) if handle.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread => {
                 tokio::task::block_in_place(|| self.0.shutdown());
@@ -191,8 +155,6 @@ pub fn init_telemetry() -> TelemetryGuard {
         tracing_opentelemetry::layer().with_tracer(p.tracer("kasane"))
     });
 
-    // tracing のイベントを OTLP ログとして送る。スパン文脈が自動で載るので、
-    // New Relic 側でトレースとログが相互に辿れる。
     let log_layer = providers
         .logger
         .as_ref()
@@ -229,13 +191,7 @@ pub fn init_telemetry() -> TelemetryGuard {
     TelemetryGuard(Providers)
 }
 
-/// アプリ固有の計器。
-///
-/// **スパンから導けない量だけを置く。** リクエスト数やレイテンシはスパンからも読めるが、
-/// 間引き設定を入れた途端に不正確になるので、レートは計器側でも持つ。再試行回数や
-/// 回収件数はそもそもスパンに現れない。
-///
-/// `production` 以外では全て空関数になる（呼び出し側に `cfg` を撒かないため）。
+/// このアプリケーションで固有のメトリクスを計測するための型。トレースから導けない値のみをここで回収する。
 pub mod metrics {
     /// 書き込みトランザクションの結末。再試行の原因を分けて数えるためにある。
     #[derive(Debug, Clone, Copy)]

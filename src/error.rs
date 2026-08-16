@@ -1,9 +1,3 @@
-//! エラーの語彙。
-//!
-//! - [`AppError::StorageError`] — ストレージエンジンのエラー。
-//! - [`AppError::Corrupt`] — ストレージはバイト列を返したが。
-//! - [`AppError::InternalError`] — このプログラムの不変条件が破れた（バグ）。
-
 use crate::models::database::table::JsonValueType;
 use crate::models::users::UserRole;
 use axum::{
