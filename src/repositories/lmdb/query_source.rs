@@ -1,4 +1,4 @@
-//! [`Source::read_subset`] は 1 回のクエリ実行で複数回呼ばれるので、そのたびに
+//! [`Source::read_range_ids`] は 1 回のクエリ実行で複数回呼ばれるので、そのたびに
 //! トランザクションを開き直すと途中で走った書き込みを一部だけ見た結果が混ざる。
 //! クエリ開始時に開いた [`LmdbQuerySnapshot`] を全ソースで共有する。
 
@@ -55,7 +55,7 @@ where
 {
     type Value = V;
 
-    fn read_subset(&self, bounds: &[RangeId]) -> Result<WorkingTree<V>, LogicError> {
+    fn read_range_ids(&self, bounds: &[RangeId]) -> Result<WorkingTree<V>, LogicError> {
         let txn = self.snapshot.lock().map_err(|_| {
             LogicError::SourceRead("query snapshot was poisoned by a panicking reader".to_string())
         })?;

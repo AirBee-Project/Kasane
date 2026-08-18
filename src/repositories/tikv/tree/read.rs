@@ -252,7 +252,7 @@ fn merge_into(by_value: &mut ValueMap, value: &[u8], mut flex_ids: Vec<FlexId>) 
 
 /// 範囲に重なる `(FlexId, 値)` を葉から取り出し、その場で `V` へ復元する。
 ///
-/// `Source::read_subset` の内側（＝クエリ実行器を回している blocking タスクの上）から呼ばれる
+/// `Source::read_range_ids` の内側（＝クエリ実行器を回している blocking タスクの上）から呼ばれる
 /// ので、さらに blocking タスクへ出さずその場で並列化する。復元できない値はここで落とす。
 fn decode_range_leaves<V: Send>(
     leaves: &[RoutedRange],

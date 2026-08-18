@@ -442,12 +442,6 @@ fn run<V: Value>(
     let ast = tracing::info_span!("query.translate", source_tables = tables.len())
         .in_scope(|| request.query.translate::<V>(app_state, tables, snapshot))?;
 
-    tracing::debug!(
-        "Executing query over {} source table(s), {} target region(s)",
-        tables.len(),
-        bounds.len()
-    );
-
     // --- フェーズ 2: クエリ最適化 ---
     let optimized = tracing::info_span!("query.optimize").in_scope(|| ast.optimize());
 

@@ -170,11 +170,13 @@ impl TikvDb {
         };
 
         // 返り値が false なのは他が先に進めていたというだけなので、失敗として扱わない。
+        // tikv-client 自身も内部で "advanced the MVCC gc safepoint" と出すので、
+        // フィルタ（tikv_client=warn）で抑制済みかどうかが分かるよう文言を変えている。
         let applied = self.client.gc(safepoint.clone()).await?;
         tracing::debug!(
             safepoint = safepoint.version(),
             applied,
-            "advanced the MVCC gc safepoint"
+            "kasane advanced the MVCC gc safepoint"
         );
         Ok(())
     }

@@ -128,12 +128,17 @@ impl Drop for TelemetryGuard {
     }
 }
 
+const DEFAULT_FILTER: &str = "info,kasane=info,kasane_logic=debug,tikv_client=warn,tower_http=info,axum_tracing_opentelemetry=error,otel::tracing=info";
+
+/// `RUST_LOG` の値をそのまま使わず、noisy な外部クレートの抑制と kasane-logic の詳細トレースを
+/// 常時追記する。デプロイ環境の `RUST_LOG` を変更せずにこの2つを効かせるため。
 fn env_filter() -> EnvFilter {
-    EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        EnvFilter::new(
-            "info,kasane=info,tower_http=info,axum_tracing_opentelemetry=error,otel::tracing=info",
-        )
-    })
+    match std::env::var("RUST_LOG") {
+        Ok(value) if !value.trim().is_empty() => {
+            EnvFilter::new(format!("{value},kasane_logic=debug,tikv_client=warn"))
+        }
+        _ => EnvFilter::new(DEFAULT_FILTER),
+    }
 }
 
 fn json_logs() -> bool {
