@@ -24,8 +24,8 @@ pub struct CreateTableRequest {
     #[serde(default)]
     #[schema(example = false)]
     pub value_index: bool,
-    /// テーブルが時空間データ（時間情報を持つ）であるかどうか。
-    /// サーバーサイドでは false の場合、書き込み時にのみ時間データを拒否します。
+    /// テーブルが時間IDを扱うかどうか。空間のみのデータの場合には`false`にしておいた方がパフォーマンスが向上する。
+    // 正確にはパフォーマンスは将来的に向上する予定である。ユーザーに対してはこの言い方で良い。
     #[serde(default = "crate::models::helpers::default_true")]
     #[schema(example = true)]
     pub is_temporal: bool,
