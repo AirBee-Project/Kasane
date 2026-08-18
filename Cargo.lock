@@ -1618,7 +1618,7 @@ dependencies = [
 [[package]]
 name = "kasane-logic"
 version = "0.1.4"
-source = "git+https://github.com/AirBee-Project/Kasane-Logic.git#80f581ea6bc7b1531b8032338f38f88b9353c111"
+source = "git+https://github.com/AirBee-Project/Kasane-Logic.git#12f5a00490e15df16a5f18f7c55399f1bfc0a12c"
 dependencies = [
  "hashbrown 0.17.1",
  "libm",
