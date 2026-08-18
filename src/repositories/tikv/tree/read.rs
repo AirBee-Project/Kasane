@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use kasane_logic::{FlexId, RangeId, SpatialIdSet};
 use rustc_hash::FxHashMap;
+use tracing::Instrument;
 
 use super::node::archived_leaf;
 use super::routing::{RoutedLeaf, RoutedRange, route_leaves_batched, route_leaves_for_ranges};
@@ -130,7 +131,17 @@ impl<R: Reader> TikvRead<'_, R> {
         if ranges.is_empty() {
             return Ok(Vec::new());
         }
-        let leaves = route_leaves_for_ranges(&self.txn, table_id, ranges).await?;
+
+        // ネットワーク降下と CPU 復号のどちらが支配的かを切り分けるための内訳。
+        let leaves = route_leaves_for_ranges(&self.txn, table_id, ranges)
+            .instrument(tracing::info_span!(
+                "tikv.route_leaves",
+                ranges = ranges.len()
+            ))
+            .await?;
+
+        let decode_span = tracing::info_span!("tikv.decode_range_leaves", leaves = leaves.len());
+        let _guard = decode_span.enter();
         decode_range_leaves(&leaves, ranges, decode)
     }
 }

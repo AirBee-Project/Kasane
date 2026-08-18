@@ -4,6 +4,7 @@
 use kasane_logic::{FlexId, RangeId};
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
+use tracing::Instrument;
 
 use super::node::load_nodes;
 use super::{AppError, Reader, Readers, ShardEntry, ShardValue, TableId};
@@ -162,9 +163,18 @@ pub(super) async fn route_leaves_for_ranges<R: Reader>(
     }
 
     let mut out = Vec::new();
+    let mut depth = 0usize;
     while !level.is_empty() {
         let regions: Vec<FlexId> = level.iter().map(|(region, _)| *region).collect();
-        let mut nodes = load_nodes(txn, table_id, &regions).await?;
+        // 降下は木の深さぶんしか回らないので、段ごとに計測してもスパン数は有限。
+        let mut nodes = load_nodes(txn, table_id, &regions)
+            .instrument(tracing::debug_span!(
+                "tikv.load_nodes",
+                depth,
+                regions = regions.len()
+            ))
+            .await?;
+        depth += 1;
 
         let mut next: Vec<(FlexId, Vec<u32>)> = Vec::new();
         for (region, hits) in level {
