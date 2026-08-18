@@ -26,7 +26,10 @@ use axum::{
         ("limit" = Option<usize>, Query, description = "最大取得件数")
     ),
     responses(
-        (status = 200, body = GetDataResponse),
+        (status = 200, description = "データ取得成功", content(
+            (GetDataResponse = "application/json"),
+            (String = "application/vnd.apache.arrow.stream")
+        )),
         (status = 400, description = "空間IDが不正な場合"),
         (status = 404, description = "テーブルが存在しない")
     ),
@@ -55,11 +58,7 @@ pub async fn data_get(
     .await?;
 
     if let Some(accept) = headers.get(axum::http::header::ACCEPT) {
-        if accept
-            .as_bytes()
-            .windows(35)
-            .any(|w| w == b"application/vnd.apache.arrow.stream")
-        {
+        if accept.to_str().unwrap_or("").contains("application/vnd.apache.arrow.stream") {
             let arrow_bytes = crate::models::database::table::data::arrow::to_arrow_ipc(result)
                 .map_err(|e| AppError::InternalError(format!("Arrow encoding error: {}", e)))?;
             return Ok(axum::response::Response::builder()
