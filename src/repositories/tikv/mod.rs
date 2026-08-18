@@ -498,7 +498,8 @@ impl TikvDb {
                 Ok(value) => return Ok(value),
                 // 競合ではないので待たず、2PC で即やり直す。
                 Err(e) if is_one_pc_failure(&e) => {
-                    tracing::debug!("TiKV declined one-phase commit; retrying with two-phase");
+                    // 書き込みごとに発火しうるので trace に留める。
+                    tracing::trace!("TiKV declined one-phase commit; retrying with two-phase");
                     one_pc = false;
                     retry.note(AppError::from(e));
                     continue;

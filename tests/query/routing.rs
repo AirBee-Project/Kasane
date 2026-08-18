@@ -60,9 +60,9 @@ fn range_routing_reaches_the_same_leaves_as_id_routing() {
     );
 }
 
-/// `TableSource::read_subset` が範囲内の全 FlexId を返すこと。
+/// `TableSource::read_range_ids` が範囲内の全 FlexId を返すこと。
 #[test]
-fn table_source_read_subset_returns_all_flex_ids() {
+fn table_source_read_range_ids_returns_all_flex_ids() {
     use kasane::repositories::lmdb::query_source::TableSource;
     use kasane_logic::Source;
     use std::sync::Arc;
@@ -98,11 +98,11 @@ fn table_source_read_subset_returns_all_flex_ids() {
     );
 
     let bbox = RangeId::new(20, [0, 0], [790000, 790003], [500000, 500000]).unwrap();
-    let working = source.read_subset(&[bbox]).unwrap();
+    let working = source.read_range_ids(&[bbox]).unwrap();
     let mut got: Vec<i32> = working.into_iter().map(|(_, v)| v).collect();
     got.sort();
 
-    assert_eq!(got, vec![0, 1, 2, 3], "read_subset が取りこぼしている");
+    assert_eq!(got, vec![0, 1, 2, 3], "read_range_ids が取りこぼしている");
 }
 
 /// 対象空間IDの集合から得た外接範囲が、全 FlexId を覆っていること。

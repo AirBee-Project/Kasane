@@ -50,7 +50,7 @@ LABEL io.kasane.backend="${BACKEND}"
 # KASANE_TIKV_PD_ENDPOINTS で指定する）。
 ENV DATABASE_DIR=/data
 ENV PORT=5172
-ENV RUST_LOG=info
+ENV RUST_LOG=info,tikv_client=warn
 
 VOLUME ["/data"]
 

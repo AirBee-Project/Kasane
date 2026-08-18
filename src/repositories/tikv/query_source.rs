@@ -1,9 +1,9 @@
 //! TiKV 上のシャードツリーを Kasane-Logic のクエリ入力源として見せるアダプタ。
 //!
-//! [`Source::read_subset`] は 1 回のクエリで複数回呼ばれるので、断面を固定しないと途中で
+//! [`Source::read_range_ids`] は 1 回のクエリで複数回呼ばれるので、断面を固定しないと途中で
 //! 走った書き込みを一部だけ見た結果が混ざる。
 //!
-//! ランタイムハンドルを持ち回るのは、[`tokio::runtime::Handle::current`] を `read_subset` の
+//! ランタイムハンドルを持ち回るのは、[`tokio::runtime::Handle::current`] を `read_range_ids` の
 //! 中で呼ぶと、実行器が rayon 側から読みに来たときにランタイム文脈が無くて panic するため。
 
 use kasane_logic::{Error as LogicError, RangeId, SafeValue, Source, WorkingTree};
@@ -53,13 +53,14 @@ where
 {
     type Value = V;
 
-    fn read_subset(&self, bounds: &[RangeId]) -> Result<WorkingTree<V>, LogicError> {
+    fn read_range_ids(&self, bounds: &[RangeId]) -> Result<WorkingTree<V>, LogicError> {
         let db = self.db.clone();
         let table_id = self.table_id;
         let bounds = bounds.to_vec();
         let snapshot_ts = self.snapshot_ts.clone();
         let decode = self.decode.clone();
 
+        let started = std::time::Instant::now();
         let flex_ids = self.handle.block_on(async move {
             // 読み取り専用なので commit も rollback も要らない。
             let reader = TikvRead::at(db.client.clone(), snapshot_ts);
@@ -70,6 +71,16 @@ where
                 .await
                 .map_err(|e| LogicError::SourceRead(e.to_string()))
         })?;
+
+        // kasane_logic.query.source_read はネットワーク待ち＋木構築の合計。ネットワークだけの
+        // 時間はここでしか分からないので、フィールドとして残す。1 クエリで複数回発火しうるので
+        // debug ではなく trace（`kasane=trace` でのみ出る）に留める。
+        tracing::trace!(
+            table_id = ?table_id,
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            value_count = flex_ids.len(),
+            "tikv read_range_ids network wait"
+        );
 
         // 重なり合う bounds が同じ FlexId を複数回返しても、値は同じなので union が吸収する。
         Ok(flex_ids.into_iter().collect())
