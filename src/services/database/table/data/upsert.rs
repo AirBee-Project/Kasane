@@ -31,7 +31,7 @@ pub async fn upsert(
         spatial_ids,
         table.max_zoom_level,
         zoom_level_policy,
-        !table.has_time,
+        !table.is_temporal,
     )?;
 
     app_state

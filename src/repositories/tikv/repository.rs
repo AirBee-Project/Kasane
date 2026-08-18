@@ -226,7 +226,7 @@ impl WriteRepository for TikvWrite<'_> {
         constraints: Option<TableConstraints>,
         description: Option<String>,
         value_index: bool,
-        has_time: bool,
+        is_temporal: bool,
     ) -> Result<Table, AppError> {
         self.txn
             .table_create_impl(
@@ -237,7 +237,7 @@ impl WriteRepository for TikvWrite<'_> {
                 constraints,
                 description,
                 value_index,
-                has_time,
+                is_temporal,
             )
             .await
     }

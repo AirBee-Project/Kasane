@@ -51,7 +51,7 @@ async fn make_table(db: &TikvDb, db_name: &str) -> Table {
             None,
             None,
             true,
-            true,
+            false,
         )
         .await
     })
@@ -348,7 +348,7 @@ async fn text_range_filter_keeps_values_that_prefix_the_upper_bound() {
         let name = name.clone();
         db.write(async move |w| {
             w.database_create(&name, None).await?;
-            w.table_create(&name, "t", TableDataType::Text, 25, None, None, true, true)
+            w.table_create(&name, "t", TableDataType::Text, 25, None, None, true, false)
                 .await
         })
         .await
@@ -813,7 +813,7 @@ async fn the_write_closure_is_re_run_until_its_locks_are_held() {
         let name = name.clone();
         db.write(async move |w| {
             w.database_create(&name, None).await?;
-            w.table_create(&name, "t", TableDataType::Int, 25, None, None, true, true)
+            w.table_create(&name, "t", TableDataType::Int, 25, None, None, true, false)
                 .await
         })
         .await

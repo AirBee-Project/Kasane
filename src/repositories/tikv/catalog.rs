@@ -521,7 +521,7 @@ impl TikvWrite<'_> {
         constraints: Option<TableConstraints>,
         description: Option<String>,
         value_index: bool,
-        has_time: bool,
+        is_temporal: bool,
     ) -> Result<Table, AppError> {
         if db_name.is_empty() {
             return Err(Resource::Database.not_found(db_name.to_string()));
@@ -561,7 +561,7 @@ impl TikvWrite<'_> {
             constraints: actual_constraints.clone(),
             description: description.clone(),
             value_index,
-            has_time,
+            is_temporal,
         };
         kv::put(
             &self.txn,
@@ -584,7 +584,7 @@ impl TikvWrite<'_> {
             constraints: actual_constraints,
             description,
             value_index,
-            has_time,
+            is_temporal,
         })
     }
 
@@ -650,7 +650,7 @@ impl TikvWrite<'_> {
             constraints: table.constraints.clone(),
             description: table.description.clone(),
             value_index: table.value_index,
-            has_time: table.has_time,
+            is_temporal: table.is_temporal,
         };
 
         if changed_name {
@@ -754,7 +754,7 @@ impl TikvWrite<'_> {
             constraints: src_meta.constraints.clone(),
             description: src_meta.description.clone(),
             value_index: src_meta.value_index,
-            has_time: src_meta.has_time,
+            is_temporal: src_meta.is_temporal,
         };
 
         kv::put(
@@ -790,7 +790,7 @@ impl TikvWrite<'_> {
             constraints: src_meta.constraints,
             description: src_meta.description,
             value_index: src_meta.value_index,
-            has_time: src_meta.has_time,
+            is_temporal: src_meta.is_temporal,
         })
     }
 

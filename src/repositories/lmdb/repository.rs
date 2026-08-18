@@ -217,7 +217,7 @@ impl WriteRepository for KasaneDbWrite<'_> {
         constraints: Option<TableConstraints>,
         description: Option<String>,
         value_index: bool,
-        has_time: bool,
+        is_temporal: bool,
     ) -> Result<Table, AppError> {
         self.table_create_impl(
             db_name,
@@ -227,7 +227,7 @@ impl WriteRepository for KasaneDbWrite<'_> {
             constraints,
             description,
             value_index,
-            has_time,
+            is_temporal,
         )
     }
 
