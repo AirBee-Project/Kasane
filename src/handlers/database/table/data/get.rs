@@ -37,10 +37,11 @@ use axum::{
 pub async fn data_get(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
+    headers: axum::http::HeaderMap,
     Path((db_name, table_name)): Path<(String, String)>,
     Query(query): Query<GetDataQuery>,
     Json(payload): Json<GetDataRequest>,
-) -> Result<Json<crate::models::database::table::data::GetDataResponse>, AppError> {
+) -> Result<axum::response::Response, AppError> {
     // 認可はサービス層の解決と同じ読み取りで行う。別途呼ぶとカタログを 2 度引く。
     let result = data_get_service::get(
         &app_state,
@@ -52,5 +53,26 @@ pub async fn data_get(
         &query,
     )
     .await?;
-    Ok(Json(result))
+
+    if let Some(accept) = headers.get(axum::http::header::ACCEPT) {
+        if accept
+            .as_bytes()
+            .windows(35)
+            .any(|w| w == b"application/vnd.apache.arrow.stream")
+        {
+            let arrow_bytes = crate::models::database::table::data::arrow::to_arrow_ipc(result)
+                .map_err(|e| AppError::InternalError(format!("Arrow encoding error: {}", e)))?;
+            return Ok(axum::response::Response::builder()
+                .status(200)
+                .header(
+                    axum::http::header::CONTENT_TYPE,
+                    "application/vnd.apache.arrow.stream",
+                )
+                .body(axum::body::Body::from(arrow_bytes))
+                .unwrap());
+        }
+    }
+
+    use axum::response::IntoResponse;
+    Ok(axum::Json(result).into_response())
 }
