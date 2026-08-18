@@ -334,13 +334,21 @@ mod tests {
         );
         assert!(res_range_reject.is_err());
 
-        let res_flex_reject =
-            process_spatial_ids(std::slice::from_ref(&flex_with_time), 0, &ZoomLevelPolicy::Ignore, true);
+        let res_flex_reject = process_spatial_ids(
+            std::slice::from_ref(&flex_with_time),
+            0,
+            &ZoomLevelPolicy::Ignore,
+            true,
+        );
         assert!(res_flex_reject.is_err());
 
         // 2. enforce_no_time = true (Accept no time)
-        let res_single_accept =
-            process_spatial_ids(std::slice::from_ref(&single_no_time), 0, &ZoomLevelPolicy::Ignore, true);
+        let res_single_accept = process_spatial_ids(
+            std::slice::from_ref(&single_no_time),
+            0,
+            &ZoomLevelPolicy::Ignore,
+            true,
+        );
         assert!(res_single_accept.is_ok());
 
         // 3. enforce_no_time = false (Accept time)
