@@ -402,9 +402,18 @@ pub async fn execute(
     let format = query_params.format;
     let limit = query_params.limit;
 
+    // Queryの同時実行を制限する
+    let _permit = app_state
+        .query_concurrency
+        .clone()
+        .acquire_owned()
+        .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?;
+
     // クエリ演算は同期ブロッキング処理のため、async ワーカーを塞がない。
     let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || -> Result<GetDataResponse, AppError> {
+        let _permit = _permit;
         span.in_scope(|| {
             let value_type = request
                 .query
