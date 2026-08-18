@@ -57,23 +57,22 @@ pub async fn data_get(
     )
     .await?;
 
-    if let Some(accept) = headers.get(axum::http::header::ACCEPT) {
-        if accept
+    if let Some(accept) = headers.get(axum::http::header::ACCEPT)
+        && accept
             .to_str()
             .unwrap_or("")
             .contains("application/vnd.apache.arrow.stream")
-        {
-            let arrow_bytes = crate::models::database::table::data::arrow::to_arrow_ipc(result)
-                .map_err(|e| AppError::InternalError(format!("Arrow encoding error: {}", e)))?;
-            return Ok(axum::response::Response::builder()
-                .status(200)
-                .header(
-                    axum::http::header::CONTENT_TYPE,
-                    "application/vnd.apache.arrow.stream",
-                )
-                .body(axum::body::Body::from(arrow_bytes))
-                .unwrap());
-        }
+    {
+        let arrow_bytes = crate::models::database::table::data::arrow::to_arrow_ipc(result)
+            .map_err(|e| AppError::InternalError(format!("Arrow encoding error: {}", e)))?;
+        return Ok(axum::response::Response::builder()
+            .status(200)
+            .header(
+                axum::http::header::CONTENT_TYPE,
+                "application/vnd.apache.arrow.stream",
+            )
+            .body(axum::body::Body::from(arrow_bytes))
+            .unwrap());
     }
 
     use axum::response::IntoResponse;
