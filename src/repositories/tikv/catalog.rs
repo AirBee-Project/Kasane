@@ -597,6 +597,7 @@ impl TikvWrite<'_> {
         new_name: Option<&str>,
         new_constraints: Option<Option<UpdateTableConstraints>>,
         description: Option<Option<String>>,
+        is_temporal: Option<bool>,
     ) -> Result<Table, AppError> {
         // 改名はテーブル集合の変更なので排他する（既存データ検証のほうは排他しない）。
         self.require_lock(LockScope::Database, db_name.as_bytes())?;
@@ -641,6 +642,10 @@ impl TikvWrite<'_> {
 
         if let Some(desc) = description {
             table.description = desc;
+        }
+
+        if let Some(v) = is_temporal {
+            table.is_temporal = v;
         }
 
         let meta = TableMetadata {

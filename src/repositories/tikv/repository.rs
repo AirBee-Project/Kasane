@@ -248,9 +248,17 @@ impl WriteRepository for TikvWrite<'_> {
         new_name: Option<&str>,
         new_constraints: Option<Option<UpdateTableConstraints>>,
         description: Option<Option<String>>,
+        is_temporal: Option<bool>,
     ) -> Result<Table, AppError> {
-        self.table_update_impl(db_name, table_name, new_name, new_constraints, description)
-            .await
+        self.table_update_impl(
+            db_name,
+            table_name,
+            new_name,
+            new_constraints,
+            description,
+            is_temporal,
+        )
+        .await
     }
 
     async fn table_remove(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError> {

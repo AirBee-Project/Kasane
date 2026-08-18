@@ -596,6 +596,7 @@ impl<'a> KasaneDbWrite<'a> {
         new_name: Option<&str>,
         new_constraints: Option<Option<crate::models::database::table::UpdateTableConstraints>>,
         description: Option<Option<String>>,
+        is_temporal: Option<bool>,
     ) -> Result<Table, AppError> {
         let db_meta = {
             let db = self.db.databases;
@@ -648,6 +649,10 @@ impl<'a> KasaneDbWrite<'a> {
 
         if let Some(desc) = description {
             table.description = desc;
+        }
+
+        if let Some(v) = is_temporal {
+            table.is_temporal = v;
         }
 
         let meta = TableMetadata {

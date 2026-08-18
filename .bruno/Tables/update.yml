@@ -26,7 +26,8 @@ http:
           "max": 100
         },
         "validate_existing_data": true,
-        "description": "更新されたテーブルの説明文です"
+        "description": "更新されたテーブルの説明文です",
+        "is_temporal": true
       }
   auth:
     type: bearer

@@ -17,6 +17,7 @@ pub async fn table_update(
     new_name: Option<&str>,
     new_constraints: Option<Option<crate::models::database::table::UpdateTableConstraints>>,
     description: Option<Option<String>>,
+    is_temporal: Option<bool>,
 ) -> Result<TableSummary, AppError> {
     if let Some(Some(desc)) = &description
         && desc.chars().count() > crate::models::database::MAX_DESCRIPTION_LENGTH
@@ -26,6 +27,15 @@ pub async fn table_update(
                 "Description cannot exceed {} characters",
                 crate::models::database::MAX_DESCRIPTION_LENGTH
             ),
+        });
+    }
+
+    // 時間ロックの再設定（true -> false）は未対応。
+    if is_temporal == Some(false) {
+        return Err(AppError::ConstraintViolation {
+            reason: "is_temporal cannot be set to false once a table has been created \
+                (there is no cheap way to verify no temporal data already exists)"
+                .to_string(),
         });
     }
 
@@ -45,6 +55,7 @@ pub async fn table_update(
                 new_name.as_deref(),
                 new_constraints.clone(),
                 description.clone(),
+                is_temporal,
             )
             .await
         })

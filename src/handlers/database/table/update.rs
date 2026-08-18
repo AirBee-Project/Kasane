@@ -28,7 +28,7 @@ use axum::{
     request_body = UpdateTableRequest,
     responses(
         (status = 200, description = "テーブルの更新に成功", body = TableSummary),
-        (status = 400, description = "リクエストが不正（パラメータエラー、または既存データが新しい制約に違反した場合）"),
+        (status = 400, description = "リクエストが不正（パラメータエラー、既存データが新しい制約に違反した場合、または is_temporal を false に変更しようとした場合）"),
         (status = 401, description = "認証エラー"),
         (status = 403, description = "権限が不足している"),
         (status = 404, description = "データベースまたはテーブルが見つからない"),
@@ -53,6 +53,7 @@ pub async fn table_update_handler(
         payload.name.as_deref(),
         payload.constraints,
         payload.description,
+        payload.is_temporal,
     )
     .await?;
 

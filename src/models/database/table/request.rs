@@ -73,6 +73,10 @@ pub struct UpdateTableRequest {
     #[serde(default, deserialize_with = "crate::models::helpers::double_option")]
     #[schema(value_type = Option<String>, example = "更新されたテーブルの説明文です")]
     pub description: Option<Option<String>>,
+
+    /// 時間ロックの解除。`true` のみ指定可能。
+    #[schema(example = true)]
+    pub is_temporal: Option<bool>,
 }
 
 #[derive(Debug, serde::Deserialize, ToSchema)]
