@@ -4,7 +4,9 @@
 
 use heed::Database;
 use heed::types::Bytes;
-use kasane_logic::{Error as LogicError, FlexId, RangeId, SafeValue, Source, WorkingTree};
+use kasane_logic::{
+    CancellationToken, Error as LogicError, FlexId, RangeId, SafeValue, Source, WorkingTree,
+};
 
 use super::LmdbQuerySnapshot;
 use super::keys::TableIdAndFlexId;
@@ -55,7 +57,11 @@ where
 {
     type Value = V;
 
-    fn read_range_ids(&self, bounds: &[RangeId]) -> Result<WorkingTree<V>, LogicError> {
+    fn read_range_ids(
+        &self,
+        bounds: &[RangeId],
+        token: &CancellationToken,
+    ) -> Result<WorkingTree<V>, LogicError> {
         let txn = self.snapshot.lock().map_err(|_| {
             LogicError::SourceRead("query snapshot was poisoned by a panicking reader".to_string())
         })?;
@@ -67,6 +73,10 @@ where
                     .map_err(|e| LogicError::SourceRead(e.to_string()))?;
 
             for region in leaves {
+                if token.is_cancelled() {
+                    return Err(LogicError::Cancelled);
+                }
+
                 let arch =
                     shard::load_leaf_archived(&self.tables_data, &txn, self.table_id, &region)
                         .map_err(|e| LogicError::SourceRead(e.to_string()))?;
@@ -84,7 +94,7 @@ where
         Ok(flex_ids.into_iter().collect())
     }
 
-    fn read_all(self: Box<Self>) -> Result<WorkingTree<V>, LogicError> {
+    fn read_all(self: Box<Self>, _token: &CancellationToken) -> Result<WorkingTree<V>, LogicError> {
         // テーブル全体の materialize は容量的に現実的でない。
         Err(LogicError::Unsupported(
             "full scan of a database-backed table; use a bounded (lazy) query instead",

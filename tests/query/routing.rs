@@ -8,7 +8,7 @@ use kasane::models::id::TableId;
 use kasane::repositories::lmdb::initialize_database;
 use kasane::repositories::lmdb::shard;
 use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
-use kasane_logic::{RangeId, SingleId, SpatialIdSet};
+use kasane_logic::{CancellationToken, RangeId, SingleId, SpatialIdSet};
 
 #[test]
 fn range_routing_reaches_the_same_leaves_as_id_routing() {
@@ -98,7 +98,9 @@ fn table_source_read_range_ids_returns_all_flex_ids() {
     );
 
     let bbox = RangeId::new(20, [0, 0], [790000, 790003], [500000, 500000]).unwrap();
-    let working = source.read_range_ids(&[bbox]).unwrap();
+    let working = source
+        .read_range_ids(&[bbox], &CancellationToken::new())
+        .unwrap();
     let mut got: Vec<i32> = working.into_iter().map(|(_, v)| v).collect();
     got.sort();
 

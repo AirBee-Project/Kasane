@@ -384,6 +384,15 @@ fn build_map_values<U: Value, V: Value>(
     Ok(input.map_values(move |value| lookup.get(&value).unwrap_or(&default).clone()))
 }
 
+/// `spawn_blocking` は `JoinHandle` を drop しても中の処理を止めないため、`execute` の async フレームが drop されたら（＝上流でキャンセル）これで `token` を代わりにキャンセルする。
+struct CancelOnDrop(kasane_logic::CancellationToken);
+
+impl Drop for CancelOnDrop {
+    fn drop(&mut self) {
+        self.0.cancel();
+    }
+}
+
 /// クエリを実行し、対象空間IDの値を返す。
 #[tracing::instrument(skip_all)]
 pub async fn execute(
@@ -410,6 +419,9 @@ pub async fn execute(
         .await
         .map_err(|e| AppError::InternalError(e.to_string()))?;
 
+    let token = kasane_logic::CancellationToken::new();
+    let _cancel_on_drop = CancelOnDrop(token.clone());
+
     // クエリ演算は同期ブロッキング処理のため、async ワーカーを塞がない。
     let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || -> Result<GetDataResponse, AppError> {
@@ -421,7 +433,7 @@ pub async fn execute(
 
             // 作業木は単一の値型で組まれるため、ここで値型ごとに単型化する。
             for_value_type!(
-                value_type, run, &app_state, &request, &tables, &snapshot, format, limit
+                value_type, run, &app_state, &request, &tables, &snapshot, format, limit, &token
             )
         })
     })
@@ -436,6 +448,7 @@ fn run<V: Value>(
     snapshot: &QuerySnapshot,
     format: OutputFormat,
     limit: Option<usize>,
+    token: &kasane_logic::CancellationToken,
 ) -> Result<GetDataResponse, AppError> {
     let targets = to_spatial_id_set(&request.spatial_ids)?;
 
@@ -456,7 +469,11 @@ fn run<V: Value>(
 
     // まとめて 1 回だけ評価する。空間 ID 1 件ずつだとクエリが件数分再実行される。
     let flex_ids = tracing::info_span!("query.run_within", target_regions = bounds.len())
-        .in_scope(|| optimized.run_within(bounds).map_err(AppError::LogicError))?
+        .in_scope(|| {
+            optimized
+                .run_within(bounds, token)
+                .map_err(AppError::LogicError)
+        })?
         .into_iter()
         .filter(|(flex_id, _)| targets.get(flex_id).next().is_some());
 

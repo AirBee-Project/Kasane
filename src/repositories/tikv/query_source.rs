@@ -6,9 +6,16 @@
 //! ランタイムハンドルを持ち回るのは、[`tokio::runtime::Handle::current`] を `read_range_ids` の
 //! 中で呼ぶと、実行器が rayon 側から読みに来たときにランタイム文脈が無くて panic するため。
 
-use kasane_logic::{Error as LogicError, RangeId, SafeValue, Source, WorkingTree};
+use std::time::Duration;
+
+use kasane_logic::{
+    CancellationToken, Error as LogicError, RangeId, SafeValue, Source, WorkingTree,
+};
 use tikv_client::Timestamp;
 use tokio::runtime::Handle;
+
+/// キャンセルを確認する間隔。往復が長引いても、これより長くは待たされない。
+const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 use crate::models::id::TableId;
 use crate::repositories::traits::DecodeFn;
@@ -53,7 +60,15 @@ where
 {
     type Value = V;
 
-    fn read_range_ids(&self, bounds: &[RangeId]) -> Result<WorkingTree<V>, LogicError> {
+    fn read_range_ids(
+        &self,
+        bounds: &[RangeId],
+        token: &CancellationToken,
+    ) -> Result<WorkingTree<V>, LogicError> {
+        if token.is_cancelled() {
+            return Err(LogicError::Cancelled);
+        }
+
         let db = self.db.clone();
         let table_id = self.table_id;
         let bounds = bounds.to_vec();
@@ -66,10 +81,21 @@ where
             let reader = TikvRead::at(db.client.clone(), snapshot_ts);
 
             // 1 本ごとに降りると往復が「境界の本数 × 木の深さ」になる。復元関数も渡す。
-            reader
-                .read_values_in_ranges(table_id, &bounds, decode.as_ref())
-                .await
-                .map_err(|e| LogicError::SourceRead(e.to_string()))
+            let read = reader.read_values_in_ranges(table_id, &bounds, decode.as_ref());
+            tokio::pin!(read);
+
+            loop {
+                tokio::select! {
+                    result = &mut read => {
+                        break result.map_err(|e| LogicError::SourceRead(e.to_string()));
+                    }
+                    _ = tokio::time::sleep(CANCEL_POLL_INTERVAL) => {
+                        if token.is_cancelled() {
+                            break Err(LogicError::Cancelled);
+                        }
+                    }
+                }
+            }
         })?;
 
         // kasane_logic.query.source_read はネットワーク待ち＋木構築の合計。ネットワークだけの
@@ -86,7 +112,7 @@ where
         Ok(flex_ids.into_iter().collect())
     }
 
-    fn read_all(self: Box<Self>) -> Result<WorkingTree<V>, LogicError> {
+    fn read_all(self: Box<Self>, _token: &CancellationToken) -> Result<WorkingTree<V>, LogicError> {
         // テーブル全体の materialize は容量的に現実的でない。
         Err(LogicError::Unsupported(
             "full scan of a database-backed table; use a bounded (lazy) query instead",
