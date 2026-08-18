@@ -58,7 +58,11 @@ pub async fn data_get(
     .await?;
 
     if let Some(accept) = headers.get(axum::http::header::ACCEPT) {
-        if accept.to_str().unwrap_or("").contains("application/vnd.apache.arrow.stream") {
+        if accept
+            .to_str()
+            .unwrap_or("")
+            .contains("application/vnd.apache.arrow.stream")
+        {
             let arrow_bytes = crate::models::database::table::data::arrow::to_arrow_ipc(result)
                 .map_err(|e| AppError::InternalError(format!("Arrow encoding error: {}", e)))?;
             return Ok(axum::response::Response::builder()

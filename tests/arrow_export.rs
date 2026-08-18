@@ -1,5 +1,5 @@
 use arrow::array::{
-    Array, DictionaryArray, Int32Array, StringArray, UInt32Array, UInt64Array, UInt8Array,
+    Array, DictionaryArray, Int32Array, StringArray, UInt8Array, UInt32Array, UInt64Array,
 };
 use arrow::ipc::reader::StreamReader;
 use kasane::models::database::table::data::{

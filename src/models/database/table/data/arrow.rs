@@ -2,8 +2,8 @@ use crate::models::database::table::data::{
     GetDataResponse, GetDataResponseFlex, GetDataResponseRange, GetDataResponseSingle,
 };
 use arrow::array::{
-    ArrayRef, DictionaryArray, Float64Builder, Int32Builder, StringBuilder, UInt32Array,
-    UInt32Builder, UInt64Builder, UInt8Array, UInt8Builder,
+    ArrayRef, DictionaryArray, Float64Builder, Int32Builder, StringBuilder, UInt8Array,
+    UInt8Builder, UInt32Array, UInt32Builder, UInt64Builder,
 };
 use arrow::datatypes::{DataType, Field, Schema, UInt32Type};
 use arrow::ipc::writer::StreamWriter;
