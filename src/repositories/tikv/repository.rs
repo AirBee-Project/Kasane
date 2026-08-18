@@ -228,8 +228,7 @@ impl WriteRepository for TikvWrite<'_> {
         value_index: bool,
         is_temporal: bool,
     ) -> Result<Table, AppError> {
-        self.txn
-            .table_create_impl(
+        self.table_create_impl(
                 db_name,
                 table_name,
                 data_type,

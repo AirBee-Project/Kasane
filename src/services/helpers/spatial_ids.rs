@@ -319,7 +319,7 @@ mod tests {
 
         // 1. enforce_no_time = true (Reject time)
         let res_single_reject = process_spatial_ids(
-            &[single_with_time.clone()],
+            std::slice::from_ref(&single_with_time),
             0,
             &ZoomLevelPolicy::Ignore,
             true,
@@ -327,7 +327,7 @@ mod tests {
         assert!(res_single_reject.is_err());
 
         let res_range_reject = process_spatial_ids(
-            &[range_with_time.clone()],
+            std::slice::from_ref(&range_with_time),
             0,
             &ZoomLevelPolicy::Ignore,
             true,
@@ -335,12 +335,12 @@ mod tests {
         assert!(res_range_reject.is_err());
 
         let res_flex_reject =
-            process_spatial_ids(&[flex_with_time.clone()], 0, &ZoomLevelPolicy::Ignore, true);
+            process_spatial_ids(std::slice::from_ref(&flex_with_time), 0, &ZoomLevelPolicy::Ignore, true);
         assert!(res_flex_reject.is_err());
 
         // 2. enforce_no_time = true (Accept no time)
         let res_single_accept =
-            process_spatial_ids(&[single_no_time.clone()], 0, &ZoomLevelPolicy::Ignore, true);
+            process_spatial_ids(std::slice::from_ref(&single_no_time), 0, &ZoomLevelPolicy::Ignore, true);
         assert!(res_single_accept.is_ok());
 
         // 3. enforce_no_time = false (Accept time)
