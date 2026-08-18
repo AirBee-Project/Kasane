@@ -82,5 +82,7 @@ examples:
               "type": "Int",
               "min": 0,
               "max": 100
-            }
+            },
+            "description": "更新されたテーブルの説明文です",
+            "is_temporal": true
           }

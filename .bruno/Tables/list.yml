@@ -46,6 +46,6 @@ examples:
               "name": "example_table",
               "data_type": "Text",
               "max_zoom_level": 25,
-              "count": 0
+              "is_temporal": true
             }
           ]
