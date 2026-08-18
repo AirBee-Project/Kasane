@@ -56,5 +56,6 @@ pub async fn table_update(
         max_zoom_level: table.max_zoom_level,
         constraints: table.constraints,
         description: table.description,
+        is_temporal: table.is_temporal,
     })
 }

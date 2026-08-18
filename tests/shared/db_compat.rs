@@ -220,21 +220,6 @@ async fn insert_int_data<S: Storage>(db: &S, table_id: TableId) {
             })
             .collect();
         db.write(async move |w| {
-            w.table_create(
-                DB_NAME,
-                INT_TABLE,
-                TableDataType::Int,
-                20,
-                None,
-                None,
-                true,
-                true,
-            )
-            .await
-        })
-        .await
-        .unwrap();
-        db.write(async move |w| {
             w.data_insert_many(table_id, Some(TableDataType::Int), entries)
                 .await
         })
