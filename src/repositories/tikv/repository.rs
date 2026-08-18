@@ -226,17 +226,20 @@ impl WriteRepository for TikvWrite<'_> {
         constraints: Option<TableConstraints>,
         description: Option<String>,
         value_index: bool,
+        has_time: bool,
     ) -> Result<Table, AppError> {
-        self.table_create_impl(
-            db_name,
-            table_name,
-            data_type,
-            max_zoom_level,
-            constraints,
-            description,
-            value_index,
-        )
-        .await
+        self.txn
+            .table_create_impl(
+                db_name,
+                table_name,
+                data_type,
+                max_zoom_level,
+                constraints,
+                description,
+                value_index,
+                has_time,
+            )
+            .await
     }
 
     async fn table_update(

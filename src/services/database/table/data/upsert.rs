@@ -27,7 +27,12 @@ pub async fn upsert(
     // 失敗し得るユーザ入力検証はバッチ投入前に済ませる（insert と同様）。
     let value = interpret_value(table.data_type, table.constraints.as_ref(), value)?;
     enforce_max_stored_size(&value)?;
-    let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
+    let ids = process_spatial_ids(
+        spatial_ids,
+        table.max_zoom_level,
+        zoom_level_policy,
+        !table.has_time,
+    )?;
 
     app_state
         .db

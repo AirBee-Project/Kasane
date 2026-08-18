@@ -47,6 +47,7 @@ pub async fn create(
                 req.constraints.clone(),
                 req.description.clone(),
                 req.value_index,
+                req.has_time,
             )
             .await
         })

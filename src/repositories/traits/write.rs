@@ -56,6 +56,7 @@ pub trait WriteRepository: CatalogRepository {
         constraints: Option<TableConstraints>,
         description: Option<String>,
         value_index: bool,
+        has_time: bool,
     ) -> Result<Table, AppError>;
 
     #[allow(clippy::too_many_arguments)]

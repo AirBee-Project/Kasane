@@ -454,6 +454,7 @@ impl<'a> KasaneDbRead<'a> {
                 constraints: m.constraints,
                 description: m.description,
                 value_index: m.value_index,
+                has_time: m.has_time,
             });
         }
         Ok(tables)
@@ -517,6 +518,7 @@ impl<'a> KasaneDbWrite<'a> {
         constraints: Option<TableConstraints>,
         description: Option<String>,
         value_index: bool,
+        has_time: bool,
     ) -> Result<Table, AppError> {
         if db_name.is_empty() {
             return Err(Resource::Database.not_found(db_name.to_string()));
@@ -565,6 +567,7 @@ impl<'a> KasaneDbWrite<'a> {
             constraints: actual_constraints.clone(),
             description: description.clone(),
             value_index,
+            has_time,
         };
 
         let db = self.db.tables;
@@ -581,6 +584,7 @@ impl<'a> KasaneDbWrite<'a> {
             constraints: actual_constraints,
             description,
             value_index,
+            has_time,
         })
     }
 
@@ -653,6 +657,7 @@ impl<'a> KasaneDbWrite<'a> {
             constraints: table.constraints.clone(),
             description: table.description.clone(),
             value_index: table.value_index,
+            has_time: table.has_time,
         };
 
         let db = self.db.tables;
@@ -821,6 +826,7 @@ impl<'a> KasaneDbWrite<'a> {
             constraints: src_table_meta.constraints.clone(),
             description: src_table_meta.description.clone(),
             value_index: src_table_meta.value_index,
+            has_time: src_table_meta.has_time,
         };
 
         db_tables.put(
@@ -881,6 +887,7 @@ impl<'a> KasaneDbWrite<'a> {
             constraints: src_table_meta.constraints,
             description: src_table_meta.description,
             value_index: src_table_meta.value_index,
+            has_time: src_table_meta.has_time,
         })
     }
 }

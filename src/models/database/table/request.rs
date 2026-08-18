@@ -24,6 +24,11 @@ pub struct CreateTableRequest {
     #[serde(default)]
     #[schema(example = false)]
     pub value_index: bool,
+    /// 時系列データとして扱うかどうか。既定は `true`。
+    /// フロントエンド側で静的なデータとして扱うか、時間変化するデータとして扱うかを 判断するために使用される。**作成後は変更できない。**
+    #[serde(default = "crate::models::helpers::default_true")]
+    #[schema(example = true)]
+    pub has_time: bool,
 }
 
 // 書き込みクロージャはやり直しで複数回呼ばれうるので、`Clone` が要る。

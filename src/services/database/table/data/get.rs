@@ -56,7 +56,12 @@ pub async fn get(
                 Resource::Table.not_found(table_name.clone())
             })?;
 
-            let ids = process_spatial_ids(&spatial_ids, table.max_zoom_level, &zoom_level_policy)?;
+            let ids = process_spatial_ids(
+                &spatial_ids,
+                table.max_zoom_level,
+                &zoom_level_policy,
+                false,
+            )?;
             let groups = db.data_get(table.id, ids, query_limit).await?;
             Ok((table, groups))
         })

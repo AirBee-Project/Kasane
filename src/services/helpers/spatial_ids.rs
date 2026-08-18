@@ -178,12 +178,18 @@ pub fn process_spatial_ids(
     ids: &[SpatialId],
     max_zoom_level: u8,
     policy: &ZoomLevelPolicy,
+    enforce_no_time: bool,
 ) -> Result<SpatialIdSet, AppError> {
     let mut result = SpatialIdSet::new();
 
     for spatial_id in ids {
         match spatial_id {
             SpatialId::SingleId(single_id) => {
+                if enforce_no_time && (single_id.i.is_some() || single_id.t.is_some()) {
+                    return Err(invalid_time_reason(
+                        "This table does not accept time-indexed spatial IDs for write operations",
+                    ));
+                }
                 let Some(zoom) = resolve_zoom(single_id.z, max_zoom_level, policy)? else {
                     continue;
                 };
@@ -199,6 +205,11 @@ pub fn process_spatial_ids(
                 }
             }
             SpatialId::RangeId(range_id) => {
+                if enforce_no_time && (range_id.i.is_some() || range_id.t.is_some()) {
+                    return Err(invalid_time_reason(
+                        "This table does not accept time-indexed spatial IDs for write operations",
+                    ));
+                }
                 let Some(zoom) = resolve_zoom(range_id.z, max_zoom_level, policy)? else {
                     continue;
                 };
@@ -214,6 +225,11 @@ pub fn process_spatial_ids(
                 }
             }
             SpatialId::FlexId(flex_id) => {
+                if enforce_no_time && (flex_id.t_zoomlevel.is_some() || flex_id.t_index.is_some()) {
+                    return Err(invalid_time_reason(
+                        "This table does not accept time-indexed spatial IDs for write operations",
+                    ));
+                }
                 let fz = resolve_zoom(flex_id.f_zoomlevel, max_zoom_level, policy)?;
                 let xz = resolve_zoom(flex_id.x_zoomlevel, max_zoom_level, policy)?;
                 let yz = resolve_zoom(flex_id.y_zoomlevel, max_zoom_level, policy)?;
@@ -257,4 +273,87 @@ pub fn process_spatial_ids(
     }
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::spatial_id::{RawFlexId, RawRangeId, RawSingleId};
+
+    #[test]
+    fn test_process_spatial_ids_enforce_no_time() {
+        let single_with_time = SpatialId::SingleId(RawSingleId {
+            z: 0,
+            f: 0,
+            x: 0,
+            y: 0,
+            i: Some(1),
+            t: Some(2),
+        });
+        let single_no_time = SpatialId::SingleId(RawSingleId {
+            z: 0,
+            f: 0,
+            x: 0,
+            y: 0,
+            i: None,
+            t: None,
+        });
+        let range_with_time = SpatialId::RangeId(RawRangeId {
+            z: 0,
+            f: None,
+            x: None,
+            y: None,
+            i: Some(1),
+            t: Some([0, 1]),
+        });
+        let flex_with_time = SpatialId::FlexId(RawFlexId {
+            f_zoomlevel: 0,
+            f_index: 0,
+            x_zoomlevel: 0,
+            x_index: 0,
+            y_zoomlevel: 0,
+            y_index: 0,
+            t_zoomlevel: Some(0),
+            t_index: Some(0),
+        });
+
+        // 1. enforce_no_time = true (Reject time)
+        let res_single_reject = process_spatial_ids(
+            &[single_with_time.clone()],
+            0,
+            &ZoomLevelPolicy::Ignore,
+            true,
+        );
+        assert!(res_single_reject.is_err());
+
+        let res_range_reject = process_spatial_ids(
+            &[range_with_time.clone()],
+            0,
+            &ZoomLevelPolicy::Ignore,
+            true,
+        );
+        assert!(res_range_reject.is_err());
+
+        let res_flex_reject =
+            process_spatial_ids(&[flex_with_time.clone()], 0, &ZoomLevelPolicy::Ignore, true);
+        assert!(res_flex_reject.is_err());
+
+        // 2. enforce_no_time = true (Accept no time)
+        let res_single_accept =
+            process_spatial_ids(&[single_no_time.clone()], 0, &ZoomLevelPolicy::Ignore, true);
+        assert!(res_single_accept.is_ok());
+
+        // 3. enforce_no_time = false (Accept time)
+        let res_single_allow_time =
+            process_spatial_ids(&[single_with_time], 0, &ZoomLevelPolicy::Ignore, false);
+        assert!(res_single_allow_time.is_ok());
+
+        let res_range_allow_time =
+            process_spatial_ids(&[range_with_time], 0, &ZoomLevelPolicy::Ignore, false);
+        assert!(res_range_allow_time.is_ok());
+
+        let res_flex_allow_time =
+            process_spatial_ids(&[flex_with_time], 0, &ZoomLevelPolicy::Ignore, false);
+        assert!(res_flex_allow_time.is_ok());
+    }
 }
