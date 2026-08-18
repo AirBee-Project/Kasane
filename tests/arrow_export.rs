@@ -1,6 +1,4 @@
-use arrow::array::{
-    Array, DictionaryArray, Int32Array, StringArray, UInt8Array, UInt32Array, UInt64Array,
-};
+use arrow::array::{Array, Int32Array, UInt8Array, UInt32Array, UInt64Array};
 use arrow::ipc::reader::StreamReader;
 use kasane::models::database::table::data::{
     DataGroup, GetDataResponse, GetDataResponseFlex, GetDataResponseRange, GetDataResponseSingle,
