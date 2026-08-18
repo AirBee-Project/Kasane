@@ -14,7 +14,7 @@ use axum::{
 ///
 /// **必要な権限**: `table` / `read`
 ///
-/// 空間IDと値をJSON配列として一括で取得します。
+/// 空間IDと値をJSON配列として一括で取得します。空間のみのTableであっても時間を指定して読み取りを行うことができます。
 #[utoipa::path(
     post,
     path = "/databases/{db_name}/tables/{table_name}/data/search",
@@ -27,6 +27,7 @@ use axum::{
     ),
     responses(
         (status = 200, body = GetDataResponse),
+        (status = 400, description = "空間IDが不正な場合"),
         (status = 404, description = "テーブルが存在しない")
     ),
     security(("bearer_auth" = [])),

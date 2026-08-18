@@ -24,6 +24,7 @@ use axum::{
     request_body = InsertDataRequest,
     responses(
         (status = 200),
+        (status = 400, description = "Tableに対して時空間IDが不正な場合（ズームレベルの不一致や時間の有無の不一致）"),
         (status = 404, description = "テーブルが存在しない")
     ),
     security(("bearer_auth" = [])),
