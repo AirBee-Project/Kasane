@@ -56,8 +56,11 @@ pub trait WriteRepository: CatalogRepository {
         constraints: Option<TableConstraints>,
         description: Option<String>,
         value_index: bool,
+        is_temporal: bool,
     ) -> Result<Table, AppError>;
 
+    /// `is_temporal`: `Some(true)` で時間ロックを解除する。`Some(false)`（再ロック）は
+    /// 既存データに時間成分が残っていないかを定数時間で確認する手段が無いため未対応で、サービスレイヤーが事前に弾く。
     #[allow(clippy::too_many_arguments)]
     async fn table_update(
         &mut self,
@@ -66,6 +69,7 @@ pub trait WriteRepository: CatalogRepository {
         new_name: Option<&str>,
         new_constraints: Option<Option<UpdateTableConstraints>>,
         description: Option<Option<String>>,
+        is_temporal: Option<bool>,
     ) -> Result<Table, AppError>;
 
     async fn table_remove(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError>;

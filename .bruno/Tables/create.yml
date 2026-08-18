@@ -19,6 +19,7 @@ http:
         "name": "example_table",
         "data_type": "Text",
         "max_zoom_level": 25,
+        "is_temporal": true,
         "description": "テーブルの説明文です"
       }
   auth:

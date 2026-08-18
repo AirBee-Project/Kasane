@@ -130,6 +130,7 @@ async fn bench_concurrent_writes() {
                 None,
                 None,
                 false,
+                true,
             )
             .await
         })

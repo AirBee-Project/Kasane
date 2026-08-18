@@ -24,6 +24,11 @@ pub struct CreateTableRequest {
     #[serde(default)]
     #[schema(example = false)]
     pub value_index: bool,
+    /// テーブルが時間IDを扱うかどうか。空間のみのデータの場合には`false`にしておいた方がパフォーマンスが向上する。
+    // 正確にはパフォーマンスは将来的に向上する予定である。ユーザーに対してはこの言い方で良い。
+    #[serde(default = "crate::models::helpers::default_true")]
+    #[schema(example = true)]
+    pub is_temporal: bool,
 }
 
 // 書き込みクロージャはやり直しで複数回呼ばれうるので、`Clone` が要る。
@@ -68,6 +73,10 @@ pub struct UpdateTableRequest {
     #[serde(default, deserialize_with = "crate::models::helpers::double_option")]
     #[schema(value_type = Option<String>, example = "更新されたテーブルの説明文です")]
     pub description: Option<Option<String>>,
+
+    /// 時間ロックの解除。`true` のみ指定可能。
+    #[schema(example = true)]
+    pub is_temporal: Option<bool>,
 }
 
 #[derive(Debug, serde::Deserialize, ToSchema)]

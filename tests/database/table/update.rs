@@ -345,3 +345,99 @@ async fn test_update_table_description_too_long() {
     let response = test_app.app.clone().oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+/// `is_temporal: false` で作成したテーブルは時間付きIDの書き込みが拒否されるが、
+/// `is_temporal: true` へ緩めれば通るようになることを検証する。
+async fn test_update_table_is_temporal_unlock_allows_temporal_write() {
+    let test_app = TestApp::new().await;
+    test_app.create_database("test_db").await;
+
+    let create_body = serde_json::json!({
+        "name": "locked_table",
+        "data_type": "Int",
+        "max_zoom_level": 25,
+        "is_temporal": false
+    });
+    let req = Request::builder()
+        .method("POST")
+        .uri("/databases/test_db/tables")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
+        .unwrap();
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // 一覧・詳細の両方で is_temporal が見えること。
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases/test_db/tables/locked_table")
+        .body(Body::empty())
+        .unwrap();
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["is_temporal"], false);
+
+    let req = Request::builder()
+        .method("GET")
+        .uri("/databases/test_db/tables")
+        .body(Body::empty())
+        .unwrap();
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json[0]["is_temporal"], false);
+
+    // 時間成分付きの書き込みは拒否される。
+    let temporal_id = serde_json::json!(
+        [{ "z": 20, "f": 0, "x": 0, "y": 0, "i": 3600, "t": 0, "type": "singleId" }]
+    );
+    let insert_body = serde_json::json!({
+        "value": 1,
+        "spatial_ids": temporal_id
+    });
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/databases/test_db/tables/locked_table/data")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&insert_body).unwrap()))
+        .unwrap();
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // false への再ロックは拒否される。
+    let update_body = serde_json::json!({ "is_temporal": false });
+    let req = Request::builder()
+        .method("PATCH")
+        .uri("/databases/test_db/tables/locked_table")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&update_body).unwrap()))
+        .unwrap();
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // true への解除は成功し、応答にも反映される。
+    let update_body = serde_json::json!({ "is_temporal": true });
+    let req = Request::builder()
+        .method("PATCH")
+        .uri("/databases/test_db/tables/locked_table")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&update_body).unwrap()))
+        .unwrap();
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["is_temporal"], true);
+
+    // 解除後は同じ時間付きIDの書き込みが通る。
+    let req = Request::builder()
+        .method("PUT")
+        .uri("/databases/test_db/tables/locked_table/data")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&insert_body).unwrap()))
+        .unwrap();
+    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}

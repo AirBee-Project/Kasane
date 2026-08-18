@@ -454,6 +454,7 @@ impl<'a> KasaneDbRead<'a> {
                 constraints: m.constraints,
                 description: m.description,
                 value_index: m.value_index,
+                is_temporal: m.is_temporal,
             });
         }
         Ok(tables)
@@ -517,6 +518,7 @@ impl<'a> KasaneDbWrite<'a> {
         constraints: Option<TableConstraints>,
         description: Option<String>,
         value_index: bool,
+        is_temporal: bool,
     ) -> Result<Table, AppError> {
         if db_name.is_empty() {
             return Err(Resource::Database.not_found(db_name.to_string()));
@@ -565,6 +567,7 @@ impl<'a> KasaneDbWrite<'a> {
             constraints: actual_constraints.clone(),
             description: description.clone(),
             value_index,
+            is_temporal,
         };
 
         let db = self.db.tables;
@@ -581,6 +584,7 @@ impl<'a> KasaneDbWrite<'a> {
             constraints: actual_constraints,
             description,
             value_index,
+            is_temporal,
         })
     }
 
@@ -592,6 +596,7 @@ impl<'a> KasaneDbWrite<'a> {
         new_name: Option<&str>,
         new_constraints: Option<Option<crate::models::database::table::UpdateTableConstraints>>,
         description: Option<Option<String>>,
+        is_temporal: Option<bool>,
     ) -> Result<Table, AppError> {
         let db_meta = {
             let db = self.db.databases;
@@ -646,6 +651,10 @@ impl<'a> KasaneDbWrite<'a> {
             table.description = desc;
         }
 
+        if let Some(v) = is_temporal {
+            table.is_temporal = v;
+        }
+
         let meta = TableMetadata {
             id: table.id,
             data_type: table.data_type,
@@ -653,6 +662,7 @@ impl<'a> KasaneDbWrite<'a> {
             constraints: table.constraints.clone(),
             description: table.description.clone(),
             value_index: table.value_index,
+            is_temporal: table.is_temporal,
         };
 
         let db = self.db.tables;
@@ -821,6 +831,7 @@ impl<'a> KasaneDbWrite<'a> {
             constraints: src_table_meta.constraints.clone(),
             description: src_table_meta.description.clone(),
             value_index: src_table_meta.value_index,
+            is_temporal: src_table_meta.is_temporal,
         };
 
         db_tables.put(
@@ -881,6 +892,7 @@ impl<'a> KasaneDbWrite<'a> {
             constraints: src_table_meta.constraints,
             description: src_table_meta.description,
             value_index: src_table_meta.value_index,
+            is_temporal: src_table_meta.is_temporal,
         })
     }
 }

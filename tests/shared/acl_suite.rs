@@ -78,9 +78,9 @@ async fn setup<S: Storage>(db: &S, n: &Names) {
     db.write(async move |w| {
         w.database_create(&d, None).await?;
         w.database_create(&o, None).await?;
-        w.table_create(&d, &t, TableDataType::Int, 20, None, None, false)
+        w.table_create(&d, &t, TableDataType::Int, 20, None, None, false, true)
             .await?;
-        w.table_create(&d, &ot, TableDataType::Int, 20, None, None, false)
+        w.table_create(&d, &ot, TableDataType::Int, 20, None, None, false, true)
             .await?;
         Ok(())
     })

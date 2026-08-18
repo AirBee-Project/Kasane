@@ -23,4 +23,7 @@ pub struct TableMetadata {
     /// 索引を持たないテーブルとして扱われるだけで、シャード本体の読み書きは変わらない。
     #[serde(default)]
     pub value_index: bool,
+    /// テーブルが時空間データであるか。マイグレーション互換性のためにデフォルトをtrueとし、既存テーブルは時間データとして扱う。
+    #[serde(default = "crate::models::helpers::default_true")]
+    pub is_temporal: bool,
 }

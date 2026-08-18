@@ -19,7 +19,12 @@ pub async fn remove(
     let table = authorized_table(app_state, user, db_name, table_name, UserRole::Write).await?;
 
     // 失敗し得るユーザ入力検証はバッチ投入前に済ませる（insert と同様）。
-    let ids = process_spatial_ids(spatial_ids, table.max_zoom_level, zoom_level_policy)?;
+    let ids = process_spatial_ids(
+        spatial_ids,
+        table.max_zoom_level,
+        zoom_level_policy,
+        !table.is_temporal,
+    )?;
 
     app_state
         .db

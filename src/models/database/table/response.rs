@@ -16,6 +16,9 @@ pub struct TableSummary {
     pub constraints: Option<TableConstraints>,
     #[schema(example = "テーブルの説明文です")]
     pub description: Option<String>,
+    /// データが時間IDを持つかどうか。
+    #[schema(example = true)]
+    pub is_temporal: bool,
 }
 
 /// 単一テーブルの詳細情報。保持する空間ID(FlexId)の総数 `count` を必ず含む。
@@ -33,6 +36,9 @@ pub struct TableInfoResponse {
     pub constraints: Option<TableConstraints>,
     #[schema(example = "テーブルの説明文です")]
     pub description: Option<String>,
+    /// データが時間IDを持つかどうか。
+    #[schema(example = true)]
+    pub is_temporal: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]

@@ -62,6 +62,7 @@ pub async fn table_copy(
         max_zoom_level: res.max_zoom_level,
         constraints: res.constraints,
         description: res.description,
+        is_temporal: res.is_temporal,
     };
 
     Ok(Json(summary))

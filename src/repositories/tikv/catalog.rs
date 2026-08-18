@@ -521,6 +521,7 @@ impl TikvWrite<'_> {
         constraints: Option<TableConstraints>,
         description: Option<String>,
         value_index: bool,
+        is_temporal: bool,
     ) -> Result<Table, AppError> {
         if db_name.is_empty() {
             return Err(Resource::Database.not_found(db_name.to_string()));
@@ -560,6 +561,7 @@ impl TikvWrite<'_> {
             constraints: actual_constraints.clone(),
             description: description.clone(),
             value_index,
+            is_temporal,
         };
         kv::put(
             &self.txn,
@@ -582,6 +584,7 @@ impl TikvWrite<'_> {
             constraints: actual_constraints,
             description,
             value_index,
+            is_temporal,
         })
     }
 
@@ -594,6 +597,7 @@ impl TikvWrite<'_> {
         new_name: Option<&str>,
         new_constraints: Option<Option<UpdateTableConstraints>>,
         description: Option<Option<String>>,
+        is_temporal: Option<bool>,
     ) -> Result<Table, AppError> {
         // 改名はテーブル集合の変更なので排他する（既存データ検証のほうは排他しない）。
         self.require_lock(LockScope::Database, db_name.as_bytes())?;
@@ -640,6 +644,10 @@ impl TikvWrite<'_> {
             table.description = desc;
         }
 
+        if let Some(v) = is_temporal {
+            table.is_temporal = v;
+        }
+
         let meta = TableMetadata {
             id: table.id,
             data_type: table.data_type,
@@ -647,6 +655,7 @@ impl TikvWrite<'_> {
             constraints: table.constraints.clone(),
             description: table.description.clone(),
             value_index: table.value_index,
+            is_temporal: table.is_temporal,
         };
 
         if changed_name {
@@ -750,6 +759,7 @@ impl TikvWrite<'_> {
             constraints: src_meta.constraints.clone(),
             description: src_meta.description.clone(),
             value_index: src_meta.value_index,
+            is_temporal: src_meta.is_temporal,
         };
 
         kv::put(
@@ -785,6 +795,7 @@ impl TikvWrite<'_> {
             constraints: src_meta.constraints,
             description: src_meta.description,
             value_index: src_meta.value_index,
+            is_temporal: src_meta.is_temporal,
         })
     }
 

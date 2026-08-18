@@ -69,5 +69,6 @@ examples:
               "type": "Int",
               "min": 0,
               "max": 100
-            }
+            },
+            "is_temporal": true
           }

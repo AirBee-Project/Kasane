@@ -12,6 +12,8 @@ pub struct Table {
     pub description: Option<String>,
     /// 値インデックスを維持するか（[`TableMetadata::value_index`](super::TableMetadata) を参照）。
     pub value_index: bool,
+    /// 時間データ（時系列データ）として扱うかどうか。
+    pub is_temporal: bool,
 }
 
 impl Table {
@@ -31,6 +33,7 @@ impl Table {
             constraints: meta.constraints,
             description: meta.description,
             value_index: meta.value_index,
+            is_temporal: meta.is_temporal,
         }
     }
 }

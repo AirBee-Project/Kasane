@@ -135,8 +135,17 @@ pub async fn populate<S: Storage>(db: &S) {
     db.write(async move |w| {
         w.database_create(DB_NAME, Some("format compat fixture".into()))
             .await?;
-        w.table_create(DB_NAME, INT_TABLE, TableDataType::Int, 20, None, None, true)
-            .await?;
+        w.table_create(
+            DB_NAME,
+            INT_TABLE,
+            TableDataType::Int,
+            20,
+            None,
+            None,
+            true,
+            true,
+        )
+        .await?;
         w.table_create(
             DB_NAME,
             TEXT_TABLE,
@@ -144,6 +153,7 @@ pub async fn populate<S: Storage>(db: &S) {
             20,
             None,
             None,
+            true,
             true,
         )
         .await?;

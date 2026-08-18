@@ -5,3 +5,7 @@ where
 {
     serde::Deserialize::deserialize(deserializer).map(Some)
 }
+
+pub const fn default_true() -> bool {
+    true
+}
