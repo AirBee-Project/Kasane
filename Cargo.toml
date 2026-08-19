@@ -68,6 +68,17 @@ http-body-util = "0.1.3"
 tempfile = "3.27.0"
 serde_yaml = "0.9"
 tower = { version = "0.5.3", features = ["util"] }
+criterion = { version = "0.8", features = ["html_reports"] }
+
+[[bench]]
+name = "query_workflow_risk_diffusion"
+path = "benches/query/workflow/risk_diffusion.rs"
+harness = false
+
+[[bench]]
+name = "query_unary_falloff"
+path = "benches/query/unary/falloff.rs"
+harness = false
 
 [profile.dev]
 opt-level = 0
@@ -81,3 +92,9 @@ opt-level = 3
 lto = "fat"
 codegen-units = 1
 strip = true
+
+[profile.bench]
+opt-level = 3
+lto = "thin"
+codegen-units = 16
+debug = false
