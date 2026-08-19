@@ -148,7 +148,8 @@ pub(super) async fn route_leaves_for_ranges<R: Reader>(
     txn: &Readers<R>,
     table_id: TableId,
     ranges: &[RangeId],
-) -> Result<Vec<RoutedRange>, AppError> {
+    tx: tokio::sync::mpsc::Sender<Result<Vec<RoutedRange>, AppError>>,
+) {
     let mut level: Vec<(FlexId, Vec<u32>)> = Vec::new();
     for root in [FlexId::LOWER_MAX, FlexId::UPPER_MAX] {
         let hits: Vec<u32> = ranges
@@ -162,27 +163,45 @@ pub(super) async fn route_leaves_for_ranges<R: Reader>(
         }
     }
 
-    let mut out = Vec::new();
     let mut depth = 0usize;
     while !level.is_empty() {
         let regions: Vec<FlexId> = level.iter().map(|(region, _)| *region).collect();
-        // 降下は木の深さぶんしか回らないので、段ごとに計測してもスパン数は有限。
-        let mut nodes = load_nodes(txn, table_id, &regions)
+
+        let nodes_result = load_nodes(txn, table_id, &regions)
             .instrument(tracing::debug_span!(
                 "tikv.load_nodes",
                 depth,
                 regions = regions.len()
             ))
-            .await?;
+            .await;
+
+        let mut nodes = match nodes_result {
+            Ok(n) => n,
+            Err(e) => {
+                let _ = tx.send(Err(e)).await;
+                return;
+            }
+        };
+
         depth += 1;
 
         let mut next: Vec<(FlexId, Vec<u32>)> = Vec::new();
+        let mut out = Vec::new();
+
         for (region, hits) in level {
-            // 未作成領域＝データ無し。読み取りでは辿る必要がない。
             let Some(value) = nodes.remove(&region) else {
                 continue;
             };
-            match ShardEntry::child_pointers(value.entry())? {
+
+            let child_ptrs = match ShardEntry::child_pointers(value.entry()) {
+                Ok(c) => c,
+                Err(e) => {
+                    let _ = tx.send(Err(e)).await;
+                    return;
+                }
+            };
+
+            match child_ptrs {
                 None => out.push(RoutedRange { node: value, hits }),
                 Some(children) => {
                     for child in children {
@@ -198,8 +217,13 @@ pub(super) async fn route_leaves_for_ranges<R: Reader>(
                 }
             }
         }
+
+        if !out.is_empty() {
+            if tx.send(Ok(out)).await.is_err() {
+                return;
+            }
+        }
+
         level = next;
     }
-
-    Ok(out)
 }

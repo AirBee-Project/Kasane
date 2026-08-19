@@ -73,13 +73,15 @@ fn bench_risk_diffusion(c: &mut Criterion) {
                 query: build_query(),
             },
             |request| {
-                rt.block_on(query::execute(
-                    &env.app_state,
-                    &env.user,
-                    request,
-                    &query_params,
-                ))
-                .unwrap()
+                rt.block_on(async {
+                    let mut res =
+                        query::execute(&env.app_state, &env.user, request, &query_params, false)
+                            .await
+                            .unwrap();
+                    let body = std::mem::replace(res.body_mut(), axum::body::Body::empty());
+                    let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+                    bytes
+                })
             },
             BatchSize::SmallInput,
         );

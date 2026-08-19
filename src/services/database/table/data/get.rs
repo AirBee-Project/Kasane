@@ -3,12 +3,12 @@ use crate::{
     error::{AppError, Resource},
     middleware::auth::AuthUser,
     models::{
-        database::table::data::{GetDataQuery, GetDataResponse, ZoomLevelPolicy},
+        database::table::data::{GetDataQuery, ZoomLevelPolicy},
         spatial_id::SpatialId,
         users::UserRole,
     },
     repositories::{ReadRepository, Storage},
-    services::helpers::{data_response, spatial_ids::process_spatial_ids, value::restore_value},
+    services::helpers::{spatial_ids::process_spatial_ids, value::restore_value},
 };
 
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
@@ -20,7 +20,8 @@ pub async fn get(
     spatial_ids: &[SpatialId],
     zoom_level_policy: &ZoomLevelPolicy,
     query: &GetDataQuery,
-) -> Result<GetDataResponse, AppError> {
+    is_arrow: bool,
+) -> Result<axum::response::Response, AppError> {
     let db_name = db_name.to_string();
     let table_name = table_name.to_string();
     let spatial_ids = spatial_ids.to_vec();
@@ -67,13 +68,22 @@ pub async fn get(
         })
         .await?;
 
-    let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
-        span.in_scope(|| {
-            data_response::build(groups, query_format, query_limit, |bytes| {
-                restore_value(table.data_type, table.constraints.as_ref(), bytes)
-            })
-        })
+        if is_arrow {
+            crate::models::database::table::data::arrow::stream_arrow_ipc(
+                groups,
+                query_format,
+                query_limit,
+                move |bytes| restore_value(table.data_type, table.constraints.as_ref(), bytes),
+            )
+        } else {
+            crate::services::helpers::stream_response::stream_json(
+                groups,
+                query_format,
+                query_limit,
+                move |bytes| restore_value(table.data_type, table.constraints.as_ref(), bytes),
+            )
+        }
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?

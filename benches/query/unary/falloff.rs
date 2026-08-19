@@ -71,13 +71,14 @@ fn bench_falloff(c: &mut Criterion) {
                 query: falloff_query(field, radius),
             },
             |request| {
-                rt.block_on(query::execute(
-                    &env.app_state,
-                    &env.user,
-                    request,
-                    &query_params,
-                ))
-                .unwrap()
+                rt.block_on(async {
+                    let mut res =
+                        query::execute(&env.app_state, &env.user, request, &query_params, false)
+                            .await
+                            .unwrap();
+                    let body = std::mem::replace(res.body_mut(), axum::body::Body::empty());
+                    axum::body::to_bytes(body, usize::MAX).await.unwrap()
+                })
             },
             BatchSize::SmallInput,
         );
