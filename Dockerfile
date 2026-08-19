@@ -19,16 +19,32 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
 ARG BACKEND
+ARG TARGETARCH
+ARG TARGETVARIANT
 # 依存のビルドと本体のビルドで feature が食い違うと、せっかくの依存キャッシュが
 # 使われずに全部ビルドし直しになる。同じ値を両方へ渡す。
 ENV FEATURES="production,${BACKEND}"
 
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        if [ "$TARGETVARIANT" = "v2" ]; then \
+            echo "export RUSTFLAGS='-C target-cpu=x86-64-v2'" >> /env_rustflags; \
+        elif [ "$TARGETVARIANT" = "v3" ]; then \
+            echo "export RUSTFLAGS='-C target-cpu=x86-64-v3'" >> /env_rustflags; \
+        elif [ "$TARGETVARIANT" = "v4" ]; then \
+            echo "export RUSTFLAGS='-C target-cpu=x86-64-v4'" >> /env_rustflags; \
+        else \
+            echo "export RUSTFLAGS=''" >> /env_rustflags; \
+        fi \
+    else \
+        echo "export RUSTFLAGS=''" >> /env_rustflags; \
+    fi
+
 COPY --from=planner /app/recipe.json recipe.json
 
-RUN cargo chef cook --release --no-default-features --features "${FEATURES}" --recipe-path recipe.json
+RUN . /env_rustflags && cargo chef cook --release --no-default-features --features "${FEATURES}" --recipe-path recipe.json
 
 COPY . .
-RUN cargo build --release --no-default-features --features "${FEATURES}"
+RUN . /env_rustflags && cargo build --release --no-default-features --features "${FEATURES}"
 
 FROM debian:bookworm-slim
 ARG BACKEND

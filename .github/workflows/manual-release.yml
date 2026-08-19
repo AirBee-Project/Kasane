@@ -67,9 +67,9 @@ jobs:
           git push origin "v${{ steps.version.outputs.version }}"
 
   build:
-    name: Build (${{ matrix.backend }}/${{ matrix.platform }})
+    name: Build (${{ matrix.backend }}/${{ matrix.platform.name }})
     needs: version
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ matrix.platform.runner }}
     permissions:
       contents: read
       packages: write
@@ -77,11 +77,18 @@ jobs:
       fail-fast: false
       matrix:
         backend: [lmdb, tikv]
-        platform: [amd64, arm64]
-        include:
-          - platform: amd64
+        platform:
+          - name: amd64
+            os: linux/amd64
             runner: ubuntu-latest
-          - platform: arm64
+          - name: amd64-v2
+            os: linux/amd64/v2
+            runner: ubuntu-latest
+          - name: amd64-v3
+            os: linux/amd64/v3
+            runner: ubuntu-latest
+          - name: arm64
+            os: linux/arm64
             runner: ubuntu-24.04-arm
     steps:
       - name: Checkout repository
@@ -116,13 +123,13 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/${{ matrix.platform }}
+          platforms: ${{ matrix.platform.os }}
           build-args: |
             BACKEND=backend-${{ matrix.backend }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=${{ matrix.backend }}-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.backend }}-${{ matrix.platform }}
+          cache-from: type=gha,scope=${{ matrix.backend }}-${{ matrix.platform.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.backend }}-${{ matrix.platform.name }}
 
       - name: Export digest
         run: |
@@ -133,7 +140,7 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ matrix.backend }}-${{ matrix.platform }}
+          name: digests-${{ matrix.backend }}-${{ matrix.platform.name }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
