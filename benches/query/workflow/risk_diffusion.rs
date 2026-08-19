@@ -14,7 +14,9 @@ use std::time::Duration;
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 
 use kasane::models::database::table::TableDataType;
-use kasane::models::query::{Direction, ExecuteQueryRequest, FalloffPattern, MergePolicyKind, QueryNode};
+use kasane::models::query::{
+    Direction, ExecuteQueryRequest, FalloffPattern, MergePolicyKind, QueryNode,
+};
 use kasane::services::query;
 
 #[path = "../../support/mod.rs"]

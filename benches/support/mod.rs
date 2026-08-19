@@ -31,7 +31,10 @@ pub struct BenchEnv {
 pub fn build_env(rt: &tokio::runtime::Runtime) -> BenchEnv {
     let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir for bench LMDB");
     let db: Db = kasane::repositories::lmdb::initialize_database(
-        temp_dir.path().to_str().expect("temp dir path is not valid UTF-8"),
+        temp_dir
+            .path()
+            .to_str()
+            .expect("temp dir path is not valid UTF-8"),
     )
     .expect("failed to initialize LMDB");
     let app_state = AppState::new(db);
@@ -131,7 +134,12 @@ fn flex_id_to_spatial_id(id: &FlexId) -> SpatialId {
 /// 建物リスクデータを実際に書き込み経路（`services::database::table::data::insert`）で
 /// 投入する。値ごとにまとめて 1 回の呼び出しにするので、往復は値の種類数（数十〜百程度）
 /// で済む。
-pub fn load_risk_table(rt: &tokio::runtime::Runtime, env: &BenchEnv, table_name: &str, max_zoom_level: u8) {
+pub fn load_risk_table(
+    rt: &tokio::runtime::Runtime,
+    env: &BenchEnv,
+    table_name: &str,
+    max_zoom_level: u8,
+) {
     let data = risk_data();
 
     rt.block_on(async {
