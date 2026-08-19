@@ -1,14 +1,3 @@
-//! `POST /query` のワークフローベンチ（実データ）。
-//!
-//! Kasane-Logic 側の `benches/query/workflow/risk_diffusion.rs` と同じクエリ形状
-//! （zoomOut → falloffF → falloffX → falloffY）を、同じ実データ（建物リスクデータ）に
-//! 対して実行する。違いは、こちらは LMDB へ実際に永続化したテーブルを
-//! `services::query::execute`（認可・翻訳・最適化・レスポンス整形を含む）経由で読む点。
-//!
-//! 2 つのベンチを比べると「Kasane-Logic のクエリエンジン単体のコスト」と
-//! 「Kasane がその外側に足しているコスト（LMDB からの読み出し・レスポンス整形など）」
-//! を切り分けられる。
-
 use std::time::Duration;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
@@ -23,10 +12,8 @@ use kasane::services::query;
 mod support;
 
 const TABLE_NAME: &str = "risk_diffusion";
-/// サンプルデータの最大ズーム（23）より大きく、falloff の対象ズーム（25）以上にする。
 const MAX_ZOOM_LEVEL: u8 = 25;
 
-/// ユーザー定義のクエリ。Kasane-Logic 側のベンチと揃えてある。
 fn build_query() -> QueryNode {
     QueryNode::FalloffY {
         input: Box::new(QueryNode::FalloffX {

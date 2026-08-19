@@ -1,11 +1,4 @@
 //! ベンチマーク共通のセットアップ。
-//!
-//! Kasane-Logic 側の `benches/query/workflow/risk_diffusion.rs` はエンジン単体
-//! （`SpatialIdTable::query()...raw_run()`）を測る。こちらは同じ実データを実際に
-//! LMDB バックエンドの Kasane へ投入し、サービス層（認可・LMDB からの読み出し・
-//! クエリ最適化・レスポンス整形）を含めた**サーバ全体**の経路を測るための土台。
-//! 2 つを比較すると、エンジンの外側（Kasane が足しているぶん）のコストが分かる。
-
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
@@ -59,24 +52,20 @@ pub fn build_env(rt: &tokio::runtime::Runtime) -> BenchEnv {
     })
 }
 
-/// 建物リスクデータ（値ごとにグループ化した空間ID群と、全体を覆う最小の領域）。
+/// 建物リスクデータ
 pub struct RiskData {
     pub by_value: HashMap<i64, Vec<SpatialId>>,
-    /// データ全体を覆う最小の `RangeId` 群。クエリの対象領域（`spatial_ids`）に使う。
     pub coverage: Vec<SpatialId>,
 }
 
 static RISK_DATA: OnceLock<RiskData> = OnceLock::new();
 
-/// `sample/bldg_risk.json`（実際の建物リスクデータ、PLATEAU 由来）を読み込む。
-/// 10MB の JSON パースは初回だけ行い、以降は使い回す。
+/// `sample/bldg_risk.json`を読み込む。
 pub fn risk_data() -> &'static RiskData {
     RISK_DATA.get_or_init(|| {
         let json_str = std::fs::read_to_string("sample/bldg_risk.json").expect(
             "sample/bldg_risk.json が読めない。ワークスペースルートから実行しているか確認する",
         );
-        // Kasane-Logic 側の SpatialIdTable の Deserialize をそのまま借りる
-        // （AirBee プロジェクト共通の JSON スキーマ）。
         let table: SpatialIdTable<i64> =
             serde_json::from_str(&json_str).expect("bldg_risk.json のパースに失敗した");
 

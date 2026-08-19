@@ -1,18 +1,8 @@
-//! `falloff_*` 単体のベンチ（実データ、半径を振る）。
-//!
-//! Kasane-Logic 側の `benches/query/unary/falloff.rs` と同じ半径の刻みで、
-//! `services::query::execute` 経由（LMDB からの読み出し・レスポンス整形込み）の
-//! コストを測る。半径ごとの伸びを Kasane-Logic 側の対応するベンチと突き合わせれば、
-//! falloff 本体（Kasane-Logic）のコストと、その外側（Kasane）のコストのどちらが
-//! 半径に対して支配的かが分かる。
-
-use std::time::Duration;
-
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
-
 use kasane::models::database::table::TableDataType;
 use kasane::models::query::{ExecuteQueryRequest, FalloffPattern, MergePolicyKind, QueryNode};
 use kasane::services::query;
+use std::time::Duration;
 
 #[path = "../../support/mod.rs"]
 mod support;
