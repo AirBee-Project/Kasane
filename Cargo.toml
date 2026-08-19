@@ -93,9 +93,6 @@ lto = "fat"
 codegen-units = 1
 strip = true
 
-# `bench` は既定で `release` を継承する（fat LTO + codegen-units=1）ため、ベンチを
-# 1 回変更して回すたびにリンクだけで数分かかる。計測目的では意味のない待ち時間なので、
-# ここだけ独立させて薄い LTO・並列コード生成に落とす。
 [profile.bench]
 opt-level = 3
 lto = "thin"
