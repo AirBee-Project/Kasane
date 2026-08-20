@@ -1,4 +1,5 @@
-// src/routes/mod.rs
+use std::time::Duration;
+
 use axum::{
     Router, middleware,
     routing::{delete, get, post, put},
@@ -6,6 +7,32 @@ use axum::{
 use utoipa::OpenApi;
 
 use crate::AppState;
+
+/// `KASANE_CORS_ALLOWED_ORIGINS`（カンマ区切り）で許可オリジンを絞れる。未設定なら
+/// 現状通り全オリジン許可（Bearer トークン方式で Cookie を使わないため、絞らなくても
+/// ただちに悪用できるわけではないが、絞れるようにしておく）。
+fn cors_layer() -> tower_http::cors::CorsLayer {
+    use tower_http::cors::{AllowOrigin, CorsLayer};
+
+    let layer = CorsLayer::permissive().max_age(Duration::from_secs(3600));
+
+    let origins: Vec<axum::http::HeaderValue> = std::env::var("KASANE_CORS_ALLOWED_ORIGINS")
+        .ok()
+        .map(|v| {
+            v.split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .filter_map(|s| s.parse().ok())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if origins.is_empty() {
+        layer
+    } else {
+        layer.allow_origin(AllowOrigin::list(origins))
+    }
+}
 
 pub fn create_router(app_state: AppState) -> Router {
     let protected_router = Router::new()
@@ -109,7 +136,7 @@ pub fn create_router(app_state: AppState) -> Router {
             utoipa_swagger_ui::SwaggerUi::new("/swagger-ui")
                 .url("/openapi.json", crate::openapi::ApiDoc::openapi()),
         )
-        .layer(tower_http::cors::CorsLayer::permissive())
+        .layer(cors_layer())
         .route_layer(middleware::from_fn(crate::middleware::metrics::record));
 
     // 本番環境ではOpenTelemetryを追加する
