@@ -23,3 +23,21 @@ pub async fn get_system_info() -> Json<SystemInfoResponse> {
         version: env!("CARGO_PKG_VERSION").to_string(),
     })
 }
+
+/// ヘルスチェック
+///
+/// **必要な権限**: なし
+#[utoipa::path(
+    get,
+    path = "/health",
+    responses(
+        (status = 200, description = "System is healthy", body = String),
+        (status = 400, description = "Bad Request (unused, for OpenAPI compliance)")
+    ),
+    security(),
+    tag = "System"
+)]
+#[tracing::instrument(skip_all)]
+pub async fn health_check() -> &'static str {
+    "OK"
+}
