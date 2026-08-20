@@ -27,8 +27,7 @@ use crate::services::query as query_service;
     ),
     responses(
         (status = 200, description = "クエリ実行成功", content(
-            (GetDataResponse = "application/json"),
-            (String = "application/vnd.apache.arrow.stream")
+            (GetDataResponse = "application/json")
         )),
         (status = 400, description = "クエリ式が不正（型の混在・非対応の型など）"),
         (status = 403, description = "参照先テーブルへの権限が不足"),
@@ -41,30 +40,10 @@ use crate::services::query as query_service;
 pub async fn execute_query(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
-    headers: axum::http::HeaderMap,
     Query(query_params): Query<GetDataQuery>,
     Json(payload): Json<ExecuteQueryRequest>,
-) -> Result<axum::response::Response, AppError> {
+) -> Result<Json<GetDataResponse>, AppError> {
     // 認可はサービス層の解決と同じ読み取りで行う。別途呼ぶとカタログを 2 度引く。
     let result = query_service::execute(&app_state, &auth_user, payload, &query_params).await?;
-
-    if let Some(accept) = headers.get(axum::http::header::ACCEPT)
-        && accept
-            .to_str()
-            .unwrap_or("")
-            .contains("application/vnd.apache.arrow.stream")
-    {
-        let stream_body = crate::models::database::table::data::arrow::stream_arrow_ipc(result);
-        return Ok(axum::response::Response::builder()
-            .status(200)
-            .header(
-                axum::http::header::CONTENT_TYPE,
-                "application/vnd.apache.arrow.stream",
-            )
-            .body(stream_body)
-            .unwrap());
-    }
-
-    use axum::response::IntoResponse;
-    Ok(axum::Json(result).into_response())
+    Ok(Json(result))
 }
