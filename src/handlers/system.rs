@@ -31,8 +31,10 @@ pub async fn get_system_info() -> Json<SystemInfoResponse> {
     get,
     path = "/health",
     responses(
-        (status = 200, description = "System is healthy", body = String)
+        (status = 200, description = "System is healthy", body = String),
+        (status = 400, description = "Bad Request (unused, for OpenAPI compliance)")
     ),
+    security(),
     tag = "System"
 )]
 #[tracing::instrument(skip_all)]
