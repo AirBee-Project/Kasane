@@ -1,4 +1,5 @@
-// src/routes/mod.rs
+use std::time::Duration;
+
 use axum::{
     Router, middleware,
     routing::{delete, get, post, put},
@@ -109,7 +110,7 @@ pub fn create_router(app_state: AppState) -> Router {
             utoipa_swagger_ui::SwaggerUi::new("/swagger-ui")
                 .url("/openapi.json", crate::openapi::ApiDoc::openapi()),
         )
-        .layer(tower_http::cors::CorsLayer::permissive())
+        .layer(tower_http::cors::CorsLayer::permissive().max_age(Duration::from_secs(3600)))
         .route_layer(middleware::from_fn(crate::middleware::metrics::record));
 
     // 本番環境ではOpenTelemetryを追加する
