@@ -1719,7 +1719,7 @@ dependencies = [
 
 [[package]]
 name = "kasane"
-version = "0.6.5"
+version = "0.6.6"
 dependencies = [
  "argon2",
  "axum 0.8.9",
