@@ -66,28 +66,22 @@ where
             LogicError::SourceRead("query snapshot was poisoned by a panicking reader".to_string())
         })?;
 
-        let mut leaf_to_ranges: rustc_hash::FxHashMap<FlexId, Vec<&RangeId>> =
-            rustc_hash::FxHashMap::default();
+        let mut flex_ids: Vec<(FlexId, V)> = Vec::new();
         for range in bounds {
             let leaves =
                 shard::route_leaves_for_range(&self.tables_data, &txn, self.table_id, range)
                     .map_err(|e| LogicError::SourceRead(e.to_string()))?;
+
             for region in leaves {
-                leaf_to_ranges.entry(region).or_default().push(range);
-            }
-        }
+                if token.is_cancelled() {
+                    return Err(LogicError::Cancelled);
+                }
 
-        let mut flex_ids: Vec<(FlexId, V)> = Vec::new();
-        for (region, ranges) in leaf_to_ranges {
-            if token.is_cancelled() {
-                return Err(LogicError::Cancelled);
-            }
+                let arch =
+                    shard::load_leaf_archived(&self.tables_data, &txn, self.table_id, &region)
+                        .map_err(|e| LogicError::SourceRead(e.to_string()))?;
+                let Some(arch) = arch else { continue };
 
-            let arch = shard::load_leaf_archived(&self.tables_data, &txn, self.table_id, &region)
-                .map_err(|e| LogicError::SourceRead(e.to_string()))?;
-            let Some(arch) = arch else { continue };
-
-            for range in ranges {
                 for (id, raw) in arch.get_range(range) {
                     // 復元できない値（型に合わない格納値）の FlexId は結果に含めない。
                     if let Some(value) = (self.decode)(raw) {

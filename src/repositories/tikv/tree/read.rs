@@ -14,7 +14,6 @@ use super::{
 };
 use crate::repositories::ValueGroups;
 use crate::repositories::encoding::value_index;
-use crate::repositories::traits::DecodeFn;
 
 // --- 読み取り ---
 
@@ -123,48 +122,27 @@ impl<R: Reader> TikvRead<'_, R> {
     /// 格納バイト列を `Vec<u8>` として一旦取り出すと結果 1 行につきヒープ確保が 1 回起き、
     /// 呼び出し側はそれを直後に `V` へ復元して捨てるので丸ごと無駄になる。
     #[tracing::instrument(skip_all, fields(table_id = %table_id, ranges = ranges.len()))]
-    pub(in crate::repositories::tikv) async fn read_values_in_ranges<V: Send + 'static>(
+    pub(in crate::repositories::tikv) async fn read_values_in_ranges<V: Send>(
         &self,
         table_id: TableId,
         ranges: &[RangeId],
-        decode: DecodeFn<V>,
-        token: kasane_logic::CancellationToken,
+        decode: &(dyn Fn(&[u8]) -> Option<V> + Send + Sync),
     ) -> Result<Vec<(FlexId, V)>, AppError> {
         if ranges.is_empty() {
             return Ok(Vec::new());
         }
 
-        let (tx, mut rx) = tokio::sync::mpsc::channel(16);
-        let ranges_clone = ranges.to_vec();
-
-        let decode_task = tokio::task::spawn_blocking(move || {
-            // 受信ごとに復元すると、深さ単位に分かれたバッチそれぞれが並列化の閾値
-            // （`LEAF_PARALLEL_THRESHOLD`）を下回りやすく、合計では超える規模のクエリでも
-            // rayon 並列化を取り逃す。全深さの葉を集め終えてからまとめて復元する。
-            let mut all_leaves = Vec::new();
-            while let Some(res) = rx.blocking_recv() {
-                all_leaves.extend(res?);
-            }
-            // `spawn_blocking` は `JoinHandle` を drop してもスレッドを止めない。呼び出し元が
-            // キャンセルでこの future ごと drop しても、この関数自体は最後まで実行される
-            // （`tx` が閉じてここへは辿り着く）。その場合に高コストな rayon 並列 decode まで
-            // 走らせて結果を捨てるのは無駄なので、ここで打ち切る。
-            if token.is_cancelled() {
-                return Err(kasane_logic::Error::Cancelled.into());
-            }
-            decode_range_leaves(&all_leaves, &ranges_clone, decode.as_ref())
-        });
-
-        route_leaves_for_ranges(&self.txn, table_id, ranges, tx)
+        // ネットワーク降下と CPU 復号のどちらが支配的かを切り分けるための内訳。
+        let leaves = route_leaves_for_ranges(&self.txn, table_id, ranges)
             .instrument(tracing::info_span!(
                 "tikv.route_leaves",
                 ranges = ranges.len()
             ))
-            .await;
+            .await?;
 
-        decode_task
-            .await
-            .map_err(|e| AppError::InternalError(e.to_string()))?
+        let decode_span = tracing::info_span!("tikv.decode_range_leaves", leaves = leaves.len());
+        let _guard = decode_span.enter();
+        decode_range_leaves(&leaves, ranges, decode)
     }
 }
 

@@ -3,16 +3,15 @@ use crate::{
     error::{AppError, Resource},
     middleware::auth::AuthUser,
     models::{
-        database::table::data::{GetDataQuery, ZoomLevelPolicy},
+        database::table::data::{GetDataQuery, GetDataResponse, ZoomLevelPolicy},
         spatial_id::SpatialId,
         users::UserRole,
     },
     repositories::{ReadRepository, Storage},
-    services::helpers::{spatial_ids::process_spatial_ids, value::restore_value},
+    services::helpers::{data_response, spatial_ids::process_spatial_ids, value::restore_value},
 };
 
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
-#[allow(clippy::too_many_arguments)]
 pub async fn get(
     app_state: &AppState,
     auth_user: &AuthUser,
@@ -21,8 +20,7 @@ pub async fn get(
     spatial_ids: &[SpatialId],
     zoom_level_policy: &ZoomLevelPolicy,
     query: &GetDataQuery,
-    is_arrow: bool,
-) -> Result<axum::response::Response, AppError> {
+) -> Result<GetDataResponse, AppError> {
     let db_name = db_name.to_string();
     let table_name = table_name.to_string();
     let spatial_ids = spatial_ids.to_vec();
@@ -69,16 +67,13 @@ pub async fn get(
         })
         .await?;
 
+    let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
-        let value_type = table.data_type;
-        crate::services::helpers::stream_response::respond(
-            groups,
-            query_format,
-            query_limit,
-            value_type,
-            is_arrow,
-            move |bytes| restore_value(table.data_type, table.constraints.as_ref(), bytes),
-        )
+        span.in_scope(|| {
+            data_response::build(groups, query_format, query_limit, |bytes| {
+                restore_value(table.data_type, table.constraints.as_ref(), bytes)
+            })
+        })
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?
