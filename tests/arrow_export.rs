@@ -6,8 +6,16 @@ use kasane::models::database::table::data::{
 use kasane::models::spatial_id::{RawFlexId, RawRangeId, RawSingleId};
 use serde_json::json;
 
-#[test]
-fn test_arrow_export_single() {
+async fn get_bytes(r: GetDataResponse) -> Vec<u8> {
+    let body = kasane::models::database::table::data::arrow::stream_arrow_ipc(r);
+    axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec()
+}
+
+#[tokio::test]
+async fn test_arrow_export_single() {
     let r = GetDataResponse::Single(GetDataResponseSingle {
         dictionary: vec![json!("value1"), json!("value2")],
         data: vec![DataGroup {
@@ -23,7 +31,7 @@ fn test_arrow_export_single() {
         }],
     });
 
-    let bytes = kasane::models::database::table::data::arrow::to_arrow_ipc(r).unwrap();
+    let bytes = get_bytes(r).await;
     let mut reader = StreamReader::try_new(std::io::Cursor::new(bytes), None).unwrap();
     let batch = reader.next().unwrap().unwrap();
 
@@ -53,8 +61,8 @@ fn test_arrow_export_single() {
     assert!(t_col.is_null(0));
 }
 
-#[test]
-fn test_arrow_export_range_with_missing_axes() {
+#[tokio::test]
+async fn test_arrow_export_range_with_missing_axes() {
     let r = GetDataResponse::Range(GetDataResponseRange {
         dictionary: vec![json!(10.5), json!(20.0)],
         data: vec![DataGroup {
@@ -70,7 +78,7 @@ fn test_arrow_export_range_with_missing_axes() {
         }],
     });
 
-    let bytes = kasane::models::database::table::data::arrow::to_arrow_ipc(r).unwrap();
+    let bytes = get_bytes(r).await;
     let mut reader = StreamReader::try_new(std::io::Cursor::new(bytes), None).unwrap();
     let batch = reader.next().unwrap().unwrap();
 
@@ -97,8 +105,8 @@ fn test_arrow_export_range_with_missing_axes() {
     assert!(y_min.is_null(0), "yMin should be null for omitted y axis");
 }
 
-#[test]
-fn test_arrow_export_flex() {
+#[tokio::test]
+async fn test_arrow_export_flex() {
     let r = GetDataResponse::Flex(GetDataResponseFlex {
         dictionary: vec![json!("a")],
         data: vec![DataGroup {
@@ -116,7 +124,7 @@ fn test_arrow_export_flex() {
         }],
     });
 
-    let bytes = kasane::models::database::table::data::arrow::to_arrow_ipc(r).unwrap();
+    let bytes = get_bytes(r).await;
     let mut reader = StreamReader::try_new(std::io::Cursor::new(bytes), None).unwrap();
     let batch = reader.next().unwrap().unwrap();
 
