@@ -41,7 +41,7 @@ fn query_concurrency_limit() -> usize {
         .ok()
         .and_then(|v| v.parse().ok())
         .filter(|&n| n > 0)
-        .unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get()))
+        .unwrap_or(4)
 }
 
 pub fn kasane(app_state: AppState) -> axum::Router {
