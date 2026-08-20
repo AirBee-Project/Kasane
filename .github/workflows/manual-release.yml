@@ -46,7 +46,7 @@ jobs:
         id: version
         run: |
           cargo set-version --bump ${{ github.event.inputs.bump_level }}
-          cargo check
+          cargo update -p kasane
           NEW_VERSION=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "Bumped version to $NEW_VERSION"
