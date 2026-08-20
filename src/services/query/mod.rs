@@ -437,6 +437,7 @@ pub async fn execute(
     .map_err(|e| AppError::InternalError(e.to_string()))?
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run<V: Value>(
     app_state: &AppState,
     request: &ExecuteQueryRequest,

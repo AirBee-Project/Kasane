@@ -12,6 +12,7 @@ use crate::{
 };
 
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
+#[allow(clippy::too_many_arguments)]
 pub async fn get(
     app_state: &AppState,
     auth_user: &AuthUser,
