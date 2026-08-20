@@ -278,6 +278,22 @@ pub enum QueryNode {
         policy: MergePolicyKind,
     },
 
+    /// 左側の結果から、右側の空間と重なる部分を取り除く。
+    Difference {
+        #[schema(no_recursion)]
+        left: Box<Self>,
+        #[schema(no_recursion)]
+        right: Box<Self>,
+    },
+
+    /// 左右の空間が重なる部分だけを残す。値は左側のものが維持される。
+    Intersection {
+        #[schema(no_recursion)]
+        left: Box<Self>,
+        #[schema(no_recursion)]
+        right: Box<Self>,
+    },
+
     /// 値を対応表に基づいて変換する。対応表にない値は `default` になる。
     MapValues {
         #[schema(no_recursion)]
@@ -321,7 +337,9 @@ impl QueryNode {
             | Self::FalloffF { input, .. }
             | Self::MathValues { input, .. }
             | Self::MapValues { input, .. } => (Some(&**input), None),
-            Self::Merge { left, right, .. } => (Some(&**left), Some(&**right)),
+            Self::Merge { left, right, .. }
+            | Self::Difference { left, right }
+            | Self::Intersection { left, right } => (Some(&**left), Some(&**right)),
         };
         a.into_iter().chain(b)
     }

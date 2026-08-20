@@ -279,6 +279,14 @@ impl QueryNode {
                 *policy,
             ),
 
+            Self::Difference { left, right } => Ok(left
+                .translate::<V>(app_state, tables, snapshot)?
+                .difference(right.translate::<V>(app_state, tables, snapshot)?)),
+
+            Self::Intersection { left, right } => Ok(left
+                .translate::<V>(app_state, tables, snapshot)?
+                .intersection(right.translate::<V>(app_state, tables, snapshot)?)),
+
             Self::FilterValues { input, condition } => {
                 let q = input.translate::<V>(app_state, tables, snapshot)?;
                 let parse = |v: &Option<serde_json::Value>| -> Result<Option<V>, AppError> {
