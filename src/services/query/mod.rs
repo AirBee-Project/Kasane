@@ -13,13 +13,13 @@ use crate::{
     models::{
         database::table::{
             Table, TableDataType,
-            data::{GetDataQuery, GetDataResponse, OutputFormat},
+            data::{GetDataQuery, OutputFormat},
         },
         query::{ExecuteQueryRequest, FilterCondition, MappingEntry, QueryNode},
         users::{User, UserRole},
     },
     repositories::{ReadRepository, Storage},
-    services::helpers::{data_response, spatial_ids::to_spatial_id_set},
+    services::helpers::spatial_ids::to_spatial_id_set,
 };
 
 use crate::repositories::traits::DecodeFn;
@@ -408,18 +408,15 @@ pub async fn execute(
     user: &User,
     request: ExecuteQueryRequest,
     query_params: &GetDataQuery,
-) -> Result<GetDataResponse, AppError> {
-    // 解決はトランザクション境界を跨ぐのでここで済ませ、評価だけを blocking へ渡す。
+    is_arrow: bool,
+) -> Result<axum::response::Response, AppError> {
     let tables = resolve_tables(app_state, user, &request.query).await?;
-
-    // 領域ごとに取り直すと、途中の書き込みを一部だけ見た結果が混ざる。
     let snapshot = app_state.db.query_snapshot().await?;
 
     let app_state = app_state.clone();
     let format = query_params.format;
     let limit = query_params.limit;
 
-    // Queryの同時実行を制限する
     let _permit = app_state
         .query_concurrency
         .clone()
@@ -430,18 +427,17 @@ pub async fn execute(
     let token = kasane_logic::CancellationToken::new();
     let _cancel_on_drop = CancelOnDrop(token.clone());
 
-    // クエリ演算は同期ブロッキング処理のため、async ワーカーを塞がない。
     let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || -> Result<GetDataResponse, AppError> {
+    tokio::task::spawn_blocking(move || -> Result<axum::response::Response, AppError> {
         let _permit = _permit;
         span.in_scope(|| {
             let value_type = request
                 .query
                 .resolve_value_type(&tables, request.value_type)?;
 
-            // 作業木は単一の値型で組まれるため、ここで値型ごとに単型化する。
             for_value_type!(
-                value_type, run, &app_state, &request, &tables, &snapshot, format, limit, &token
+                value_type, run, &app_state, &request, &tables, &snapshot, format, limit, is_arrow,
+                &token, value_type
             )
         })
     })
@@ -449,6 +445,7 @@ pub async fn execute(
     .map_err(|e| AppError::InternalError(e.to_string()))?
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run<V: Value>(
     app_state: &AppState,
     request: &ExecuteQueryRequest,
@@ -456,26 +453,32 @@ fn run<V: Value>(
     snapshot: &QuerySnapshot,
     format: OutputFormat,
     limit: Option<usize>,
+    is_arrow: bool,
     token: &kasane_logic::CancellationToken,
-) -> Result<GetDataResponse, AppError> {
+    value_type: TableDataType,
+) -> Result<axum::response::Response, AppError> {
     let targets = to_spatial_id_set(&request.spatial_ids)?;
+    let bounds: Vec<RangeId> = targets
+        .range_ids_in(kasane_logic::AllowedIntervals::calendar())
+        .collect();
 
-    // 外接矩形 1 つにまとめると `bounding_box()` が全 FlexId を覆わず取りこぼす。
-    let bounds: Vec<RangeId> = targets.iter().map(|id| RangeId::from(&id)).collect();
     if bounds.is_empty() {
-        // 対象領域が空。クエリを走らせるまでもない。
         let empty: Vec<(V, Vec<kasane_logic::FlexId>)> = Vec::new();
-        return data_response::build(empty, format, limit, |v| Ok(v.to_json()));
+        return crate::services::helpers::stream_response::respond(
+            empty,
+            format,
+            limit,
+            value_type,
+            is_arrow,
+            |v| Ok(v.to_json()),
+        );
     }
 
-    // --- フェーズ 1: DSL → kasane-logic AST の翻訳 ---
     let ast = tracing::info_span!("query.translate", source_tables = tables.len())
         .in_scope(|| request.query.translate::<V>(app_state, tables, snapshot))?;
 
-    // --- フェーズ 2: クエリ最適化 ---
     let optimized = tracing::info_span!("query.optimize").in_scope(|| ast.optimize());
 
-    // まとめて 1 回だけ評価する。空間 ID 1 件ずつだとクエリが件数分再実行される。
     let flex_ids = tracing::info_span!("query.run_within", target_regions = bounds.len())
         .in_scope(|| {
             optimized
@@ -486,7 +489,16 @@ fn run<V: Value>(
         .filter(|(flex_id, _)| targets.get(flex_id).next().is_some());
 
     let by_value = group_by_value(flex_ids, limit);
-    data_response::build(by_value, format, limit, |v| Ok(v.to_json()))
+    let groups: Vec<(V, Vec<kasane_logic::FlexId>)> = by_value.into_iter().collect();
+
+    crate::services::helpers::stream_response::respond(
+        groups,
+        format,
+        limit,
+        value_type,
+        is_arrow,
+        |v| Ok(v.to_json()),
+    )
 }
 
 /// FlexId 列を値ごとにグループ化する。

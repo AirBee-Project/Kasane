@@ -20,22 +20,27 @@ pub struct BenchEnv {
     _temp_dir: tempfile::TempDir,
 }
 
-/// LMDB バックエンドの `AppState` を作り、`bench` データベースと root ユーザーを揃える。
+/// バックエンドの `AppState` を作り、`bench` データベースと root ユーザーを揃える。
 pub fn build_env(rt: &tokio::runtime::Runtime) -> BenchEnv {
-    let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir for bench LMDB");
-    let db: Db = kasane::repositories::lmdb::initialize_database(
+    let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir for bench");
+
+    // Target is temp_dir for LMDB, or "127.0.0.1:2379" for TiKV if PD is running locally
+    let target = if kasane::backend::NAME == "tikv" {
+        "127.0.0.1:2379"
+    } else {
         temp_dir
             .path()
             .to_str()
-            .expect("temp dir path is not valid UTF-8"),
-    )
-    .expect("failed to initialize LMDB");
+            .expect("temp dir path is not valid UTF-8")
+    };
+
+    let db: Db = rt
+        .block_on(kasane::backend::open(target))
+        .expect("failed to initialize database");
     let app_state = AppState::new(db);
 
     rt.block_on(async {
-        kasane::services::database::create(&app_state, DB_NAME, None)
-            .await
-            .expect("failed to create bench database");
+        let _ = kasane::services::database::create(&app_state, DB_NAME, None).await;
 
         let user = app_state
             .db
@@ -132,7 +137,7 @@ pub fn load_risk_table(
     let data = risk_data();
 
     rt.block_on(async {
-        kasane::services::database::table::create::create(
+        let create_result = kasane::services::database::table::create::create(
             &env.app_state,
             &env.user,
             DB_NAME,
@@ -148,8 +153,16 @@ pub fn load_risk_table(
                 is_temporal: false,
             },
         )
-        .await
-        .expect("failed to create bench table");
+        .await;
+
+        // TiKV はプロセスをまたいでデータが残るため、既存テーブルはスキップする。
+        match &create_result {
+            Ok(_) => {}
+            Err(kasane::error::AppError::AlreadyExists { .. }) => {
+                return; // データ投入済みとみなす
+            }
+            Err(e) => panic!("failed to create bench table: {e}"),
+        }
 
         for (value, ids) in &data.by_value {
             kasane::services::database::table::data::insert::insert(

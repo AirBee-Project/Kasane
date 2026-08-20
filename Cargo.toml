@@ -43,6 +43,8 @@ percent-encoding = { version = "2.3.2", optional = true }
 mimalloc = { version = "0.1", optional = true }
 thiserror = "2.0.20"
 arrow = { version = "59.2.0", features = ["ipc"] }
+bytes = "1"
+tokio-stream = "0.1"
 
 [features]
 default = ["backend-lmdb"]
