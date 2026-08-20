@@ -1,16 +1,17 @@
-use axum::{
-    http::{StatusCode, header},
-    response::{IntoResponse, Response},
-};
+use axum::response::Response;
 use bytes::Bytes;
 use kasane_logic::{AllowedIntervals, FlexId, SpatialId as _, SpatialIdSet};
 use serde_json::Value;
 
+use super::stream::build_stream_response;
 use crate::{
     error::AppError,
-    models::database::table::data::{
-        GetDataResponse, GetDataResponseFlex, GetDataResponseRange, GetDataResponseSingle,
-        OutputFormat,
+    models::database::table::{
+        TableDataType,
+        data::{
+            GetDataResponse, GetDataResponseFlex, GetDataResponseRange, GetDataResponseSingle,
+            OutputFormat,
+        },
     },
 };
 use arrow::array::{
@@ -86,6 +87,22 @@ fn build_dictionary_array(
     let keys = UInt32Array::from(value_refs);
     let dict_array = DictionaryArray::<UInt32Type>::try_new(keys, dict_values)?;
     Ok(Arc::new(dict_array))
+}
+
+/// ストリーミング応答の value 列の Arrow 型を、テーブルの `data_type` から直接決める。
+///
+/// `build_dictionary_array` の分類（数値/真偽値/文字列）は実際には常に `data_type` だけで
+/// 決まる（`V::to_json` は型ごとに常に同じ JSON 種別を返すため）。データを見ずに決められる
+/// ので、スキーマは行を1件も処理する前に確定できる — これがストリーミングの前提になる。
+fn dictionary_value_arrow_type(data_type: TableDataType) -> DataType {
+    match data_type {
+        TableDataType::Int => DataType::Float64,
+        TableDataType::Text | TableDataType::Enum => DataType::Utf8,
+        TableDataType::Boolean => DataType::Boolean,
+        // Presence の値は常に JSON null。all_numbers は is_null() も許すため、全 null の辞書は
+        // 今まで通り Float64 として扱う。
+        TableDataType::Presence => DataType::Float64,
+    }
 }
 
 fn build_batch_single(
@@ -371,430 +388,481 @@ macro_rules! try_arrow {
     };
 }
 
-pub fn stream_arrow_ipc<V, I, F>(
-    groups: I,
-    format: OutputFormat,
+/// `spawn_blocking` の中身を panic から守る。panic すると `tx` がそのまま drop され、
+/// `fail_stream` が呼ばれないまま無言でストリームが切れてしまう（`Result` を返す失敗は
+/// 上の `try_arrow!`/`fail_stream` で拾えるが、panic はそれをすり抜ける）。
+fn spawn_blocking_stream(
+    tx: tokio::sync::mpsc::Sender<Result<Bytes, String>>,
+    body: impl FnOnce(tokio::sync::mpsc::Sender<Result<Bytes, String>>) + Send + 'static,
+) {
+    tokio::task::spawn_blocking(move || {
+        let panic_tx = tx.clone();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body(tx)));
+        if result.is_err() {
+            fail_stream(&panic_tx, "internal panic while generating stream");
+        }
+    });
+}
+
+/// `OutputFormat` ごとに異なる列（value 列を除く）の蓄積とバッチ変換を切り出したもの。
+/// バッチ分割・辞書管理・書き込み・panic 保護は `stream_format` 側の共通処理。
+trait FormatBuffers: Default {
+    /// 1 group の `flex_ids` を `limit_left` の予算内で展開し、積んだ行数を返す
+    /// （0 なら group は不採用— 呼び出し側は辞書に登録しない）。
+    fn push_group(&mut self, flex_ids: Vec<FlexId>, limit_left: &mut Option<usize>) -> usize;
+    /// value 列を除く Field 定義。
+    fn fields() -> Vec<Field>;
+    /// `[offset, end)` の範囲を value 列を除く Array 群に変換する。
+    fn columns(&self, offset: usize, end: usize) -> Vec<Arc<dyn arrow::array::Array>>;
+    fn row_count(&self) -> usize;
+}
+
+#[derive(Default)]
+struct SingleIdBuffers {
+    zs: Vec<u8>,
+    fs: Vec<i32>,
+    xs: Vec<u32>,
+    ys: Vec<u32>,
+    is_vals: Vec<Option<u64>>,
+    ts_vals: Vec<Option<u64>>,
+}
+
+impl FormatBuffers for SingleIdBuffers {
+    fn push_group(&mut self, flex_ids: Vec<FlexId>, limit_left: &mut Option<usize>) -> usize {
+        let set: SpatialIdSet = flex_ids.into_iter().collect();
+        let start = self.zs.len();
+        'ranges: for range_id in set.range_ids_in(AllowedIntervals::calendar()) {
+            for single_id in range_id.single_ids() {
+                if !take_one(limit_left) {
+                    break 'ranges;
+                }
+                self.zs.push(single_id.z());
+                self.fs.push(single_id.f());
+                self.xs.push(single_id.x());
+                self.ys.push(single_id.y());
+                if single_id.is_whole_time() {
+                    self.is_vals.push(None);
+                    self.ts_vals.push(None);
+                } else {
+                    self.is_vals.push(Some(single_id.time_interval().seconds()));
+                    self.ts_vals.push(Some(single_id.t()));
+                }
+            }
+        }
+        self.zs.len() - start
+    }
+
+    fn fields() -> Vec<Field> {
+        vec![
+            Field::new("z", DataType::UInt8, false),
+            Field::new("f", DataType::Int32, false),
+            Field::new("x", DataType::UInt32, false),
+            Field::new("y", DataType::UInt32, false),
+            Field::new("i", DataType::UInt64, true),
+            Field::new("t", DataType::UInt64, true),
+        ]
+    }
+
+    fn columns(&self, offset: usize, end: usize) -> Vec<Arc<dyn arrow::array::Array>> {
+        let mut is = UInt64Builder::new();
+        let mut ts = UInt64Builder::new();
+        for i in offset..end {
+            match self.is_vals[i] {
+                Some(v) => is.append_value(v),
+                None => is.append_null(),
+            }
+            match self.ts_vals[i] {
+                Some(v) => ts.append_value(v),
+                None => ts.append_null(),
+            }
+        }
+        vec![
+            Arc::new(UInt8Array::from(self.zs[offset..end].to_vec())),
+            Arc::new(arrow::array::Int32Array::from(
+                self.fs[offset..end].to_vec(),
+            )),
+            Arc::new(arrow::array::UInt32Array::from(
+                self.xs[offset..end].to_vec(),
+            )),
+            Arc::new(arrow::array::UInt32Array::from(
+                self.ys[offset..end].to_vec(),
+            )),
+            Arc::new(is.finish()),
+            Arc::new(ts.finish()),
+        ]
+    }
+
+    fn row_count(&self) -> usize {
+        self.zs.len()
+    }
+}
+
+#[derive(Default)]
+struct RangeIdBuffers {
+    zs: Vec<u8>,
+    f_mins: Vec<i32>,
+    f_maxs: Vec<i32>,
+    x_mins: Vec<u32>,
+    x_maxs: Vec<u32>,
+    y_mins: Vec<u32>,
+    y_maxs: Vec<u32>,
+    is_vals: Vec<Option<u64>>,
+    t_mins: Vec<Option<u64>>,
+    t_maxs: Vec<Option<u64>>,
+}
+
+impl FormatBuffers for RangeIdBuffers {
+    fn push_group(&mut self, flex_ids: Vec<FlexId>, limit_left: &mut Option<usize>) -> usize {
+        let set: SpatialIdSet = flex_ids.into_iter().collect();
+        let start = self.zs.len();
+        for range_id in set.range_ids_in(AllowedIntervals::calendar()) {
+            if !take_one(limit_left) {
+                break;
+            }
+            self.zs.push(range_id.z());
+            self.f_mins.push(range_id.f()[0]);
+            self.f_maxs.push(range_id.f()[1]);
+            self.x_mins.push(range_id.x()[0]);
+            self.x_maxs.push(range_id.x()[1]);
+            self.y_mins.push(range_id.y()[0]);
+            self.y_maxs.push(range_id.y()[1]);
+            if range_id.is_whole_time() {
+                self.is_vals.push(None);
+                self.t_mins.push(None);
+                self.t_maxs.push(None);
+            } else {
+                self.is_vals.push(Some(range_id.time_interval().seconds()));
+                self.t_mins.push(Some(range_id.t()[0]));
+                self.t_maxs.push(Some(range_id.t()[1]));
+            }
+        }
+        self.zs.len() - start
+    }
+
+    fn fields() -> Vec<Field> {
+        vec![
+            Field::new("z", DataType::UInt8, false),
+            Field::new("fMin", DataType::Int32, true),
+            Field::new("fMax", DataType::Int32, true),
+            Field::new("xMin", DataType::UInt32, true),
+            Field::new("xMax", DataType::UInt32, true),
+            Field::new("yMin", DataType::UInt32, true),
+            Field::new("yMax", DataType::UInt32, true),
+            Field::new("i", DataType::UInt64, true),
+            Field::new("tMin", DataType::UInt64, true),
+            Field::new("tMax", DataType::UInt64, true),
+        ]
+    }
+
+    fn columns(&self, offset: usize, end: usize) -> Vec<Arc<dyn arrow::array::Array>> {
+        let mut is = UInt64Builder::new();
+        let mut t_min_b = UInt64Builder::new();
+        let mut t_max_b = UInt64Builder::new();
+        for i in offset..end {
+            match self.is_vals[i] {
+                Some(v) => is.append_value(v),
+                None => is.append_null(),
+            }
+            match self.t_mins[i] {
+                Some(v) => t_min_b.append_value(v),
+                None => t_min_b.append_null(),
+            }
+            match self.t_maxs[i] {
+                Some(v) => t_max_b.append_value(v),
+                None => t_max_b.append_null(),
+            }
+        }
+        vec![
+            Arc::new(UInt8Array::from(self.zs[offset..end].to_vec())),
+            Arc::new(arrow::array::Int32Array::from(
+                self.f_mins[offset..end].to_vec(),
+            )),
+            Arc::new(arrow::array::Int32Array::from(
+                self.f_maxs[offset..end].to_vec(),
+            )),
+            Arc::new(arrow::array::UInt32Array::from(
+                self.x_mins[offset..end].to_vec(),
+            )),
+            Arc::new(arrow::array::UInt32Array::from(
+                self.x_maxs[offset..end].to_vec(),
+            )),
+            Arc::new(arrow::array::UInt32Array::from(
+                self.y_mins[offset..end].to_vec(),
+            )),
+            Arc::new(arrow::array::UInt32Array::from(
+                self.y_maxs[offset..end].to_vec(),
+            )),
+            Arc::new(is.finish()),
+            Arc::new(t_min_b.finish()),
+            Arc::new(t_max_b.finish()),
+        ]
+    }
+
+    fn row_count(&self) -> usize {
+        self.zs.len()
+    }
+}
+
+#[derive(Default)]
+struct FlexIdBuffers {
+    f_zs: Vec<u8>,
+    f_is: Vec<i32>,
+    x_zs: Vec<u8>,
+    x_is: Vec<u32>,
+    y_zs: Vec<u8>,
+    y_is: Vec<u32>,
+    t_zs: Vec<Option<u8>>,
+    t_is: Vec<Option<u64>>,
+}
+
+impl FormatBuffers for FlexIdBuffers {
+    fn push_group(&mut self, flex_ids: Vec<FlexId>, limit_left: &mut Option<usize>) -> usize {
+        let start = self.f_zs.len();
+        for flex_id in flex_ids {
+            if !take_one(limit_left) {
+                break;
+            }
+            self.f_zs.push(flex_id.f_zoomlevel());
+            self.f_is.push(flex_id.f_index());
+            self.x_zs.push(flex_id.x_zoomlevel());
+            self.x_is.push(flex_id.x_index());
+            self.y_zs.push(flex_id.y_zoomlevel());
+            self.y_is.push(flex_id.y_index());
+            if flex_id.is_whole_time() {
+                self.t_zs.push(None);
+                self.t_is.push(None);
+            } else {
+                self.t_zs.push(Some(flex_id.t_zoomlevel()));
+                self.t_is.push(Some(flex_id.t()));
+            }
+        }
+        self.f_zs.len() - start
+    }
+
+    fn fields() -> Vec<Field> {
+        vec![
+            Field::new("fZoomlevel", DataType::UInt8, false),
+            Field::new("fIndex", DataType::Int32, false),
+            Field::new("xZoomlevel", DataType::UInt8, false),
+            Field::new("xIndex", DataType::UInt32, false),
+            Field::new("yZoomlevel", DataType::UInt8, false),
+            Field::new("yIndex", DataType::UInt32, false),
+            Field::new("tZoomlevel", DataType::UInt8, true),
+            Field::new("tIndex", DataType::UInt64, true),
+        ]
+    }
+
+    fn columns(&self, offset: usize, end: usize) -> Vec<Arc<dyn arrow::array::Array>> {
+        let mut t_z = UInt8Builder::new();
+        let mut t_i = UInt64Builder::new();
+        for i in offset..end {
+            match self.t_zs[i] {
+                Some(v) => t_z.append_value(v),
+                None => t_z.append_null(),
+            }
+            match self.t_is[i] {
+                Some(v) => t_i.append_value(v),
+                None => t_i.append_null(),
+            }
+        }
+        vec![
+            Arc::new(UInt8Array::from(self.f_zs[offset..end].to_vec())),
+            Arc::new(arrow::array::Int32Array::from(
+                self.f_is[offset..end].to_vec(),
+            )),
+            Arc::new(UInt8Array::from(self.x_zs[offset..end].to_vec())),
+            Arc::new(arrow::array::UInt32Array::from(
+                self.x_is[offset..end].to_vec(),
+            )),
+            Arc::new(UInt8Array::from(self.y_zs[offset..end].to_vec())),
+            Arc::new(arrow::array::UInt32Array::from(
+                self.y_is[offset..end].to_vec(),
+            )),
+            Arc::new(t_z.finish()),
+            Arc::new(t_i.finish()),
+        ]
+    }
+
+    fn row_count(&self) -> usize {
+        self.f_zs.len()
+    }
+}
+
+/// その時点までに確定している辞書と、行ごとの辞書参照。バッチをまたいで伸びていく。
+struct DictionaryState<'a> {
+    dictionary: &'a [Value],
+    value_refs: &'a [u32],
+}
+
+/// 蓄積中の1バッチ分（`[offset, end)`）を書き出す。辞書は「その時点までに確定した全体」を
+/// 毎回渡す — Arrow IPC の `StreamWriter`（既定の `DictionaryHandling::Resend`）は辞書の
+/// 内容がバッチ間で変わっても自動的に再送してくれるので、辞書をバッチごとに区切って
+/// 差分管理する必要はない。
+fn flush_batch<B: FormatBuffers, W: std::io::Write>(
+    tx: &tokio::sync::mpsc::Sender<Result<Bytes, String>>,
+    writer: &mut StreamWriter<W>,
+    schema: &Arc<Schema>,
+    dict: DictionaryState<'_>,
+    buffers: &B,
+    offset: usize,
+    end: usize,
+) -> bool {
+    let value_col =
+        match build_dictionary_array(dict.dictionary, dict.value_refs[offset..end].to_vec()) {
+            Ok(v) => v,
+            Err(e) => {
+                fail_stream(tx, format!("dictionary array build failed: {e}"));
+                return false;
+            }
+        };
+
+    let mut columns = vec![value_col];
+    columns.extend(buffers.columns(offset, end));
+
+    let batch = match RecordBatch::try_new(schema.clone(), columns) {
+        Ok(b) => b,
+        Err(e) => {
+            fail_stream(tx, format!("record batch build failed: {e}"));
+            return false;
+        }
+    };
+
+    writer.write(&batch).is_ok()
+}
+
+/// `format` 1 種類ぶんの本体。スキーマは行を処理する前に確定させ（`dictionary_value_arrow_type`
+/// が実データを見ずに決められるおかげ）、`ARROW_BATCH_ROWS` 行たまるたびにその場で書き出す
+/// ので、ピークメモリは「distinct 値数（辞書）+ 直近バッチぶんの行バッファ」に収まる。
+fn stream_format<V, F, B>(
+    groups: Vec<(V, Vec<FlexId>)>,
     limit: Option<usize>,
+    value_type: TableDataType,
     to_json: F,
 ) -> Result<Response, AppError>
 where
-    I: IntoIterator<Item = (V, Vec<FlexId>)>,
-    F: Fn(&V) -> Result<Value, AppError>,
+    V: Send + 'static,
+    F: Fn(&V) -> Result<Value, AppError> + Send + 'static,
+    B: FormatBuffers + Send + 'static,
 {
-    let mut dictionary: Vec<Value> = Vec::new();
-    let mut limit_left = limit;
+    let mut fields = vec![Field::new(
+        "value",
+        dictionary_value_arrow_type(value_type),
+        true,
+    )];
+    fields.extend(B::fields());
+    let schema = Arc::new(Schema::new(fields));
 
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Bytes, String>>(4);
 
+    let schema_for_task = schema.clone();
+    spawn_blocking_stream(tx, move |tx| {
+        let mut writer_sink = ChannelWriter { tx: tx.clone() };
+        let mut writer = try_arrow!(
+            &tx,
+            StreamWriter::try_new(&mut writer_sink, &schema_for_task),
+            "arrow stream init failed"
+        );
+
+        let mut dictionary: Vec<Value> = Vec::new();
+        let mut value_refs: Vec<u32> = Vec::new();
+        let mut buffers = B::default();
+        let mut flushed = 0usize;
+        let mut limit_left = limit;
+
+        for (value, flex_ids) in groups {
+            if limit_left == Some(0) {
+                break;
+            }
+
+            let added = buffers.push_group(flex_ids, &mut limit_left);
+            if added == 0 {
+                // 先に辞書へ push すると、limit で data に載らなかった値が孤立した辞書項目
+                // として残る。行を1件も積めなかった group はここで見送る。
+                continue;
+            }
+
+            let value_json = match to_json(&value) {
+                Ok(v) => v,
+                Err(e) => {
+                    fail_stream(&tx, format!("value to_json failed: {e}"));
+                    return;
+                }
+            };
+            let value_ref = dictionary.len() as u32;
+            dictionary.push(value_json);
+            value_refs.resize(buffers.row_count(), value_ref);
+
+            while buffers.row_count() - flushed >= ARROW_BATCH_ROWS {
+                let end = flushed + ARROW_BATCH_ROWS;
+                let dict = DictionaryState {
+                    dictionary: &dictionary,
+                    value_refs: &value_refs,
+                };
+                if !flush_batch(
+                    &tx,
+                    &mut writer,
+                    &schema_for_task,
+                    dict,
+                    &buffers,
+                    flushed,
+                    end,
+                ) {
+                    return;
+                }
+                flushed = end;
+            }
+        }
+
+        let total = buffers.row_count();
+        if total > flushed {
+            let dict = DictionaryState {
+                dictionary: &dictionary,
+                value_refs: &value_refs,
+            };
+            if !flush_batch(
+                &tx,
+                &mut writer,
+                &schema_for_task,
+                dict,
+                &buffers,
+                flushed,
+                total,
+            ) {
+                return;
+            }
+        }
+
+        if let Err(e) = writer.finish() {
+            fail_stream(&tx, format!("arrow stream finish failed: {e}"));
+        }
+    });
+
+    Ok(build_stream_response(
+        rx,
+        "application/vnd.apache.arrow.stream",
+    ))
+}
+
+pub fn stream_arrow_ipc<V, F>(
+    groups: Vec<(V, Vec<FlexId>)>,
+    format: OutputFormat,
+    limit: Option<usize>,
+    value_type: TableDataType,
+    to_json: F,
+) -> Result<Response, AppError>
+where
+    V: Send + 'static,
+    F: Fn(&V) -> Result<Value, AppError> + Send + 'static,
+{
     match format {
         OutputFormat::SingleId => {
-            let mut value_refs: Vec<u32> = Vec::new();
-            let mut zs: Vec<u8> = Vec::new();
-            let mut fs: Vec<i32> = Vec::new();
-            let mut xs: Vec<u32> = Vec::new();
-            let mut ys: Vec<u32> = Vec::new();
-            let mut is_vals: Vec<Option<u64>> = Vec::new();
-            let mut ts_vals: Vec<Option<u64>> = Vec::new();
-
-            'groups: for (value, flex_ids) in groups {
-                if limit_left == Some(0) {
-                    break;
-                }
-                let set: SpatialIdSet = flex_ids.into_iter().collect();
-                let start = zs.len();
-                'ranges: for range_id in set.range_ids_in(AllowedIntervals::calendar()) {
-                    for single_id in range_id.single_ids() {
-                        if !take_one(&mut limit_left) {
-                            break 'ranges;
-                        }
-                        zs.push(single_id.z());
-                        fs.push(single_id.f());
-                        xs.push(single_id.x());
-                        ys.push(single_id.y());
-                        if single_id.is_whole_time() {
-                            is_vals.push(None);
-                            ts_vals.push(None);
-                        } else {
-                            is_vals.push(Some(single_id.time_interval().seconds()));
-                            ts_vals.push(Some(single_id.t()));
-                        }
-                    }
-                }
-                // 先に push すると、limit で data に載らなかった値が孤立した辞書項目として残る。
-                if zs.len() == start {
-                    continue 'groups;
-                }
-                let value_ref = dictionary.len() as u32;
-                dictionary.push(to_json(&value)?);
-                value_refs.resize(zs.len(), value_ref);
-            }
-
-            let schema = Arc::new(Schema::new(vec![
-                Field::new(
-                    "value",
-                    build_dictionary_array(&dictionary, vec![])
-                        .map_err(|e| AppError::InternalError(e.to_string()))?
-                        .data_type()
-                        .clone(),
-                    true,
-                ),
-                Field::new("z", DataType::UInt8, false),
-                Field::new("f", DataType::Int32, false),
-                Field::new("x", DataType::UInt32, false),
-                Field::new("y", DataType::UInt32, false),
-                Field::new("i", DataType::UInt64, true),
-                Field::new("t", DataType::UInt64, true),
-            ]));
-
-            tokio::task::spawn_blocking(move || {
-                let mut writer_sink = ChannelWriter { tx: tx.clone() };
-                let mut writer = try_arrow!(
-                    &tx,
-                    StreamWriter::try_new(&mut writer_sink, &schema),
-                    "arrow stream init failed"
-                );
-
-                let total = zs.len();
-                let mut offset = 0;
-                while offset < total {
-                    let end = (offset + ARROW_BATCH_ROWS).min(total);
-
-                    let value_col = try_arrow!(
-                        &tx,
-                        build_dictionary_array(&dictionary, value_refs[offset..end].to_vec()),
-                        "dictionary array build failed"
-                    );
-
-                    let mut is = UInt64Builder::new();
-                    let mut ts = UInt64Builder::new();
-                    for i in offset..end {
-                        match is_vals[i] {
-                            Some(v) => is.append_value(v),
-                            None => is.append_null(),
-                        }
-                        match ts_vals[i] {
-                            Some(v) => ts.append_value(v),
-                            None => ts.append_null(),
-                        }
-                    }
-
-                    let batch = try_arrow!(
-                        &tx,
-                        RecordBatch::try_new(
-                            schema.clone(),
-                            vec![
-                                value_col,
-                                Arc::new(UInt8Array::from(zs[offset..end].to_vec())),
-                                Arc::new(arrow::array::Int32Array::from(fs[offset..end].to_vec())),
-                                Arc::new(arrow::array::UInt32Array::from(xs[offset..end].to_vec())),
-                                Arc::new(arrow::array::UInt32Array::from(ys[offset..end].to_vec())),
-                                Arc::new(is.finish()),
-                                Arc::new(ts.finish()),
-                            ],
-                        ),
-                        "record batch build failed"
-                    );
-
-                    if writer.write(&batch).is_err() {
-                        return;
-                    }
-                    offset = end;
-                }
-
-                if let Err(e) = writer.finish() {
-                    fail_stream(&tx, format!("arrow stream finish failed: {e}"));
-                }
-            });
+            stream_format::<V, F, SingleIdBuffers>(groups, limit, value_type, to_json)
         }
         OutputFormat::RangeId => {
-            let mut value_refs: Vec<u32> = Vec::new();
-            let mut zs: Vec<u8> = Vec::new();
-            let mut f_mins: Vec<i32> = Vec::new();
-            let mut f_maxs: Vec<i32> = Vec::new();
-            let mut x_mins: Vec<u32> = Vec::new();
-            let mut x_maxs: Vec<u32> = Vec::new();
-            let mut y_mins: Vec<u32> = Vec::new();
-            let mut y_maxs: Vec<u32> = Vec::new();
-            let mut is_vals: Vec<Option<u64>> = Vec::new();
-            let mut t_mins: Vec<Option<u64>> = Vec::new();
-            let mut t_maxs: Vec<Option<u64>> = Vec::new();
-
-            'groups: for (value, flex_ids) in groups {
-                if limit_left == Some(0) {
-                    break;
-                }
-                let set: SpatialIdSet = flex_ids.into_iter().collect();
-                let start = zs.len();
-                for range_id in set.range_ids_in(AllowedIntervals::calendar()) {
-                    if !take_one(&mut limit_left) {
-                        break;
-                    }
-                    zs.push(range_id.z());
-                    f_mins.push(range_id.f()[0]);
-                    f_maxs.push(range_id.f()[1]);
-                    x_mins.push(range_id.x()[0]);
-                    x_maxs.push(range_id.x()[1]);
-                    y_mins.push(range_id.y()[0]);
-                    y_maxs.push(range_id.y()[1]);
-                    if range_id.is_whole_time() {
-                        is_vals.push(None);
-                        t_mins.push(None);
-                        t_maxs.push(None);
-                    } else {
-                        is_vals.push(Some(range_id.time_interval().seconds()));
-                        t_mins.push(Some(range_id.t()[0]));
-                        t_maxs.push(Some(range_id.t()[1]));
-                    }
-                }
-                // 先に push すると、limit で data に載らなかった値が孤立した辞書項目として残る。
-                if zs.len() == start {
-                    continue 'groups;
-                }
-                let value_ref = dictionary.len() as u32;
-                dictionary.push(to_json(&value)?);
-                value_refs.resize(zs.len(), value_ref);
-            }
-
-            let schema = Arc::new(Schema::new(vec![
-                Field::new(
-                    "value",
-                    build_dictionary_array(&dictionary, vec![])
-                        .map_err(|e| AppError::InternalError(e.to_string()))?
-                        .data_type()
-                        .clone(),
-                    true,
-                ),
-                Field::new("z", DataType::UInt8, false),
-                Field::new("fMin", DataType::Int32, true),
-                Field::new("fMax", DataType::Int32, true),
-                Field::new("xMin", DataType::UInt32, true),
-                Field::new("xMax", DataType::UInt32, true),
-                Field::new("yMin", DataType::UInt32, true),
-                Field::new("yMax", DataType::UInt32, true),
-                Field::new("i", DataType::UInt64, true),
-                Field::new("tMin", DataType::UInt64, true),
-                Field::new("tMax", DataType::UInt64, true),
-            ]));
-
-            tokio::task::spawn_blocking(move || {
-                let mut writer_sink = ChannelWriter { tx: tx.clone() };
-                let mut writer = try_arrow!(
-                    &tx,
-                    StreamWriter::try_new(&mut writer_sink, &schema),
-                    "arrow stream init failed"
-                );
-
-                let total = zs.len();
-                let mut offset = 0;
-                while offset < total {
-                    let end = (offset + ARROW_BATCH_ROWS).min(total);
-
-                    let value_col = try_arrow!(
-                        &tx,
-                        build_dictionary_array(&dictionary, value_refs[offset..end].to_vec()),
-                        "dictionary array build failed"
-                    );
-
-                    let mut is = UInt64Builder::new();
-                    let mut t_min_b = UInt64Builder::new();
-                    let mut t_max_b = UInt64Builder::new();
-                    for i in offset..end {
-                        match is_vals[i] {
-                            Some(v) => is.append_value(v),
-                            None => is.append_null(),
-                        }
-                        match t_mins[i] {
-                            Some(v) => t_min_b.append_value(v),
-                            None => t_min_b.append_null(),
-                        }
-                        match t_maxs[i] {
-                            Some(v) => t_max_b.append_value(v),
-                            None => t_max_b.append_null(),
-                        }
-                    }
-
-                    let batch = try_arrow!(
-                        &tx,
-                        RecordBatch::try_new(
-                            schema.clone(),
-                            vec![
-                                value_col,
-                                Arc::new(UInt8Array::from(zs[offset..end].to_vec())),
-                                Arc::new(arrow::array::Int32Array::from(
-                                    f_mins[offset..end].to_vec()
-                                )),
-                                Arc::new(arrow::array::Int32Array::from(
-                                    f_maxs[offset..end].to_vec()
-                                )),
-                                Arc::new(arrow::array::UInt32Array::from(
-                                    x_mins[offset..end].to_vec()
-                                )),
-                                Arc::new(arrow::array::UInt32Array::from(
-                                    x_maxs[offset..end].to_vec()
-                                )),
-                                Arc::new(arrow::array::UInt32Array::from(
-                                    y_mins[offset..end].to_vec()
-                                )),
-                                Arc::new(arrow::array::UInt32Array::from(
-                                    y_maxs[offset..end].to_vec()
-                                )),
-                                Arc::new(is.finish()),
-                                Arc::new(t_min_b.finish()),
-                                Arc::new(t_max_b.finish()),
-                            ],
-                        ),
-                        "record batch build failed"
-                    );
-
-                    if writer.write(&batch).is_err() {
-                        return;
-                    }
-                    offset = end;
-                }
-
-                if let Err(e) = writer.finish() {
-                    fail_stream(&tx, format!("arrow stream finish failed: {e}"));
-                }
-            });
+            stream_format::<V, F, RangeIdBuffers>(groups, limit, value_type, to_json)
         }
         OutputFormat::FlexId => {
-            let mut value_refs: Vec<u32> = Vec::new();
-            let mut f_zs: Vec<u8> = Vec::new();
-            let mut f_is: Vec<i32> = Vec::new();
-            let mut x_zs: Vec<u8> = Vec::new();
-            let mut x_is: Vec<u32> = Vec::new();
-            let mut y_zs: Vec<u8> = Vec::new();
-            let mut y_is: Vec<u32> = Vec::new();
-            let mut t_zs: Vec<Option<u8>> = Vec::new();
-            let mut t_is: Vec<Option<u64>> = Vec::new();
-
-            'groups: for (value, flex_ids) in groups {
-                if limit_left == Some(0) {
-                    break;
-                }
-                let start = f_zs.len();
-                for flex_id in flex_ids {
-                    if !take_one(&mut limit_left) {
-                        break;
-                    }
-                    f_zs.push(flex_id.f_zoomlevel());
-                    f_is.push(flex_id.f_index());
-                    x_zs.push(flex_id.x_zoomlevel());
-                    x_is.push(flex_id.x_index());
-                    y_zs.push(flex_id.y_zoomlevel());
-                    y_is.push(flex_id.y_index());
-                    if flex_id.is_whole_time() {
-                        t_zs.push(None);
-                        t_is.push(None);
-                    } else {
-                        t_zs.push(Some(flex_id.t_zoomlevel()));
-                        t_is.push(Some(flex_id.t()));
-                    }
-                }
-                // 先に push すると、limit で data に載らなかった値が孤立した辞書項目として残る。
-                if f_zs.len() == start {
-                    continue 'groups;
-                }
-                let value_ref = dictionary.len() as u32;
-                dictionary.push(to_json(&value)?);
-                value_refs.resize(f_zs.len(), value_ref);
-            }
-
-            let schema = Arc::new(Schema::new(vec![
-                Field::new(
-                    "value",
-                    build_dictionary_array(&dictionary, vec![])
-                        .map_err(|e| AppError::InternalError(e.to_string()))?
-                        .data_type()
-                        .clone(),
-                    true,
-                ),
-                Field::new("fZoomlevel", DataType::UInt8, false),
-                Field::new("fIndex", DataType::Int32, false),
-                Field::new("xZoomlevel", DataType::UInt8, false),
-                Field::new("xIndex", DataType::UInt32, false),
-                Field::new("yZoomlevel", DataType::UInt8, false),
-                Field::new("yIndex", DataType::UInt32, false),
-                Field::new("tZoomlevel", DataType::UInt8, true),
-                Field::new("tIndex", DataType::UInt64, true),
-            ]));
-
-            tokio::task::spawn_blocking(move || {
-                let mut writer_sink = ChannelWriter { tx: tx.clone() };
-                let mut writer = try_arrow!(
-                    &tx,
-                    StreamWriter::try_new(&mut writer_sink, &schema),
-                    "arrow stream init failed"
-                );
-
-                let total = f_zs.len();
-                let mut offset = 0;
-                while offset < total {
-                    let end = (offset + ARROW_BATCH_ROWS).min(total);
-
-                    let value_col = try_arrow!(
-                        &tx,
-                        build_dictionary_array(&dictionary, value_refs[offset..end].to_vec()),
-                        "dictionary array build failed"
-                    );
-
-                    let mut t_z = UInt8Builder::new();
-                    let mut t_i = UInt64Builder::new();
-                    for i in offset..end {
-                        match t_zs[i] {
-                            Some(v) => t_z.append_value(v),
-                            None => t_z.append_null(),
-                        }
-                        match t_is[i] {
-                            Some(v) => t_i.append_value(v),
-                            None => t_i.append_null(),
-                        }
-                    }
-
-                    let batch = try_arrow!(
-                        &tx,
-                        RecordBatch::try_new(
-                            schema.clone(),
-                            vec![
-                                value_col,
-                                Arc::new(UInt8Array::from(f_zs[offset..end].to_vec())),
-                                Arc::new(arrow::array::Int32Array::from(
-                                    f_is[offset..end].to_vec()
-                                )),
-                                Arc::new(UInt8Array::from(x_zs[offset..end].to_vec())),
-                                Arc::new(arrow::array::UInt32Array::from(
-                                    x_is[offset..end].to_vec()
-                                )),
-                                Arc::new(UInt8Array::from(y_zs[offset..end].to_vec())),
-                                Arc::new(arrow::array::UInt32Array::from(
-                                    y_is[offset..end].to_vec()
-                                )),
-                                Arc::new(t_z.finish()),
-                                Arc::new(t_i.finish()),
-                            ],
-                        ),
-                        "record batch build failed"
-                    );
-
-                    if writer.write(&batch).is_err() {
-                        return;
-                    }
-                    offset = end;
-                }
-
-                if let Err(e) = writer.finish() {
-                    fail_stream(&tx, format!("arrow stream finish failed: {e}"));
-                }
-            });
+            stream_format::<V, F, FlexIdBuffers>(groups, limit, value_type, to_json)
         }
     }
-
-    let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
-
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, "application/vnd.apache.arrow.stream")
-        .body(axum::body::Body::from_stream(stream))
-        .unwrap()
-        .into_response())
 }

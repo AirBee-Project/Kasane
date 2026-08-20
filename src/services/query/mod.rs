@@ -429,7 +429,7 @@ pub async fn execute(
 
             for_value_type!(
                 value_type, run, &app_state, &request, &tables, &snapshot, format, limit, is_arrow,
-                &token
+                &token, value_type
             )
         })
     })
@@ -446,6 +446,7 @@ fn run<V: Value>(
     limit: Option<usize>,
     is_arrow: bool,
     token: &kasane_logic::CancellationToken,
+    value_type: TableDataType,
 ) -> Result<axum::response::Response, AppError> {
     let targets = to_spatial_id_set(&request.spatial_ids)?;
     let bounds: Vec<RangeId> = targets
@@ -454,21 +455,14 @@ fn run<V: Value>(
 
     if bounds.is_empty() {
         let empty: Vec<(V, Vec<kasane_logic::FlexId>)> = Vec::new();
-        if is_arrow {
-            return crate::models::database::table::data::arrow::stream_arrow_ipc(
-                empty,
-                format,
-                limit,
-                |v| Ok(v.to_json()),
-            );
-        } else {
-            return crate::services::helpers::stream_response::stream_json(
-                empty,
-                format,
-                limit,
-                |v| Ok(v.to_json()),
-            );
-        }
+        return crate::services::helpers::stream_response::respond(
+            empty,
+            format,
+            limit,
+            value_type,
+            is_arrow,
+            |v| Ok(v.to_json()),
+        );
     }
 
     let ast = tracing::info_span!("query.translate", source_tables = tables.len())
@@ -486,19 +480,16 @@ fn run<V: Value>(
         .filter(|(flex_id, _)| targets.get(flex_id).next().is_some());
 
     let by_value = group_by_value(flex_ids, limit);
+    let groups: Vec<(V, Vec<kasane_logic::FlexId>)> = by_value.into_iter().collect();
 
-    if is_arrow {
-        crate::models::database::table::data::arrow::stream_arrow_ipc(
-            by_value,
-            format,
-            limit,
-            |v| Ok(v.to_json()),
-        )
-    } else {
-        crate::services::helpers::stream_response::stream_json(by_value, format, limit, |v| {
-            Ok(v.to_json())
-        })
-    }
+    crate::services::helpers::stream_response::respond(
+        groups,
+        format,
+        limit,
+        value_type,
+        is_arrow,
+        |v| Ok(v.to_json()),
+    )
 }
 
 /// FlexId 列を値ごとにグループ化する。

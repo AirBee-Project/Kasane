@@ -128,6 +128,7 @@ impl<R: Reader> TikvRead<'_, R> {
         table_id: TableId,
         ranges: &[RangeId],
         decode: DecodeFn<V>,
+        token: kasane_logic::CancellationToken,
     ) -> Result<Vec<(FlexId, V)>, AppError> {
         if ranges.is_empty() {
             return Ok(Vec::new());
@@ -143,6 +144,13 @@ impl<R: Reader> TikvRead<'_, R> {
             let mut all_leaves = Vec::new();
             while let Some(res) = rx.blocking_recv() {
                 all_leaves.extend(res?);
+            }
+            // `spawn_blocking` は `JoinHandle` を drop してもスレッドを止めない。呼び出し元が
+            // キャンセルでこの future ごと drop しても、この関数自体は最後まで実行される
+            // （`tx` が閉じてここへは辿り着く）。その場合に高コストな rayon 並列 decode まで
+            // 走らせて結果を捨てるのは無駄なので、ここで打ち切る。
+            if token.is_cancelled() {
+                return Err(kasane_logic::Error::Cancelled.into());
             }
             decode_range_leaves(&all_leaves, &ranges_clone, decode.as_ref())
         });

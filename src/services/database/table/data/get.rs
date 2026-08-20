@@ -69,21 +69,15 @@ pub async fn get(
         .await?;
 
     tokio::task::spawn_blocking(move || {
-        if is_arrow {
-            crate::models::database::table::data::arrow::stream_arrow_ipc(
-                groups,
-                query_format,
-                query_limit,
-                move |bytes| restore_value(table.data_type, table.constraints.as_ref(), bytes),
-            )
-        } else {
-            crate::services::helpers::stream_response::stream_json(
-                groups,
-                query_format,
-                query_limit,
-                move |bytes| restore_value(table.data_type, table.constraints.as_ref(), bytes),
-            )
-        }
+        let value_type = table.data_type;
+        crate::services::helpers::stream_response::respond(
+            groups,
+            query_format,
+            query_limit,
+            value_type,
+            is_arrow,
+            move |bytes| restore_value(table.data_type, table.constraints.as_ref(), bytes),
+        )
     })
     .await
     .map_err(|e| AppError::InternalError(e.to_string()))?

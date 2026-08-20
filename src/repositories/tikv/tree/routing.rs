@@ -29,6 +29,12 @@ pub(super) struct Routing {
 }
 
 /// 書き込み経路でも使うため、まだノードが作られていない領域も担当リーフとして返す。
+///
+/// [`route_leaves_for_ranges`] と骨格（半球分割 + 深さ単位のBFS）が似ているが、意図して
+/// 統合していない。`FlexId` は必ずどちらか一方の半球に属するので符号だけで単純分割できる
+/// のに対し、`route_leaves_for_ranges` が扱う `RangeId` は両半球にまたがりうるため交差判定
+/// が要る。加えてアキュムレータ形状（`parents`追跡の要否）・配送方式（戻り値 vs チャンネル
+/// 配信）も異なり、共通化すると閉包/トレイト引数が多くなり可読性が下がる。
 pub(super) async fn route_leaves_batched<R: Reader>(
     txn: &Readers<R>,
     table_id: TableId,
@@ -144,6 +150,8 @@ pub(super) struct RoutedRange {
 ///
 /// 範囲 1 本ごとにルートから降りると往復が**範囲の本数 × 木の深さ**になる。評価境界は対象
 /// 空間 ID の FlexId ごとに 1 本ずつ立つので、この本数は要求の広さに比例して増える。
+///
+/// 構造は [`route_leaves_batched`] と似ているが統合していない — 理由はそちらのコメントを参照。
 pub(super) async fn route_leaves_for_ranges<R: Reader>(
     txn: &Readers<R>,
     table_id: TableId,
