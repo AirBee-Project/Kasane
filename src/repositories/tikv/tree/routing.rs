@@ -226,10 +226,8 @@ pub(super) async fn route_leaves_for_ranges<R: Reader>(
             }
         }
 
-        if !out.is_empty() {
-            if tx.send(Ok(out)).await.is_err() {
-                return;
-            }
+        if !out.is_empty() && tx.send(Ok(out)).await.is_err() {
+            return;
         }
 
         level = next;
