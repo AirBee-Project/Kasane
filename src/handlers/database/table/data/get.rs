@@ -63,15 +63,14 @@ pub async fn data_get(
             .unwrap_or("")
             .contains("application/vnd.apache.arrow.stream")
     {
-        let arrow_bytes = crate::models::database::table::data::arrow::to_arrow_ipc(result)
-            .map_err(|e| AppError::InternalError(format!("Arrow encoding error: {}", e)))?;
+        let stream_body = crate::models::database::table::data::arrow::stream_arrow_ipc(result);
         return Ok(axum::response::Response::builder()
             .status(200)
             .header(
                 axum::http::header::CONTENT_TYPE,
                 "application/vnd.apache.arrow.stream",
             )
-            .body(axum::body::Body::from(arrow_bytes))
+            .body(stream_body)
             .unwrap());
     }
 
