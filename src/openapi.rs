@@ -65,6 +65,7 @@ const PRIVILEGE_LEGEND: &str = r#"
         // Auth
         crate::handlers::auth::login,
         // System
+        crate::handlers::system::health_check,
         crate::handlers::system::get_system_info,
         // Databases
         crate::handlers::database::database_list,

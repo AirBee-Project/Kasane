@@ -96,11 +96,14 @@ pub fn create_router(app_state: AppState) -> Router {
             crate::middleware::auth::require_auth,
         ));
 
-    // Auth
-    let auth_router = Router::new().route("/auth/login", post(crate::handlers::auth::login));
+    // Auth & System (Unauthenticated)
+    let public_router = Router::new()
+        .route("/health", get(crate::handlers::system::health_check))
+        .route("/auth/login", post(crate::handlers::auth::login));
+
     #[allow(unused_mut)]
     let mut router = Router::new()
-        .merge(auth_router)
+        .merge(public_router)
         .merge(protected_router)
         .merge(
             utoipa_swagger_ui::SwaggerUi::new("/swagger-ui")
