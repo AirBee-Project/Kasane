@@ -45,15 +45,7 @@ pub async fn data_get(
     Query(query): Query<GetDataQuery>,
     Json(payload): Json<GetDataRequest>,
 ) -> Result<axum::response::Response, AppError> {
-    let is_arrow = if let Some(accept) = headers.get(axum::http::header::ACCEPT) {
-        accept
-            .to_str()
-            .unwrap_or("")
-            .contains("application/vnd.apache.arrow.stream")
-    } else {
-        false
-    };
-
+    // 認可はサービス層の解決と同じ読み取りで行う。別途呼ぶとカタログを 2 度引く。
     let result = data_get_service::get(
         &app_state,
         &auth_user,
@@ -62,9 +54,27 @@ pub async fn data_get(
         &payload.spatial_ids,
         &payload.zoom_level_policy,
         &query,
-        is_arrow,
     )
     .await?;
 
-    Ok(result)
+    if let Some(accept) = headers.get(axum::http::header::ACCEPT)
+        && accept
+            .to_str()
+            .unwrap_or("")
+            .contains("application/vnd.apache.arrow.stream")
+    {
+        let arrow_bytes = crate::models::database::table::data::arrow::to_arrow_ipc(result)
+            .map_err(|e| AppError::InternalError(format!("Arrow encoding error: {}", e)))?;
+        return Ok(axum::response::Response::builder()
+            .status(200)
+            .header(
+                axum::http::header::CONTENT_TYPE,
+                "application/vnd.apache.arrow.stream",
+            )
+            .body(axum::body::Body::from(arrow_bytes))
+            .unwrap());
+    }
+
+    use axum::response::IntoResponse;
+    Ok(axum::Json(result).into_response())
 }

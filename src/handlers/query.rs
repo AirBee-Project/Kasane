@@ -45,16 +45,27 @@ pub async fn execute_query(
     Query(query_params): Query<GetDataQuery>,
     Json(payload): Json<ExecuteQueryRequest>,
 ) -> Result<axum::response::Response, AppError> {
-    let is_arrow = if let Some(accept) = headers.get(axum::http::header::ACCEPT) {
-        accept
+    // 認可はサービス層の解決と同じ読み取りで行う。別途呼ぶとカタログを 2 度引く。
+    let result = query_service::execute(&app_state, &auth_user, payload, &query_params).await?;
+
+    if let Some(accept) = headers.get(axum::http::header::ACCEPT)
+        && accept
             .to_str()
             .unwrap_or("")
             .contains("application/vnd.apache.arrow.stream")
-    } else {
-        false
-    };
+    {
+        let arrow_bytes = crate::models::database::table::data::arrow::to_arrow_ipc(result)
+            .map_err(|e| AppError::InternalError(format!("Arrow encoding error: {}", e)))?;
+        return Ok(axum::response::Response::builder()
+            .status(200)
+            .header(
+                axum::http::header::CONTENT_TYPE,
+                "application/vnd.apache.arrow.stream",
+            )
+            .body(axum::body::Body::from(arrow_bytes))
+            .unwrap());
+    }
 
-    let result =
-        query_service::execute(&app_state, &auth_user, payload, &query_params, is_arrow).await?;
-    Ok(result)
+    use axum::response::IntoResponse;
+    Ok(axum::Json(result).into_response())
 }

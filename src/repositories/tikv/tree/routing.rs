@@ -29,12 +29,6 @@ pub(super) struct Routing {
 }
 
 /// 書き込み経路でも使うため、まだノードが作られていない領域も担当リーフとして返す。
-///
-/// [`route_leaves_for_ranges`] と骨格（半球分割 + 深さ単位のBFS）が似ているが、意図して
-/// 統合していない。`FlexId` は必ずどちらか一方の半球に属するので符号だけで単純分割できる
-/// のに対し、`route_leaves_for_ranges` が扱う `RangeId` は両半球にまたがりうるため交差判定
-/// が要る。加えてアキュムレータ形状（`parents`追跡の要否）・配送方式（戻り値 vs チャンネル
-/// 配信）も異なり、共通化すると閉包/トレイト引数が多くなり可読性が下がる。
 pub(super) async fn route_leaves_batched<R: Reader>(
     txn: &Readers<R>,
     table_id: TableId,
@@ -150,14 +144,11 @@ pub(super) struct RoutedRange {
 ///
 /// 範囲 1 本ごとにルートから降りると往復が**範囲の本数 × 木の深さ**になる。評価境界は対象
 /// 空間 ID の FlexId ごとに 1 本ずつ立つので、この本数は要求の広さに比例して増える。
-///
-/// 構造は [`route_leaves_batched`] と似ているが統合していない — 理由はそちらのコメントを参照。
 pub(super) async fn route_leaves_for_ranges<R: Reader>(
     txn: &Readers<R>,
     table_id: TableId,
     ranges: &[RangeId],
-    tx: tokio::sync::mpsc::Sender<Result<Vec<RoutedRange>, AppError>>,
-) {
+) -> Result<Vec<RoutedRange>, AppError> {
     let mut level: Vec<(FlexId, Vec<u32>)> = Vec::new();
     for root in [FlexId::LOWER_MAX, FlexId::UPPER_MAX] {
         let hits: Vec<u32> = ranges
@@ -171,45 +162,27 @@ pub(super) async fn route_leaves_for_ranges<R: Reader>(
         }
     }
 
+    let mut out = Vec::new();
     let mut depth = 0usize;
     while !level.is_empty() {
         let regions: Vec<FlexId> = level.iter().map(|(region, _)| *region).collect();
-
-        let nodes_result = load_nodes(txn, table_id, &regions)
+        // 降下は木の深さぶんしか回らないので、段ごとに計測してもスパン数は有限。
+        let mut nodes = load_nodes(txn, table_id, &regions)
             .instrument(tracing::debug_span!(
                 "tikv.load_nodes",
                 depth,
                 regions = regions.len()
             ))
-            .await;
-
-        let mut nodes = match nodes_result {
-            Ok(n) => n,
-            Err(e) => {
-                let _ = tx.send(Err(e)).await;
-                return;
-            }
-        };
-
+            .await?;
         depth += 1;
 
         let mut next: Vec<(FlexId, Vec<u32>)> = Vec::new();
-        let mut out = Vec::new();
-
         for (region, hits) in level {
+            // 未作成領域＝データ無し。読み取りでは辿る必要がない。
             let Some(value) = nodes.remove(&region) else {
                 continue;
             };
-
-            let child_ptrs = match ShardEntry::child_pointers(value.entry()) {
-                Ok(c) => c,
-                Err(e) => {
-                    let _ = tx.send(Err(e)).await;
-                    return;
-                }
-            };
-
-            match child_ptrs {
+            match ShardEntry::child_pointers(value.entry())? {
                 None => out.push(RoutedRange { node: value, hits }),
                 Some(children) => {
                     for child in children {
@@ -225,11 +198,8 @@ pub(super) async fn route_leaves_for_ranges<R: Reader>(
                 }
             }
         }
-
-        if !out.is_empty() && tx.send(Ok(out)).await.is_err() {
-            return;
-        }
-
         level = next;
     }
+
+    Ok(out)
 }
