@@ -2,6 +2,8 @@
 //!
 //! 読み書きどちらからも必要なので、読み取り元だけを受け取る自由関数にしてある。
 
+#![allow(clippy::result_large_err)]
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 

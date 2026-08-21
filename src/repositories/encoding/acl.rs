@@ -138,7 +138,7 @@ fn split(key: &[u8], what: &str) -> Result<[[u8; UUID_LEN]; 3], AppError> {
         )
     })?;
     let mut parts = [[0u8; UUID_LEN]; 3];
-    for (slot, chunk) in parts.iter_mut().zip(bytes.chunks_exact(UUID_LEN)) {
+    for (slot, chunk) in parts.iter_mut().zip(bytes.as_chunks::<UUID_LEN>().0) {
         slot.copy_from_slice(chunk);
     }
     Ok(parts)
