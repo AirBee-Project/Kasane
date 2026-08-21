@@ -55,9 +55,15 @@ impl<'a> ShardReader<'a> {
             return Ok(out);
         }
 
-        let still_missing = if self.consult_l2 {
+        // ネットワークへ投げる**前**に無効化の通し番号を控えておく。取得が終わって
+        // 挿入する時点で番号が進んでいたら、その間に別の書き込みが割り込んで
+        // この値がもう古いかもしれないということなので、挿入を諦める
+        // (`ShardCache` のモジュール doc を参照)。L2 を見に行くのと同じ手番で控えるので、
+        // 別途 `still_missing` を舐め直すことはしない。
+        let (still_missing, read_versions): (Vec<FlexId>, Vec<u64>) = if self.consult_l2 {
             let mut l1 = self.l1.lock().expect("node cache lock poisoned");
             let mut still_missing = Vec::new();
+            let mut read_versions = Vec::new();
             for region in missing {
                 match self.l2.get(table_id, region) {
                     Some(value) => {
@@ -66,12 +72,19 @@ impl<'a> ShardReader<'a> {
                             out.insert(region, v);
                         }
                     }
-                    None => still_missing.push(region),
+                    None => {
+                        read_versions.push(self.l2.current_version(table_id, region));
+                        still_missing.push(region);
+                    }
                 }
             }
-            still_missing
+            (still_missing, read_versions)
         } else {
-            missing
+            let read_versions = missing
+                .iter()
+                .map(|&region| self.l2.current_version(table_id, region))
+                .collect();
+            (missing, read_versions)
         };
         if still_missing.is_empty() {
             return Ok(out);
@@ -80,12 +93,13 @@ impl<'a> ShardReader<'a> {
         let fetched = load_nodes(txn, table_id, &still_missing).await?;
 
         let mut l1 = self.l1.lock().expect("node cache lock poisoned");
-        for region in still_missing {
+        for (region, read_version) in still_missing.into_iter().zip(read_versions) {
             let value = fetched.get(&region).cloned();
             l1.insert(region, value.clone());
             // Strict でも、後で BoundedStale を選ぶ誰かのために L2 は温めておく
             // (L2 から読むかどうかだけが consult_l2 で決まる)。
-            self.l2.insert(table_id, region, value.clone());
+            self.l2
+                .insert_if_fresh(table_id, region, read_version, value.clone());
             if let Some(v) = value {
                 out.insert(region, v);
             }
