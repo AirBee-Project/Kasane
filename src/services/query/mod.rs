@@ -13,7 +13,7 @@ use crate::{
     models::{
         database::table::{
             Table, TableDataType,
-            data::{GetDataQuery, GetDataResponse, OutputFormat},
+            data::{ConsistencyLevel, GetDataQuery, GetDataResponse, OutputFormat},
         },
         query::{ExecuteQueryRequest, FilterCondition, MappingEntry, QueryNode},
         users::{User, UserRole},
@@ -149,11 +149,15 @@ impl QueryNode {
     }
 
     /// Kasane の DSL を Kasane-Logic の AST へ翻訳する。
+    ///
+    /// `consistency` はクエリ全体で 1 つ。読み取り経路(TiKV)へそのまま渡され、
+    /// キャッシュ(L2)を参照してよいかの合図になる([`ConsistencyLevel`] を参照)。
     fn translate<V: Value>(
         &self,
         app_state: &AppState,
         tables: &ResolvedTables,
         snapshot: &QuerySnapshot,
+        consistency: ConsistencyLevel,
     ) -> Result<Query<V>, AppError> {
         match self {
             Self::Source { database, table } => {
@@ -161,22 +165,22 @@ impl QueryNode {
                 let decode = build_decoder::<V>(meta)?;
                 Ok(app_state
                     .db
-                    .table_source::<V>(meta.id, decode, snapshot.clone())
+                    .table_source::<V>(meta.id, decode, snapshot.clone(), consistency)
                     .query())
             }
 
             Self::ShiftX { input, z, index } => Ok(input
-                .translate::<V>(app_state, tables, snapshot)?
+                .translate::<V>(app_state, tables, snapshot, consistency)?
                 .shift_x(*z, *index)),
             Self::ShiftY { input, z, index } => Ok(input
-                .translate::<V>(app_state, tables, snapshot)?
+                .translate::<V>(app_state, tables, snapshot, consistency)?
                 .shift_y(*z, *index)),
             Self::ShiftF { input, z, index } => Ok(input
-                .translate::<V>(app_state, tables, snapshot)?
+                .translate::<V>(app_state, tables, snapshot, consistency)?
                 .shift_f(*z, *index)),
 
             Self::ZoomOut { input, z, policy } => V::zoom_out(
-                input.translate::<V>(app_state, tables, snapshot)?,
+                input.translate::<V>(app_state, tables, snapshot, consistency)?,
                 *z,
                 *policy,
             ),
@@ -188,7 +192,7 @@ impl QueryNode {
                 end,
                 policy,
             } => V::extrude_x(
-                input.translate::<V>(app_state, tables, snapshot)?,
+                input.translate::<V>(app_state, tables, snapshot, consistency)?,
                 *z,
                 *start,
                 *end,
@@ -201,7 +205,7 @@ impl QueryNode {
                 end,
                 policy,
             } => V::extrude_y(
-                input.translate::<V>(app_state, tables, snapshot)?,
+                input.translate::<V>(app_state, tables, snapshot, consistency)?,
                 *z,
                 *start,
                 *end,
@@ -214,7 +218,7 @@ impl QueryNode {
                 end,
                 policy,
             } => V::extrude_f(
-                input.translate::<V>(app_state, tables, snapshot)?,
+                input.translate::<V>(app_state, tables, snapshot, consistency)?,
                 *z,
                 *start,
                 *end,
@@ -229,7 +233,7 @@ impl QueryNode {
                 direction,
                 policy,
             } => V::falloff_x(
-                input.translate::<V>(app_state, tables, snapshot)?,
+                input.translate::<V>(app_state, tables, snapshot, consistency)?,
                 *z,
                 *radius,
                 direction.map(Into::into),
@@ -244,7 +248,7 @@ impl QueryNode {
                 direction,
                 policy,
             } => V::falloff_y(
-                input.translate::<V>(app_state, tables, snapshot)?,
+                input.translate::<V>(app_state, tables, snapshot, consistency)?,
                 *z,
                 *radius,
                 direction.map(Into::into),
@@ -259,7 +263,7 @@ impl QueryNode {
                 direction,
                 policy,
             } => V::falloff_f(
-                input.translate::<V>(app_state, tables, snapshot)?,
+                input.translate::<V>(app_state, tables, snapshot, consistency)?,
                 *z,
                 *radius,
                 direction.map(Into::into),
@@ -273,22 +277,22 @@ impl QueryNode {
                 default,
                 policy,
             } => V::merge(
-                left.translate::<V>(app_state, tables, snapshot)?,
-                right.translate::<V>(app_state, tables, snapshot)?,
+                left.translate::<V>(app_state, tables, snapshot, consistency)?,
+                right.translate::<V>(app_state, tables, snapshot, consistency)?,
                 V::from_json(default)?,
                 *policy,
             ),
 
             Self::Difference { left, right } => Ok(left
-                .translate::<V>(app_state, tables, snapshot)?
-                .difference(right.translate::<V>(app_state, tables, snapshot)?)),
+                .translate::<V>(app_state, tables, snapshot, consistency)?
+                .difference(right.translate::<V>(app_state, tables, snapshot, consistency)?)),
 
             Self::Intersection { left, right } => Ok(left
-                .translate::<V>(app_state, tables, snapshot)?
-                .intersection(right.translate::<V>(app_state, tables, snapshot)?)),
+                .translate::<V>(app_state, tables, snapshot, consistency)?
+                .intersection(right.translate::<V>(app_state, tables, snapshot, consistency)?)),
 
             Self::FilterValues { input, condition } => {
-                let q = input.translate::<V>(app_state, tables, snapshot)?;
+                let q = input.translate::<V>(app_state, tables, snapshot, consistency)?;
                 let parse = |v: &Option<serde_json::Value>| -> Result<Option<V>, AppError> {
                     v.as_ref().map(V::from_json).transpose()
                 };
@@ -316,7 +320,7 @@ impl QueryNode {
                 operator,
                 operand,
             } => {
-                let q = input.translate::<V>(app_state, tables, snapshot)?;
+                let q = input.translate::<V>(app_state, tables, snapshot, consistency)?;
                 V::apply_math(q, *operator, *operand)
             }
 
@@ -345,6 +349,7 @@ impl QueryNode {
                     app_state,
                     tables,
                     snapshot,
+                    consistency,
                     mapping,
                     default
                 )
@@ -359,10 +364,11 @@ fn build_map_values<U: Value, V: Value>(
     app_state: &AppState,
     tables: &ResolvedTables,
     snapshot: &QuerySnapshot,
+    consistency: ConsistencyLevel,
     mapping: &[MappingEntry],
     default: &serde_json::Value,
 ) -> Result<Query<V>, AppError> {
-    let input = input.translate::<U>(app_state, tables, snapshot)?;
+    let input = input.translate::<U>(app_state, tables, snapshot, consistency)?;
 
     let mut lookup: BTreeMap<U, V> = BTreeMap::new();
     for entry in mapping {
@@ -418,6 +424,7 @@ pub async fn execute(
     let app_state = app_state.clone();
     let format = query_params.format;
     let limit = query_params.limit;
+    let consistency = query_params.consistency;
 
     // Queryの同時実行を制限する
     let _permit = app_state
@@ -441,7 +448,16 @@ pub async fn execute(
 
             // 作業木は単一の値型で組まれるため、ここで値型ごとに単型化する。
             for_value_type!(
-                value_type, run, &app_state, &request, &tables, &snapshot, format, limit, &token
+                value_type,
+                run,
+                &app_state,
+                &request,
+                &tables,
+                &snapshot,
+                format,
+                limit,
+                consistency,
+                &token
             )
         })
     })
@@ -449,6 +465,7 @@ pub async fn execute(
     .map_err(|e| AppError::InternalError(e.to_string()))?
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run<V: Value>(
     app_state: &AppState,
     request: &ExecuteQueryRequest,
@@ -456,6 +473,7 @@ fn run<V: Value>(
     snapshot: &QuerySnapshot,
     format: OutputFormat,
     limit: Option<usize>,
+    consistency: ConsistencyLevel,
     token: &kasane_logic::CancellationToken,
 ) -> Result<GetDataResponse, AppError> {
     let targets = to_spatial_id_set(&request.spatial_ids)?;
@@ -470,7 +488,7 @@ fn run<V: Value>(
 
     // --- フェーズ 1: DSL → kasane-logic AST の翻訳 ---
     let ast = tracing::info_span!("query.translate", source_tables = tables.len())
-        .in_scope(|| request.query.translate::<V>(app_state, tables, snapshot))?;
+        .in_scope(|| request.query.translate::<V>(app_state, tables, snapshot, consistency))?;
 
     // --- フェーズ 2: クエリ最適化 ---
     let optimized = tracing::info_span!("query.optimize").in_scope(|| ast.optimize());

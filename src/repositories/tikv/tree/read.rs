@@ -10,9 +10,10 @@ use tracing::Instrument;
 use super::node::archived_leaf;
 use super::routing::{RoutedLeaf, RoutedRange, route_leaves_batched, route_leaves_for_ranges};
 use super::{
-    AppError, LEAF_PARALLEL_THRESHOLD, NodeCache, Reader, TableDataType, TableId, TikvRead,
-    ValueMap, keys, kv,
+    AppError, LEAF_PARALLEL_THRESHOLD, Reader, ShardReader, TableDataType, TableId, TikvRead,
+    ValueMap, keys, kv, new_node_cache,
 };
+use crate::models::database::table::data::ConsistencyLevel;
 use crate::repositories::ValueGroups;
 use crate::repositories::encoding::value_index;
 
@@ -25,9 +26,18 @@ impl<R: Reader> TikvRead<'_, R> {
         table_id: TableId,
         ids: SpatialIdSet,
         limit: Option<usize>,
+        consistency: ConsistencyLevel,
     ) -> Result<ValueGroups, AppError> {
         let mut by_value = ValueMap::default();
         let mut held = 0usize;
+
+        // 呼び出し1回(=このリクエスト)限りのL1。この関数の間だけ生きる。
+        let l1 = new_node_cache();
+        let reader = ShardReader::new(
+            &l1,
+            &self.shard_cache,
+            consistency == ConsistencyLevel::BoundedStale,
+        );
 
         // 区切るのは打ち切りの粒度であって、1 リクエストのキー数ではない（`kv::BATCH_KEYS`）。
         const ROUTING_BATCH_SIZE: usize = 8192;
@@ -42,7 +52,7 @@ impl<R: Reader> TikvRead<'_, R> {
                 break;
             }
 
-            let routed = route_leaves_batched(&self.txn, table_id, &batch)
+            let routed = route_leaves_batched(&self.txn, table_id, &batch, Some(&reader))
                 .await?
                 .leaves;
             let partial = resolve_leaves(routed, limit, held).await?;
@@ -128,14 +138,14 @@ impl<R: Reader> TikvRead<'_, R> {
         table_id: TableId,
         ranges: &[RangeId],
         decode: &(dyn Fn(&[u8]) -> Option<V> + Send + Sync),
-        node_cache: &NodeCache,
+        reader: &ShardReader<'_>,
     ) -> Result<Vec<(FlexId, V)>, AppError> {
         if ranges.is_empty() {
             return Ok(Vec::new());
         }
 
         // ネットワーク降下と CPU 復号のどちらが支配的かを切り分けるための内訳。
-        let leaves = route_leaves_for_ranges(&self.txn, table_id, ranges, node_cache)
+        let leaves = route_leaves_for_ranges(&self.txn, table_id, ranges, reader)
             .instrument(tracing::info_span!(
                 "tikv.route_leaves",
                 ranges = ranges.len()

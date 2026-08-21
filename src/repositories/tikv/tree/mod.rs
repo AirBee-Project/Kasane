@@ -8,10 +8,14 @@ mod leaf;
 mod node;
 mod read;
 mod routing;
+mod shard_reader;
 mod write;
+
+pub(in crate::repositories::tikv) use shard_reader::ShardReader;
 
 // private な `use` も子孫からは見える。
 use super::kv::{Reader, Readers, ShardValue};
+use super::shard_cache::ShardCache;
 use super::{TikvRead, TikvWrite, keys, kv};
 use crate::error::{AppError, Stored};
 use crate::models::database::table::TableDataType;

@@ -25,7 +25,8 @@ impl TikvWrite<'_> {
         table_id: TableId,
         flex_ids: &[FlexId],
     ) -> Result<Routing, AppError> {
-        let mut routed = route_leaves_batched(&self.txn, table_id, flex_ids).await?;
+        // 書き込み経路はキャッシュを一切経由しない(`None`)。常に生の `load_nodes` を呼ぶ。
+        let mut routed = route_leaves_batched(&self.txn, table_id, flex_ids, None).await?;
         let regions: BTreeSet<FlexId> = routed.leaves.iter().map(|leaf| leaf.region).collect();
         let mut locked = kv::lock_shards(&self.txn, table_id, regions).await?;
 

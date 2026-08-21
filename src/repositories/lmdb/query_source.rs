@@ -11,6 +11,7 @@ use kasane_logic::{
 use super::LmdbQuerySnapshot;
 use super::keys::TableIdAndFlexId;
 use super::shard;
+use crate::models::database::table::data::ConsistencyLevel;
 use crate::models::id::TableId;
 
 use crate::repositories::traits::DecodeFn;
@@ -41,11 +42,15 @@ impl<V> TableSource<V> {
 
 impl super::AppDb {
     /// ストレージのハンドル（`Env` / `Database`）をサービス層へ露出させないための入口。
+    ///
+    /// `consistency` は TiKV 側のキャッシュ選択の合図で、LMDB はプロセス内の直接読み取り
+    /// なので無視する。
     pub fn table_source<V>(
         &self,
         table_id: TableId,
         decode: DecodeFn<V>,
         snapshot: LmdbQuerySnapshot,
+        _consistency: ConsistencyLevel,
     ) -> TableSource<V> {
         TableSource::new(snapshot, self.tables_data, table_id, decode)
     }

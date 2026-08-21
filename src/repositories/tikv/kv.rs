@@ -244,6 +244,31 @@ impl LazyTxn {
         }
     }
 
+    /// この試行が触るシャード本体のキーを `(table_id, region)` として返す。**`flush` より
+    /// 前に呼ぶこと**（`flush` が `pending` を空にして送ってしまうため）。
+    ///
+    /// L2 シャードキャッシュ（[`super::shard_cache::ShardCache`]）の無効化に使う。コミットが
+    /// 実際に成功したときだけ呼び出し側が反映すること。
+    pub(super) fn staged_shard_regions(
+        &self,
+    ) -> Vec<(crate::models::id::TableId, kasane_logic::FlexId)> {
+        let mut out = Vec::new();
+        for key in self.pending.keys() {
+            match keys::shard_from_key(key) {
+                Some(Ok(pair)) => out.push(pair),
+                Some(Err(e)) => {
+                    // キャッシュの無効化を諦めるだけで、書き込み自体は続行してよい
+                    // （L2 は TTL で頭打ちになる bounded staleness を前提にしている）。
+                    tracing::warn!(
+                        "failed to decode a staged shard key while invalidating the shard cache: {e}"
+                    );
+                }
+                None => {}
+            }
+        }
+        out
+    }
+
     /// 溜めた変更をまとめて送り、悲観ロックを取る。**コミットの直前に 1 度だけ呼ぶ。**
     ///
     /// 捨てる試行では呼ばない。溜めたまま drop すればロックも MVCC の版も作られない。

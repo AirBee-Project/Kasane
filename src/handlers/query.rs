@@ -7,7 +7,7 @@ use crate::AppState;
 use crate::error::AppError;
 use crate::middleware::auth::AuthUser;
 use crate::models::{
-    database::table::data::{GetDataQuery, GetDataResponse, OutputFormat},
+    database::table::data::{ConsistencyLevel, GetDataQuery, GetDataResponse, OutputFormat},
     query::ExecuteQueryRequest,
 };
 use crate::services::query as query_service;
@@ -23,7 +23,8 @@ use crate::services::query as query_service;
     request_body = ExecuteQueryRequest,
     params(
         ("format" = Option<OutputFormat>, Query, description = "出力フォーマット(singleId, rangeId, flexId)"),
-        ("limit" = Option<usize>, Query, description = "最大取得件数")
+        ("limit" = Option<usize>, Query, description = "最大取得件数"),
+        ("consistency" = Option<ConsistencyLevel>, Query, description = "読み取りの一貫性(strict: 常に最新、boundedStale: キャッシュを許容して高速化。既定はstrict)")
     ),
     responses(
         (status = 200, description = "クエリ実行成功", content(

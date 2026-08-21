@@ -18,10 +18,11 @@ use tokio::runtime::Handle;
 /// キャンセルを確認する間隔。往復が長引いても、これより長くは待たされない。
 const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
+use crate::models::database::table::data::ConsistencyLevel;
 use crate::models::id::TableId;
 use crate::repositories::traits::DecodeFn;
 
-use super::tree::NodeCache;
+use super::tree::{NodeCache, ShardReader};
 use super::{TikvDb, TikvRead};
 
 /// トランザクションは保持しない（`Source` は複数回・複数スレッドから呼ばれうる）。
@@ -34,22 +35,27 @@ pub struct TikvTableSource<V> {
     snapshot_ts: Timestamp,
     /// 構築時（ランタイム文脈内）に捕まえたハンドル。
     handle: Handle,
-    /// このクエリ限りのノードキャッシュ。`snapshot_ts` を固定して使い回す間は同じ
+    /// このクエリ限りのノードキャッシュ（L1）。`snapshot_ts` を固定して使い回す間は同じ
     /// (table_id, region) が同じ値であり続けることを TiKV の MVCC が保証するので、
     /// 無効化なしに使い回せる（[`NodeCache`] を参照）。`read_range_ids` は 1 回のクエリで
     /// 複数回呼ばれ、そのたびに根本から降り直すので、ルート付近のノードほどよく効く。
     node_cache: Arc<NodeCache>,
+    /// `true`（`ConsistencyLevel::BoundedStale`）なら、L1 で引けなかった分を
+    /// プロセス寿命の L2（[`super::shard_cache::ShardCache`]）からも探す。
+    consult_l2: bool,
 }
 
 impl TikvDb {
     /// ストレージのハンドルをサービス層へ露出させないための入口。`snapshot_ts` は
     /// [`Storage::query_snapshot`](crate::repositories::Storage::query_snapshot) で
-    /// 1 度だけ取ったものを全ソースへ配る。
+    /// 1 度だけ取ったものを全ソースへ配る。`consistency` は L2（プロセス寿命の
+    /// シャードキャッシュ）を読みに使ってよいかの合図。
     pub fn table_source<V>(
         &self,
         table_id: TableId,
         decode: DecodeFn<V>,
         snapshot_ts: Timestamp,
+        consistency: ConsistencyLevel,
     ) -> TikvTableSource<V> {
         TikvTableSource {
             db: self.clone(),
@@ -58,6 +64,7 @@ impl TikvDb {
             snapshot_ts,
             handle: Handle::current(),
             node_cache: Arc::new(super::tree::new_node_cache()),
+            consult_l2: consistency == ConsistencyLevel::BoundedStale,
         }
     }
 }
@@ -83,15 +90,21 @@ where
         let snapshot_ts = self.snapshot_ts.clone();
         let decode = self.decode.clone();
         let node_cache = self.node_cache.clone();
+        let consult_l2 = self.consult_l2;
 
         let started = std::time::Instant::now();
         let flex_ids = self.handle.block_on(async move {
             // 読み取り専用なので commit も rollback も要らない。
-            let reader = TikvRead::at(db.client.clone(), snapshot_ts);
+            let txn_reader = TikvRead::at(db.client.clone(), snapshot_ts, db.shard_cache.clone());
+            let shard_reader = ShardReader::new(&node_cache, &db.shard_cache, consult_l2);
 
             // 1 本ごとに降りると往復が「境界の本数 × 木の深さ」になる。復元関数も渡す。
-            let read =
-                reader.read_values_in_ranges(table_id, &bounds, decode.as_ref(), &node_cache);
+            let read = txn_reader.read_values_in_ranges(
+                table_id,
+                &bounds,
+                decode.as_ref(),
+                &shard_reader,
+            );
             tokio::pin!(read);
 
             loop {

@@ -226,6 +226,25 @@ pub fn shards_of(table_id: TableId) -> Vec<u8> {
     with_ns(Ns::TablesData, &table_id.into_bytes())
 }
 
+/// `key` がシャード本体（`0x06 ‖ table_id ‖ flex_id`）なら `(table_id, region)` を復元する。
+/// 他の名前空間のキーには `None`。書き込みがコミットで送った変更（`kv::LazyTxn` の
+/// `pending`）から、L2 シャードキャッシュを無効化すべき行だけを拾うのに使う。
+pub fn shard_from_key(key: &[u8]) -> Option<Result<(TableId, FlexId), AppError>> {
+    if key.first().copied() != Some(Ns::TablesData as u8) {
+        return None;
+    }
+    let id_bytes = match key.get(1..1 + UUID_LEN).and_then(|s| <[u8; UUID_LEN]>::try_from(s).ok()) {
+        Some(bytes) => bytes,
+        None => {
+            return Some(Err(AppError::corrupt(
+                Stored::Shard,
+                "key is too short to carry a table id",
+            )));
+        }
+    };
+    Some(region_from_shard_key(key).map(|region| (TableId::from(id_bytes), region)))
+}
+
 /// `0x08 ‖ table_id ‖ flex_id`。本体（[`shard`]）と同じ並びなのでプレフィックスも対応する。
 pub fn shard_count(table_id: TableId, region: &FlexId) -> Vec<u8> {
     region_key(Ns::ShardCount, table_id, region)

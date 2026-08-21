@@ -162,8 +162,12 @@ impl TikvDb {
             config.pd_endpoints,
             config.security.is_some()
         );
+        let shard_cache = super::shard_cache::ShardCache::new(
+            &super::shard_cache::ShardCacheConfig::from_env(),
+        );
         let db = Self {
             client: Arc::new(client),
+            shard_cache: Arc::new(shard_cache),
         };
         db.ensure_initialized().await?;
         Ok(db)

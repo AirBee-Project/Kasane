@@ -24,6 +24,20 @@ pub struct GetDataQuery {
     #[serde(default)]
     pub format: OutputFormat,
     pub limit: Option<usize>,
+    #[serde(default)]
+    pub consistency: ConsistencyLevel,
+}
+
+#[derive(Debug, Deserialize, ToSchema, Default, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ConsistencyLevel {
+    #[default]
+    /// クラスタの最新状態を読む(既定)。読み取りのたびに実データを取得する。
+    Strict,
+    /// キャッシュされたデータを許容し、高速化する。自インスタンスでの書き込みは
+    /// 常に反映されるが、他インスタンスでの書き込みが短時間(既定 500ms 程度)
+    /// 反映されないことがある。
+    BoundedStale,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]

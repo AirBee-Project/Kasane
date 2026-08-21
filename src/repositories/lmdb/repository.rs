@@ -10,6 +10,7 @@ use crate::models::database::DatabaseInfoResponse;
 use crate::models::database::table::{
     Table, TableConstraints, TableDataType, UpdateTableConstraints,
 };
+use crate::models::database::table::data::ConsistencyLevel;
 use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
 use crate::models::users::{AclEntry, Grant, Scope, UserRecord};
 use crate::repositories::{CatalogRepository, ReadRepository, ValueGroups, WriteRepository};
@@ -138,6 +139,8 @@ impl ReadRepository for KasaneDbRead<'_> {
         table_id: TableId,
         ids: SpatialIdSet,
         limit: Option<usize>,
+        // LMDB はプロセス内の直接読み取りで、断面を跨ぐ共有キャッシュを持たない。
+        _consistency: ConsistencyLevel,
     ) -> Result<ValueGroups, AppError> {
         self.data_get_impl(table_id, ids, limit)
     }

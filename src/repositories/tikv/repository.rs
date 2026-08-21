@@ -10,6 +10,7 @@ use crate::models::database::DatabaseInfoResponse;
 use crate::models::database::table::{
     Table, TableConstraints, TableDataType, UpdateTableConstraints,
 };
+use crate::models::database::table::data::ConsistencyLevel;
 use std::collections::{BTreeSet, HashMap};
 
 use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
@@ -144,8 +145,9 @@ impl<R: Reader> ReadRepository for TikvRead<'_, R> {
         table_id: TableId,
         ids: SpatialIdSet,
         limit: Option<usize>,
+        consistency: ConsistencyLevel,
     ) -> Result<ValueGroups, AppError> {
-        self.data_get_impl(table_id, ids, limit).await
+        self.data_get_impl(table_id, ids, limit, consistency).await
     }
 
     async fn data_filter_eq(

@@ -5,6 +5,7 @@ use kasane_logic::{FlexId, SpatialIdSet};
 use crate::error::AppError;
 use crate::models::database::DatabaseInfoResponse;
 use crate::models::database::table::{Table, TableDataType};
+use crate::models::database::table::data::ConsistencyLevel;
 use crate::models::id::{DatabaseId, TableId};
 use crate::models::users::{User, UserRecord};
 
@@ -70,11 +71,14 @@ pub trait ReadRepository: CatalogRepository {
 
     async fn table_count(&self, table_id: TableId) -> Result<u64, AppError>;
 
+    /// `consistency`: [`ConsistencyLevel::BoundedStale`] は読み取り専用のキャッシュを
+    /// 参照してよいという合図。実際に使うかどうかはバックエンド次第(LMDB は無視する)。
     async fn data_get(
         &self,
         table_id: TableId,
         ids: SpatialIdSet,
         limit: Option<usize>,
+        consistency: ConsistencyLevel,
     ) -> Result<ValueGroups, AppError>;
 
     async fn data_filter_eq(

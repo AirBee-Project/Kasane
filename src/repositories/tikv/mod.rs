@@ -12,6 +12,7 @@ mod keys;
 mod kv;
 mod query_source;
 mod repository;
+mod shard_cache;
 mod tree;
 mod users;
 
@@ -30,6 +31,7 @@ use crate::error::AppError;
 use crate::repositories::Storage;
 use keys::LockScope;
 use kv::LazyTxn;
+use shard_cache::ShardCache;
 
 /// 競合・ロック待ちでやり直す上限。
 const MAX_ATTEMPTS: usize = 20;
@@ -191,6 +193,7 @@ fn is_one_pc_failure(err: &tikv_client::Error) -> bool {
 #[derive(Clone)]
 pub struct TikvDb {
     pub(super) client: Arc<TransactionClient>,
+    pub(super) shard_cache: Arc<ShardCache>,
 }
 
 /// 保持中のロック。中身が [`Option`] なのは、[`Drop`] でも返しにいけるようにするため。
@@ -264,15 +267,23 @@ pub struct TikvRead<'a, R = Snapshot> {
     pub(crate) txn: kv::Readers<R>,
     /// ストレージのハンドルより長生きしないことを型で示すだけ。
     pub(crate) _db: PhantomData<&'a TikvDb>,
+    /// L2(プロセス寿命)のシャードキャッシュ。参照するかどうかは呼び出し側の
+    /// `ConsistencyLevel` 次第(`tree::ShardReader` を参照)。
+    pub(crate) shard_cache: Arc<ShardCache>,
 }
 
 impl TikvRead<'_, Snapshot> {
     /// トランザクションを開かないのが要点。開始と rollback の 2 往復が要らず、タイムスタンプを
     /// 手元に持てるので同じ断面を追加で開いて並行に読める（[`kv::Readers`]）。
-    pub(crate) fn at(client: Arc<TransactionClient>, ts: tikv_client::Timestamp) -> Self {
+    pub(crate) fn at(
+        client: Arc<TransactionClient>,
+        ts: tikv_client::Timestamp,
+        shard_cache: Arc<ShardCache>,
+    ) -> Self {
         Self {
             txn: kv::Readers::fanned_out(client, ts),
             _db: PhantomData,
+            shard_cache,
         }
     }
 }
@@ -353,7 +364,7 @@ impl Storage for TikvDb {
         // ロックを取らないので、書き込みをブロックせず書き込みにもブロックされない。
         let start = std::time::Instant::now();
         let ts = self.client.current_timestamp().await?;
-        let r = TikvRead::at(self.client.clone(), ts);
+        let r = TikvRead::at(self.client.clone(), ts, self.shard_cache.clone());
         let result = f(&r).await;
         crate::telemetry::metrics::read_transaction(start.elapsed().as_secs_f64());
         result
@@ -435,6 +446,14 @@ impl TikvDb {
             let was_stale = w.stale;
             let mut lazy = w.txn.into_inner();
 
+            // `flush` が `pending` を空にしてしまう前に、シャードキャッシュ（L2）の無効化
+            // 対象を控えておく。実際に無効化するのはコミットが成功したと分かってから。
+            let touched_shards = if restart || result.is_err() {
+                Vec::new()
+            } else {
+                lazy.staged_shard_regions()
+            };
+
             // 捨てる試行では送らない。送らなければロックも MVCC のバージョンも作られない。
             let flushed = if restart || result.is_err() {
                 Ok(())
@@ -477,7 +496,14 @@ impl TikvDb {
 
             let outcome = match result {
                 Ok(value) => match txn {
-                    Some(mut txn) => commit_or_release(&mut txn).await.map(|_| value),
+                    Some(mut txn) => commit_or_release(&mut txn).await.map(|_| {
+                        // コミットが確定して初めて、触れたシャードを L2 から追い出す。
+                        // 自インスタンスの書き込みが常に即座に反映される所以。
+                        for (table_id, region) in &touched_shards {
+                            self.shard_cache.invalidate(*table_id, *region);
+                        }
+                        value
+                    }),
                     // 何も書かずに終わった（読み取りだけ、あるいは即座に確定した）。
                     None => Ok(value),
                 },

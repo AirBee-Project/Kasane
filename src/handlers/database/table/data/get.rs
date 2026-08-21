@@ -1,7 +1,7 @@
 use crate::AppState;
 use crate::middleware::auth::AuthUser;
 use crate::models::database::table::data::{
-    GetDataQuery, GetDataRequest, GetDataResponse, OutputFormat,
+    ConsistencyLevel, GetDataQuery, GetDataRequest, GetDataResponse, OutputFormat,
 };
 use crate::{error::AppError, services::database::table::data::get as data_get_service};
 use axum::Extension;
@@ -23,7 +23,8 @@ use axum::{
         ("db_name" = String, Path, description = "データベース名", example = "example_database"),
         ("table_name" = String, Path, description = "テーブル名", example = "example_table"),
         ("format" = Option<OutputFormat>, Query, description = "出力フォーマット(singleId, rangeId, flexId)"),
-        ("limit" = Option<usize>, Query, description = "最大取得件数")
+        ("limit" = Option<usize>, Query, description = "最大取得件数"),
+        ("consistency" = Option<ConsistencyLevel>, Query, description = "読み取りの一貫性(strict: 常に最新、boundedStale: キャッシュを許容して高速化。既定はstrict)")
     ),
     responses(
         (status = 200, description = "データ取得成功", content(

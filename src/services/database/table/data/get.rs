@@ -27,6 +27,7 @@ pub async fn get(
     let zoom_level_policy = *zoom_level_policy;
     let query_format = query.format;
     let query_limit = query.limit;
+    let consistency = query.consistency;
     let user = auth_user.user.clone();
 
     // レスポンス組み立ては CPU 処理なので、外へ出して明示的に blocking タスクへ渡す。
@@ -62,7 +63,7 @@ pub async fn get(
                 &zoom_level_policy,
                 false,
             )?;
-            let groups = db.data_get(table.id, ids, query_limit).await?;
+            let groups = db.data_get(table.id, ids, query_limit, consistency).await?;
             Ok((table, groups))
         })
         .await?;

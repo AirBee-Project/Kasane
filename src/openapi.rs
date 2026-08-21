@@ -3,8 +3,8 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 
 use crate::models::auth::{LoginRequest, LoginResponse};
 use crate::models::database::table::data::{
-    GetDataRequest, GetDataResponse, InsertDataRequest, OutputFormat, RemoveDataRequest,
-    ZoomLevelPolicy,
+    ConsistencyLevel, GetDataRequest, GetDataResponse, InsertDataRequest, OutputFormat,
+    RemoveDataRequest, ZoomLevelPolicy,
 };
 use crate::models::database::table::{
     CopyTableRequest, CreateTableRequest, TableDataType, TableInfoResponse, TableListResponse,
@@ -137,6 +137,7 @@ const PRIVILEGE_LEGEND: &str = r#"
         GetDataRequest,
         GetDataResponse,
         OutputFormat,
+        ConsistencyLevel,
         InsertDataRequest,
         RemoveDataRequest,
         ZoomLevelPolicy,

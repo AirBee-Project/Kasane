@@ -16,6 +16,7 @@
 use serde::{Deserialize, Serialize};
 
 use kasane::models::database::table::TableDataType;
+use kasane::models::database::table::data::ConsistencyLevel;
 use kasane::models::id::{PrincipalId, TableId};
 use kasane::models::users::{DataRole, PrivilegeRule};
 use kasane::repositories::{CatalogRepository, ReadRepository, Storage, WriteRepository};
@@ -353,7 +354,10 @@ pub async fn read_actual<S: Storage>(db: &S) -> Expected {
         let mut ids = SpatialIdSet::new();
         ids.insert(SingleId::new(20, 0, PROBE_HIT, 0).unwrap());
         let groups = db
-            .read(async move |r| r.data_get(int_id, ids.clone(), None).await)
+            .read(async move |r| {
+                r.data_get(int_id, ids.clone(), None, ConsistencyLevel::Strict)
+                    .await
+            })
             .await
             .unwrap();
         groups.into_iter().next().map(|(value, _)| value)

@@ -26,6 +26,7 @@ rand_core = { version = "0.6.4", features = ["getrandom"] }
 heed = { version = "0.22.1", optional = true }
 tikv-client = { version = "0.4", optional = true }
 crc32fast = { version = "1", optional = true }
+moka = { version = "0.12", features = ["sync"], optional = true }
 rayon = "1.12"
 rustc-hash = "2.1.2"
 
@@ -47,7 +48,7 @@ tower-http = { version = "0.7.0", features = ["cors"] }
 [features]
 default = ["backend-lmdb"]
 backend-lmdb = ["dep:heed"]
-backend-tikv = ["dep:tikv-client", "dep:crc32fast"]
+backend-tikv = ["dep:tikv-client", "dep:crc32fast", "dep:moka"]
 
 # 互換性テスト用
 gen-fixtures = []
