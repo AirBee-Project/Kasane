@@ -10,7 +10,8 @@ use tracing::Instrument;
 use super::node::archived_leaf;
 use super::routing::{RoutedLeaf, RoutedRange, route_leaves_batched, route_leaves_for_ranges};
 use super::{
-    AppError, LEAF_PARALLEL_THRESHOLD, Reader, TableDataType, TableId, TikvRead, ValueMap, keys, kv,
+    AppError, LEAF_PARALLEL_THRESHOLD, NodeCache, Reader, TableDataType, TableId, TikvRead,
+    ValueMap, keys, kv,
 };
 use crate::repositories::ValueGroups;
 use crate::repositories::encoding::value_index;
@@ -127,13 +128,14 @@ impl<R: Reader> TikvRead<'_, R> {
         table_id: TableId,
         ranges: &[RangeId],
         decode: &(dyn Fn(&[u8]) -> Option<V> + Send + Sync),
+        node_cache: &NodeCache,
     ) -> Result<Vec<(FlexId, V)>, AppError> {
         if ranges.is_empty() {
             return Ok(Vec::new());
         }
 
         // ネットワーク降下と CPU 復号のどちらが支配的かを切り分けるための内訳。
-        let leaves = route_leaves_for_ranges(&self.txn, table_id, ranges)
+        let leaves = route_leaves_for_ranges(&self.txn, table_id, ranges, node_cache)
             .instrument(tracing::info_span!(
                 "tikv.route_leaves",
                 ranges = ranges.len()
