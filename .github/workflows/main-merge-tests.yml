@@ -43,6 +43,7 @@ jobs:
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
         with:
+          shared-key: "kasane"
           key: lmdb
 
       - name: Check formatting
@@ -108,7 +109,14 @@ jobs:
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
         with:
+          shared-key: "kasane"
           key: tikv
+
+      - name: Start TiKV
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose up -d --wait
 
       - name: Clippy
         shell: bash
@@ -122,12 +130,6 @@ jobs:
             --no-default-features \
             --features "production,backend-tikv" \
             -- -D warnings
-
-      - name: Start TiKV
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker compose up -d --wait
 
       - name: Wait for the cluster to accept writes
         shell: bash
