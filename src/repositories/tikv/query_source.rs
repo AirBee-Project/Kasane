@@ -90,7 +90,8 @@ where
             let reader = TikvRead::at(db.client.clone(), snapshot_ts);
 
             // 1 本ごとに降りると往復が「境界の本数 × 木の深さ」になる。復元関数も渡す。
-            let read = reader.read_values_in_ranges(table_id, &bounds, decode.as_ref(), &node_cache);
+            let read =
+                reader.read_values_in_ranges(table_id, &bounds, decode.as_ref(), &node_cache);
             tokio::pin!(read);
 
             loop {
