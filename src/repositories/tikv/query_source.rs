@@ -6,6 +6,7 @@
 //! ランタイムハンドルを持ち回るのは、[`tokio::runtime::Handle::current`] を `read_range_ids` の
 //! 中で呼ぶと、実行器が rayon 側から読みに来たときにランタイム文脈が無くて panic するため。
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use kasane_logic::{
@@ -20,6 +21,7 @@ const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(50);
 use crate::models::id::TableId;
 use crate::repositories::traits::DecodeFn;
 
+use super::tree::NodeCache;
 use super::{TikvDb, TikvRead};
 
 /// トランザクションは保持しない（`Source` は複数回・複数スレッドから呼ばれうる）。
@@ -32,6 +34,11 @@ pub struct TikvTableSource<V> {
     snapshot_ts: Timestamp,
     /// 構築時（ランタイム文脈内）に捕まえたハンドル。
     handle: Handle,
+    /// このクエリ限りのノードキャッシュ。`snapshot_ts` を固定して使い回す間は同じ
+    /// (table_id, region) が同じ値であり続けることを TiKV の MVCC が保証するので、
+    /// 無効化なしに使い回せる（[`NodeCache`] を参照）。`read_range_ids` は 1 回のクエリで
+    /// 複数回呼ばれ、そのたびに根本から降り直すので、ルート付近のノードほどよく効く。
+    node_cache: Arc<NodeCache>,
 }
 
 impl TikvDb {
@@ -50,6 +57,7 @@ impl TikvDb {
             decode,
             snapshot_ts,
             handle: Handle::current(),
+            node_cache: Arc::new(super::tree::new_node_cache()),
         }
     }
 }
@@ -74,6 +82,7 @@ where
         let bounds = bounds.to_vec();
         let snapshot_ts = self.snapshot_ts.clone();
         let decode = self.decode.clone();
+        let node_cache = self.node_cache.clone();
 
         let started = std::time::Instant::now();
         let flex_ids = self.handle.block_on(async move {
@@ -81,7 +90,8 @@ where
             let reader = TikvRead::at(db.client.clone(), snapshot_ts);
 
             // 1 本ごとに降りると往復が「境界の本数 × 木の深さ」になる。復元関数も渡す。
-            let read = reader.read_values_in_ranges(table_id, &bounds, decode.as_ref());
+            let read =
+                reader.read_values_in_ranges(table_id, &bounds, decode.as_ref(), &node_cache);
             tokio::pin!(read);
 
             loop {

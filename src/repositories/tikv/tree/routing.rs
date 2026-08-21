@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tracing::Instrument;
 
 use super::node::load_nodes;
-use super::{AppError, Reader, Readers, ShardEntry, ShardValue, TableId};
+use super::{AppError, NodeCache, Reader, Readers, ShardEntry, ShardValue, TableId};
 
 /// 降下の途中で読んだバイト列を持ち回るので、呼び出し側が同じキーを引き直さずに済む。
 pub(super) struct RoutedLeaf {
@@ -140,14 +140,66 @@ pub(super) struct RoutedRange {
     pub hits: Vec<u32>,
 }
 
+/// `load_nodes` をノードキャッシュ越しに呼ぶ。**同じ `NodeCache` を同一クエリの間だけ
+/// 使い回すこと。** そのクエリの断面（`snapshot_ts`）が固定である間は、同じ
+/// (table_id, region) は同じ値であり続けることを TiKV の MVCC が保証するので、無効化の
+/// 要らない安全なキャッシュになる（[`NodeCache`] のドキュメントを参照）。
+async fn load_nodes_cached<R: Reader>(
+    txn: &Readers<R>,
+    table_id: TableId,
+    regions: &[FlexId],
+    cache: &NodeCache,
+) -> Result<FxHashMap<FlexId, ShardValue>, AppError> {
+    let mut out = FxHashMap::default();
+    let mut missing = Vec::new();
+
+    {
+        let cached = cache.lock().expect("node cache lock poisoned");
+        for &region in regions {
+            match cached.get(&region) {
+                Some(Some(value)) => {
+                    out.insert(region, value.clone());
+                }
+                // 未作成領域だと確認済み。読み直さない。
+                Some(None) => {}
+                None => missing.push(region),
+            }
+        }
+    }
+
+    if missing.is_empty() {
+        return Ok(out);
+    }
+    let fetched = load_nodes(txn, table_id, &missing).await?;
+
+    let mut cached = cache.lock().expect("node cache lock poisoned");
+    for region in missing {
+        match fetched.get(&region) {
+            Some(value) => {
+                cached.insert(region, Some(value.clone()));
+                out.insert(region, value.clone());
+            }
+            None => {
+                cached.insert(region, None);
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// `ranges` のいずれかと重なる**既存のリーフ領域**を、木の降下 1 回で集める。
 ///
 /// 範囲 1 本ごとにルートから降りると往復が**範囲の本数 × 木の深さ**になる。評価境界は対象
 /// 空間 ID の FlexId ごとに 1 本ずつ立つので、この本数は要求の広さに比例して増える。
+///
+/// `cache` は呼び出し元（[`TikvTableSource`](super::super::TikvTableSource)）が同一クエリの
+/// 間だけ持ち回るノードキャッシュ。`Source::read_range_ids` は 1 回のクエリで複数回呼ばれ、
+/// そのたびにルート付近から降り直すので、根に近いノードほどキャッシュがよく効く。
 pub(super) async fn route_leaves_for_ranges<R: Reader>(
     txn: &Readers<R>,
     table_id: TableId,
     ranges: &[RangeId],
+    cache: &NodeCache,
 ) -> Result<Vec<RoutedRange>, AppError> {
     let mut level: Vec<(FlexId, Vec<u32>)> = Vec::new();
     for root in [FlexId::LOWER_MAX, FlexId::UPPER_MAX] {
@@ -167,7 +219,7 @@ pub(super) async fn route_leaves_for_ranges<R: Reader>(
     while !level.is_empty() {
         let regions: Vec<FlexId> = level.iter().map(|(region, _)| *region).collect();
         // 降下は木の深さぶんしか回らないので、段ごとに計測してもスパン数は有限。
-        let mut nodes = load_nodes(txn, table_id, &regions)
+        let mut nodes = load_nodes_cached(txn, table_id, &regions, cache)
             .instrument(tracing::debug_span!(
                 "tikv.load_nodes",
                 depth,

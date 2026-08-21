@@ -3,6 +3,8 @@
 //! 排他の付け方は経路で違う。データ経路はシャードのキー単位（`kv::lock_shards`）、
 //! カタログ経路は明示ロック（`lock_options` と `TikvWrite::require_lock`）。
 
+#![allow(clippy::result_large_err)]
+
 mod catalog;
 mod gc;
 mod init;

@@ -2,6 +2,8 @@
 //!
 //! 読み書きどちらからも必要なので、読み取り元だけを受け取る自由関数にしてある。
 
+#![allow(clippy::result_large_err)]
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
@@ -728,8 +730,13 @@ const FRAME_HEADER_LEN: usize = 4;
 /// CRC32 で包むのは、読み出しが `access_unchecked`（構造を検証しないゼロコピーアクセス）を
 /// 通るため。その安全条件「自分が書いたバイト列そのもの」は、ネットワーク越しに届き複数
 /// インスタンスで共有されうる TiKV では成り立たない。検証にコピーは発生しない。
+///
+/// `Arc<[u8]>` で持つのは `Clone` を安く保つため。クエリ用のノードキャッシュ
+/// （[`tree::NodeCache`](super::tree::NodeCache)）はこれを複製して溜めるので、シャード
+/// 本体（数 MB になりうる）を毎回複製すると意味が無い。
+#[derive(Clone)]
 pub(super) struct ShardValue {
-    framed: Vec<u8>,
+    framed: Arc<[u8]>,
 }
 
 /// ここを通過したバイト列だけが `access_unchecked` へ渡る。
@@ -755,7 +762,9 @@ impl TryFrom<Vec<u8>> for ShardValue {
                  (crc32 expected {expected:#010x}, found {actual:#010x})"
             )));
         }
-        Ok(Self { framed })
+        Ok(Self {
+            framed: Arc::from(framed),
+        })
     }
 }
 
