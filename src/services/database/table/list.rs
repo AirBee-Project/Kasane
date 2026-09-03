@@ -1,6 +1,6 @@
-use crate::services::auth::{reaches, visible_database};
 use crate::models::users::{Scope, User, UserRole};
 use crate::repositories::{CatalogRepository, ReadRepository, Storage};
+use crate::services::auth::{reaches, visible_database};
 use crate::{
     AppState,
     error::AppError,

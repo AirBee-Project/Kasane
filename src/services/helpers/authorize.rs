@@ -7,10 +7,10 @@
 use crate::{
     AppState,
     error::{AppError, Resource},
-    services::auth::authorize_resolved,
     models::database::table::Table,
     models::users::{User, UserRole},
     repositories::{ReadRepository, Storage},
+    services::auth::authorize_resolved,
 };
 
 /// **開いている読み取り**の中で、テーブルへの権限を確かめメタデータを返す。

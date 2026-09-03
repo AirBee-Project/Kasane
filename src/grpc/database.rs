@@ -76,7 +76,9 @@ impl DatabaseService for DatabaseServiceImpl {
             Some(super::pb::update_database_request::DescriptionUpdate::ClearDescription(true)) => {
                 Some(None)
             }
-            Some(super::pb::update_database_request::DescriptionUpdate::ClearDescription(false)) => None,
+            Some(super::pb::update_database_request::DescriptionUpdate::ClearDescription(
+                false,
+            )) => None,
             Some(super::pb::update_database_request::DescriptionUpdate::SetDescription(s)) => {
                 Some(Some(s))
             }

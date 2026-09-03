@@ -148,9 +148,7 @@ pub fn parse_table_constraints_update(
 ) -> Result<Option<Option<DomainUpdateTableConstraints>>, Status> {
     match update {
         None => Ok(None),
-        Some(pb::update_table_request::ConstraintsUpdate::ClearConstraints(true)) => {
-            Ok(Some(None))
-        }
+        Some(pb::update_table_request::ConstraintsUpdate::ClearConstraints(true)) => Ok(Some(None)),
         Some(pb::update_table_request::ConstraintsUpdate::ClearConstraints(false)) => Ok(None),
         Some(pb::update_table_request::ConstraintsUpdate::SetConstraints(c)) => {
             Ok(Some(Some(update_table_constraints_to_domain(c)?)))

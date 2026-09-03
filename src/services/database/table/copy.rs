@@ -1,10 +1,10 @@
 use crate::{
     AppState,
     error::AppError,
-    services::auth::authorize_path,
     models::database::table::Table,
     models::users::{User, UserRole},
     repositories::{Storage, WriteRepository},
+    services::auth::authorize_path,
 };
 
 /// 複製元には Read、複製**先のデータベース**には Manage を要求する。

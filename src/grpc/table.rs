@@ -88,7 +88,9 @@ impl TableService for TableServiceImpl {
             Some(super::pb::update_table_request::DescriptionUpdate::ClearDescription(true)) => {
                 Some(None)
             }
-            Some(super::pb::update_table_request::DescriptionUpdate::ClearDescription(false)) => None,
+            Some(super::pb::update_table_request::DescriptionUpdate::ClearDescription(false)) => {
+                None
+            }
             Some(super::pb::update_table_request::DescriptionUpdate::SetDescription(s)) => {
                 Some(Some(s))
             }

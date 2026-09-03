@@ -1,10 +1,10 @@
 use crate::{
     AppState,
     error::AppError,
-    services::auth::authorize_path,
     models::database::table::{CreateTableRequest, Table},
     models::users::{User, UserRole},
     repositories::{Storage, WriteRepository},
+    services::auth::authorize_path,
 };
 
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]

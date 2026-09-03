@@ -125,9 +125,7 @@ async fn put_privilege(
         .user_as(client_token)
         .grant_privilege(pb::GrantPrivilegeRequest {
             username: username.to_string(),
-            privilege: Some(pb::PrivilegeRule {
-                scope: Some(scope),
-            }),
+            privilege: Some(pb::PrivilegeRule { scope: Some(scope) }),
         })
         .await
         .map(|_| ())
@@ -145,13 +143,17 @@ async fn delete_privilege(
     let client_token = client_token.as_deref();
     let target = match (db_name, table_name) {
         (None, _) => pb::privilege_target::Target::Global(pb::privilege_target::Global {}),
-        (Some(db), None) => pb::privilege_target::Target::Database(pb::privilege_target::Database {
-            db_name: db.to_string(),
-        }),
-        (Some(db), Some(table)) => pb::privilege_target::Target::Table(pb::privilege_target::Table {
-            db_name: db.to_string(),
-            table_name: table.to_string(),
-        }),
+        (Some(db), None) => {
+            pb::privilege_target::Target::Database(pb::privilege_target::Database {
+                db_name: db.to_string(),
+            })
+        }
+        (Some(db), Some(table)) => {
+            pb::privilege_target::Target::Table(pb::privilege_target::Table {
+                db_name: db.to_string(),
+                table_name: table.to_string(),
+            })
+        }
     };
     test_app
         .user_as(client_token)

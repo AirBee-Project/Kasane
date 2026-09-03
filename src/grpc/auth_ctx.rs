@@ -2,9 +2,9 @@ use tonic::Status;
 
 use crate::AppState;
 use crate::error::{AppError, AuthError};
-use crate::services::auth::AuthUser;
 use crate::models::auth::Claims;
 use crate::repositories::{ReadRepository, Storage};
+use crate::services::auth::AuthUser;
 
 /// [`super::interceptor::require_auth`] が検証した `Claims` から、現在の利用者レコードを
 /// 読み直して [`AuthUser`] を組み立てる。`uid`/`ver` が最新のレコードと一致しない場合
