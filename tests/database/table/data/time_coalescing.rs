@@ -5,10 +5,11 @@
 //! 制限される。`86400`（1日）は2の冪ではないため、挿入時は内部で複数の木Segmentへ
 //! 分解されるが、読み出し時には暦の単位に結合し直され、単一のエントリとして戻るはず。
 
-use kasane::models::spatial_id::RawSingleId;
+use kasane::grpc::pb;
 
 use crate::common::TestApp;
-use crate::common::data::put_data;
+use crate::common::builders::{self, num};
+use crate::common::data::{put_data, search_data};
 
 #[tokio::test]
 async fn read_back_coalesces_a_non_power_of_two_calendar_interval() {
@@ -18,43 +19,39 @@ async fn read_back_coalesces_a_non_power_of_two_calendar_interval() {
         .create_table("test_db", "test_table", "Int", 25)
         .await;
 
-    let single_id_query = serde_json::json!([{
-        "z": 20, "f": 0, "x": 931386, "y": 412905,
-        "i": 86400, "t": 5,
-        "type": "singleId"
-    }]);
+    let single_id_query = vec![builders::single_id_with_time(
+        20, 0, 931386, 412905, 86400, 5,
+    )];
 
-    put_data(
-        &test_app,
-        "test_table",
-        &serde_json::json!({ "value": 7, "spatial_ids": single_id_query }),
-    )
-    .await;
+    put_data(&test_app, "test_table", num(7.0), single_id_query.clone()).await;
 
-    let result_json =
-        crate::common::data::search_data(&test_app, "test_table", &single_id_query).await;
+    let result = search_data(&test_app, "test_table", single_id_query).await;
 
-    let data = result_json["data"].as_array().expect("no data");
-    assert_eq!(data.len(), 1);
-    let spatial_ids = data[0]["spatialIds"].as_array().expect("no spatialIds");
+    assert_eq!(result.data.len(), 1);
+    let group = &result.data[0];
     assert_eq!(
-        spatial_ids.len(),
+        group.spatial_ids.len(),
         1,
-        "expected the day-long segment to coalesce back into a single entry, got {spatial_ids:?}"
+        "expected the day-long segment to coalesce back into a single entry, got {:?}",
+        group.spatial_ids
     );
 
-    let got: RawSingleId = serde_json::from_value(spatial_ids[0].clone()).unwrap();
-    assert_eq!(
-        got,
-        RawSingleId {
-            z: 20,
-            f: 0,
-            x: 931386,
-            y: 412905,
-            i: Some(86400),
-            t: Some(5),
+    match &group.spatial_ids[0].kind {
+        Some(pb::spatial_id::Kind::SingleId(s)) => {
+            assert_eq!(
+                s,
+                &pb::SingleId {
+                    z: 20,
+                    f: 0,
+                    x: 931386,
+                    y: 412905,
+                    i: Some(86400),
+                    t: Some(5),
+                }
+            );
         }
-    );
+        other => panic!("expected a SingleId, got {other:?}"),
+    }
 }
 
 /// 隣接する2つの `HOUR`（3600秒）Segmentを別々に挿入しても、読み出し時には
@@ -68,50 +65,49 @@ async fn read_back_coalesces_adjacent_segments_into_a_range() {
         .await;
 
     for t in [0, 1] {
-        let query = serde_json::json!([{
-            "z": 20, "f": 0, "x": 931386, "y": 412905,
-            "i": 3600, "t": t,
-            "type": "singleId"
-        }]);
-        put_data(
-            &test_app,
-            "test_table",
-            &serde_json::json!({ "value": 9, "spatial_ids": query }),
-        )
-        .await;
+        let query = vec![builders::single_id_with_time(
+            20, 0, 931386, 412905, 3600, t,
+        )];
+        put_data(&test_app, "test_table", num(9.0), query).await;
     }
 
-    let range_query = serde_json::json!([{
-        "z": 20, "f": [0, 0], "x": [931386, 931386], "y": [412905, 412905],
-        "i": 3600, "t": [0, 1],
-        "type": "rangeId"
-    }]);
-    let body = serde_json::json!({ "spatial_ids": range_query });
-    let req = axum::http::Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables/test_table/data/search?format=rangeId")
-        .header("Content-Type", "application/json")
-        .body(axum::body::Body::from(
-            serde_json::to_string(&body).unwrap(),
-        ))
-        .unwrap();
-    let response = tower::ServiceExt::oneshot(test_app.app.clone(), req)
-        .await
-        .unwrap();
-    assert_eq!(response.status(), axum::http::StatusCode::OK);
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let result_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+    let range_query = vec![builders::range_id_with_time(
+        20,
+        Some((0, 0)),
+        Some((931386, 931386)),
+        Some((412905, 412905)),
+        3600,
+        (0, 1),
+    )];
 
-    let data = result_json["data"].as_array().expect("no data");
-    assert_eq!(data.len(), 1);
-    let spatial_ids = data[0]["spatialIds"].as_array().expect("no spatialIds");
+    let result = test_app
+        .data()
+        .search(pb::SearchDataRequest {
+            db_name: "test_db".to_string(),
+            table_name: "test_table".to_string(),
+            spatial_ids: range_query,
+            zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
+            format: pb::OutputFormat::RangeId as i32,
+            limit: None,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+
+    assert_eq!(result.data.len(), 1);
+    let group = &result.data[0];
     assert_eq!(
-        spatial_ids.len(),
+        group.spatial_ids.len(),
         1,
-        "expected the two adjacent hour segments to coalesce into one range, got {spatial_ids:?}"
+        "expected the two adjacent hour segments to coalesce into one range, got {:?}",
+        group.spatial_ids
     );
-    assert_eq!(spatial_ids[0]["i"], serde_json::json!(3600));
-    assert_eq!(spatial_ids[0]["t"], serde_json::json!([0, 1]));
+
+    match &group.spatial_ids[0].kind {
+        Some(pb::spatial_id::Kind::RangeId(r)) => {
+            assert_eq!(r.i, Some(3600));
+            assert_eq!(r.t, Some(pb::Uint64Range { min: 0, max: 1 }));
+        }
+        other => panic!("expected a RangeId, got {other:?}"),
+    }
 }

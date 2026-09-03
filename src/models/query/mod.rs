@@ -1,9 +1,8 @@
 use crate::models::spatial_id::SpatialId;
 use serde::Deserialize;
-use utoipa::ToSchema;
 
 /// 同一空間に複数の値が集まったときの集約規則。
-#[derive(Debug, Deserialize, ToSchema, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum MergePolicyKind {
     /// 後の値で上書きする
@@ -23,47 +22,38 @@ pub enum MergePolicyKind {
 }
 
 /// 値フィルタの条件。
-#[derive(Debug, Deserialize, ToSchema, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(tag = "mode", rename_all = "camelCase")]
 pub enum FilterCondition {
     /// `value` に一致する値だけを残す
-    Equals {
-        #[schema(example = json!("some_value"))]
-        value: serde_json::Value,
-    },
+    Equals { value: serde_json::Value },
     /// 値が `min..=max`に入る値だけを残す
     InRange {
         #[serde(default)]
-        #[schema(example = json!(0))]
         min: Option<serde_json::Value>,
         #[serde(default)]
-        #[schema(example = json!(100))]
         max: Option<serde_json::Value>,
     },
     /// 値が `min..=max`に入る値を取り除く
     NotInRange {
         #[serde(default)]
-        #[schema(example = json!(0))]
         min: Option<serde_json::Value>,
         #[serde(default)]
-        #[schema(example = json!(100))]
         max: Option<serde_json::Value>,
     },
 }
 
 /// 対応表エントリ
-#[derive(Debug, Deserialize, ToSchema, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct MappingEntry {
     /// 変換前の値
-    #[schema(example = json!(1))]
     pub from: serde_json::Value,
     /// 変換後の値
-    #[schema(example = json!("one"))]
     pub to: serde_json::Value,
 }
 
 /// 計算用のオペランド（整数と小数の両方を受け付ける）
-#[derive(Debug, Deserialize, ToSchema, Clone, Copy, PartialEq)]
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq)]
 #[serde(untagged)]
 pub enum MathOperand {
     Int(i64),
@@ -71,7 +61,7 @@ pub enum MathOperand {
 }
 
 /// 四則演算の演算子
-#[derive(Debug, Deserialize, ToSchema, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum MathOperator {
     Add,
@@ -80,7 +70,7 @@ pub enum MathOperator {
     Divide,
 }
 
-#[derive(Debug, Deserialize, ToSchema, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum FalloffPattern {
     #[default]
@@ -101,7 +91,7 @@ impl From<FalloffPattern>
     }
 }
 
-#[derive(Debug, Deserialize, ToSchema, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum Direction {
     Upper,
@@ -117,204 +107,121 @@ impl From<Direction> for kasane_logic::spatial_id::helpers::Side {
     }
 }
 
-#[derive(Debug, Deserialize, ToSchema, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum QueryNode {
     /// 演算の起点。読み出し対象のテーブルを指定する。
-    Source {
-        #[schema(example = "example_database")]
-        database: String,
-        #[schema(example = "example_table")]
-        table: String,
-    },
+    Source { database: String, table: String },
 
     FilterValues {
-        #[schema(no_recursion)]
         input: Box<Self>,
         #[serde(flatten)]
         condition: FilterCondition,
     },
 
     /// X方向へ平行移動する
-    ShiftX {
-        #[schema(no_recursion)]
-        input: Box<Self>,
-        #[schema(example = 25)]
-        z: u8,
-        #[schema(example = 1)]
-        index: i32,
-    },
+    ShiftX { input: Box<Self>, z: u8, index: i32 },
     /// Y方向へ平行移動する
-    ShiftY {
-        #[schema(no_recursion)]
-        input: Box<Self>,
-        #[schema(example = 25)]
-        z: u8,
-        #[schema(example = 1)]
-        index: i32,
-    },
+    ShiftY { input: Box<Self>, z: u8, index: i32 },
     /// F(高度)方向へ平行移動する
-    ShiftF {
-        #[schema(no_recursion)]
-        input: Box<Self>,
-        #[schema(example = 25)]
-        z: u8,
-        #[schema(example = 1)]
-        index: i32,
-    },
+    ShiftF { input: Box<Self>, z: u8, index: i32 },
 
     /// 指定された値までズームレベルを落とし、`policy` で集約する
     ZoomOut {
-        #[schema(no_recursion)]
         input: Box<Self>,
-        #[schema(example = 24)]
         z: u8,
-        #[schema(example = "average")]
         policy: MergePolicyKind,
     },
 
     /// X方向の絶対座標範囲へ引き延ばす
     ExtrudeX {
-        #[schema(no_recursion)]
         input: Box<Self>,
-        #[schema(example = 25)]
         z: u8,
-        #[schema(example = 7300000)]
         start: u32,
-        #[schema(example = 7300063)]
         end: u32,
-        #[schema(example = "overwrite")]
         policy: MergePolicyKind,
     },
     /// Y方向の絶対座標範囲へ引き延ばす
     ExtrudeY {
-        #[schema(no_recursion)]
         input: Box<Self>,
-        #[schema(example = 25)]
         z: u8,
-        #[schema(example = 3276800)]
         start: u32,
-        #[schema(example = 3276863)]
         end: u32,
-        #[schema(example = "overwrite")]
         policy: MergePolicyKind,
     },
     /// F方向の絶対座標範囲へ引き延ばす
     ExtrudeF {
-        #[schema(no_recursion)]
         input: Box<Self>,
-        #[schema(example = 25)]
         z: u8,
-        #[schema(example = -5)]
         start: i32,
-        #[schema(example = 5)]
         end: i32,
-        #[schema(example = "overwrite")]
         policy: MergePolicyKind,
     },
 
     /// X方向へ、指定距離で0になるよう値を減衰させる
     FalloffX {
-        #[schema(no_recursion)]
         input: Box<Self>,
-        #[schema(example = 25)]
         z: u8,
-        #[schema(example = 3)]
         radius: u32,
         #[serde(default)]
-        #[schema(example = "linear")]
         pattern: FalloffPattern,
         #[serde(default)]
-        #[schema(example = "upper")]
         direction: Option<Direction>,
-        #[schema(example = "max")]
         policy: MergePolicyKind,
     },
     /// Y方向へ、指定距離で0になるよう値を減衰させる
     FalloffY {
-        #[schema(no_recursion)]
         input: Box<Self>,
-        #[schema(example = 25)]
         z: u8,
-        #[schema(example = 3)]
         radius: u32,
         #[serde(default)]
-        #[schema(example = "linear")]
         pattern: FalloffPattern,
         #[serde(default)]
-        #[schema(example = "upper")]
         direction: Option<Direction>,
-        #[schema(example = "max")]
         policy: MergePolicyKind,
     },
     /// F方向へ、指定距離で0になるよう値を減衰させる
     FalloffF {
-        #[schema(no_recursion)]
         input: Box<Self>,
-        #[schema(example = 25)]
         z: u8,
-        #[schema(example = 3)]
         radius: u32,
         #[serde(default)]
-        #[schema(example = "linear")]
         pattern: FalloffPattern,
         #[serde(default)]
-        #[schema(example = "upper")]
         direction: Option<Direction>,
-        #[schema(example = "max")]
         policy: MergePolicyKind,
     },
 
     /// 2つの部分式を `policy` で重ね合わせる。
     /// 片側にしか値が無い FlexId は `default` を相手側の値とみなす。
     Merge {
-        #[schema(no_recursion)]
         left: Box<Self>,
-        #[schema(no_recursion)]
         right: Box<Self>,
-        #[schema(example = json!(0))]
         default: serde_json::Value,
-        #[schema(example = "overwrite")]
         policy: MergePolicyKind,
     },
 
     /// 左側の結果から、右側の空間と重なる部分を取り除く。
-    Difference {
-        #[schema(no_recursion)]
-        left: Box<Self>,
-        #[schema(no_recursion)]
-        right: Box<Self>,
-    },
+    Difference { left: Box<Self>, right: Box<Self> },
 
     /// 左右の空間が重なる部分だけを残す。値は左側のものが維持される。
-    Intersection {
-        #[schema(no_recursion)]
-        left: Box<Self>,
-        #[schema(no_recursion)]
-        right: Box<Self>,
-    },
+    Intersection { left: Box<Self>, right: Box<Self> },
 
     /// 値を対応表に基づいて変換する。対応表にない値は `default` になる。
     MapValues {
-        #[schema(no_recursion)]
         input: Box<Self>,
         /// この MapValues が出力する型。対応表の `to` や `default` はこの型として解釈される。
-        #[schema(example = "Int")]
         output_type: crate::models::database::table::TableDataType,
         /// 変換前後の対応表。`from` の重複は 400 で拒否される。
         mapping: Vec<MappingEntry>,
         /// 対応表に存在しない値に使う既定値
-        #[schema(example = json!("unknown"))]
         default: serde_json::Value,
     },
 
     /// 値に対して四則演算を行う
     MathValues {
-        #[schema(no_recursion)]
         input: Box<Self>,
-        #[schema(example = "multiply")]
         operator: MathOperator,
-        #[schema(value_type = f64, example = 1.5)]
         operand: MathOperand,
     },
 }
@@ -368,39 +275,7 @@ impl QueryNode {
 }
 
 /// Tableに対するQueryを表現する型
-#[derive(Debug, Deserialize, ToSchema)]
-#[schema(example = json!({
-    "value_type": "Int",
-    "spatial_ids": [
-        { "type": "rangeId", "z": 23, "f": [0, 0], "x": [7300000, 7300063], "y": [3276800, 3276863] }
-    ],
-    "query": {
-        "type": "zoomOut",
-        "z": 23,
-        "policy": "average",
-        "input": {
-            "type": "falloffY",
-            "z": 25,
-            "radius": 3,
-            "pattern": "linear",
-            "direction": null,
-            "policy": "max",
-            "input": {
-                "type": "falloffX",
-                "z": 25,
-                "radius": 3,
-                "pattern": "linear",
-                "direction": null,
-                "policy": "max",
-                 "input": {
-                        "type": "source",
-                        "database": "sensors",
-                        "table": "heat_sources"
-                }
-            }
-        }
-    }
-}))]
+#[derive(Debug, Deserialize)]
 pub struct ExecuteQueryRequest {
     #[serde(default)]
     pub value_type: Option<crate::models::database::table::TableDataType>,

@@ -8,21 +8,17 @@
 //! そのため、ここにある関数は `AppState` ではなく**開いているリポジトリ**を受け取り、
 //! 解決した ID を呼び出し側へ返す。
 
-use crate::repositories::{CatalogRepository, ReadRepository, Storage};
-use axum::{extract::Request, http::header, middleware::Next, response::Response};
+use crate::repositories::CatalogRepository;
 
+use crate::error::{AppError, AuthError, Resource};
 use crate::models::id::{DatabaseId, TableId};
 use crate::models::users::{Scope, User, UserRole};
-use crate::{
-    AppState,
-    error::{AppError, AuthError, Resource},
-    services::auth::verify_jwt,
-};
 
-/// 認証済みユーザーをリクエスト拡張で運ぶための包み。
+/// 認証済みユーザーを運ぶための包み。
 ///
-/// 権限判定は [`User`] 側にあり `Deref` 越しに使う。認可のドメインロジックを HTTP 層へ
-/// 漏らさないため。
+/// 権限判定は [`User`] 側にあり `Deref` 越しに使う。認可のドメインロジックを gRPC 層へ
+/// 漏らさないため。JWT の検証とこの型の組み立ては [`crate::grpc::interceptor`] /
+/// [`crate::grpc::auth_ctx`] が行う。
 #[derive(Clone)]
 pub struct AuthUser {
     pub user: User,
@@ -34,46 +30,6 @@ impl std::ops::Deref for AuthUser {
     fn deref(&self) -> &Self::Target {
         &self.user
     }
-}
-
-#[tracing::instrument(skip_all)]
-pub async fn require_auth(
-    axum::extract::State(app_state): axum::extract::State<AppState>,
-    mut req: Request,
-    next: Next,
-) -> Result<Response, AppError> {
-    let auth_header = req.headers().get(header::AUTHORIZATION);
-
-    let auth_header = match auth_header {
-        Some(header) => header.to_str().unwrap_or(""),
-        None => {
-            return Err(AuthError::MissingToken.into());
-        }
-    };
-
-    if !auth_header.starts_with("Bearer ") {
-        return Err(AuthError::MalformedHeader.into());
-    }
-
-    let token = &auth_header[7..];
-    let claims = verify_jwt(token)?;
-
-    let sub = claims.sub.clone();
-    // 読むのは利用者レコード 1 件だけ。権限は対象ごとの行なので、保持数によらず
-    // ここのコストは一定になる。
-    let user = app_state
-        .db
-        .read(async move |repo| repo.get_user(&sub).await)
-        .await?
-        .ok_or(AppError::Auth(AuthError::TokenRevoked))?;
-
-    if claims.uid != user.id.to_string() || claims.ver != user.token_version {
-        return Err(AuthError::TokenRevoked.into());
-    }
-
-    req.extensions_mut().insert(AuthUser { user });
-
-    Ok(next.run(req).await)
 }
 
 /// 特定のデータベースに紐づかない操作（データベースの作成・削除など）で使う。

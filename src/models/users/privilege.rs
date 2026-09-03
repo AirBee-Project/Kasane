@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 use super::entity::{DataRole, UserRole};
 use crate::models::id::{DataTarget, DatabaseId, TableId};
@@ -20,25 +19,16 @@ pub enum Scope {
 ///
 /// 保存形式（ACL 行）は UUID ベースだが、外部にはデータベース名・テーブル名で見せる。
 /// 付与時に名前 → ID を解決し、存在しない名前は 404 で弾く。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "scope", rename_all = "snake_case")]
 pub enum PrivilegeRule {
     /// サーバー全体。`role` に `admin` を指定できるのはこのスコープだけ。
-    #[schema(title = "GlobalPrivilege")]
     Global { role: UserRole },
     /// データベース配下すべて。`admin` は指定できない。
-    #[schema(title = "DatabasePrivilege")]
-    Database {
-        #[schema(example = "example_database")]
-        db_name: String,
-        role: DataRole,
-    },
+    Database { db_name: String, role: DataRole },
     /// 単一テーブル。`admin` は指定できない。
-    #[schema(title = "TablePrivilege")]
     Table {
-        #[schema(example = "example_database")]
         db_name: String,
-        #[schema(example = "example_table")]
         table_name: String,
         role: DataRole,
     },

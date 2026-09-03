@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+package kasane;
+
+import "google/protobuf/empty.proto";
+import "common.proto";
+
+// 一覧で返す軽量ビュー。件数は含まない。
+message TableSummary {
+  string name = 1;
+  TableDataType data_type = 2;
+  uint32 max_zoom_level = 3;
+  optional TableConstraints constraints = 4;
+  optional string description = 5;
+  bool is_temporal = 6;
+}
+
+// 単一テーブルの詳細情報。保持する空間ID(FlexId)の総数 `count` を必ず含む。
+message TableInfo {
+  string name = 1;
+  TableDataType data_type = 2;
+  uint32 max_zoom_level = 3;
+  uint64 count = 4;
+  optional TableConstraints constraints = 5;
+  optional string description = 6;
+  bool is_temporal = 7;
+}
+
+// **必要な権限**: `database` / `manage`
+message CreateTableRequest {
+  string db_name = 1;
+  string name = 2;
+  TableDataType data_type = 3;
+  uint32 max_zoom_level = 4;
+  // 指定しない場合は制約なし。
+  optional TableConstraints constraints = 5;
+  optional string description = 6;
+  // 値インデックス（値による絞り込み用の二次索引）を維持するかどうか。作成後は変更不可。
+  bool value_index = 7;
+  // テーブルが時間IDを扱うかどうか。
+  bool is_temporal = 8;
+}
+
+// **必要な権限**: `table` / `read`（またはデータベーススコープの `read`）
+message GetTableRequest {
+  string db_name = 1;
+  string table_name = 2;
+}
+
+// **必要な権限**: `database` / `read`
+message ListTablesRequest {
+  string db_name = 1;
+}
+
+message ListTablesResponse {
+  repeated TableSummary tables = 1;
+}
+
+// `Option<Option<T>>` の各フィールドを tri-state で表現する更新パッチ。
+message UpdateTableConstraints {
+  message TextUpdate {
+    optional Uint64Update min_length = 1;
+    optional Uint64Update max_length = 2;
+  }
+  message IntUpdate {
+    optional Int64Update min = 1;
+    optional Int64Update max = 2;
+  }
+  message EnumUpdate {
+    // 選択肢を丸ごと置き換える。
+    optional StringListUpdate choices = 1;
+    // 既存の選択肢に追加する。
+    optional StringListUpdate add_choices = 2;
+    // 既存の選択肢から取り除く。
+    optional StringListUpdate remove_choices = 3;
+  }
+  oneof kind {
+    TextUpdate text = 1;
+    IntUpdate int = 2;
+    EnumUpdate enum_update = 3;
+  }
+}
+
+// `constraints` フィールド自体の tri-state（触らない/削除する/`UpdateTableConstraints`を適用する）。
+message UpdateTableConstraintsUpdate {
+  bool clear = 1;
+  UpdateTableConstraints value = 2;
+}
+
+// **必要な権限**: `table` / `manage`
+message UpdateTableRequest {
+  string db_name = 1;
+  string table_name = 2;
+  optional string new_name = 3;
+  optional UpdateTableConstraintsUpdate constraints = 4;
+  optional StringUpdate description = 5;
+  // 時間ロックの解除。`true` のみ指定可能。
+  optional bool is_temporal = 6;
+}
+
+// **必要な権限**: `table` / `manage`
+message DeleteTableRequest {
+  string db_name = 1;
+  string table_name = 2;
+}
+
+// **必要な権限**: `database` / `manage`
+message CopyTableRequest {
+  string db_name = 1;
+  string table_name = 2;
+  optional string copy_db_name = 3;
+  string copy_table_name = 4;
+}
+
+service TableService {
+  rpc Create(CreateTableRequest) returns (TableSummary);
+  rpc Get(GetTableRequest) returns (TableInfo);
+  rpc List(ListTablesRequest) returns (ListTablesResponse);
+  rpc Update(UpdateTableRequest) returns (google.protobuf.Empty);
+  rpc Delete(DeleteTableRequest) returns (google.protobuf.Empty);
+  rpc Copy(CopyTableRequest) returns (TableSummary);
+}

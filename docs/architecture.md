@@ -8,19 +8,19 @@ Kasane は「外側のレイヤーが内側のレイヤーを利用する」構�
 
 ```mermaid
 flowchart TD
-    Main[main.rs / lib.rs] --> Router[routes]
-    Router --> Handler[handlers]
-    Handler --> Service[services]
+    Main[main.rs / lib.rs] --> Grpc[grpc]
+    Grpc --> Service[services]
     Service --> Repository[repositories]
     Repository --> Redb[(redb)]
 
-    Handler --> Model[models]
+    Grpc --> Convert[grpc::convert*]
+    Convert --> Model[models]
     Service --> Model
     Repository --> Model
     Service --> Error[error]
-    Handler --> Error
+    Grpc --> Error
     Repository --> Error
-    Router --> AppState[AppState]
+    Grpc --> AppState[AppState]
 ```
 
 ## レイヤーの責務
@@ -28,20 +28,14 @@ flowchart TD
 ### `main.rs` / `lib.rs`
 
 - アプリケーション全体の起点。
-- `AppState` を組み立ててルーターに渡す。
-- ルーティングの組み立て以外の業務ロジックは持たない。
+- `AppState` を組み立てて gRPC サーバーに渡す。
+- サーバーの起動以外の業務ロジックは持たない。
 
-### `routes`
+### `grpc`
 
-- HTTP エンドポイントと handler の紐付けを行う。
-- リクエストの解釈や永続化は行わない。
-- REST のリソース構造に基づいて設計する。
-
-### `handlers`
-
-- HTTP の入出力を扱う。
-- Path / Query / Json を受け取り、サービス層に渡す。
-- レスポンスの HTTP ステータスや JSON 形式を決める。
+- proto（`proto/kasane/v1/*.proto`）から生成された gRPC サービス・メッセージ型（`grpc::pb`）と、各サービスの実装（`grpc::database`, `grpc::table` 等）を置く。
+- `grpc::convert*` が proto のメッセージ型とドメイン型（`models`）の相互変換を担う。
+- 認証は `grpc::interceptor`（JWT の検証）と `grpc::auth_ctx`（利用者レコードの読み直しと `AuthUser` の組み立て）に分かれる。
 - ドメインロジックや DB 操作は持たない。
 
 ### `services`
@@ -80,32 +74,30 @@ flowchart TD
 
 ### 許可される依存
 
-- `routes` -> `handlers`
-- `handlers` -> `services`, `models`, `error`
+- `grpc` -> `services`, `models`, `error`
 - `services` -> `repositories`, `models`, `error`, `helpers`
 - `repositories` -> `db_init`, `models`, `error`, `redb`
-- `main.rs` / `lib.rs` -> `routes`, `db_init`, `AppState`
+- `main.rs` / `lib.rs` -> `grpc`, `db_init`, `AppState`
 
 ### 禁止したい依存
 
-- `repositories` から `services` や `handlers` を呼ぶこと
+- `repositories` から `services` や `grpc` を呼ぶこと
 - `models` から上位レイヤーへ依存すること
-- `handlers` に DB 操作を直接書くこと
-- `routes` に業務ロジックを置くこと
+- `grpc` に DB 操作を直接書くこと
 
-## Table API の流れ
+## Table サービスの流れ
 
-`/{db_name}/tables` 系 API は次の順序で処理されます。
+`TableService` 系の RPC は次の順序で処理されます。
 
-1. `routes` が HTTP メソッドとパスを handler に割り当てる。
-2. `handlers` が request を取り出して service を呼ぶ。
+1. `grpc::interceptor` が JWT を検証し、`grpc::auth_ctx` が利用者レコードを読み直す。
+2. `grpc::table` が proto のメッセージをドメイン型へ変換し、service を呼ぶ。
 3. `services` がバリデーションとトランザクション管理を行う。
 4. `repositories` が `redb` を使って実データを読み書きする。
-5. `error` が失敗を HTTP レスポンスに変換する。
+5. `error` が失敗を `tonic::Status` に変換する。
 
 ## 補足
 
-- `create` は `POST /databases/{db_name}/tables`。
-- `info` は `GET /databases/{db_name}/tables/{table_name}/info`。
-- `remove` は `DELETE /databases/{db_name}/tables/{table_name}`。
+- `create` は `TableService.Create`。
+- `get` は `TableService.Get`。
+- `delete` は `TableService.Delete`。
 - 追加の CRUD が増えても、この依存方向は変えない。

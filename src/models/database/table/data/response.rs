@@ -1,8 +1,7 @@
 use crate::models::spatial_id::{RawFlexId, RawRangeId, RawSingleId};
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GetDataResponse {
     Single(GetDataResponseSingle),
@@ -10,28 +9,28 @@ pub enum GetDataResponse {
     Flex(GetDataResponseFlex),
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetDataResponseSingle {
     pub dictionary: Vec<serde_json::Value>,
     pub data: Vec<DataGroup<RawSingleId>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetDataResponseRange {
     pub dictionary: Vec<serde_json::Value>,
     pub data: Vec<DataGroup<RawRangeId>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetDataResponseFlex {
     pub dictionary: Vec<serde_json::Value>,
     pub data: Vec<DataGroup<RawFlexId>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DataGroup<T> {
     pub value_ref: usize,

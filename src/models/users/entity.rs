@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 use crate::error::{AppError, Stored};
 use crate::models::id::{DataTarget, PrincipalId};
@@ -49,9 +48,7 @@ pub struct AclEntry {
 ///
 /// 制御面の `admin` を含まないため、`database` / `table` スコープに `admin` を
 /// 与えるリクエストは型として表現できない（デシリアライズの時点で弾かれる）。
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, utoipa::ToSchema,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[repr(u8)]
 pub enum DataRole {
@@ -104,9 +101,7 @@ impl TryFrom<UserRole> for DataRole {
 ///
 /// `admin` は制御面（ユーザーの作成・削除・権限付与）を表し、`global` スコープに
 /// のみ現れる。データベース・テーブルスコープの保存・API 表現は [`DataRole`] を使う。
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, utoipa::ToSchema,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[repr(u8)]
 pub enum UserRole {
@@ -130,9 +125,8 @@ impl From<DataRole> for UserRole {
 ///
 /// 権限そのものを含めないのは、一覧のページあたりの読み取りを利用者数に比例させない
 /// ため。詳細は `GET /users/{username}/privileges` で引く。
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserSummary {
-    #[schema(example = "example_user")]
     pub username: String,
     /// サーバー全体のロール。持たなければ `null`。
     pub global_role: Option<UserRole>,

@@ -1,0 +1,147 @@
+syntax = "proto3";
+
+package kasane;
+
+// リソース横断で使う共有型。
+
+message Int32Range {
+  int32 min = 1;
+  int32 max = 2;
+}
+
+message Uint32Range {
+  uint32 min = 1;
+  uint32 max = 2;
+}
+
+message Uint64Range {
+  uint64 min = 1;
+  uint64 max = 2;
+}
+
+// 通常の時空間ID。`i`/`t` は両方指定するか、両方省略して「全時間」を表す。
+message SingleId {
+  uint32 z = 1;
+  int32 f = 2;
+  uint32 x = 3;
+  uint32 y = 4;
+  optional uint64 i = 5;
+  optional uint64 t = 6;
+}
+
+// 区間表現の時空間ID。省略された軸はその軸全体を表す。
+message RangeId {
+  uint32 z = 1;
+  optional Int32Range f = 2;
+  optional Uint32Range x = 3;
+  optional Uint32Range y = 4;
+  optional uint64 i = 5;
+  optional Uint64Range t = 6;
+}
+
+// 4軸すべてを「ズームレベル + インデックス」で表す拡張時空間ID。
+message FlexId {
+  uint32 f_zoomlevel = 1;
+  int32 f_index = 2;
+  uint32 x_zoomlevel = 3;
+  uint32 x_index = 4;
+  uint32 y_zoomlevel = 5;
+  uint32 y_index = 6;
+  optional uint32 t_zoomlevel = 7;
+  optional uint64 t_index = 8;
+}
+
+message SpatialId {
+  oneof kind {
+    SingleId single_id = 1;
+    RangeId range_id = 2;
+    FlexId flex_id = 3;
+  }
+}
+
+// テーブルの max_zoom_level を超える空間IDが入力された場合の処理方針。
+enum ZoomLevelPolicy {
+  ZOOM_LEVEL_POLICY_UNSPECIFIED = 0;
+  ZOOM_LEVEL_POLICY_ERROR = 1;
+  ZOOM_LEVEL_POLICY_IGNORE = 2;
+  ZOOM_LEVEL_POLICY_NORMALIZE = 3;
+}
+
+// --- テーブルの値の型と制約 ---
+
+enum TableDataType {
+  TABLE_DATA_TYPE_UNSPECIFIED = 0;
+  TABLE_DATA_TYPE_TEXT = 1;
+  TABLE_DATA_TYPE_INT = 2;
+  TABLE_DATA_TYPE_BOOLEAN = 3;
+  TABLE_DATA_TYPE_ENUM = 4;
+  TABLE_DATA_TYPE_PRESENCE = 5;
+}
+
+// テーブルの値に対する制約。`Presence`/`Boolean` には制約を指定できない。
+// 内部実装用の Enum choices <-> ID マッピングは公開 API の対象外（サーバー内部でのみ保持）。
+message TableConstraints {
+  message Text {
+    optional uint64 min_length = 1;
+    optional uint64 max_length = 2;
+  }
+  message Int {
+    optional int64 min = 1;
+    optional int64 max = 2;
+  }
+  message Enum {
+    repeated string choices = 1;
+  }
+  oneof kind {
+    Text text = 1;
+    Int int = 2;
+    Enum enum_constraint = 3;
+  }
+}
+
+// --- 更新系リクエスト向けの tri-state ラッパー ---
+//
+// 「触らない」/「null にする」/「値を設定する」の3状態を表す。
+// 親メッセージ側でこのフィールド自体を `optional` にし、未設定なら「触らない」を表す。
+// フィールドが存在すれば、`clear` で「null にする」か「`value` を設定する」かを選ぶ。
+
+message StringUpdate {
+  bool clear = 1;
+  string value = 2;
+}
+
+message Uint64Update {
+  bool clear = 1;
+  uint64 value = 2;
+}
+
+message Int64Update {
+  bool clear = 1;
+  int64 value = 2;
+}
+
+// 文字列配列そのものを丸ごと差し替える更新。フィールドの `optional` 有無で
+// 「触らない」か「この配列で置き換える」かを表す（空配列での置き換えも可能）。
+message StringListUpdate {
+  repeated string values = 1;
+}
+
+// --- ユーザー権限 ---
+
+// 権限の強さ。数値が大きいほど強く、上位は下位をすべて含む。
+// `admin` は制御面（ユーザー管理）専用で `global` スコープにのみ現れる。
+enum UserRole {
+  USER_ROLE_UNSPECIFIED = 0;
+  USER_ROLE_READ = 1;
+  USER_ROLE_WRITE = 2;
+  USER_ROLE_MANAGE = 3;
+  USER_ROLE_ADMIN = 4;
+}
+
+// データ面（database/table スコープ）で指定できるロール。`admin` を含まない。
+enum DataRole {
+  DATA_ROLE_UNSPECIFIED = 0;
+  DATA_ROLE_READ = 1;
+  DATA_ROLE_WRITE = 2;
+  DATA_ROLE_MANAGE = 3;
+}

@@ -1,11 +1,5 @@
 use crate::models::database::table::JsonValueType;
 use crate::models::users::UserRole;
-use axum::{
-    Json,
-    http::StatusCode,
-    response::{IntoResponse, Response},
-};
-use serde_json::json;
 use std::fmt;
 
 /// エラーが指すリソースの種類
@@ -116,20 +110,6 @@ pub enum AuthError {
 }
 
 impl AuthError {
-    pub fn status(&self) -> StatusCode {
-        match self {
-            Self::MissingToken
-            | Self::MalformedHeader
-            | Self::InvalidToken
-            | Self::TokenRevoked
-            | Self::InvalidCredentials => StatusCode::UNAUTHORIZED,
-            Self::RequiresGlobalRole { .. }
-            | Self::NotSelfOrAdmin
-            | Self::InsufficientPrivilege { .. }
-            | Self::RootProtected => StatusCode::FORBIDDEN,
-        }
-    }
-
     /// クライアントが分岐に使える安定した機械可読コード。
     pub fn code(&self) -> &'static str {
         match self {
@@ -147,6 +127,20 @@ impl AuthError {
             Self::NotSelfOrAdmin => "not_self_or_admin",
             Self::InsufficientPrivilege { .. } => "insufficient_privilege",
             Self::RootProtected => "root_protected",
+        }
+    }
+
+    fn grpc_code(&self) -> tonic::Code {
+        match self {
+            Self::MissingToken
+            | Self::MalformedHeader
+            | Self::InvalidToken
+            | Self::TokenRevoked
+            | Self::InvalidCredentials => tonic::Code::Unauthenticated,
+            Self::RequiresGlobalRole { .. }
+            | Self::NotSelfOrAdmin
+            | Self::InsufficientPrivilege { .. }
+            | Self::RootProtected => tonic::Code::PermissionDenied,
         }
     }
 }
@@ -230,26 +224,6 @@ impl AppError {
         }
     }
 
-    fn status(&self) -> StatusCode {
-        match self {
-            Self::Auth(e) => e.status(),
-            Self::NotFound { .. } | Self::PrivilegeNotFound => StatusCode::NOT_FOUND,
-            Self::AlreadyExists { .. } | Self::Conflict(_) => StatusCode::CONFLICT,
-            Self::InvalidPrivilege { .. }
-            | Self::InvalidName { .. }
-            | Self::InvalidSpatialId { .. }
-            | Self::ValueTypeMismatch { .. }
-            | Self::NumericValueOutOfRange { .. }
-            | Self::ConstraintViolation { .. }
-            | Self::ZoomLevelPolicy { .. }
-            | Self::LogicError(_) => StatusCode::BAD_REQUEST,
-            Self::SchemaVersionMismatch { .. }
-            | Self::Corrupt { .. }
-            | Self::StorageError(_)
-            | Self::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-        }
-    }
-
     /// クライアントが分岐に使える安定した機械可読コード。
     fn code(&self) -> &'static str {
         match self {
@@ -272,11 +246,50 @@ impl AppError {
             Self::InternalError(_) => "internal_error",
         }
     }
+
+    fn grpc_code(&self) -> tonic::Code {
+        match self {
+            Self::Auth(e) => e.grpc_code(),
+            Self::NotFound { .. } | Self::PrivilegeNotFound => tonic::Code::NotFound,
+            Self::AlreadyExists { .. } => tonic::Code::AlreadyExists,
+            // 同時実行の食い違いは、存在確認だけで判定できる `AlreadyExists` とは区別する。
+            Self::Conflict(_) => tonic::Code::Aborted,
+            Self::InvalidPrivilege { .. }
+            | Self::InvalidName { .. }
+            | Self::InvalidSpatialId { .. }
+            | Self::ValueTypeMismatch { .. }
+            | Self::NumericValueOutOfRange { .. }
+            | Self::ConstraintViolation { .. }
+            | Self::ZoomLevelPolicy { .. }
+            | Self::LogicError(_) => tonic::Code::InvalidArgument,
+            Self::SchemaVersionMismatch { .. }
+            | Self::Corrupt { .. }
+            | Self::StorageError(_)
+            | Self::InternalError(_) => tonic::Code::Internal,
+        }
+    }
 }
 
-impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
-        let body = Json(json!({ "error": self.to_string(), "code": self.code() }));
-        (self.status(), body).into_response()
+/// `code()` の機械可読コードは `google.rpc.ErrorInfo.reason` として details に載せる。
+/// gRPC のクライアントは JSON 時代と同じ文字列で分岐できる。
+const GRPC_ERROR_DOMAIN: &str = "kasane";
+
+impl From<AppError> for tonic::Status {
+    fn from(err: AppError) -> Self {
+        use tonic_types::{ErrorDetails, StatusExt};
+
+        let mut details = ErrorDetails::new();
+        details.set_error_info(
+            err.code(),
+            GRPC_ERROR_DOMAIN,
+            std::collections::HashMap::new(),
+        );
+        tonic::Status::with_error_details(err.grpc_code(), err.to_string(), details)
+    }
+}
+
+impl From<AuthError> for tonic::Status {
+    fn from(err: AuthError) -> Self {
+        AppError::from(err).into()
     }
 }

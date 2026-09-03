@@ -8,61 +8,54 @@ Kasane は JWT (JSON Web Token) による Bearer 認証と、スコープ付き�
 
 ### トークンの取得
 
-`/auth/login` にクレデンシャルを送るとアクセストークン (JWT) が発行されます。
+`AuthService.Login` にクレデンシャルを送るとアクセストークン (JWT) が発行されます。
 
-```http
-POST /auth/login
-Content-Type: application/json
-
-{
-  "username": "your_username",
-  "password": "your_password"
-}
+```bash
+grpcurl -plaintext -d '{"username": "your_username", "password": "your_password"}' \
+  localhost:5172 kasane.AuthService/Login
 ```
 
 ### API へのアクセス
 
-発行されたトークンは `Authorization` ヘッダーに `Bearer <token>` の形式で付与します。
+発行されたトークンは gRPC メタデータの `authorization` に `Bearer <token>` の形式で付与します。
 
-```http
-GET /databases
-Authorization: Bearer eyJhb...
+```bash
+grpcurl -plaintext -H "authorization: Bearer eyJhb..." \
+  -d '{}' localhost:5172 kasane.DatabaseService/List
 ```
 
 ### エラーレスポンスの形式
 
-すべてのエラーレスポンスは、人間向けメッセージ (`error`) と、クライアントが分岐に使える安定した機械可読コード (`code`) を持ちます。
+すべてのエラーは `tonic::Status` として返り、gRPC の標準コードに加えて
+`google.rpc.ErrorInfo`（`reason` フィールド）にクライアントが分岐に使える安定した
+機械可読コードを載せます。
 
-```json
-{ "error": "Authentication token is no longer valid", "code": "token_revoked" }
-```
-
-| code | HTTP | 意味 |
+| code | gRPCコード | 意味 |
 | :--- | :--- | :--- |
-| `missing_token` | 401 | `Authorization` ヘッダが無い |
-| `malformed_header` | 401 | ヘッダが `Bearer <token>` 形式でない |
-| `invalid_token` | 401 | 署名・期限などの検証に失敗 |
-| `token_revoked` | 401 | トークンが失効済み（パスワード変更、ユーザー削除・再作成など） |
-| `invalid_credentials` | 401 | ログインのユーザー名/パスワード不一致（存在有無は区別しない） |
-| `requires_global_admin` | 403 | `global` / `admin` が必要（制御面の操作） |
-| `requires_global_role` | 403 | `global` スコープで一定以上のロールが必要（`admin` 未満で足りる操作） |
-| `not_self_or_admin` | 403 | 本人または `global` / `admin` のみ許可される操作 |
-| `insufficient_privilege` | 403 | 対象データベース・テーブルへの権限不足 |
-| `root_protected` | 403 | root ユーザーに対して許可されない操作 |
-| `invalid_privilege` | 400 | 権限ルールが不正（保持数の上限超過など） |
-| `user_not_found` | 404 | 指定した利用者が存在しない |
-| `user_already_exists` | 409 | 同名の利用者が既に存在する |
-| `privilege_not_found` | 404 | 剥奪しようとした対象の権限を持っていない |
+| `missing_token` | `UNAUTHENTICATED` | `authorization` メタデータが無い |
+| `malformed_header` | `UNAUTHENTICATED` | ヘッダが `Bearer <token>` 形式でない |
+| `invalid_token` | `UNAUTHENTICATED` | 署名・期限などの検証に失敗 |
+| `token_revoked` | `UNAUTHENTICATED` | トークンが失効済み（パスワード変更、ユーザー削除・再作成など） |
+| `invalid_credentials` | `UNAUTHENTICATED` | ログインのユーザー名/パスワード不一致（存在有無は区別しない） |
+| `requires_global_admin` | `PERMISSION_DENIED` | `global` / `admin` が必要（制御面の操作） |
+| `requires_global_role` | `PERMISSION_DENIED` | `global` スコープで一定以上のロールが必要（`admin` 未満で足りる操作） |
+| `not_self_or_admin` | `PERMISSION_DENIED` | 本人または `global` / `admin` のみ許可される操作 |
+| `insufficient_privilege` | `PERMISSION_DENIED` | 対象データベース・テーブルへの権限不足 |
+| `root_protected` | `PERMISSION_DENIED` | root ユーザーに対して許可されない操作 |
+| `invalid_privilege` | `INVALID_ARGUMENT` | 権限ルールが不正（保持数の上限超過など） |
+| `user_not_found` | `NOT_FOUND` | 指定した利用者が存在しない |
+| `user_already_exists` | `ALREADY_EXISTS` | 同名の利用者が既に存在する |
+| `privilege_not_found` | `NOT_FOUND` | 剥奪しようとした対象の権限を持っていない |
 
 サーバー側の失敗は原因で 3 つに分かれます。混ぜないのは、運用時に「直すべき場所」を
 区別できるようにするためです。
 
-| code | HTTP | 意味 |
+| code | gRPCコード | 意味 |
 | :--- | :--- | :--- |
-| `storage_error` | 500 | ストレージエンジン自身が失敗した（I/O・競合・接続） |
-| `corrupt_storage` | 500 | 読めたバイト列が、書いたときの形式と違う |
-| `schema_version_mismatch` | 500 | ディスク形式の版がこのビルドと合わない |
-| `internal_error` | 500 | このプログラムの不変条件が破れた（バグ） |
+| `storage_error` | `INTERNAL` | ストレージエンジン自身が失敗した（I/O・競合・接続） |
+| `corrupt_storage` | `INTERNAL` | 読めたバイト列が、書いたときの形式と違う |
+| `schema_version_mismatch` | `INTERNAL` | ディスク形式の版がこのビルドと合わない |
+| `internal_error` | `INTERNAL` | このプログラムの不変条件が破れた（バグ） |
 
 ## 2. スコープとロール (Scopes & Roles)
 
@@ -102,58 +95,58 @@ Authorization: Bearer eyJhb...
 
 ### 保持数の上限
 
-1 ユーザーが保持できる `database` / `table` スコープの権限は最大 50,000 件です（`global` はスコープの性質上 1 件なので数えません）。超えると `invalid_privilege` (400) になります。
+1 ユーザーが保持できる `database` / `table` スコープの権限は最大 50,000 件です（`global` はスコープの性質上 1 件なので数えません）。超えると `invalid_privilege`（`INVALID_ARGUMENT`）になります。
 
-### エンドポイントごとの必要権限
+### 操作ごとの必要権限
 
 | 操作 | 必要な権限 |
 | --- | --- |
-| `POST /databases`, `DELETE /databases/{db}`, `POST /databases/{db}/copy` | `global` / `manage` |
-| `PATCH /databases/{db}` | 対象データベースへの `manage` |
-| `GET /databases/{db}` | 配下のどれかに `read`（テーブル単位の権限でも可） |
-| `GET /databases` | 認証のみ（結果が権限で絞られます） |
-| `POST /databases/{db}/tables` | 対象データベースへの `manage` |
-| `GET /databases/{db}/tables` | 配下のどれかに `read`（結果が権限で絞られます） |
-| `GET /databases/{db}/tables/{t}` | 対象テーブルへの `read` |
-| `PATCH` / `DELETE /databases/{db}/tables/{t}` | 対象テーブルへの `manage` |
-| `POST /databases/{db}/tables/{t}/copy` | 複製元テーブルへの `read` と、**複製先データベース**への `manage` |
-| データ書き込み（`PUT` / `PATCH` / `DELETE .../data`） | 対象テーブルへの `write` |
-| データ読み取り（`POST .../data/search`, `POST /query`） | 参照するすべてのテーブルへの `read` |
+| `DatabaseService.Create` / `Delete` / `Copy` | `global` / `manage` |
+| `DatabaseService.Update` | 対象データベースへの `manage` |
+| `DatabaseService.Get` | 配下のどれかに `read`（テーブル単位の権限でも可） |
+| `DatabaseService.List` | 認証のみ（結果が権限で絞られます） |
+| `TableService.Create` | 対象データベースへの `manage` |
+| `TableService.List` | 配下のどれかに `read`（結果が権限で絞られます） |
+| `TableService.Get` | 対象テーブルへの `read` |
+| `TableService.Update` / `Delete` | 対象テーブルへの `manage` |
+| `TableService.Copy` | 複製元テーブルへの `read` と、**複製先データベース**への `manage` |
+| データ書き込み（`DataService.Insert` / `Upsert` / `Remove`） | 対象テーブルへの `write` |
+| データ読み取り（`DataService.Search`, `QueryService.Execute`） | 参照するすべてのテーブルへの `read` |
 | ユーザーの作成・削除・権限の付与剥奪 | `global` / `admin` |
 | ユーザー情報・権限の参照、パスワード変更 | 本人 または `global` / `admin` |
 
 ### 「存在しない」より先に「権限が無い」を返す
 
-権限のない利用者に 404 を返すと、名前の存在有無を教えることになります。そのため認可は必ず存在確認より先に走り、権限がなければ対象の有無に関わらず 403 を返します。
+権限のない利用者に `NOT_FOUND` を返すと、名前の存在有無を教えることになります。そのため認可は必ず存在確認より先に走り、権限がなければ対象の有無に関わらず `PERMISSION_DENIED` を返します。
 
 ## 3. ユーザーと権限の管理
 
 ### ユーザー管理
 
-- `GET /users`: 一覧（`global` / `admin`）。利用者名の辞書順で、既定 100 件・上限 1000 件。続きがあれば `next` に次の `after` が入ります。返るのは利用者名と `global` のロールだけで、個々の権限ルールは含みません。
-- `POST /users`: 作成。`privileges` を指定すると作成と同時に付与できます。
-- `DELETE /users/{username}`: 削除（root は不可）
-- `GET /users/{username}`: 情報の取得（本人 または `global` / `admin`）
-- `PUT /users/{username}/password`: パスワードの更新（本人 または `global` / `admin`）
+- `UserService.List`: 一覧（`global` / `admin`）。利用者名の辞書順で、既定 100 件・上限 1000 件。続きがあれば `next` に次の `after` が入ります。返るのは利用者名と `global` のロールだけで、個々の権限ルールは含みません。
+- `UserService.Create`: 作成。`privileges` を指定すると作成と同時に付与できます。
+- `UserService.Delete`: 削除（root は不可）
+- `UserService.Get`: 情報の取得（本人 または `global` / `admin`）
+- `UserService.UpdatePassword`: パスワードの更新（本人 または `global` / `admin`）
 
-```http
-GET /users?limit=50&after=alice
+```bash
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
+  -d '{"limit": 50, "after": "alice"}' localhost:5172 kasane.UserService/List
 ```
 
 ### 権限管理
 
-対象ごとのサブリソースへ `PUT` / `DELETE` します。剥奪はロールを問わず対象ごと落とすので、「`manage` を指定したが実際は `read` だったので何も消えなかった」は起きません。
+対象ごとの RPC で設定・剥奪します。剥奪はロールを問わず対象ごと落とすので、「`manage` を指定したが実際は `read` だったので何も消えなかった」は起きません。
 
-- `GET /users/{username}/privileges`: 権限一覧の取得
-- `PUT` / `DELETE /users/{username}/privileges/global`
-- `PUT` / `DELETE /users/{username}/privileges/databases/{db_name}`
-- `PUT` / `DELETE /users/{username}/privileges/databases/{db_name}/tables/{table_name}`
+- `UserService.GetPrivileges`: 権限一覧の取得
+- `UserService.SetGlobalPrivilege` / `DeleteGlobalPrivilege`
+- `UserService.SetDatabasePrivilege` / `DeleteDatabasePrivilege`
+- `UserService.SetTablePrivilege` / `DeleteTablePrivilege`
 
-```http
-PUT /users/alice/privileges/databases/sensors/tables/temperature
-Content-Type: application/json
-
-{ "role": "write" }
+```bash
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
+  -d '{"username": "alice", "db_name": "sensors", "table_name": "temperature", "role": "DATA_ROLE_WRITE"}' \
+  localhost:5172 kasane.UserService/SetTablePrivilege
 ```
 
 root の権限は変更できません（`root_protected`）。

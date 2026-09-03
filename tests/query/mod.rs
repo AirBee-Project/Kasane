@@ -1,65 +1,57 @@
-//! `POST /query` の統合テスト。
+//! `QueryService::Execute` の統合テスト。
 //!
 //! クエリはシャードされた FlexTree を Kasane-Logic の入力源として読み、
 //! 対象領域だけを遅延評価する。ここではその end-to-end の挙動を検証する。
 
-use axum::body::{Body, to_bytes};
-use axum::http::{Request, StatusCode, header};
-use tower::ServiceExt;
-
-mod bruno;
 mod routing;
 mod values;
 
+use kasane::grpc::pb;
+
 use crate::common::TestApp;
+use crate::common::builders::{self, merge, num, shift_x, source};
 use crate::common::data::put_data;
 
-/// `POST /query` を実行し、`(status, body)` を返す。
-async fn post_query(
+/// `z=20, f=0, y=500000` 固定で X だけを振った空間ID。
+fn single_id(x: i64) -> pb::SpatialId {
+    builders::single_id(20, 0, x as u32, 500000)
+}
+
+/// 既定値（`format=singleId`, `limit` 無指定, `value_type` 推論）のリクエストを組み立てる。
+fn request(spatial_ids: Vec<pb::SpatialId>, query: pb::QueryNode) -> pb::ExecuteQueryRequest {
+    pb::ExecuteQueryRequest {
+        value_type: None,
+        spatial_ids,
+        query: Some(query),
+        format: pb::OutputFormat::SingleId as i32,
+        limit: None,
+    }
+}
+
+async fn execute_query(
     test_app: &TestApp,
-    body: &serde_json::Value,
-    query_string: &str,
-) -> (StatusCode, serde_json::Value) {
-    let req = Request::builder()
-        .method("POST")
-        .uri(format!("/query{}", query_string))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(body).unwrap()))
-        .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    let status = response.status();
-    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let json = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
-    (status, json)
+    request: pb::ExecuteQueryRequest,
+) -> Result<pb::SearchDataResponse, tonic::Status> {
+    test_app
+        .query()
+        .execute(request)
+        .await
+        .map(tonic::Response::into_inner)
 }
 
-fn single_id(x: i64) -> serde_json::Value {
-    serde_json::json!({ "z": 20, "f": 0, "x": x, "y": 500000, "type": "singleId" })
+/// レスポンスに含まれる空間IDの総数。
+fn total_ids(result: &pb::SearchDataResponse) -> usize {
+    result.data.iter().map(|g| g.spatial_ids.len()).sum()
 }
 
-/// 値辞書 + データ群のレスポンスを、値の合計と件数へ畳み込む。
-fn total_ids(result: &serde_json::Value) -> usize {
-    result["data"].as_array().map_or(0, |groups| {
-        groups
-            .iter()
-            .map(|g| g["spatialIds"].as_array().map_or(0, std::vec::Vec::len))
-            .sum()
-    })
-}
-
-/// 出力に現れた値の集合を返す。
-fn values(result: &serde_json::Value) -> Vec<i64> {
-    let dict = result["dictionary"].as_array().cloned().unwrap_or_default();
-    let mut out: Vec<i64> = result["data"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default()
+/// 出力に現れた値の集合を返す（昇順）。
+fn values(result: &pb::SearchDataResponse) -> Vec<i64> {
+    let mut out: Vec<i64> = result
+        .data
         .iter()
-        .filter_map(|g| {
-            let idx = g["valueRef"].as_u64()? as usize;
-            dict.get(idx)?.as_i64()
-        })
+        .filter_map(|g| result.dictionary.get(g.value_ref as usize))
+        .filter_map(builders::value_as_f64)
+        .map(|n| n as i64)
         .collect();
     out.sort_unstable();
     out
@@ -74,24 +66,15 @@ async fn query_source_only_returns_stored_values() {
         .create_table("test_db", "test_table", "Int", 25)
         .await;
 
-    put_data(
-        &test_app,
-        "test_table",
-        &serde_json::json!({ "value": 42, "spatial_ids": [single_id(600000)] }),
-    )
-    .await;
+    put_data(&test_app, "test_table", num(42.0), vec![single_id(600000)]).await;
 
-    let (status, result) = post_query(
+    let result = execute_query(
         &test_app,
-        &serde_json::json!({
-            "spatial_ids": [single_id(600000)],
-            "query": { "type": "source", "database": "test_db", "table": "test_table" }
-        }),
-        "?format=singleId",
+        request(vec![single_id(600000)], source("test_db", "test_table")),
     )
-    .await;
+    .await
+    .unwrap();
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(total_ids(&result), 1);
     assert_eq!(values(&result), vec![42]);
 }
@@ -105,38 +88,20 @@ async fn query_shift_x_moves_values() {
         .create_table("test_db", "test_table", "Int", 25)
         .await;
 
-    put_data(
-        &test_app,
-        "test_table",
-        &serde_json::json!({ "value": 7, "spatial_ids": [single_id(610000)] }),
-    )
-    .await;
+    put_data(&test_app, "test_table", num(7.0), vec![single_id(610000)]).await;
 
-    let query = serde_json::json!({
-        "type": "shiftX",
-        "input": { "type": "source", "database": "test_db", "table": "test_table" },
-        "z": 20,
-        "index": 3
-    });
+    let query = shift_x(source("test_db", "test_table"), 20, 3);
 
     // 移動先には現れる
-    let (status, moved) = post_query(
-        &test_app,
-        &serde_json::json!({ "spatial_ids": [single_id(610003)], "query": query }),
-        "?format=singleId",
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "body: {moved}");
+    let moved = execute_query(&test_app, request(vec![single_id(610003)], query.clone()))
+        .await
+        .unwrap();
     assert_eq!(values(&moved), vec![7]);
 
     // 元の位置には残らない
-    let (status, origin) = post_query(
-        &test_app,
-        &serde_json::json!({ "spatial_ids": [single_id(610000)], "query": query }),
-        "?format=singleId",
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
+    let origin = execute_query(&test_app, request(vec![single_id(610000)], query))
+        .await
+        .unwrap();
     assert_eq!(total_ids(&origin), 0);
 }
 
@@ -154,43 +119,31 @@ async fn query_merge_across_two_databases() {
         .await;
 
     // 同じ空間IDへ、別々のデータベースのテーブルから 10 と 5 を置く。
-    put_data(
-        &test_app,
-        "test_table",
-        &serde_json::json!({ "value": 10, "spatial_ids": [single_id(620000)] }),
-    )
-    .await;
+    put_data(&test_app, "test_table", num(10.0), vec![single_id(620000)]).await;
 
-    let req = Request::builder()
-        .method("PUT")
-        .uri("/databases/other_db/tables/other_table/data")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(
-            serde_json::json!({ "value": 5, "spatial_ids": [single_id(620000)] }).to_string(),
-        ))
+    test_app
+        .data()
+        .insert(pb::InsertDataRequest {
+            db_name: "other_db".to_string(),
+            table_name: "other_table".to_string(),
+            value: Some(num(5.0)),
+            spatial_ids: vec![single_id(620000)],
+            zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
+        })
+        .await
         .unwrap();
-    assert_eq!(
-        test_app.app.clone().oneshot(req).await.unwrap().status(),
-        StatusCode::OK
+
+    let query = merge(
+        source("test_db", "test_table"),
+        source("other_db", "other_table"),
+        num(0.0),
+        pb::MergePolicyKind::Sum,
     );
 
-    let (status, result) = post_query(
-        &test_app,
-        &serde_json::json!({
-            "spatial_ids": [single_id(620000)],
-            "query": {
-                "type": "merge",
-                "left":  { "type": "source", "database": "test_db",  "table": "test_table" },
-                "right": { "type": "source", "database": "other_db", "table": "other_table" },
-                "default": 0,
-                "policy": "sum"
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
+    let result = execute_query(&test_app, request(vec![single_id(620000)], query))
+        .await
+        .unwrap();
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(values(&result), vec![15], "10 + 5 = 15 が返るはず");
 }
 
@@ -212,55 +165,41 @@ async fn query_uses_finest_table_resolution() {
         .await;
 
     // 細かいテーブルへ zoom25 の FlexId へ 10 を置く。
-    let fine_id =
-        serde_json::json!({ "z": 25, "f": 0, "x": 620000, "y": 500000, "type": "singleId" });
-    put_data(
-        &test_app,
-        "fine_table",
-        &serde_json::json!({ "value": 10, "spatial_ids": [fine_id] }),
-    )
-    .await;
+    let fine_id = builders::single_id(25, 0, 620000, 500000);
+    put_data(&test_app, "fine_table", num(10.0), vec![fine_id]).await;
 
     // 粗いテーブルへ、その zoom25 FlexId をちょうど内包する zoom20 の親 FlexId
     // (620000 >> 5 = 19375, 500000 >> 5 = 15625) へ 5 を置く。
-    let coarse_id =
-        serde_json::json!({ "z": 20, "f": 0, "x": 19375, "y": 15625, "type": "singleId" });
-    let req = Request::builder()
-        .method("PUT")
-        .uri("/databases/coarse_db/tables/coarse_table/data")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(
-            serde_json::json!({ "value": 5, "spatial_ids": [coarse_id] }).to_string(),
-        ))
+    let coarse_id = builders::single_id(20, 0, 19375, 15625);
+    test_app
+        .data()
+        .insert(pb::InsertDataRequest {
+            db_name: "coarse_db".to_string(),
+            table_name: "coarse_table".to_string(),
+            value: Some(num(5.0)),
+            spatial_ids: vec![coarse_id],
+            zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
+        })
+        .await
         .unwrap();
-    assert_eq!(
-        test_app.app.clone().oneshot(req).await.unwrap().status(),
-        StatusCode::OK
+
+    // zoom25 の空間IDで merge クエリを実行（policy は既定の Error 相当のことはしない、Sum を使う）。
+    let query = merge(
+        source("test_db", "fine_table"),
+        source("coarse_db", "coarse_table"),
+        num(0.0),
+        pb::MergePolicyKind::Sum,
     );
 
-    // zoom25 の空間IDで merge クエリを実行（policy は既定の Error）。
-    let (status, result) = post_query(
-        &test_app,
-        &serde_json::json!({
-            "spatial_ids": [fine_id],
-            "query": {
-                "type": "merge",
-                "left":  { "type": "source", "database": "test_db",   "table": "fine_table" },
-                "right": { "type": "source", "database": "coarse_db", "table": "coarse_table" },
-                "default": 0,
-                "policy": "sum"
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
+    let result = execute_query(&test_app, request(vec![fine_id], query))
+        .await
+        .unwrap();
 
-    // 400 にならず、細かいズームレベルで 10 + (内包する粗い FlexId の) 5 = 15 が返る。
-    assert_eq!(status, StatusCode::OK, "body: {result}");
+    // 細かいズームレベルで 10 + (内包する粗い FlexId の) 5 = 15 が返る。
     assert_eq!(values(&result), vec![15]);
 }
 
-/// data_type が異なるテーブルを混在させると 400 で拒否される。
+/// data_type が異なるテーブルを混在させると InvalidArgument で拒否される。
 #[tokio::test]
 async fn query_rejects_mixed_data_types() {
     let test_app = TestApp::new().await;
@@ -272,40 +211,29 @@ async fn query_rejects_mixed_data_types() {
         .create_table("test_db", "text_table", "Text", 25)
         .await;
 
-    let (status, _) = post_query(
-        &test_app,
-        &serde_json::json!({
-            "spatial_ids": [single_id(630000)],
-            "query": {
-                "type": "merge",
-                "left":  { "type": "source", "database": "test_db", "table": "int_table" },
-                "right": { "type": "source", "database": "test_db", "table": "text_table" },
-                "default": 0,
-                "policy": "sum"
-            }
-        }),
-        "",
-    )
-    .await;
+    let query = merge(
+        source("test_db", "int_table"),
+        source("test_db", "text_table"),
+        num(0.0),
+        pb::MergePolicyKind::Sum,
+    );
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let result = execute_query(&test_app, request(vec![single_id(630000)], query)).await;
+
+    assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
 }
 
-/// 存在しないテーブルを参照すると 404。
+/// 存在しないテーブルを参照すると NotFound。
 #[tokio::test]
 async fn query_missing_table_returns_404() {
     let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
-    let (status, _) = post_query(
+    let result = execute_query(
         &test_app,
-        &serde_json::json!({
-            "spatial_ids": [single_id(640000)],
-            "query": { "type": "source", "database": "test_db", "table": "nope" }
-        }),
-        "",
+        request(vec![single_id(640000)], source("test_db", "nope")),
     )
     .await;
 
-    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
 }

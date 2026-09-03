@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "src/**"
+      - "proto/**"
       - "tests/**"
       - "deployment/**"
       - "docker-compose.yml"
@@ -39,6 +40,9 @@ jobs:
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
@@ -75,17 +79,6 @@ jobs:
             --features "production,backend-lmdb" \
             --run-ignored all
 
-      - name: Validate OpenAPI spec
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # Generate OpenAPI spec
-          cargo run --bin export_openapi
-
-          # Lint OpenAPI spec
-          npx --yes @redocly/cli lint openapi.json
-
   tikv:
     name: Verify (TiKV)
     runs-on: ubuntu-latest
@@ -105,6 +98,9 @@ jobs:
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2

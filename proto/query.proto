@@ -1,0 +1,190 @@
+syntax = "proto3";
+
+package kasane;
+
+import "google/protobuf/struct.proto";
+import "common.proto";
+import "data.proto";
+
+// 同一空間に複数の値が集まったときの集約規則。
+enum MergePolicyKind {
+  MERGE_POLICY_KIND_UNSPECIFIED = 0;
+  MERGE_POLICY_KIND_OVERWRITE = 1;
+  MERGE_POLICY_KIND_KEEP_EXISTING = 2;
+  MERGE_POLICY_KIND_SUM = 3;
+  MERGE_POLICY_KIND_MAX = 4;
+  MERGE_POLICY_KIND_MIN = 5;
+  MERGE_POLICY_KIND_AVERAGE = 6;
+  MERGE_POLICY_KIND_DIFFERENCE = 7;
+}
+
+// 四則演算の演算子。
+enum MathOperator {
+  MATH_OPERATOR_UNSPECIFIED = 0;
+  MATH_OPERATOR_ADD = 1;
+  MATH_OPERATOR_SUBTRACT = 2;
+  MATH_OPERATOR_MULTIPLY = 3;
+  MATH_OPERATOR_DIVIDE = 4;
+}
+
+enum FalloffPattern {
+  FALLOFF_PATTERN_UNSPECIFIED = 0;
+  FALLOFF_PATTERN_LINEAR = 1;
+  FALLOFF_PATTERN_QUADRATIC_IN = 2;
+  FALLOFF_PATTERN_QUADRATIC_OUT = 3;
+}
+
+enum Direction {
+  DIRECTION_UNSPECIFIED = 0;
+  DIRECTION_UPPER = 1;
+  DIRECTION_LOWER = 2;
+}
+
+// 計算用のオペランド（整数と小数の両方を受け付ける）。
+message MathOperand {
+  oneof value {
+    int64 int_value = 1;
+    double float_value = 2;
+  }
+}
+
+// 値フィルタの条件。
+message FilterCondition {
+  message Equals {
+    google.protobuf.Value value = 1;
+  }
+  message InRange {
+    optional google.protobuf.Value min = 1;
+    optional google.protobuf.Value max = 2;
+  }
+  message NotInRange {
+    optional google.protobuf.Value min = 1;
+    optional google.protobuf.Value max = 2;
+  }
+  oneof mode {
+    Equals equals = 1;
+    InRange in_range = 2;
+    NotInRange not_in_range = 3;
+  }
+}
+
+// `MapValues` の対応表エントリ。
+message MappingEntry {
+  google.protobuf.Value from = 1;
+  google.protobuf.Value to = 2;
+}
+
+// クエリ式の AST ノード。
+//
+// 同じ形の入力ノードをまとめるため、`ShiftX/Y/F` は `Shift`、`ExtrudeX/Y` は
+// `ExtrudeXy`、`FalloffX/Y/F` は `Falloff`、`Difference/Intersection` は `SetOp`
+// として共通メッセージ化してある（意味の区別は `oneof node` 側のフィールド名で保つ）。
+//
+// 実装メモ: 自己参照するため、`build.rs` で `QueryNode` を boxed 指定してコード生成する。
+message QueryNode {
+  // 演算の起点。読み出し対象のテーブルを指定する。
+  message Source {
+    string database = 1;
+    string table = 2;
+  }
+  message FilterValues {
+    QueryNode input = 1;
+    FilterCondition condition = 2;
+  }
+  // X/Y/F 方向への平行移動。
+  message Shift {
+    QueryNode input = 1;
+    uint32 z = 2;
+    int32 index = 3;
+  }
+  // 指定されたズームレベルまで落とし、`policy` で集約する。
+  message ZoomOut {
+    QueryNode input = 1;
+    uint32 z = 2;
+    MergePolicyKind policy = 3;
+  }
+  // X/Y 方向の絶対座標範囲へ引き延ばす。
+  message ExtrudeXy {
+    QueryNode input = 1;
+    uint32 z = 2;
+    uint32 start = 3;
+    uint32 end = 4;
+    MergePolicyKind policy = 5;
+  }
+  // F 方向の絶対座標範囲へ引き延ばす（符号あり座標）。
+  message ExtrudeF {
+    QueryNode input = 1;
+    uint32 z = 2;
+    int32 start = 3;
+    int32 end = 4;
+    MergePolicyKind policy = 5;
+  }
+  // X/Y/F 方向へ、指定距離で0になるよう値を減衰させる。
+  message Falloff {
+    QueryNode input = 1;
+    uint32 z = 2;
+    uint32 radius = 3;
+    FalloffPattern pattern = 4;
+    optional Direction direction = 5;
+    MergePolicyKind policy = 6;
+  }
+  // 2つの部分式を `policy` で重ね合わせる。
+  message Merge {
+    QueryNode left = 1;
+    QueryNode right = 2;
+    google.protobuf.Value default_value = 3;
+    MergePolicyKind policy = 4;
+  }
+  // 2項の空間集合演算（差分 / 積）。
+  message SetOp {
+    QueryNode left = 1;
+    QueryNode right = 2;
+  }
+  // 値を対応表に基づいて変換する。対応表にない値は `default_value` になる。
+  message MapValues {
+    QueryNode input = 1;
+    TableDataType output_type = 2;
+    repeated MappingEntry mapping = 3;
+    google.protobuf.Value default_value = 4;
+  }
+  // 値に対して四則演算を行う。
+  message MathValues {
+    QueryNode input = 1;
+    MathOperator operator = 2;
+    MathOperand operand = 3;
+  }
+
+  oneof node {
+    Source source = 1;
+    FilterValues filter_values = 2;
+    Shift shift_x = 3;
+    Shift shift_y = 4;
+    Shift shift_f = 5;
+    ZoomOut zoom_out = 6;
+    ExtrudeXy extrude_x = 7;
+    ExtrudeXy extrude_y = 8;
+    ExtrudeF extrude_f = 9;
+    Falloff falloff_x = 10;
+    Falloff falloff_y = 11;
+    Falloff falloff_f = 12;
+    Merge merge = 13;
+    SetOp difference = 14;
+    SetOp intersection = 15;
+    MapValues map_values = 16;
+    MathValues math_values = 17;
+  }
+}
+
+// **必要な権限**: 参照する全テーブルに `table` / `read`
+message ExecuteQueryRequest {
+  optional TableDataType value_type = 1;
+  repeated SpatialId spatial_ids = 2;
+  QueryNode query = 3;
+  OutputFormat format = 4;
+  optional uint64 limit = 5;
+}
+
+service QueryService {
+  // 複数のテーブルを対象にクエリ式を実行し、指定した空間IDの結果を取得する。
+  rpc Execute(ExecuteQueryRequest) returns (SearchDataResponse);
+}

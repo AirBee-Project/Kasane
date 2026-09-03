@@ -19,7 +19,8 @@ cargo run -- --database-path default_kasane_db --port 3000
 cp .env.example .env
 ```
 
-起動すると、実際に待ち受けている URL と接続先が表示されます。
+起動すると、実際に待ち受けている URL と接続先が表示されます。API は gRPC のみです。詳細は
+[docs/grpc.md](docs/grpc.md) を参照してください。
 
 ## ログ
 
@@ -28,14 +29,14 @@ cp .env.example .env
 
 - `debug` のような全体レベル指定
 - `kasane=debug` のような対象別の指定
-- `kasane::handlers=info` のようなモジュール階層の指定
+- `kasane::grpc=info` のようなモジュール階層の指定
 - `kasane[request]=trace` のようなスパン名を含む指定
 - `kasane[request{method}]=debug` のようなスパンのフィールド名を含む指定
 - `kasane[request{method="GET"}]=debug` のようなフィールド値まで含めた指定
-- `kasane=debug,axum=info,tower_http=warn` のような複数指定
+- `kasane=debug,tonic=info,tower_http=warn` のような複数指定
 
 指定できるレベルは `error`、`warn`、`info`、`debug`、`trace`、`off` です。
 
 たとえば、全体を詳しく見たい場合は `RUST_LOG=debug`、Kasane だけ詳細にしたい場合は
-`RUST_LOG=kasane=debug`、HTTP 周りを少し抑えたい場合は `RUST_LOG=kasane=info,tower_http=warn`
+`RUST_LOG=kasane=debug`、gRPC 周りを少し抑えたい場合は `RUST_LOG=kasane=info,tower_http=warn`
 のように指定できます。出力形式は `KASANE_LOG_FORMAT` で `plain` / `json` を選べます。

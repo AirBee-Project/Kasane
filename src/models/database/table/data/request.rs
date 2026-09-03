@@ -1,8 +1,7 @@
 use crate::models::spatial_id::SpatialId;
 use serde::Deserialize;
-use utoipa::ToSchema;
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 /// 空間IDの配列を指定して値を取得する
 pub struct GetDataRequest {
     pub spatial_ids: Vec<SpatialId>,
@@ -10,7 +9,7 @@ pub struct GetDataRequest {
     pub zoom_level_policy: ZoomLevelPolicy,
 }
 
-#[derive(Debug, Deserialize, ToSchema, Default, Clone, Copy)]
+#[derive(Debug, Deserialize, Default, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub enum OutputFormat {
     SingleId,
@@ -19,14 +18,14 @@ pub enum OutputFormat {
     FlexId,
 }
 
-#[derive(Debug, Deserialize, ToSchema, Default)]
+#[derive(Debug, Deserialize, Default)]
 pub struct GetDataQuery {
     #[serde(default)]
     pub format: OutputFormat,
     pub limit: Option<usize>,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 /// 空間IDの配列を指定して値を挿入する
 pub struct InsertDataRequest {
     pub value: serde_json::Value,
@@ -35,7 +34,7 @@ pub struct InsertDataRequest {
     pub zoom_level_policy: ZoomLevelPolicy,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 /// 空間IDの配列を指定して値を削除する
 pub struct RemoveDataRequest {
     pub spatial_ids: Vec<SpatialId>,
@@ -43,7 +42,7 @@ pub struct RemoveDataRequest {
     pub zoom_level_policy: ZoomLevelPolicy,
 }
 
-#[derive(Debug, Deserialize, ToSchema, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Default, Clone, Copy, PartialEq, Eq)]
 /// テーブルの max_zoom_level よりも大きなズームレベル値の空間IDが入力された場合の処理方針
 pub enum ZoomLevelPolicy {
     #[default]

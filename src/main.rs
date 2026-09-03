@@ -1,4 +1,4 @@
-use kasane::{AppState, backend, kasane};
+use kasane::{AppState, backend};
 use std::net::SocketAddr;
 
 #[cfg(feature = "production")]
@@ -18,11 +18,10 @@ async fn main() {
         .await
         .expect("failed to open the storage backend");
 
-    let app = kasane(AppState::new(db));
-
+    let app_state = AppState::new(db);
     let address = SocketAddr::from(([0, 0, 0, 0], port));
-    let listener = match tokio::net::TcpListener::bind(address).await {
-        Ok(listener) => listener,
+    let bound = match kasane::grpc::bind(app_state, address) {
+        Ok(bound) => bound,
         Err(e) => {
             tracing::error!("cannot listen on {address}: {e}");
             std::process::exit(1);
@@ -30,17 +29,14 @@ async fn main() {
     };
 
     tracing::info!(
-        "Kasane is running on http://{} (backend: {}, target: {})",
-        address,
+        "Kasane is running on grpc://{} (backend: {}, target: {})",
+        bound.local_addr(),
         backend::NAME,
         database_path,
     );
 
-    if let Err(e) = axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-    {
-        tracing::error!("the HTTP server stopped with an error: {e}");
+    if let Err(e) = bound.serve(shutdown_signal()).await {
+        tracing::error!("the gRPC server stopped with an error: {e}");
     }
 }
 

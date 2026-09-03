@@ -1,8 +1,4 @@
-use axum::{
-    body::Body,
-    http::{Request, StatusCode},
-};
-use tower::ServiceExt;
+use kasane::grpc::pb;
 
 use crate::common::TestApp;
 
@@ -12,39 +8,27 @@ async fn test_table_copy_success_same_db() {
     let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
-    // テーブルを作成
-    let create_body = serde_json::json!({
-        "name": "src_table",
-        "data_type": "Int",
-        "max_zoom_level": 25
-    });
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables")
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
-        .unwrap();
-    let _ = test_app.app.clone().oneshot(req).await.unwrap();
+    test_app
+        .create_table("test_db", "src_table", "Int", 25)
+        .await;
 
-    // テーブルをコピー
-    let copy_body = serde_json::json!({
-        "copy_table_name": "copied_table"
-    });
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables/src_table/copy")
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&copy_body).unwrap()))
+    test_app
+        .table()
+        .copy(pb::CopyTableRequest {
+            db_name: "test_db".to_string(),
+            table_name: "src_table".to_string(),
+            copy_db_name: None,
+            copy_table_name: "copied_table".to_string(),
+        })
+        .await
         .unwrap();
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
 
-    // コピー先テーブルの情報が取得できるか確認
-    let req = Request::builder()
-        .method("GET")
-        .uri("/databases/test_db/tables/copied_table")
-        .body(Body::empty())
+    test_app
+        .table()
+        .get(pb::GetTableRequest {
+            db_name: "test_db".to_string(),
+            table_name: "copied_table".to_string(),
+        })
+        .await
         .unwrap();
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
 }

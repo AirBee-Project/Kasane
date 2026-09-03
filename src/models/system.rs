@@ -1,7 +1,6 @@
 use serde::Serialize;
-use utoipa::ToSchema;
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize)]
 pub struct SystemInfoResponse {
     /// サーバーのステータス（通常は "ok"）
     pub status: String,
