@@ -8,6 +8,13 @@ use crate::models::database::table::{
     TableInfoResponse, TableSummary, UpdateTableConstraints as DomainUpdateTableConstraints,
 };
 
+/// proto の `enumeration` フィールド（生の `i32`）を、範囲外の値なら `unspecified` に
+/// フォールバックした上で対応する enum 値へ変換する。`Unspecified` バリアントを持つ
+/// 全ての proto enum で共通のパターン。
+pub fn enum_from_i32<T: TryFrom<i32> + Copy>(value: i32, unspecified: T) -> T {
+    T::try_from(value).unwrap_or(unspecified)
+}
+
 impl TryFrom<pb::TableDataType> for DomainTableDataType {
     type Error = Status;
 
@@ -26,9 +33,7 @@ impl TryFrom<pb::TableDataType> for DomainTableDataType {
 }
 
 pub fn table_data_type_to_domain(value: i32) -> Result<DomainTableDataType, Status> {
-    pb::TableDataType::try_from(value)
-        .unwrap_or(pb::TableDataType::Unspecified)
-        .try_into()
+    enum_from_i32(value, pb::TableDataType::Unspecified).try_into()
 }
 
 impl From<DomainTableDataType> for pb::TableDataType {
@@ -156,15 +161,41 @@ pub fn parse_table_constraints_update(
     }
 }
 
-pub fn parse_description_update(
-    clear: Option<bool>,
-    set: Option<String>,
-) -> Option<Option<String>> {
-    if clear == Some(true) {
-        Some(None)
-    } else {
-        set.map(Some)
+/// `ClearDescription`/`SetDescription` の2バリアントを持つ oneof。生成コードは
+/// メッセージごとに別の Rust 型になるため、[`parse_description_update`] が両方を
+/// 同じ形で扱えるようこのトレイトで橋渡しする。
+///
+/// `ClearDescription(false)` は「クリアしない」という積極的な指定ではなく、
+/// フィールド自体が無いのと同じ「触らない」を表す（`oneof` にデフォルト値を
+/// 送ってしまった場合の取り扱い）。
+pub trait DescriptionUpdateOneof {
+    fn into_tri_state(self) -> Option<Option<String>>;
+}
+
+impl DescriptionUpdateOneof for pb::update_database_request::DescriptionUpdate {
+    fn into_tri_state(self) -> Option<Option<String>> {
+        match self {
+            Self::ClearDescription(true) => Some(None),
+            Self::ClearDescription(false) => None,
+            Self::SetDescription(s) => Some(Some(s)),
+        }
     }
+}
+
+impl DescriptionUpdateOneof for pb::update_table_request::DescriptionUpdate {
+    fn into_tri_state(self) -> Option<Option<String>> {
+        match self {
+            Self::ClearDescription(true) => Some(None),
+            Self::ClearDescription(false) => None,
+            Self::SetDescription(s) => Some(Some(s)),
+        }
+    }
+}
+
+pub fn parse_description_update<T: DescriptionUpdateOneof>(
+    update: Option<T>,
+) -> Option<Option<String>> {
+    update.and_then(T::into_tri_state)
 }
 
 impl From<TableSummary> for pb::TableSummary {
@@ -182,14 +213,7 @@ impl From<TableSummary> for pb::TableSummary {
 
 impl From<Table> for pb::TableSummary {
     fn from(table: Table) -> Self {
-        Self {
-            name: table.name,
-            data_type: table_data_type_to_pb(table.data_type),
-            max_zoom_level: table.max_zoom_level as u32,
-            constraints: table_constraints_to_pb(table.constraints),
-            description: table.description,
-            is_temporal: table.is_temporal,
-        }
+        TableSummary::from(table).into()
     }
 }
 

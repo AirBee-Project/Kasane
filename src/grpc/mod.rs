@@ -59,27 +59,23 @@ impl BoundServer {
     ) -> Result<(), tonic::transport::Error> {
         let app_state = self.app_state;
         let (health_reporter, health_service) = tonic_health::server::health_reporter();
-        health_reporter
-            .set_serving::<pb::system_service_server::SystemServiceServer<system::SystemServiceImpl>>()
-            .await;
-        health_reporter
-            .set_serving::<pb::auth_service_server::AuthServiceServer<auth::AuthServiceImpl>>()
-            .await;
-        health_reporter
-            .set_serving::<pb::database_service_server::DatabaseServiceServer<database::DatabaseServiceImpl>>()
-            .await;
-        health_reporter
-            .set_serving::<pb::table_service_server::TableServiceServer<table::TableServiceImpl>>()
-            .await;
-        health_reporter
-            .set_serving::<pb::data_service_server::DataServiceServer<data::DataServiceImpl>>()
-            .await;
-        health_reporter
-            .set_serving::<pb::query_service_server::QueryServiceServer<query::QueryServiceImpl>>()
-            .await;
-        health_reporter
-            .set_serving::<pb::user_service_server::UserServiceServer<users::UserServiceImpl>>()
-            .await;
+        // 互いに独立な更新なので、7回直列に待たず並行に走らせる。
+        tokio::join!(
+            health_reporter
+                .set_serving::<pb::system_service_server::SystemServiceServer<system::SystemServiceImpl>>(),
+            health_reporter
+                .set_serving::<pb::auth_service_server::AuthServiceServer<auth::AuthServiceImpl>>(),
+            health_reporter
+                .set_serving::<pb::database_service_server::DatabaseServiceServer<database::DatabaseServiceImpl>>(),
+            health_reporter
+                .set_serving::<pb::table_service_server::TableServiceServer<table::TableServiceImpl>>(),
+            health_reporter
+                .set_serving::<pb::data_service_server::DataServiceServer<data::DataServiceImpl>>(),
+            health_reporter
+                .set_serving::<pb::query_service_server::QueryServiceServer<query::QueryServiceImpl>>(),
+            health_reporter
+                .set_serving::<pb::user_service_server::UserServiceServer<users::UserServiceImpl>>(),
+        );
 
         let reflection_service = tonic_reflection::server::Builder::configure()
             .register_encoded_file_descriptor_set(pb::FILE_DESCRIPTOR_SET)

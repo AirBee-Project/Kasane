@@ -2,6 +2,7 @@
 
 use tonic::Status;
 
+use super::convert::enum_from_i32;
 use super::pb;
 use crate::models::users::{
     DataRole as DomainDataRole, PrivilegeRule as DomainPrivilegeRule,
@@ -23,9 +24,7 @@ impl TryFrom<pb::UserRole> for DomainUserRole {
 }
 
 pub fn user_role_to_domain(value: i32) -> Result<DomainUserRole, Status> {
-    pb::UserRole::try_from(value)
-        .unwrap_or(pb::UserRole::Unspecified)
-        .try_into()
+    enum_from_i32(value, pb::UserRole::Unspecified).try_into()
 }
 
 impl From<DomainUserRole> for pb::UserRole {
@@ -58,9 +57,7 @@ impl TryFrom<pb::DataRole> for DomainDataRole {
 }
 
 pub fn data_role_to_domain(value: i32) -> Result<DomainDataRole, Status> {
-    pb::DataRole::try_from(value)
-        .unwrap_or(pb::DataRole::Unspecified)
-        .try_into()
+    enum_from_i32(value, pb::DataRole::Unspecified).try_into()
 }
 
 impl From<DomainDataRole> for pb::DataRole {

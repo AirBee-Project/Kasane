@@ -2,6 +2,7 @@
 
 use tonic::Status;
 
+use super::convert::enum_from_i32;
 use super::pb;
 use crate::models::database::table::data::{
     DataGroup, GetDataResponse, GetDataResponseFlex, GetDataResponseRange, GetDataResponseSingle,
@@ -20,9 +21,7 @@ impl From<pb::ZoomLevelPolicy> for DomainZoomLevelPolicy {
 }
 
 pub fn zoom_level_policy_to_domain(value: i32) -> DomainZoomLevelPolicy {
-    pb::ZoomLevelPolicy::try_from(value)
-        .unwrap_or(pb::ZoomLevelPolicy::Unspecified)
-        .into()
+    enum_from_i32(value, pb::ZoomLevelPolicy::Unspecified).into()
 }
 
 impl From<pb::OutputFormat> for DomainOutputFormat {
@@ -36,9 +35,7 @@ impl From<pb::OutputFormat> for DomainOutputFormat {
 }
 
 pub fn output_format_to_domain(value: i32) -> DomainOutputFormat {
-    pb::OutputFormat::try_from(value)
-        .unwrap_or(pb::OutputFormat::Unspecified)
-        .into()
+    enum_from_i32(value, pb::OutputFormat::Unspecified).into()
 }
 
 pub fn json_to_typed_value(value: serde_json::Value) -> pb::TypedValue {

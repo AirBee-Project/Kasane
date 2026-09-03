@@ -1,5 +1,6 @@
 use crate::models::database::table::TableDataType;
 use crate::models::database::table::data_type::TableConstraints;
+use crate::models::database::table::response::TableSummary;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -34,6 +35,19 @@ impl Table {
             description: meta.description,
             value_index: meta.value_index,
             is_temporal: meta.is_temporal,
+        }
+    }
+}
+
+impl From<Table> for TableSummary {
+    fn from(table: Table) -> Self {
+        Self {
+            name: table.name,
+            data_type: table.data_type,
+            max_zoom_level: table.max_zoom_level,
+            constraints: table.constraints,
+            description: table.description,
+            is_temporal: table.is_temporal,
         }
     }
 }

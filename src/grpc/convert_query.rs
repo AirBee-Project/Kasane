@@ -4,7 +4,7 @@
 
 use tonic::Status;
 
-use super::convert::table_data_type_to_domain;
+use super::convert::{enum_from_i32, table_data_type_to_domain};
 use super::convert_data::{output_format_to_domain, spatial_ids_to_domain, typed_value_to_json};
 use super::pb;
 use crate::models::query::{
@@ -36,9 +36,7 @@ impl TryFrom<pb::MergePolicyKind> for MergePolicyKind {
 }
 
 fn merge_policy_to_domain(value: i32) -> Result<MergePolicyKind, Status> {
-    pb::MergePolicyKind::try_from(value)
-        .unwrap_or(pb::MergePolicyKind::Unspecified)
-        .try_into()
+    enum_from_i32(value, pb::MergePolicyKind::Unspecified).try_into()
 }
 
 impl TryFrom<pb::MathOperator> for MathOperator {
@@ -58,9 +56,7 @@ impl TryFrom<pb::MathOperator> for MathOperator {
 }
 
 fn math_operator_to_domain(value: i32) -> Result<MathOperator, Status> {
-    pb::MathOperator::try_from(value)
-        .unwrap_or(pb::MathOperator::Unspecified)
-        .try_into()
+    enum_from_i32(value, pb::MathOperator::Unspecified).try_into()
 }
 
 impl From<pb::FalloffPattern> for FalloffPattern {
@@ -74,15 +70,13 @@ impl From<pb::FalloffPattern> for FalloffPattern {
 }
 
 fn falloff_pattern_to_domain(value: i32) -> FalloffPattern {
-    pb::FalloffPattern::try_from(value)
-        .unwrap_or(pb::FalloffPattern::Unspecified)
-        .into()
+    enum_from_i32(value, pb::FalloffPattern::Unspecified).into()
 }
 
 fn direction_to_domain(value: Option<i32>) -> Result<Option<Direction>, Status> {
     use pb::Direction as P;
     let Some(value) = value else { return Ok(None) };
-    match P::try_from(value).unwrap_or(P::Unspecified) {
+    match enum_from_i32(value, P::Unspecified) {
         P::Upper => Ok(Some(Direction::Upper)),
         P::Lower => Ok(Some(Direction::Lower)),
         P::Unspecified => Err(Status::invalid_argument("direction must be specified")),

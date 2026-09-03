@@ -2,7 +2,8 @@ use tonic::{Request, Response, Status};
 
 use super::auth_ctx::authenticate;
 use super::convert::{
-    parse_table_constraints_update, table_constraints_to_domain, table_data_type_to_domain,
+    parse_description_update, parse_table_constraints_update, table_constraints_to_domain,
+    table_data_type_to_domain,
 };
 use super::pb::{
     CopyTableRequest, CreateTableRequest, DeleteTableRequest, DeleteTableResponse, GetTableRequest,
@@ -83,18 +84,7 @@ impl TableService for TableServiceImpl {
         let req = request.into_inner();
 
         let constraints = parse_table_constraints_update(req.constraints_update)?;
-        let description = match req.description_update {
-            None => None,
-            Some(super::pb::update_table_request::DescriptionUpdate::ClearDescription(true)) => {
-                Some(None)
-            }
-            Some(super::pb::update_table_request::DescriptionUpdate::ClearDescription(false)) => {
-                None
-            }
-            Some(super::pb::update_table_request::DescriptionUpdate::SetDescription(s)) => {
-                Some(Some(s))
-            }
-        };
+        let description = parse_description_update(req.description_update);
 
         crate::services::database::table::update::table_update(
             self.app_state.clone(),
