@@ -19,8 +19,8 @@ async fn test_update_table_name_success() {
             db_name: "test_db".to_string(),
             table_name: "old_name".to_string(),
             new_name: Some("new_name".to_string()),
-            constraints: None,
-            description: None,
+            constraints_update: None,
+            description_update: None,
             is_temporal: None,
         })
         .await
@@ -60,24 +60,25 @@ async fn test_update_table_constraints_success() {
             db_name: "test_db".to_string(),
             table_name: "constrained_table".to_string(),
             new_name: None,
-            constraints: Some(pb::UpdateTableConstraintsUpdate {
-                clear: false,
-                value: Some(pb::UpdateTableConstraints {
-                    kind: Some(pb::update_table_constraints::Kind::Int(
-                        pb::update_table_constraints::IntUpdate {
-                            min: Some(pb::Int64Update {
-                                clear: false,
-                                value: 10,
-                            }),
-                            max: Some(pb::Int64Update {
-                                clear: false,
-                                value: 100,
-                            }),
-                        },
-                    )),
-                }),
-            }),
-            description: None,
+            constraints_update: Some(
+                pb::update_table_request::ConstraintsUpdate::SetConstraints(
+                    pb::UpdateTableConstraints {
+                        kind: Some(pb::update_table_constraints::Kind::Int(
+                            pb::update_table_constraints::IntUpdate {
+                                min_update: Some(
+                                    pb::update_table_constraints::int_update::MinUpdate::SetMin(10),
+                                ),
+                                max_update: Some(
+                                    pb::update_table_constraints::int_update::MaxUpdate::SetMax(
+                                        100,
+                                    ),
+                                ),
+                            },
+                        )),
+                    },
+                ),
+            ),
+            description_update: None,
             is_temporal: None,
         })
         .await
@@ -125,21 +126,21 @@ async fn test_update_table_constraints_with_existing_data_violation() {
             db_name: "test_db".to_string(),
             table_name: "my_table".to_string(),
             new_name: None,
-            constraints: Some(pb::UpdateTableConstraintsUpdate {
-                clear: false,
-                value: Some(pb::UpdateTableConstraints {
-                    kind: Some(pb::update_table_constraints::Kind::Int(
-                        pb::update_table_constraints::IntUpdate {
-                            min: Some(pb::Int64Update {
-                                clear: false,
-                                value: 10,
-                            }),
-                            max: None,
-                        },
-                    )),
-                }),
-            }),
-            description: None,
+            constraints_update: Some(
+                pb::update_table_request::ConstraintsUpdate::SetConstraints(
+                    pb::UpdateTableConstraints {
+                        kind: Some(pb::update_table_constraints::Kind::Int(
+                            pb::update_table_constraints::IntUpdate {
+                                min_update: Some(
+                                    pb::update_table_constraints::int_update::MinUpdate::SetMin(10),
+                                ),
+                                max_update: None,
+                            },
+                        )),
+                    },
+                ),
+            ),
+            description_update: None,
             is_temporal: None,
         })
         .await;
@@ -162,21 +163,21 @@ async fn test_update_table_constraints_type_mismatch() {
             db_name: "test_db".to_string(),
             table_name: "my_table".to_string(),
             new_name: None,
-            constraints: Some(pb::UpdateTableConstraintsUpdate {
-                clear: false,
-                value: Some(pb::UpdateTableConstraints {
-                    kind: Some(pb::update_table_constraints::Kind::Text(
-                        pb::update_table_constraints::TextUpdate {
-                            min_length: Some(pb::Uint64Update {
-                                clear: false,
-                                value: 5,
-                            }),
-                            max_length: None,
-                        },
-                    )),
-                }),
-            }),
-            description: None,
+            constraints_update: Some(
+                pb::update_table_request::ConstraintsUpdate::SetConstraints(
+                    pb::UpdateTableConstraints {
+                        kind: Some(pb::update_table_constraints::Kind::Text(
+                            pb::update_table_constraints::TextUpdate {
+                                min_length_update: Some(
+                                    pb::update_table_constraints::text_update::MinLengthUpdate::SetMinLength(5),
+                                ),
+                                max_length_update: None,
+                            },
+                        )),
+                    },
+                ),
+            ),
+            description_update: None,
             is_temporal: None,
         })
         .await;
@@ -210,11 +211,12 @@ async fn test_update_table_description_success() {
             db_name: "test_db".to_string(),
             table_name: "desc_table".to_string(),
             new_name: None,
-            constraints: None,
-            description: Some(pb::StringUpdate {
-                clear: false,
-                value: "Updated description.".to_string(),
-            }),
+            constraints_update: None,
+            description_update: Some(
+                pb::update_table_request::DescriptionUpdate::SetDescription(
+                    "Updated description.".to_string(),
+                ),
+            ),
             is_temporal: None,
         })
         .await
@@ -231,18 +233,17 @@ async fn test_update_table_description_success() {
         .into_inner();
     assert_eq!(info.description.as_deref(), Some("Updated description."));
 
-    // 削除（null 指定）
+    // 削除（ClearDescription 指定）
     test_app
         .table()
         .update(pb::UpdateTableRequest {
             db_name: "test_db".to_string(),
             table_name: "desc_table".to_string(),
             new_name: None,
-            constraints: None,
-            description: Some(pb::StringUpdate {
-                clear: true,
-                value: String::new(),
-            }),
+            constraints_update: None,
+            description_update: Some(
+                pb::update_table_request::DescriptionUpdate::ClearDescription(true),
+            ),
             is_temporal: None,
         })
         .await
@@ -266,11 +267,12 @@ async fn test_update_table_description_success() {
             db_name: "test_db".to_string(),
             table_name: "desc_table".to_string(),
             new_name: None,
-            constraints: None,
-            description: Some(pb::StringUpdate {
-                clear: false,
-                value: "Temp description".to_string(),
-            }),
+            constraints_update: None,
+            description_update: Some(
+                pb::update_table_request::DescriptionUpdate::SetDescription(
+                    "Temp description".to_string(),
+                ),
+            ),
             is_temporal: None,
         })
         .await
@@ -282,8 +284,8 @@ async fn test_update_table_description_success() {
             db_name: "test_db".to_string(),
             table_name: "desc_table".to_string(),
             new_name: Some("desc_table_renamed".to_string()),
-            constraints: None,
-            description: None,
+            constraints_update: None,
+            description_update: None,
             is_temporal: None,
         })
         .await
@@ -318,11 +320,10 @@ async fn test_update_table_description_too_long() {
             db_name: "test_db".to_string(),
             table_name: "desc_table_too_long".to_string(),
             new_name: None,
-            constraints: None,
-            description: Some(pb::StringUpdate {
-                clear: false,
-                value: long_desc,
-            }),
+            constraints_update: None,
+            description_update: Some(
+                pb::update_table_request::DescriptionUpdate::SetDescription(long_desc),
+            ),
             is_temporal: None,
         })
         .await;
@@ -392,8 +393,8 @@ async fn test_update_table_is_temporal_unlock_allows_temporal_write() {
             db_name: "test_db".to_string(),
             table_name: "locked_table".to_string(),
             new_name: None,
-            constraints: None,
-            description: None,
+            constraints_update: None,
+            description_update: None,
             is_temporal: Some(false),
         })
         .await;
@@ -406,8 +407,8 @@ async fn test_update_table_is_temporal_unlock_allows_temporal_write() {
             db_name: "test_db".to_string(),
             table_name: "locked_table".to_string(),
             new_name: None,
-            constraints: None,
-            description: None,
+            constraints_update: None,
+            description_update: None,
             is_temporal: Some(true),
         })
         .await

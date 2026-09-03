@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package kasane;
 
-import "google/protobuf/struct.proto";
 import "common.proto";
 import "data.proto";
 
@@ -51,15 +50,15 @@ message MathOperand {
 // 値フィルタの条件。
 message FilterCondition {
   message Equals {
-    google.protobuf.Value value = 1;
+    TypedValue value = 1;
   }
   message InRange {
-    optional google.protobuf.Value min = 1;
-    optional google.protobuf.Value max = 2;
+    optional TypedValue min = 1;
+    optional TypedValue max = 2;
   }
   message NotInRange {
-    optional google.protobuf.Value min = 1;
-    optional google.protobuf.Value max = 2;
+    optional TypedValue min = 1;
+    optional TypedValue max = 2;
   }
   oneof mode {
     Equals equals = 1;
@@ -70,17 +69,11 @@ message FilterCondition {
 
 // `MapValues` の対応表エントリ。
 message MappingEntry {
-  google.protobuf.Value from = 1;
-  google.protobuf.Value to = 2;
+  TypedValue from = 1;
+  TypedValue to = 2;
 }
 
 // クエリ式の AST ノード。
-//
-// 同じ形の入力ノードをまとめるため、`ShiftX/Y/F` は `Shift`、`ExtrudeX/Y` は
-// `ExtrudeXy`、`FalloffX/Y/F` は `Falloff`、`Difference/Intersection` は `SetOp`
-// として共通メッセージ化してある（意味の区別は `oneof node` 側のフィールド名で保つ）。
-//
-// 実装メモ: 自己参照するため、`build.rs` で `QueryNode` を boxed 指定してコード生成する。
 message QueryNode {
   // 演算の起点。読み出し対象のテーブルを指定する。
   message Source {
@@ -132,7 +125,7 @@ message QueryNode {
   message Merge {
     QueryNode left = 1;
     QueryNode right = 2;
-    google.protobuf.Value default_value = 3;
+    TypedValue default_value = 3;
     MergePolicyKind policy = 4;
   }
   // 2項の空間集合演算（差分 / 積）。
@@ -145,7 +138,7 @@ message QueryNode {
     QueryNode input = 1;
     TableDataType output_type = 2;
     repeated MappingEntry mapping = 3;
-    google.protobuf.Value default_value = 4;
+    TypedValue default_value = 4;
   }
   // 値に対して四則演算を行う。
   message MathValues {

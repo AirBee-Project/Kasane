@@ -8,7 +8,7 @@ use crate::common::data::{assert_first_entry, put_data, search_data, to_result_m
 async fn insert_raw(
     test_app: &TestApp,
     table_name: &str,
-    value: prost_types::Value,
+    value: pb::TypedValue,
     spatial_ids: Vec<pb::SpatialId>,
 ) -> Result<(), tonic::Status> {
     test_app
@@ -24,9 +24,9 @@ async fn insert_raw(
         .map(|_| ())
 }
 
-fn null_value() -> prost_types::Value {
-    prost_types::Value {
-        kind: Some(prost_types::value::Kind::NullValue(0)),
+fn null_value() -> pb::TypedValue {
+    pb::TypedValue {
+        kind: Some(pb::typed_value::Kind::NullVal(0)),
     }
 }
 

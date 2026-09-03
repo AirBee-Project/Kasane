@@ -98,7 +98,7 @@ async fn test_database_rename_success() {
         .update(pb::UpdateDatabaseRequest {
             db_name: "test_db".to_string(),
             new_name: Some("renamed_db".to_string()),
-            description: None,
+            description_update: None,
         })
         .await
         .unwrap();
@@ -184,10 +184,11 @@ async fn test_database_description() {
         .update(pb::UpdateDatabaseRequest {
             db_name: "desc_db".to_string(),
             new_name: None,
-            description: Some(pb::StringUpdate {
-                clear: false,
-                value: "Updated description.".to_string(),
-            }),
+            description_update: Some(
+                pb::update_database_request::DescriptionUpdate::SetDescription(
+                    "Updated description.".to_string(),
+                ),
+            ),
         })
         .await
         .unwrap();
@@ -207,10 +208,9 @@ async fn test_database_description() {
         .update(pb::UpdateDatabaseRequest {
             db_name: "desc_db".to_string(),
             new_name: None,
-            description: Some(pb::StringUpdate {
-                clear: true,
-                value: String::new(),
-            }),
+            description_update: Some(
+                pb::update_database_request::DescriptionUpdate::ClearDescription(true),
+            ),
         })
         .await
         .unwrap();
@@ -230,10 +230,11 @@ async fn test_database_description() {
         .update(pb::UpdateDatabaseRequest {
             db_name: "desc_db".to_string(),
             new_name: None,
-            description: Some(pb::StringUpdate {
-                clear: false,
-                value: "Temp desc".to_string(),
-            }),
+            description_update: Some(
+                pb::update_database_request::DescriptionUpdate::SetDescription(
+                    "Temp desc".to_string(),
+                ),
+            ),
         })
         .await
         .unwrap();
@@ -243,7 +244,7 @@ async fn test_database_description() {
         .update(pb::UpdateDatabaseRequest {
             db_name: "desc_db".to_string(),
             new_name: Some("desc_db_renamed".to_string()),
-            description: None,
+            description_update: None,
         })
         .await
         .unwrap();

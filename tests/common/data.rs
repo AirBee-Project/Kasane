@@ -3,28 +3,33 @@ use std::collections::HashMap;
 use kasane::grpc::pb;
 
 use crate::common::TestApp;
-use crate::common::builders::{value_as_f64, value_as_str};
 
 pub trait FromPbValue: Sized {
-    fn from_pb_value(v: &prost_types::Value) -> Self;
+    fn from_pb_value(v: &pb::TypedValue) -> Self;
 }
 
 impl FromPbValue for i64 {
-    fn from_pb_value(v: &prost_types::Value) -> Self {
-        value_as_f64(v).expect("expected a number") as i64
+    fn from_pb_value(v: &pb::TypedValue) -> Self {
+        match &v.kind {
+            Some(pb::typed_value::Kind::IntVal(i)) => *i,
+            other => panic!("expected an int, got {other:?}"),
+        }
     }
 }
 
 impl FromPbValue for String {
-    fn from_pb_value(v: &prost_types::Value) -> Self {
-        value_as_str(v).expect("expected a string").to_string()
+    fn from_pb_value(v: &pb::TypedValue) -> Self {
+        match &v.kind {
+            Some(pb::typed_value::Kind::StringVal(s)) => s.clone(),
+            other => panic!("expected a string, got {other:?}"),
+        }
     }
 }
 
 impl FromPbValue for bool {
-    fn from_pb_value(v: &prost_types::Value) -> Self {
+    fn from_pb_value(v: &pb::TypedValue) -> Self {
         match &v.kind {
-            Some(prost_types::value::Kind::BoolValue(b)) => *b,
+            Some(pb::typed_value::Kind::BoolVal(b)) => *b,
             other => panic!("expected a bool, got {other:?}"),
         }
     }
@@ -34,7 +39,7 @@ impl FromPbValue for bool {
 pub async fn put_data(
     test_app: &TestApp,
     table_name: &str,
-    value: prost_types::Value,
+    value: pb::TypedValue,
     spatial_ids: Vec<pb::SpatialId>,
 ) {
     test_app
@@ -54,7 +59,7 @@ pub async fn put_data(
 pub async fn patch_data(
     test_app: &TestApp,
     table_name: &str,
-    value: prost_types::Value,
+    value: pb::TypedValue,
     spatial_ids: Vec<pb::SpatialId>,
 ) {
     test_app
@@ -94,7 +99,7 @@ pub async fn search_data(
 /// `search_data` の結果の先頭エントリのデータ値と空間IDを検証する。
 pub fn assert_first_entry(
     result: &pb::SearchDataResponse,
-    expected_value: &prost_types::Value,
+    expected_value: &pb::TypedValue,
     expected_id: &pb::SingleId,
 ) {
     let group = result.data.first().expect("no data groups");

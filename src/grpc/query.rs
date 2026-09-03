@@ -1,7 +1,6 @@
 use tonic::{Request, Response, Status};
 
 use super::auth_ctx::authenticate;
-use super::convert_data::get_data_response_to_pb;
 use super::convert_query::execute_query_request_to_domain;
 use super::pb::{ExecuteQueryRequest, SearchDataResponse, query_service_server::QueryService};
 use crate::AppState;
@@ -33,6 +32,6 @@ impl QueryService for QueryServiceImpl {
             &query_params,
         )
         .await?;
-        Ok(Response::new(get_data_response_to_pb(result)))
+        Ok(Response::new(result.into()))
     }
 }

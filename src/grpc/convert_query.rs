@@ -1,55 +1,82 @@
 //! クエリ DSL (`QueryNode` とその周辺) の変換。レスポンス側は `SearchDataResponse` を
-//! そのまま使う（[`super::convert_data::get_data_response_to_pb`]）ため、ここは
+//! そのまま使う（[`super::convert_data`]）ため、ここは
 //! リクエスト方向（proto → ドメイン）だけを持つ。
 
 use tonic::Status;
 
-use super::convert_data::{prost_value_to_json, spatial_ids_to_domain};
+use super::convert::table_data_type_to_domain;
+use super::convert_data::{output_format_to_domain, spatial_ids_to_domain, typed_value_to_json};
 use super::pb;
 use crate::models::query::{
     Direction, ExecuteQueryRequest, FalloffPattern, FilterCondition, MappingEntry, MathOperand,
     MathOperator, MergePolicyKind, QueryNode,
 };
 
-use super::convert::table_data_type_to_domain;
-use super::convert_data::output_format_to_domain;
-
 fn required<T>(value: Option<T>, field: &str) -> Result<T, Status> {
     value.ok_or_else(|| Status::invalid_argument(format!("{field} must be set")))
 }
 
+impl TryFrom<pb::MergePolicyKind> for MergePolicyKind {
+    type Error = Status;
+
+    fn try_from(value: pb::MergePolicyKind) -> Result<Self, Self::Error> {
+        match value {
+            pb::MergePolicyKind::Overwrite => Ok(Self::Overwrite),
+            pb::MergePolicyKind::KeepExisting => Ok(Self::KeepExisting),
+            pb::MergePolicyKind::Sum => Ok(Self::Sum),
+            pb::MergePolicyKind::Max => Ok(Self::Max),
+            pb::MergePolicyKind::Min => Ok(Self::Min),
+            pb::MergePolicyKind::Average => Ok(Self::Average),
+            pb::MergePolicyKind::Difference => Ok(Self::Difference),
+            pb::MergePolicyKind::Unspecified => {
+                Err(Status::invalid_argument("policy must be specified"))
+            }
+        }
+    }
+}
+
 fn merge_policy_to_domain(value: i32) -> Result<MergePolicyKind, Status> {
-    use pb::MergePolicyKind as P;
-    match P::try_from(value).unwrap_or(P::Unspecified) {
-        P::Overwrite => Ok(MergePolicyKind::Overwrite),
-        P::KeepExisting => Ok(MergePolicyKind::KeepExisting),
-        P::Sum => Ok(MergePolicyKind::Sum),
-        P::Max => Ok(MergePolicyKind::Max),
-        P::Min => Ok(MergePolicyKind::Min),
-        P::Average => Ok(MergePolicyKind::Average),
-        P::Difference => Ok(MergePolicyKind::Difference),
-        P::Unspecified => Err(Status::invalid_argument("policy must be specified")),
+    pb::MergePolicyKind::try_from(value)
+        .unwrap_or(pb::MergePolicyKind::Unspecified)
+        .try_into()
+}
+
+impl TryFrom<pb::MathOperator> for MathOperator {
+    type Error = Status;
+
+    fn try_from(value: pb::MathOperator) -> Result<Self, Self::Error> {
+        match value {
+            pb::MathOperator::Add => Ok(Self::Add),
+            pb::MathOperator::Subtract => Ok(Self::Subtract),
+            pb::MathOperator::Multiply => Ok(Self::Multiply),
+            pb::MathOperator::Divide => Ok(Self::Divide),
+            pb::MathOperator::Unspecified => {
+                Err(Status::invalid_argument("operator must be specified"))
+            }
+        }
     }
 }
 
 fn math_operator_to_domain(value: i32) -> Result<MathOperator, Status> {
-    use pb::MathOperator as P;
-    match P::try_from(value).unwrap_or(P::Unspecified) {
-        P::Add => Ok(MathOperator::Add),
-        P::Subtract => Ok(MathOperator::Subtract),
-        P::Multiply => Ok(MathOperator::Multiply),
-        P::Divide => Ok(MathOperator::Divide),
-        P::Unspecified => Err(Status::invalid_argument("operator must be specified")),
+    pb::MathOperator::try_from(value)
+        .unwrap_or(pb::MathOperator::Unspecified)
+        .try_into()
+}
+
+impl From<pb::FalloffPattern> for FalloffPattern {
+    fn from(value: pb::FalloffPattern) -> Self {
+        match value {
+            pb::FalloffPattern::QuadraticIn => Self::QuadraticIn,
+            pb::FalloffPattern::QuadraticOut => Self::QuadraticOut,
+            pb::FalloffPattern::Unspecified | pb::FalloffPattern::Linear => Self::Linear,
+        }
     }
 }
 
 fn falloff_pattern_to_domain(value: i32) -> FalloffPattern {
-    use pb::FalloffPattern as P;
-    match P::try_from(value).unwrap_or(P::Unspecified) {
-        P::QuadraticIn => FalloffPattern::QuadraticIn,
-        P::QuadraticOut => FalloffPattern::QuadraticOut,
-        P::Unspecified | P::Linear => FalloffPattern::Linear,
-    }
+    pb::FalloffPattern::try_from(value)
+        .unwrap_or(pb::FalloffPattern::Unspecified)
+        .into()
 }
 
 fn direction_to_domain(value: Option<i32>) -> Result<Option<Direction>, Status> {
@@ -75,23 +102,23 @@ fn filter_condition_to_domain(condition: pb::FilterCondition) -> Result<FilterCo
     use pb::filter_condition::Mode;
     match required(condition.mode, "condition.mode")? {
         Mode::Equals(e) => Ok(FilterCondition::Equals {
-            value: prost_value_to_json(e.value),
+            value: typed_value_to_json(e.value),
         }),
         Mode::InRange(r) => Ok(FilterCondition::InRange {
-            min: r.min.map(|v| prost_value_to_json(Some(v))),
-            max: r.max.map(|v| prost_value_to_json(Some(v))),
+            min: r.min.map(|v| typed_value_to_json(Some(v))),
+            max: r.max.map(|v| typed_value_to_json(Some(v))),
         }),
         Mode::NotInRange(r) => Ok(FilterCondition::NotInRange {
-            min: r.min.map(|v| prost_value_to_json(Some(v))),
-            max: r.max.map(|v| prost_value_to_json(Some(v))),
+            min: r.min.map(|v| typed_value_to_json(Some(v))),
+            max: r.max.map(|v| typed_value_to_json(Some(v))),
         }),
     }
 }
 
 fn mapping_entry_to_domain(entry: pb::MappingEntry) -> MappingEntry {
     MappingEntry {
-        from: prost_value_to_json(entry.from),
-        to: prost_value_to_json(entry.to),
+        from: typed_value_to_json(entry.from),
+        to: typed_value_to_json(entry.to),
     }
 }
 
@@ -203,7 +230,7 @@ pub fn query_node_to_domain(node: pb::QueryNode) -> Result<QueryNode, Status> {
         Node::Merge(m) => QueryNode::Merge {
             left: Box::new(query_node_to_domain(*required(m.left, "merge.left")?)?),
             right: Box::new(query_node_to_domain(*required(m.right, "merge.right")?)?),
-            default: prost_value_to_json(m.default_value),
+            default: typed_value_to_json(m.default_value),
             policy: merge_policy_to_domain(m.policy)?,
         },
         Node::Difference(s) => QueryNode::Difference {
@@ -230,7 +257,7 @@ pub fn query_node_to_domain(node: pb::QueryNode) -> Result<QueryNode, Status> {
             )?)?),
             output_type: table_data_type_to_domain(m.output_type)?,
             mapping: m.mapping.into_iter().map(mapping_entry_to_domain).collect(),
-            default: prost_value_to_json(m.default_value),
+            default: typed_value_to_json(m.default_value),
         },
         Node::MathValues(m) => QueryNode::MathValues {
             input: Box::new(query_node_to_domain(*required(

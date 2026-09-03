@@ -199,8 +199,8 @@ async fn bench_concurrent_writes() {
                 let request = pb::InsertDataRequest {
                     db_name: db_name.clone(),
                     table_name: "t".to_string(),
-                    value: Some(prost_types::Value {
-                        kind: Some(prost_types::value::Kind::NumberValue(i as f64)),
+                    value: Some(pb::TypedValue {
+                        kind: Some(pb::typed_value::Kind::IntVal(i as i64)),
                     }),
                     spatial_ids: vec![pb::SpatialId {
                         kind: Some(pb::spatial_id::Kind::SingleId(pb::SingleId {

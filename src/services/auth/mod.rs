@@ -1,3 +1,6 @@
+pub mod permissions;
+pub use permissions::*;
+
 use crate::repositories::{CatalogRepository, Storage};
 use argon2::{
     Argon2,

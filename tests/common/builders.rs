@@ -102,37 +102,40 @@ pub fn flex_id(
     }
 }
 
-/// `NumberValue`（`double`）で表現できる範囲の数値。`google.protobuf.Value` を経由する
-/// フィールド（クエリの `default`/フィルタ値など）は、この精度でしか値を運べない
-/// （2^53 を超える整数は丸まる）。
-pub fn num(v: f64) -> prost_types::Value {
-    prost_types::Value {
-        kind: Some(prost_types::value::Kind::NumberValue(v)),
+pub fn num(v: f64) -> pb::TypedValue {
+    pb::TypedValue {
+        kind: Some(pb::typed_value::Kind::IntVal(v as i64)),
     }
 }
 
-pub fn text(v: &str) -> prost_types::Value {
-    prost_types::Value {
-        kind: Some(prost_types::value::Kind::StringValue(v.to_string())),
+pub fn text(v: &str) -> pb::TypedValue {
+    pb::TypedValue {
+        kind: Some(pb::typed_value::Kind::StringVal(v.to_string())),
     }
 }
 
-pub fn boolean(v: bool) -> prost_types::Value {
-    prost_types::Value {
-        kind: Some(prost_types::value::Kind::BoolValue(v)),
+pub fn boolean(v: bool) -> pb::TypedValue {
+    pb::TypedValue {
+        kind: Some(pb::typed_value::Kind::BoolVal(v)),
     }
 }
 
-pub fn value_as_f64(v: &prost_types::Value) -> Option<f64> {
+pub fn null_val() -> pb::TypedValue {
+    pb::TypedValue {
+        kind: Some(pb::typed_value::Kind::NullVal(0)),
+    }
+}
+
+pub fn value_as_f64(v: &pb::TypedValue) -> Option<f64> {
     match &v.kind {
-        Some(prost_types::value::Kind::NumberValue(n)) => Some(*n),
+        Some(pb::typed_value::Kind::IntVal(n)) => Some(*n as f64),
         _ => None,
     }
 }
 
-pub fn value_as_str(v: &prost_types::Value) -> Option<&str> {
+pub fn value_as_str(v: &pb::TypedValue) -> Option<&str> {
     match &v.kind {
-        Some(prost_types::value::Kind::StringValue(s)) => Some(s.as_str()),
+        Some(pb::typed_value::Kind::StringVal(s)) => Some(s.as_str()),
         _ => None,
     }
 }
@@ -324,7 +327,7 @@ fn falloff(
 pub fn merge(
     left: pb::QueryNode,
     right: pb::QueryNode,
-    default: prost_types::Value,
+    default: pb::TypedValue,
     policy: pb::MergePolicyKind,
 ) -> pb::QueryNode {
     pb::QueryNode {
@@ -361,7 +364,7 @@ pub fn intersection(left: pb::QueryNode, right: pb::QueryNode) -> pb::QueryNode 
     }
 }
 
-pub fn filter_equals(input: pb::QueryNode, value: prost_types::Value) -> pb::QueryNode {
+pub fn filter_equals(input: pb::QueryNode, value: pb::TypedValue) -> pb::QueryNode {
     filter_values(
         input,
         pb::filter_condition::Mode::Equals(pb::filter_condition::Equals { value: Some(value) }),
@@ -370,8 +373,8 @@ pub fn filter_equals(input: pb::QueryNode, value: prost_types::Value) -> pb::Que
 
 pub fn filter_in_range(
     input: pb::QueryNode,
-    min: Option<prost_types::Value>,
-    max: Option<prost_types::Value>,
+    min: Option<pb::TypedValue>,
+    max: Option<pb::TypedValue>,
 ) -> pb::QueryNode {
     filter_values(
         input,
@@ -381,8 +384,8 @@ pub fn filter_in_range(
 
 pub fn filter_not_in_range(
     input: pb::QueryNode,
-    min: Option<prost_types::Value>,
-    max: Option<prost_types::Value>,
+    min: Option<pb::TypedValue>,
+    max: Option<pb::TypedValue>,
 ) -> pb::QueryNode {
     filter_values(
         input,
@@ -401,7 +404,7 @@ fn filter_values(input: pb::QueryNode, mode: pb::filter_condition::Mode) -> pb::
     }
 }
 
-pub fn mapping_entry(from: prost_types::Value, to: prost_types::Value) -> pb::MappingEntry {
+pub fn mapping_entry(from: pb::TypedValue, to: pb::TypedValue) -> pb::MappingEntry {
     pb::MappingEntry {
         from: Some(from),
         to: Some(to),
@@ -412,7 +415,7 @@ pub fn map_values(
     input: pb::QueryNode,
     output_type: pb::TableDataType,
     mapping: Vec<pb::MappingEntry>,
-    default: prost_types::Value,
+    default: pb::TypedValue,
 ) -> pb::QueryNode {
     pb::QueryNode {
         node: Some(pb::query_node::Node::MapValues(Box::new(

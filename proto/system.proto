@@ -2,10 +2,10 @@ syntax = "proto3";
 
 package kasane;
 
-import "google/protobuf/empty.proto";
+message GetSystemInfoRequest {}
 
 // サーバーのステータスとバージョン情報。
-message SystemInfo {
+message GetSystemInfoResponse {
   string status = 1;
   string version = 2;
 }
@@ -14,5 +14,5 @@ message SystemInfo {
 // `grpc.health.v1.Health` サービス（`tonic-health`）が別途担い、
 // このサービスには含めない。
 service SystemService {
-  rpc GetInfo(google.protobuf.Empty) returns (SystemInfo);
+  rpc GetSystemInfo(GetSystemInfoRequest) returns (GetSystemInfoResponse);
 }

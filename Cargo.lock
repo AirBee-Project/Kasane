@@ -1668,7 +1668,6 @@ dependencies = [
  "opentelemetry-otlp",
  "opentelemetry_sdk",
  "prost 0.14.4",
- "prost-types",
  "rand_core 0.6.4",
  "rayon",
  "rustc-hash",

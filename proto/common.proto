@@ -4,6 +4,21 @@ package kasane;
 
 // リソース横断で使う共有型。
 
+enum NullValue {
+  NULL_VALUE = 0;
+}
+
+// 動的な値（Text, Int, Boolean, Presence/Null）。
+// 64bit整数の精度を完全に保持し、JSON中継を排する。
+message TypedValue {
+  oneof kind {
+    string string_val = 1;
+    int64 int_val = 2;
+    bool bool_val = 3;
+    NullValue null_val = 4;
+  }
+}
+
 message Int32Range {
   int32 min = 1;
   int32 max = 2;
@@ -97,33 +112,6 @@ message TableConstraints {
     Int int = 2;
     Enum enum_constraint = 3;
   }
-}
-
-// --- 更新系リクエスト向けの tri-state ラッパー ---
-//
-// 「触らない」/「null にする」/「値を設定する」の3状態を表す。
-// 親メッセージ側でこのフィールド自体を `optional` にし、未設定なら「触らない」を表す。
-// フィールドが存在すれば、`clear` で「null にする」か「`value` を設定する」かを選ぶ。
-
-message StringUpdate {
-  bool clear = 1;
-  string value = 2;
-}
-
-message Uint64Update {
-  bool clear = 1;
-  uint64 value = 2;
-}
-
-message Int64Update {
-  bool clear = 1;
-  int64 value = 2;
-}
-
-// 文字列配列そのものを丸ごと差し替える更新。フィールドの `optional` 有無で
-// 「触らない」か「この配列で置き換える」かを表す（空配列での置き換えも可能）。
-message StringListUpdate {
-  repeated string values = 1;
 }
 
 // --- ユーザー権限 ---

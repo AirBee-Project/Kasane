@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package kasane;
 
-import "google/protobuf/empty.proto";
 import "common.proto";
 
 // 一覧で返す軽量ビュー。件数は含まない。
@@ -56,23 +55,35 @@ message ListTablesResponse {
   repeated TableSummary tables = 1;
 }
 
-// `Option<Option<T>>` の各フィールドを tri-state で表現する更新パッチ。
+// 制約の更新パッチ。
 message UpdateTableConstraints {
   message TextUpdate {
-    optional Uint64Update min_length = 1;
-    optional Uint64Update max_length = 2;
+    oneof min_length_update {
+      bool clear_min_length = 1;
+      uint64 set_min_length = 2;
+    }
+    oneof max_length_update {
+      bool clear_max_length = 3;
+      uint64 set_max_length = 4;
+    }
   }
   message IntUpdate {
-    optional Int64Update min = 1;
-    optional Int64Update max = 2;
+    oneof min_update {
+      bool clear_min = 1;
+      int64 set_min = 2;
+    }
+    oneof max_update {
+      bool clear_max = 3;
+      int64 set_max = 4;
+    }
   }
   message EnumUpdate {
     // 選択肢を丸ごと置き換える。
-    optional StringListUpdate choices = 1;
+    repeated string choices = 1;
     // 既存の選択肢に追加する。
-    optional StringListUpdate add_choices = 2;
+    repeated string add_choices = 2;
     // 既存の選択肢から取り除く。
-    optional StringListUpdate remove_choices = 3;
+    repeated string remove_choices = 3;
   }
   oneof kind {
     TextUpdate text = 1;
@@ -81,28 +92,34 @@ message UpdateTableConstraints {
   }
 }
 
-// `constraints` フィールド自体の tri-state（触らない/削除する/`UpdateTableConstraints`を適用する）。
-message UpdateTableConstraintsUpdate {
-  bool clear = 1;
-  UpdateTableConstraints value = 2;
-}
-
 // **必要な権限**: `table` / `manage`
 message UpdateTableRequest {
   string db_name = 1;
   string table_name = 2;
   optional string new_name = 3;
-  optional UpdateTableConstraintsUpdate constraints = 4;
-  optional StringUpdate description = 5;
   // 時間ロックの解除。`true` のみ指定可能。
-  optional bool is_temporal = 6;
+  optional bool is_temporal = 4;
+
+  oneof description_update {
+    bool clear_description = 5;
+    string set_description = 6;
+  }
+
+  oneof constraints_update {
+    bool clear_constraints = 7;
+    UpdateTableConstraints set_constraints = 8;
+  }
 }
+
+message UpdateTableResponse {}
 
 // **必要な権限**: `table` / `manage`
 message DeleteTableRequest {
   string db_name = 1;
   string table_name = 2;
 }
+
+message DeleteTableResponse {}
 
 // **必要な権限**: `database` / `manage`
 message CopyTableRequest {
@@ -116,7 +133,7 @@ service TableService {
   rpc Create(CreateTableRequest) returns (TableSummary);
   rpc Get(GetTableRequest) returns (TableInfo);
   rpc List(ListTablesRequest) returns (ListTablesResponse);
-  rpc Update(UpdateTableRequest) returns (google.protobuf.Empty);
-  rpc Delete(DeleteTableRequest) returns (google.protobuf.Empty);
+  rpc Update(UpdateTableRequest) returns (UpdateTableResponse);
+  rpc Delete(DeleteTableRequest) returns (DeleteTableResponse);
   rpc Copy(CopyTableRequest) returns (TableSummary);
 }

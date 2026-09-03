@@ -1,4 +1,4 @@
-//! 認証と認可の入口。
+//! 認可ロジックと権限検査ヘルパー。
 //!
 //! **認可はカタログを引いたのと同じトランザクションの中で行う。** 認可のためだけに
 //! 読み取りを開くと、直後にサービス層が同じ名前を引き直すことになり、名前の解決が
@@ -8,11 +8,10 @@
 //! そのため、ここにある関数は `AppState` ではなく**開いているリポジトリ**を受け取り、
 //! 解決した ID を呼び出し側へ返す。
 
-use crate::repositories::CatalogRepository;
-
 use crate::error::{AppError, AuthError, Resource};
 use crate::models::id::{DatabaseId, TableId};
 use crate::models::users::{Scope, User, UserRole};
+use crate::repositories::CatalogRepository;
 
 /// 認証済みユーザーを運ぶための包み。
 ///

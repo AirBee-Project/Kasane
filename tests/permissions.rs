@@ -107,35 +107,30 @@ async fn put_privilege(
 ) -> Result<(), Status> {
     let client_token = Some(bearer(token));
     let client_token = client_token.as_deref();
-    match (db_name, table_name) {
-        (None, _) => test_app
-            .user_as(client_token)
-            .set_global_privilege(pb::SetGlobalPrivilegeRequest {
-                username: username.to_string(),
-                role: user_role(role) as i32,
-            })
-            .await
-            .map(|_| ()),
-        (Some(db), None) => test_app
-            .user_as(client_token)
-            .set_database_privilege(pb::SetDatabasePrivilegeRequest {
-                username: username.to_string(),
-                db_name: db.to_string(),
-                role: data_role(role) as i32,
-            })
-            .await
-            .map(|_| ()),
-        (Some(db), Some(table)) => test_app
-            .user_as(client_token)
-            .set_table_privilege(pb::SetTablePrivilegeRequest {
-                username: username.to_string(),
-                db_name: db.to_string(),
-                table_name: table.to_string(),
-                role: data_role(role) as i32,
-            })
-            .await
-            .map(|_| ()),
-    }
+    let scope = match (db_name, table_name) {
+        (None, _) => pb::privilege_rule::Scope::Global(pb::privilege_rule::Global {
+            role: user_role(role) as i32,
+        }),
+        (Some(db), None) => pb::privilege_rule::Scope::Database(pb::privilege_rule::Database {
+            db_name: db.to_string(),
+            role: data_role(role) as i32,
+        }),
+        (Some(db), Some(table)) => pb::privilege_rule::Scope::Table(pb::privilege_rule::Table {
+            db_name: db.to_string(),
+            table_name: table.to_string(),
+            role: data_role(role) as i32,
+        }),
+    };
+    test_app
+        .user_as(client_token)
+        .grant_privilege(pb::GrantPrivilegeRequest {
+            username: username.to_string(),
+            privilege: Some(pb::PrivilegeRule {
+                scope: Some(scope),
+            }),
+        })
+        .await
+        .map(|_| ())
 }
 
 /// 対象 1 件の権限を剥奪する（結果は呼び出し側が判断する）。
@@ -148,32 +143,26 @@ async fn delete_privilege(
 ) -> Result<(), Status> {
     let client_token = Some(bearer(token));
     let client_token = client_token.as_deref();
-    match (db_name, table_name) {
-        (None, _) => test_app
-            .user_as(client_token)
-            .delete_global_privilege(pb::DeleteGlobalPrivilegeRequest {
-                username: username.to_string(),
-            })
-            .await
-            .map(|_| ()),
-        (Some(db), None) => test_app
-            .user_as(client_token)
-            .delete_database_privilege(pb::DeleteDatabasePrivilegeRequest {
-                username: username.to_string(),
-                db_name: db.to_string(),
-            })
-            .await
-            .map(|_| ()),
-        (Some(db), Some(table)) => test_app
-            .user_as(client_token)
-            .delete_table_privilege(pb::DeleteTablePrivilegeRequest {
-                username: username.to_string(),
-                db_name: db.to_string(),
-                table_name: table.to_string(),
-            })
-            .await
-            .map(|_| ()),
-    }
+    let target = match (db_name, table_name) {
+        (None, _) => pb::privilege_target::Target::Global(pb::privilege_target::Global {}),
+        (Some(db), None) => pb::privilege_target::Target::Database(pb::privilege_target::Database {
+            db_name: db.to_string(),
+        }),
+        (Some(db), Some(table)) => pb::privilege_target::Target::Table(pb::privilege_target::Table {
+            db_name: db.to_string(),
+            table_name: table.to_string(),
+        }),
+    };
+    test_app
+        .user_as(client_token)
+        .revoke_privilege(pb::RevokePrivilegeRequest {
+            username: username.to_string(),
+            target: Some(pb::PrivilegeTarget {
+                target: Some(target),
+            }),
+        })
+        .await
+        .map(|_| ())
 }
 
 async fn grant_privilege(
@@ -793,16 +782,20 @@ async fn test_get_system_info() {
     let root_token = test_app.root_token().to_string();
 
     // 1. 未ログイン（ヘッダーなし）→ Unauthenticated (missing_token)
-    let err = test_app.system_as(None).get_info(()).await.unwrap_err();
+    let err = test_app
+        .system_as(None)
+        .get_system_info(pb::GetSystemInfoRequest {})
+        .await
+        .unwrap_err();
     assert_eq!(err.code(), Code::Unauthenticated);
     assert_eq!(error_reason(&err), "missing_token");
 
     // 2. ログイン済み（rootユーザー）→ 成功
     let info = test_app
         .system_as(Some(&bearer(&root_token)))
-        .get_info(())
+        .get_system_info(pb::GetSystemInfoRequest {})
         .await
-        .expect("get_info failed")
+        .expect("get_system_info failed")
         .into_inner();
     assert_eq!(info.status, "ok");
     assert_eq!(info.version, env!("CARGO_PKG_VERSION"));
@@ -888,7 +881,7 @@ async fn test_copy_and_rename_permissions() {
         .update(pb::UpdateDatabaseRequest {
             db_name: "src_db".to_string(),
             new_name: Some("renamed_db".to_string()),
-            description: None,
+            description_update: None,
         })
         .await
         .unwrap_err();
@@ -900,7 +893,7 @@ async fn test_copy_and_rename_permissions() {
         .update(pb::UpdateDatabaseRequest {
             db_name: "src_db".to_string(),
             new_name: Some("renamed_db".to_string()),
-            description: None,
+            description_update: None,
         })
         .await
         .expect("user_b (manage) should be able to rename");
@@ -1011,7 +1004,7 @@ async fn test_privileges_follow_database_rename() {
         .update(pb::UpdateDatabaseRequest {
             db_name: "before_db".to_string(),
             new_name: Some("after_db".to_string()),
-            description: None,
+            description_update: None,
         })
         .await
         .expect("rename should succeed");

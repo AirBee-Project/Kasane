@@ -7,7 +7,7 @@
 use crate::{
     AppState,
     error::{AppError, Resource},
-    middleware::auth::authorize_resolved,
+    services::auth::authorize_resolved,
     models::database::table::Table,
     models::users::{User, UserRole},
     repositories::{ReadRepository, Storage},

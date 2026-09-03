@@ -1,7 +1,7 @@
 use crate::{
     AppState,
     error::AppError,
-    middleware::auth::{authorize_path, visible_database},
+    services::auth::{authorize_path, visible_database},
     models::database::DatabaseInfoResponse,
     models::users::{User, UserRole},
     repositories::{CatalogRepository, ReadRepository, Storage, WriteRepository},

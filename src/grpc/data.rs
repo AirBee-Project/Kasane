@@ -2,11 +2,12 @@ use tonic::{Request, Response, Status};
 
 use super::auth_ctx::authenticate;
 use super::convert_data::{
-    get_data_response_to_pb, output_format_to_domain, prost_value_to_json, spatial_ids_to_domain,
+    output_format_to_domain, spatial_ids_to_domain, typed_value_to_json,
     zoom_level_policy_to_domain,
 };
 use super::pb::{
-    InsertDataRequest, RemoveDataRequest, SearchDataRequest, SearchDataResponse, UpsertDataRequest,
+    InsertDataRequest, InsertDataResponse, RemoveDataRequest, RemoveDataResponse,
+    SearchDataRequest, SearchDataResponse, UpsertDataRequest, UpsertDataResponse,
     data_service_server::DataService,
 };
 use crate::AppState;
@@ -42,16 +43,19 @@ impl DataService for DataServiceImpl {
             &query,
         )
         .await?;
-        Ok(Response::new(get_data_response_to_pb(result)))
+        Ok(Response::new(result.into()))
     }
 
-    async fn insert(&self, request: Request<InsertDataRequest>) -> Result<Response<()>, Status> {
+    async fn insert(
+        &self,
+        request: Request<InsertDataRequest>,
+    ) -> Result<Response<InsertDataResponse>, Status> {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
         let spatial_ids = spatial_ids_to_domain(req.spatial_ids)?;
         let zoom_level_policy = zoom_level_policy_to_domain(req.zoom_level_policy);
-        let value = prost_value_to_json(req.value);
+        let value = typed_value_to_json(req.value);
 
         crate::services::database::table::data::insert::insert(
             &self.app_state,
@@ -63,16 +67,19 @@ impl DataService for DataServiceImpl {
             &zoom_level_policy,
         )
         .await?;
-        Ok(Response::new(()))
+        Ok(Response::new(InsertDataResponse {}))
     }
 
-    async fn upsert(&self, request: Request<UpsertDataRequest>) -> Result<Response<()>, Status> {
+    async fn upsert(
+        &self,
+        request: Request<UpsertDataRequest>,
+    ) -> Result<Response<UpsertDataResponse>, Status> {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
         let spatial_ids = spatial_ids_to_domain(req.spatial_ids)?;
         let zoom_level_policy = zoom_level_policy_to_domain(req.zoom_level_policy);
-        let value = prost_value_to_json(req.value);
+        let value = typed_value_to_json(req.value);
 
         crate::services::database::table::data::upsert::upsert(
             &self.app_state,
@@ -84,10 +91,13 @@ impl DataService for DataServiceImpl {
             &zoom_level_policy,
         )
         .await?;
-        Ok(Response::new(()))
+        Ok(Response::new(UpsertDataResponse {}))
     }
 
-    async fn remove(&self, request: Request<RemoveDataRequest>) -> Result<Response<()>, Status> {
+    async fn remove(
+        &self,
+        request: Request<RemoveDataRequest>,
+    ) -> Result<Response<RemoveDataResponse>, Status> {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
@@ -103,6 +113,6 @@ impl DataService for DataServiceImpl {
             &zoom_level_policy,
         )
         .await?;
-        Ok(Response::new(()))
+        Ok(Response::new(RemoveDataResponse {}))
     }
 }

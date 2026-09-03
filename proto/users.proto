@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package kasane;
 
-import "google/protobuf/empty.proto";
 import "common.proto";
 
 // API 上の権限ルール表現。保存形式は UUID ベースだが、外部には
@@ -30,6 +29,23 @@ message PrivilegeRule {
   }
 }
 
+// 権限の剥奪対象を指定するメッセージ。
+message PrivilegeTarget {
+  message Global {}
+  message Database {
+    string db_name = 1;
+  }
+  message Table {
+    string db_name = 1;
+    string table_name = 2;
+  }
+  oneof target {
+    Global global = 1;
+    Database database = 2;
+    Table table = 3;
+  }
+}
+
 // 一覧で 1 利用者について返す概要。権限そのものは含まない。
 message UserSummary {
   string username = 1;
@@ -51,6 +67,8 @@ message CreateUserRequest {
   repeated PrivilegeRule privileges = 3;
 }
 
+message CreateUserResponse {}
+
 // **必要な権限**: 本人 または `global` / `admin`
 message GetUserRequest {
   string username = 1;
@@ -60,6 +78,8 @@ message GetUserRequest {
 message DeleteUserRequest {
   string username = 1;
 }
+
+message DeleteUserResponse {}
 
 // **必要な権限**: `global` / `admin`
 message ListUsersRequest {
@@ -81,6 +101,8 @@ message UpdatePasswordRequest {
   string password = 2;
 }
 
+message UpdatePasswordResponse {}
+
 // **必要な権限**: 本人 または `global` / `admin`
 message GetPrivilegesRequest {
   string username = 1;
@@ -91,51 +113,28 @@ message PrivilegesResponse {
 }
 
 // **必要な権限**: `global` / `admin`
-message SetGlobalPrivilegeRequest {
+message GrantPrivilegeRequest {
   string username = 1;
-  UserRole role = 2;
+  PrivilegeRule privilege = 2;
 }
 
-message DeleteGlobalPrivilegeRequest {
+message GrantPrivilegeResponse {}
+
+// **必要な権限**: `global` / `admin`
+message RevokePrivilegeRequest {
   string username = 1;
+  PrivilegeTarget target = 2;
 }
 
-message SetDatabasePrivilegeRequest {
-  string username = 1;
-  string db_name = 2;
-  DataRole role = 3;
-}
-
-message DeleteDatabasePrivilegeRequest {
-  string username = 1;
-  string db_name = 2;
-}
-
-message SetTablePrivilegeRequest {
-  string username = 1;
-  string db_name = 2;
-  string table_name = 3;
-  DataRole role = 4;
-}
-
-message DeleteTablePrivilegeRequest {
-  string username = 1;
-  string db_name = 2;
-  string table_name = 3;
-}
+message RevokePrivilegeResponse {}
 
 service UserService {
   rpc List(ListUsersRequest) returns (ListUsersResponse);
-  rpc Create(CreateUserRequest) returns (google.protobuf.Empty);
+  rpc Create(CreateUserRequest) returns (CreateUserResponse);
   rpc Get(GetUserRequest) returns (UserInfo);
-  rpc Delete(DeleteUserRequest) returns (google.protobuf.Empty);
-  rpc UpdatePassword(UpdatePasswordRequest) returns (google.protobuf.Empty);
+  rpc Delete(DeleteUserRequest) returns (DeleteUserResponse);
+  rpc UpdatePassword(UpdatePasswordRequest) returns (UpdatePasswordResponse);
   rpc GetPrivileges(GetPrivilegesRequest) returns (PrivilegesResponse);
-  // ロールを問わず対象ごと剥奪する（Delete* 系すべて共通）。
-  rpc SetGlobalPrivilege(SetGlobalPrivilegeRequest) returns (google.protobuf.Empty);
-  rpc DeleteGlobalPrivilege(DeleteGlobalPrivilegeRequest) returns (google.protobuf.Empty);
-  rpc SetDatabasePrivilege(SetDatabasePrivilegeRequest) returns (google.protobuf.Empty);
-  rpc DeleteDatabasePrivilege(DeleteDatabasePrivilegeRequest) returns (google.protobuf.Empty);
-  rpc SetTablePrivilege(SetTablePrivilegeRequest) returns (google.protobuf.Empty);
-  rpc DeleteTablePrivilege(DeleteTablePrivilegeRequest) returns (google.protobuf.Empty);
+  rpc GrantPrivilege(GrantPrivilegeRequest) returns (GrantPrivilegeResponse);
+  rpc RevokePrivilege(RevokePrivilegeRequest) returns (RevokePrivilegeResponse);
 }

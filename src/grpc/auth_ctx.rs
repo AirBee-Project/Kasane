@@ -2,7 +2,7 @@ use tonic::Status;
 
 use crate::AppState;
 use crate::error::{AppError, AuthError};
-use crate::middleware::auth::AuthUser;
+use crate::services::auth::AuthUser;
 use crate::models::auth::Claims;
 use crate::repositories::{ReadRepository, Storage};
 

@@ -2,13 +2,12 @@ use tonic::{Request, Response, Status};
 
 use super::auth_ctx::authenticate;
 use super::convert::{
-    table_constraints_to_domain, table_data_type_to_domain, table_domain_to_summary_pb,
-    table_info_to_pb, table_summary_to_pb, tri_string, update_table_constraints_update_to_domain,
+    parse_table_constraints_update, table_constraints_to_domain, table_data_type_to_domain,
 };
 use super::pb::{
-    CopyTableRequest, CreateTableRequest, DeleteTableRequest, GetTableRequest, ListTablesRequest,
-    ListTablesResponse, TableInfo, TableSummary, UpdateTableRequest,
-    table_service_server::TableService,
+    CopyTableRequest, CreateTableRequest, DeleteTableRequest, DeleteTableResponse, GetTableRequest,
+    ListTablesRequest, ListTablesResponse, TableInfo, TableSummary, UpdateTableRequest,
+    UpdateTableResponse, table_service_server::TableService,
 };
 use crate::AppState;
 use crate::models::database::table::CreateTableRequest as DomainCreateTableRequest;
@@ -44,7 +43,7 @@ impl TableService for TableServiceImpl {
             domain_req,
         )
         .await?;
-        Ok(Response::new(table_domain_to_summary_pb(table)))
+        Ok(Response::new(table.into()))
     }
 
     async fn get(&self, request: Request<GetTableRequest>) -> Result<Response<TableInfo>, Status> {
@@ -58,7 +57,7 @@ impl TableService for TableServiceImpl {
             &req.table_name,
         )
         .await?;
-        Ok(Response::new(table_info_to_pb(info)))
+        Ok(Response::new(info.into()))
     }
 
     async fn list(
@@ -72,16 +71,28 @@ impl TableService for TableServiceImpl {
             crate::services::database::table::list::list(&self.app_state, &req.db_name, &auth_user)
                 .await?;
         Ok(Response::new(ListTablesResponse {
-            tables: tables.0.into_iter().map(table_summary_to_pb).collect(),
+            tables: tables.0.into_iter().map(Into::into).collect(),
         }))
     }
 
-    async fn update(&self, request: Request<UpdateTableRequest>) -> Result<Response<()>, Status> {
+    async fn update(
+        &self,
+        request: Request<UpdateTableRequest>,
+    ) -> Result<Response<UpdateTableResponse>, Status> {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
-        let constraints = update_table_constraints_update_to_domain(req.constraints)?;
-        let description = tri_string(req.description);
+        let constraints = parse_table_constraints_update(req.constraints_update)?;
+        let description = match req.description_update {
+            None => None,
+            Some(super::pb::update_table_request::DescriptionUpdate::ClearDescription(true)) => {
+                Some(None)
+            }
+            Some(super::pb::update_table_request::DescriptionUpdate::ClearDescription(false)) => None,
+            Some(super::pb::update_table_request::DescriptionUpdate::SetDescription(s)) => {
+                Some(Some(s))
+            }
+        };
 
         crate::services::database::table::update::table_update(
             self.app_state.clone(),
@@ -94,10 +105,13 @@ impl TableService for TableServiceImpl {
             req.is_temporal,
         )
         .await?;
-        Ok(Response::new(()))
+        Ok(Response::new(UpdateTableResponse {}))
     }
 
-    async fn delete(&self, request: Request<DeleteTableRequest>) -> Result<Response<()>, Status> {
+    async fn delete(
+        &self,
+        request: Request<DeleteTableRequest>,
+    ) -> Result<Response<DeleteTableResponse>, Status> {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
@@ -108,7 +122,7 @@ impl TableService for TableServiceImpl {
             &req.table_name,
         )
         .await?;
-        Ok(Response::new(()))
+        Ok(Response::new(DeleteTableResponse {}))
     }
 
     async fn copy(
@@ -130,6 +144,6 @@ impl TableService for TableServiceImpl {
             &req.copy_table_name,
         )
         .await?;
-        Ok(Response::new(table_domain_to_summary_pb(table)))
+        Ok(Response::new(table.into()))
     }
 }

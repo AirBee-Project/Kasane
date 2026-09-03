@@ -65,7 +65,7 @@ async fn resolve_tables(
             let resolved = r.resolve_tables(&refs).await?;
             // 逆順にすると、権限の無い利用者へ 404 で名前の存在有無を教えることになる。
             for ((db_name, table_name), entry) in for_auth.iter().zip(&resolved) {
-                crate::middleware::auth::authorize_resolved(
+                crate::services::auth::authorize_resolved(
                     r,
                     &user,
                     entry.db_id,

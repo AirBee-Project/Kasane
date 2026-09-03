@@ -34,7 +34,7 @@ fn error_reason(status: &Status) -> String {
 /// `Insert` を投げて結果だけ返す（成功・失敗どちらも許容する）。
 async fn insert_result(
     test_app: &TestApp,
-    value: prost_types::Value,
+    value: pb::TypedValue,
     spatial_ids: Vec<pb::SpatialId>,
 ) -> Result<(), Status> {
     test_app

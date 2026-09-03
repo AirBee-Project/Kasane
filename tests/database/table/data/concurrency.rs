@@ -95,7 +95,7 @@ async fn test_invalid_request_does_not_abort_valid_batch() {
         let mut client = test_app.data();
         // 正常リクエスト（Int）と、その合間に不正リクエスト（Int テーブルへ文字列）を混ぜる。
         tasks.push(tokio::spawn(async move {
-            let make_req = |value: prost_types::Value, x: u32| pb::InsertDataRequest {
+            let make_req = |value: pb::TypedValue, x: u32| pb::InsertDataRequest {
                 db_name: "test_db".to_string(),
                 table_name: "test_table".to_string(),
                 value: Some(value),

@@ -15,7 +15,7 @@ async fn seed(
     test_app: &TestApp,
     table: &str,
     data_type: &str,
-    flex_ids: &[(i64, prost_types::Value)],
+    flex_ids: &[(i64, pb::TypedValue)],
 ) {
     test_app.create_table("test_db", table, data_type, 25).await;
     for (x, v) in flex_ids {
@@ -31,9 +31,9 @@ fn ids(base: i64, count: i64) -> Vec<pb::SpatialId> {
     (0..count).map(|i| single_id(base + i)).collect()
 }
 
-fn value_as_bool(v: &prost_types::Value) -> Option<bool> {
+fn value_as_bool(v: &pb::TypedValue) -> Option<bool> {
     match &v.kind {
-        Some(prost_types::value::Kind::BoolValue(b)) => Some(*b),
+        Some(pb::typed_value::Kind::BoolVal(b)) => Some(*b),
         _ => None,
     }
 }

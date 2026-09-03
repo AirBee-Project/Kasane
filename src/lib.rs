@@ -4,7 +4,6 @@ use tokio::sync::Semaphore;
 pub mod backend;
 pub mod error;
 pub mod grpc;
-pub mod middleware;
 pub mod models;
 pub mod repositories;
 pub mod services;

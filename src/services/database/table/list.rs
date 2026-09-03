@@ -1,4 +1,4 @@
-use crate::middleware::auth::{reaches, visible_database};
+use crate::services::auth::{reaches, visible_database};
 use crate::models::users::{Scope, User, UserRole};
 use crate::repositories::{CatalogRepository, ReadRepository, Storage};
 use crate::{

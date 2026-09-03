@@ -1,7 +1,7 @@
 use crate::{
     AppState,
     error::{AppError, Resource},
-    middleware::auth::AuthUser,
+    services::auth::AuthUser,
     models::{
         database::table::data::{GetDataQuery, GetDataResponse, ZoomLevelPolicy},
         spatial_id::SpatialId,
@@ -40,7 +40,7 @@ pub async fn get(
             })?;
 
             // 「存在しない」より先に判定する（`authorize_resolved` の注記を参照）。
-            crate::middleware::auth::authorize_resolved(
+            crate::services::auth::authorize_resolved(
                 db,
                 &user,
                 resolved.db_id,
