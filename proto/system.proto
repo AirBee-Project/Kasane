@@ -2,17 +2,17 @@ syntax = "proto3";
 
 package kasane;
 
+// 認証必須（追加の権限は要求しない）。ヘルスチェックは標準の
+// `grpc.health.v1.Health` サービス（`tonic-health`）が別途担い、
+// このサービスには含めない。
+service SystemService {
+  rpc GetSystemInfo(GetSystemInfoRequest) returns (GetSystemInfoResponse);
+}
+
 message GetSystemInfoRequest {}
 
 // サーバーのステータスとバージョン情報。
 message GetSystemInfoResponse {
   string status = 1;
   string version = 2;
-}
-
-// 認証必須（追加の権限は要求しない）。ヘルスチェックは標準の
-// `grpc.health.v1.Health` サービス（`tonic-health`）が別途担い、
-// このサービスには含めない。
-service SystemService {
-  rpc GetSystemInfo(GetSystemInfoRequest) returns (GetSystemInfoResponse);
 }

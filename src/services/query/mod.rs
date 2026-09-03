@@ -11,6 +11,7 @@ use crate::{
     error::{AppError, Resource},
     for_value_type,
     models::{
+        ValueLiteral,
         database::table::{
             Table, TableDataType,
             data::{GetDataQuery, GetDataResponse, OutputFormat},
@@ -275,7 +276,7 @@ impl QueryNode {
             } => V::merge(
                 left.translate::<V>(app_state, tables, snapshot)?,
                 right.translate::<V>(app_state, tables, snapshot)?,
-                V::from_json(default)?,
+                V::from_value(default)?,
                 *policy,
             ),
 
@@ -289,11 +290,11 @@ impl QueryNode {
 
             Self::FilterValues { input, condition } => {
                 let q = input.translate::<V>(app_state, tables, snapshot)?;
-                let parse = |v: &Option<serde_json::Value>| -> Result<Option<V>, AppError> {
-                    v.as_ref().map(V::from_json).transpose()
+                let parse = |v: &Option<ValueLiteral>| -> Result<Option<V>, AppError> {
+                    v.as_ref().map(V::from_value).transpose()
                 };
                 Ok(match condition {
-                    FilterCondition::Equals { value } => q.filter_eq(V::from_json(value)?),
+                    FilterCondition::Equals { value } => q.filter_eq(V::from_value(value)?),
                     FilterCondition::InRange { min, max } => {
                         let start = parse(min)?
                             .map_or(core::ops::Bound::Unbounded, core::ops::Bound::Included);
@@ -360,14 +361,14 @@ fn build_map_values<U: Value, V: Value>(
     tables: &ResolvedTables,
     snapshot: &QuerySnapshot,
     mapping: &[MappingEntry],
-    default: &serde_json::Value,
+    default: &ValueLiteral,
 ) -> Result<Query<V>, AppError> {
     let input = input.translate::<U>(app_state, tables, snapshot)?;
 
     let mut lookup: BTreeMap<U, V> = BTreeMap::new();
     for entry in mapping {
-        let from = U::from_json(&entry.from)?;
-        let to = V::from_json(&entry.to).map_err(|e| AppError::ConstraintViolation {
+        let from = U::from_value(&entry.from)?;
+        let to = V::from_value(&entry.to).map_err(|e| AppError::ConstraintViolation {
             reason: format!(
                 "mapValues mapping value could not be parsed as the inferred type {}: {}",
                 V::type_name(),
@@ -381,7 +382,7 @@ fn build_map_values<U: Value, V: Value>(
             });
         }
     }
-    let default = V::from_json(default).map_err(|e| AppError::ConstraintViolation {
+    let default = V::from_value(default).map_err(|e| AppError::ConstraintViolation {
         reason: format!(
             "mapValues default value could not be parsed as the inferred type {}: {}",
             V::type_name(),
@@ -465,7 +466,7 @@ fn run<V: Value>(
     if bounds.is_empty() {
         // 対象領域が空。クエリを走らせるまでもない。
         let empty: Vec<(V, Vec<kasane_logic::FlexId>)> = Vec::new();
-        return data_response::build(empty, format, limit, |v| Ok(v.to_json()));
+        return data_response::build(empty, format, limit, |v| Ok(v.to_value()));
     }
 
     // --- フェーズ 1: DSL → kasane-logic AST の翻訳 ---
@@ -486,7 +487,7 @@ fn run<V: Value>(
         .filter(|(flex_id, _)| targets.get(flex_id).next().is_some());
 
     let by_value = group_by_value(flex_ids, limit);
-    data_response::build(by_value, format, limit, |v| Ok(v.to_json()))
+    data_response::build(by_value, format, limit, |v| Ok(v.to_value()))
 }
 
 /// FlexId 列を値ごとにグループ化する。

@@ -9,6 +9,10 @@ use crate::models::users::{
     PrivilegeTarget as DomainPrivilegeTarget, UserRole as DomainUserRole,
 };
 
+// ---------------------------------------------------------------------------
+// UserRole
+// ---------------------------------------------------------------------------
+
 impl TryFrom<pb::UserRole> for DomainUserRole {
     type Error = Status;
 
@@ -23,8 +27,12 @@ impl TryFrom<pb::UserRole> for DomainUserRole {
     }
 }
 
-pub fn user_role_to_domain(value: i32) -> Result<DomainUserRole, Status> {
-    enum_from_i32(value, pb::UserRole::Unspecified).try_into()
+impl TryFrom<i32> for DomainUserRole {
+    type Error = Status;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        enum_from_i32(value, pb::UserRole::Unspecified).try_into()
+    }
 }
 
 impl From<DomainUserRole> for pb::UserRole {
@@ -38,10 +46,15 @@ impl From<DomainUserRole> for pb::UserRole {
     }
 }
 
-pub fn user_role_to_pb(role: DomainUserRole) -> i32 {
-    let pb_role: pb::UserRole = role.into();
-    pb_role as i32
+impl From<DomainUserRole> for i32 {
+    fn from(role: DomainUserRole) -> Self {
+        pb::UserRole::from(role) as i32
+    }
 }
+
+// ---------------------------------------------------------------------------
+// DataRole
+// ---------------------------------------------------------------------------
 
 impl TryFrom<pb::DataRole> for DomainDataRole {
     type Error = Status;
@@ -56,8 +69,12 @@ impl TryFrom<pb::DataRole> for DomainDataRole {
     }
 }
 
-pub fn data_role_to_domain(value: i32) -> Result<DomainDataRole, Status> {
-    enum_from_i32(value, pb::DataRole::Unspecified).try_into()
+impl TryFrom<i32> for DomainDataRole {
+    type Error = Status;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        enum_from_i32(value, pb::DataRole::Unspecified).try_into()
+    }
 }
 
 impl From<DomainDataRole> for pb::DataRole {
@@ -70,10 +87,15 @@ impl From<DomainDataRole> for pb::DataRole {
     }
 }
 
-pub fn data_role_to_pb(role: DomainDataRole) -> i32 {
-    let pb_role: pb::DataRole = role.into();
-    pb_role as i32
+impl From<DomainDataRole> for i32 {
+    fn from(role: DomainDataRole) -> Self {
+        pb::DataRole::from(role) as i32
+    }
 }
+
+// ---------------------------------------------------------------------------
+// PrivilegeRule
+// ---------------------------------------------------------------------------
 
 impl TryFrom<pb::PrivilegeRule> for DomainPrivilegeRule {
     type Error = Status;
@@ -84,40 +106,32 @@ impl TryFrom<pb::PrivilegeRule> for DomainPrivilegeRule {
             .scope
             .ok_or_else(|| Status::invalid_argument("privilege.scope must be set"))?
         {
-            Scope::Global(g) => Ok(DomainPrivilegeRule::Global {
-                role: user_role_to_domain(g.role)?,
+            Scope::Global(g) => Ok(Self::Global {
+                role: g.role.try_into()?,
             }),
-            Scope::Database(d) => Ok(DomainPrivilegeRule::Database {
+            Scope::Database(d) => Ok(Self::Database {
                 db_name: d.db_name,
-                role: data_role_to_domain(d.role)?,
+                role: d.role.try_into()?,
             }),
-            Scope::Table(t) => Ok(DomainPrivilegeRule::Table {
+            Scope::Table(t) => Ok(Self::Table {
                 db_name: t.db_name,
                 table_name: t.table_name,
-                role: data_role_to_domain(t.role)?,
+                role: t.role.try_into()?,
             }),
         }
     }
-}
-
-pub fn privilege_rules_to_domain(
-    rules: Vec<pb::PrivilegeRule>,
-) -> Result<Vec<DomainPrivilegeRule>, Status> {
-    rules.into_iter().map(TryInto::try_into).collect()
 }
 
 impl From<DomainPrivilegeRule> for pb::PrivilegeRule {
     fn from(rule: DomainPrivilegeRule) -> Self {
         let scope = match rule {
             DomainPrivilegeRule::Global { role } => {
-                pb::privilege_rule::Scope::Global(pb::privilege_rule::Global {
-                    role: user_role_to_pb(role),
-                })
+                pb::privilege_rule::Scope::Global(pb::privilege_rule::Global { role: role.into() })
             }
             DomainPrivilegeRule::Database { db_name, role } => {
                 pb::privilege_rule::Scope::Database(pb::privilege_rule::Database {
                     db_name,
-                    role: data_role_to_pb(role),
+                    role: role.into(),
                 })
             }
             DomainPrivilegeRule::Table {
@@ -127,12 +141,16 @@ impl From<DomainPrivilegeRule> for pb::PrivilegeRule {
             } => pb::privilege_rule::Scope::Table(pb::privilege_rule::Table {
                 db_name,
                 table_name,
-                role: data_role_to_pb(role),
+                role: role.into(),
             }),
         };
-        pb::PrivilegeRule { scope: Some(scope) }
+        Self { scope: Some(scope) }
     }
 }
+
+// ---------------------------------------------------------------------------
+// PrivilegeTarget
+// ---------------------------------------------------------------------------
 
 impl TryFrom<pb::PrivilegeTarget> for DomainPrivilegeTarget {
     type Error = Status;
@@ -143,9 +161,9 @@ impl TryFrom<pb::PrivilegeTarget> for DomainPrivilegeTarget {
             .target
             .ok_or_else(|| Status::invalid_argument("privilege_target.target must be set"))?
         {
-            Target::Global(_) => Ok(DomainPrivilegeTarget::Global),
-            Target::Database(d) => Ok(DomainPrivilegeTarget::Database { db_name: d.db_name }),
-            Target::Table(t) => Ok(DomainPrivilegeTarget::Table {
+            Target::Global(_) => Ok(Self::Global),
+            Target::Database(d) => Ok(Self::Database { db_name: d.db_name }),
+            Target::Table(t) => Ok(Self::Table {
                 db_name: t.db_name,
                 table_name: t.table_name,
             }),
@@ -170,7 +188,7 @@ impl From<DomainPrivilegeTarget> for pb::PrivilegeTarget {
                 table_name,
             }),
         };
-        pb::PrivilegeTarget {
+        Self {
             target: Some(target),
         }
     }

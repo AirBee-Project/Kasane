@@ -1,7 +1,6 @@
 use tonic::{Request, Response, Status};
 
 use super::auth_ctx::authenticate;
-use super::convert_users::{privilege_rules_to_domain, user_role_to_pb};
 use super::pb::{
     CreateUserRequest, CreateUserResponse, DeleteUserRequest, DeleteUserResponse,
     GetPrivilegesRequest, GetUserRequest, GrantPrivilegeRequest, GrantPrivilegeResponse,
@@ -23,7 +22,7 @@ pub struct UserServiceImpl {
 fn summary_to_pb(summary: crate::models::users::UserSummary) -> UserSummary {
     UserSummary {
         username: summary.username,
-        global_role: summary.global_role.map(user_role_to_pb),
+        global_role: summary.global_role.map(Into::into),
     }
 }
 
@@ -56,10 +55,15 @@ impl UserService for UserServiceImpl {
         let req = request.into_inner();
 
         check_global_admin(&auth_user)?;
+        let privileges = req
+            .privileges
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, _>>()?;
         let domain_req = DomainCreateUserRequest {
             username: req.username,
             password: req.password,
-            privileges: privilege_rules_to_domain(req.privileges)?,
+            privileges,
         };
         crate::services::users::create_user(&self.app_state, domain_req).await?;
         Ok(Response::new(CreateUserResponse {}))

@@ -1,7 +1,7 @@
 use tonic::{Request, Response, Status};
 
 use super::auth_ctx::authenticate;
-use super::convert_query::execute_query_request_to_domain;
+use super::convert_query::ExecuteQuery;
 use super::pb::{ExecuteQueryRequest, SearchDataResponse, query_service_server::QueryService};
 use crate::AppState;
 use crate::models::database::table::data::GetDataQuery;
@@ -19,7 +19,7 @@ impl QueryService for QueryServiceImpl {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
-        let parsed = execute_query_request_to_domain(req)?;
+        let parsed: ExecuteQuery = req.try_into()?;
         let query_params = GetDataQuery {
             format: parsed.format,
             limit: parsed.limit,

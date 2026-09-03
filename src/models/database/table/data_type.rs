@@ -76,17 +76,6 @@ fn is_zero(num: &u16) -> bool {
     *num == 0
 }
 
-impl From<TableDataType> for JsonValueType {
-    fn from(value: TableDataType) -> Self {
-        match value {
-            TableDataType::Text | TableDataType::Enum => Self::String,
-            TableDataType::Int => Self::Number,
-            TableDataType::Boolean => Self::Bool,
-            TableDataType::Presence => Self::Null,
-        }
-    }
-}
-
 impl TableConstraints {
     /// `Enum` の選択肢に未割り当ての ID を振る。
     ///
@@ -265,14 +254,4 @@ impl TableConstraints {
         }
         Ok(())
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum JsonValueType {
-    String,
-    Number,
-    Bool,
-    Array,
-    Object,
-    Null,
 }

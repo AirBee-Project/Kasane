@@ -1,4 +1,4 @@
-use crate::models::database::table::JsonValueType;
+use crate::models::ValueType;
 use crate::models::users::UserRole;
 use std::fmt;
 
@@ -170,8 +170,8 @@ pub enum AppError {
     InvalidSpatialId { reason: String },
     #[error("Value type mismatch: expected {expected:?}, got {actual:?}")]
     ValueTypeMismatch {
-        actual: JsonValueType,
-        expected: JsonValueType,
+        actual: ValueType,
+        expected: ValueType,
     },
     #[error("Numeric value out of range: expected {expected}, got {actual}")]
     NumericValueOutOfRange { actual: String, expected: String },

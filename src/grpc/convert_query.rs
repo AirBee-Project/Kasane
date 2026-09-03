@@ -4,9 +4,9 @@
 
 use tonic::Status;
 
-use super::convert::{enum_from_i32, table_data_type_to_domain};
-use super::convert_data::{output_format_to_domain, spatial_ids_to_domain, typed_value_to_json};
+use super::convert::enum_from_i32;
 use super::pb;
+use crate::models::ValueLiteral;
 use crate::models::query::{
     Direction, ExecuteQueryRequest, FalloffPattern, FilterCondition, MappingEntry, MathOperand,
     MathOperator, MergePolicyKind, QueryNode,
@@ -15,6 +15,10 @@ use crate::models::query::{
 fn required<T>(value: Option<T>, field: &str) -> Result<T, Status> {
     value.ok_or_else(|| Status::invalid_argument(format!("{field} must be set")))
 }
+
+// ---------------------------------------------------------------------------
+// MergePolicyKind
+// ---------------------------------------------------------------------------
 
 impl TryFrom<pb::MergePolicyKind> for MergePolicyKind {
     type Error = Status;
@@ -35,9 +39,17 @@ impl TryFrom<pb::MergePolicyKind> for MergePolicyKind {
     }
 }
 
-fn merge_policy_to_domain(value: i32) -> Result<MergePolicyKind, Status> {
-    enum_from_i32(value, pb::MergePolicyKind::Unspecified).try_into()
+impl TryFrom<i32> for MergePolicyKind {
+    type Error = Status;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        enum_from_i32(value, pb::MergePolicyKind::Unspecified).try_into()
+    }
 }
+
+// ---------------------------------------------------------------------------
+// MathOperator
+// ---------------------------------------------------------------------------
 
 impl TryFrom<pb::MathOperator> for MathOperator {
     type Error = Status;
@@ -55,9 +67,17 @@ impl TryFrom<pb::MathOperator> for MathOperator {
     }
 }
 
-fn math_operator_to_domain(value: i32) -> Result<MathOperator, Status> {
-    enum_from_i32(value, pb::MathOperator::Unspecified).try_into()
+impl TryFrom<i32> for MathOperator {
+    type Error = Status;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        enum_from_i32(value, pb::MathOperator::Unspecified).try_into()
+    }
 }
+
+// ---------------------------------------------------------------------------
+// FalloffPattern
+// ---------------------------------------------------------------------------
 
 impl From<pb::FalloffPattern> for FalloffPattern {
     fn from(value: pb::FalloffPattern) -> Self {
@@ -69,200 +89,303 @@ impl From<pb::FalloffPattern> for FalloffPattern {
     }
 }
 
-fn falloff_pattern_to_domain(value: i32) -> FalloffPattern {
-    enum_from_i32(value, pb::FalloffPattern::Unspecified).into()
-}
-
-fn direction_to_domain(value: Option<i32>) -> Result<Option<Direction>, Status> {
-    use pb::Direction as P;
-    let Some(value) = value else { return Ok(None) };
-    match enum_from_i32(value, P::Unspecified) {
-        P::Upper => Ok(Some(Direction::Upper)),
-        P::Lower => Ok(Some(Direction::Lower)),
-        P::Unspecified => Err(Status::invalid_argument("direction must be specified")),
+impl From<i32> for FalloffPattern {
+    fn from(value: i32) -> Self {
+        enum_from_i32(value, pb::FalloffPattern::Unspecified).into()
     }
 }
 
-fn math_operand_to_domain(operand: Option<pb::MathOperand>) -> Result<MathOperand, Status> {
-    use pb::math_operand::Value as P;
-    match required(operand, "operand")?.value {
-        Some(P::IntValue(v)) => Ok(MathOperand::Int(v)),
-        Some(P::FloatValue(v)) => Ok(MathOperand::Float(v)),
-        None => Err(Status::invalid_argument("operand.value must be set")),
+// ---------------------------------------------------------------------------
+// Direction
+// ---------------------------------------------------------------------------
+
+impl TryFrom<i32> for Direction {
+    type Error = Status;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        use pb::Direction as P;
+        match enum_from_i32(value, P::Unspecified) {
+            P::Upper => Ok(Self::Upper),
+            P::Lower => Ok(Self::Lower),
+            P::Unspecified => Err(Status::invalid_argument("direction must be specified")),
+        }
     }
 }
 
-fn filter_condition_to_domain(condition: pb::FilterCondition) -> Result<FilterCondition, Status> {
-    use pb::filter_condition::Mode;
-    match required(condition.mode, "condition.mode")? {
-        Mode::Equals(e) => Ok(FilterCondition::Equals {
-            value: typed_value_to_json(e.value),
-        }),
-        Mode::InRange(r) => Ok(FilterCondition::InRange {
-            min: r.min.map(|v| typed_value_to_json(Some(v))),
-            max: r.max.map(|v| typed_value_to_json(Some(v))),
-        }),
-        Mode::NotInRange(r) => Ok(FilterCondition::NotInRange {
-            min: r.min.map(|v| typed_value_to_json(Some(v))),
-            max: r.max.map(|v| typed_value_to_json(Some(v))),
-        }),
+// ---------------------------------------------------------------------------
+// MathOperand
+// ---------------------------------------------------------------------------
+
+impl TryFrom<pb::MathOperand> for MathOperand {
+    type Error = Status;
+
+    fn try_from(operand: pb::MathOperand) -> Result<Self, Self::Error> {
+        use pb::math_operand::Value as P;
+        match operand
+            .value
+            .ok_or_else(|| Status::invalid_argument("operand.value must be set"))?
+        {
+            P::IntValue(v) => Ok(Self::Int(v)),
+            P::FloatValue(v) => Ok(Self::Float(v)),
+        }
     }
 }
 
-fn mapping_entry_to_domain(entry: pb::MappingEntry) -> MappingEntry {
-    MappingEntry {
-        from: typed_value_to_json(entry.from),
-        to: typed_value_to_json(entry.to),
+// ---------------------------------------------------------------------------
+// FilterCondition
+// ---------------------------------------------------------------------------
+
+impl TryFrom<pb::FilterCondition> for FilterCondition {
+    type Error = Status;
+
+    fn try_from(condition: pb::FilterCondition) -> Result<Self, Self::Error> {
+        use pb::filter_condition::Mode;
+        match required(condition.mode, "condition.mode")? {
+            Mode::Equals(e) => Ok(Self::Equals {
+                value: e.value.map(Into::into).unwrap_or(ValueLiteral::Null),
+            }),
+            Mode::InRange(r) => Ok(Self::InRange {
+                min: r.min.map(Into::into),
+                max: r.max.map(Into::into),
+            }),
+            Mode::NotInRange(r) => Ok(Self::NotInRange {
+                min: r.min.map(Into::into),
+                max: r.max.map(Into::into),
+            }),
+        }
     }
 }
 
-/// `QueryNode` は自身を再帰的に参照するため、変換も再帰関数になる。
-pub fn query_node_to_domain(node: pb::QueryNode) -> Result<QueryNode, Status> {
-    use pb::query_node::Node;
+// ---------------------------------------------------------------------------
+// MappingEntry
+// ---------------------------------------------------------------------------
 
-    Ok(match required(node.node, "query.node")? {
-        Node::Source(s) => QueryNode::Source {
-            database: s.database,
-            table: s.table,
-        },
-        Node::FilterValues(f) => QueryNode::FilterValues {
-            input: Box::new(query_node_to_domain(*required(
-                f.input,
-                "filter_values.input",
-            )?)?),
-            condition: filter_condition_to_domain(required(
-                f.condition,
-                "filter_values.condition",
-            )?)?,
-        },
-        Node::ShiftX(s) => QueryNode::ShiftX {
-            input: Box::new(query_node_to_domain(*required(s.input, "shift_x.input")?)?),
-            z: s.z as u8,
-            index: s.index,
-        },
-        Node::ShiftY(s) => QueryNode::ShiftY {
-            input: Box::new(query_node_to_domain(*required(s.input, "shift_y.input")?)?),
-            z: s.z as u8,
-            index: s.index,
-        },
-        Node::ShiftF(s) => QueryNode::ShiftF {
-            input: Box::new(query_node_to_domain(*required(s.input, "shift_f.input")?)?),
-            z: s.z as u8,
-            index: s.index,
-        },
-        Node::ZoomOut(z0) => QueryNode::ZoomOut {
-            input: Box::new(query_node_to_domain(*required(
-                z0.input,
-                "zoom_out.input",
-            )?)?),
-            z: z0.z as u8,
-            policy: merge_policy_to_domain(z0.policy)?,
-        },
-        Node::ExtrudeX(e) => QueryNode::ExtrudeX {
-            input: Box::new(query_node_to_domain(*required(
-                e.input,
-                "extrude_x.input",
-            )?)?),
-            z: e.z as u8,
-            start: e.start,
-            end: e.end,
-            policy: merge_policy_to_domain(e.policy)?,
-        },
-        Node::ExtrudeY(e) => QueryNode::ExtrudeY {
-            input: Box::new(query_node_to_domain(*required(
-                e.input,
-                "extrude_y.input",
-            )?)?),
-            z: e.z as u8,
-            start: e.start,
-            end: e.end,
-            policy: merge_policy_to_domain(e.policy)?,
-        },
-        Node::ExtrudeF(e) => QueryNode::ExtrudeF {
-            input: Box::new(query_node_to_domain(*required(
-                e.input,
-                "extrude_f.input",
-            )?)?),
-            z: e.z as u8,
-            start: e.start,
-            end: e.end,
-            policy: merge_policy_to_domain(e.policy)?,
-        },
-        Node::FalloffX(f) => QueryNode::FalloffX {
-            input: Box::new(query_node_to_domain(*required(
-                f.input,
-                "falloff_x.input",
-            )?)?),
-            z: f.z as u8,
-            radius: f.radius,
-            pattern: falloff_pattern_to_domain(f.pattern),
-            direction: direction_to_domain(f.direction)?,
-            policy: merge_policy_to_domain(f.policy)?,
-        },
-        Node::FalloffY(f) => QueryNode::FalloffY {
-            input: Box::new(query_node_to_domain(*required(
-                f.input,
-                "falloff_y.input",
-            )?)?),
-            z: f.z as u8,
-            radius: f.radius,
-            pattern: falloff_pattern_to_domain(f.pattern),
-            direction: direction_to_domain(f.direction)?,
-            policy: merge_policy_to_domain(f.policy)?,
-        },
-        Node::FalloffF(f) => QueryNode::FalloffF {
-            input: Box::new(query_node_to_domain(*required(
-                f.input,
-                "falloff_f.input",
-            )?)?),
-            z: f.z as u8,
-            radius: f.radius,
-            pattern: falloff_pattern_to_domain(f.pattern),
-            direction: direction_to_domain(f.direction)?,
-            policy: merge_policy_to_domain(f.policy)?,
-        },
-        Node::Merge(m) => QueryNode::Merge {
-            left: Box::new(query_node_to_domain(*required(m.left, "merge.left")?)?),
-            right: Box::new(query_node_to_domain(*required(m.right, "merge.right")?)?),
-            default: typed_value_to_json(m.default_value),
-            policy: merge_policy_to_domain(m.policy)?,
-        },
-        Node::Difference(s) => QueryNode::Difference {
-            left: Box::new(query_node_to_domain(*required(s.left, "difference.left")?)?),
-            right: Box::new(query_node_to_domain(*required(
-                s.right,
-                "difference.right",
-            )?)?),
-        },
-        Node::Intersection(s) => QueryNode::Intersection {
-            left: Box::new(query_node_to_domain(*required(
-                s.left,
-                "intersection.left",
-            )?)?),
-            right: Box::new(query_node_to_domain(*required(
-                s.right,
-                "intersection.right",
-            )?)?),
-        },
-        Node::MapValues(m) => QueryNode::MapValues {
-            input: Box::new(query_node_to_domain(*required(
-                m.input,
-                "map_values.input",
-            )?)?),
-            output_type: table_data_type_to_domain(m.output_type)?,
-            mapping: m.mapping.into_iter().map(mapping_entry_to_domain).collect(),
-            default: typed_value_to_json(m.default_value),
-        },
-        Node::MathValues(m) => QueryNode::MathValues {
-            input: Box::new(query_node_to_domain(*required(
-                m.input,
-                "math_values.input",
-            )?)?),
-            operator: math_operator_to_domain(m.operator)?,
-            operand: math_operand_to_domain(m.operand)?,
-        },
-    })
+impl From<pb::MappingEntry> for MappingEntry {
+    fn from(entry: pb::MappingEntry) -> Self {
+        Self {
+            from: entry.from.map(Into::into).unwrap_or(ValueLiteral::Null),
+            to: entry.to.map(Into::into).unwrap_or(ValueLiteral::Null),
+        }
+    }
 }
+
+// ---------------------------------------------------------------------------
+// QueryNode
+// ---------------------------------------------------------------------------
+
+impl TryFrom<pb::QueryNode> for QueryNode {
+    type Error = Status;
+
+    fn try_from(node: pb::QueryNode) -> Result<Self, Self::Error> {
+        use pb::query_node::Node;
+
+        Ok(match required(node.node, "query.node")? {
+            Node::Source(s) => Self::Source {
+                database: s.database,
+                table: s.table,
+            },
+            Node::FilterValues(f) => Self::FilterValues {
+                input: Box::new(
+                    required(f.input, "filter_values.input")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+                condition: required(f.condition, "filter_values.condition")?.try_into()?,
+            },
+            Node::ShiftX(s) => Self::ShiftX {
+                input: Box::new(
+                    required(s.input, "shift_x.input")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+                z: s.z as u8,
+                index: s.index,
+            },
+            Node::ShiftY(s) => Self::ShiftY {
+                input: Box::new(
+                    required(s.input, "shift_y.input")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+                z: s.z as u8,
+                index: s.index,
+            },
+            Node::ShiftF(s) => Self::ShiftF {
+                input: Box::new(
+                    required(s.input, "shift_f.input")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+                z: s.z as u8,
+                index: s.index,
+            },
+            Node::ZoomOut(z0) => Self::ZoomOut {
+                input: Box::new(
+                    required(z0.input, "zoom_out.input")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+                z: z0.z as u8,
+                policy: z0.policy.try_into()?,
+            },
+            Node::ExtrudeX(e) => Self::ExtrudeX {
+                input: Box::new(
+                    required(e.input, "extrude_x.input")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+                z: e.z as u8,
+                start: e.start,
+                end: e.end,
+                policy: e.policy.try_into()?,
+            },
+            Node::ExtrudeY(e) => Self::ExtrudeY {
+                input: Box::new(
+                    required(e.input, "extrude_y.input")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+                z: e.z as u8,
+                start: e.start,
+                end: e.end,
+                policy: e.policy.try_into()?,
+            },
+            Node::ExtrudeF(e) => Self::ExtrudeF {
+                input: Box::new(
+                    required(e.input, "extrude_f.input")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+                z: e.z as u8,
+                start: e.start,
+                end: e.end,
+                policy: e.policy.try_into()?,
+            },
+            Node::FalloffX(f) => Self::FalloffX {
+                input: Box::new(
+                    required(f.input, "falloff_x.input")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+                z: f.z as u8,
+                radius: f.radius,
+                pattern: f.pattern.into(),
+                direction: f.direction.map(TryInto::try_into).transpose()?,
+                policy: f.policy.try_into()?,
+            },
+            Node::FalloffY(f) => Self::FalloffY {
+                input: Box::new(
+                    required(f.input, "falloff_y.input")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+                z: f.z as u8,
+                radius: f.radius,
+                pattern: f.pattern.into(),
+                direction: f.direction.map(TryInto::try_into).transpose()?,
+                policy: f.policy.try_into()?,
+            },
+            Node::FalloffF(f) => Self::FalloffF {
+                input: Box::new(
+                    required(f.input, "falloff_f.input")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+                z: f.z as u8,
+                radius: f.radius,
+                pattern: f.pattern.into(),
+                direction: f.direction.map(TryInto::try_into).transpose()?,
+                policy: f.policy.try_into()?,
+            },
+            Node::Merge(m) => Self::Merge {
+                left: Box::new(
+                    required(m.left, "merge.left")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+                right: Box::new(
+                    required(m.right, "merge.right")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+                default: m
+                    .default_value
+                    .map(Into::into)
+                    .unwrap_or(ValueLiteral::Null),
+                policy: m.policy.try_into()?,
+            },
+            Node::Difference(s) => Self::Difference {
+                left: Box::new(
+                    required(s.left, "difference.left")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+                right: Box::new(
+                    required(s.right, "difference.right")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+            },
+            Node::Intersection(s) => Self::Intersection {
+                left: Box::new(
+                    required(s.left, "intersection.left")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+                right: Box::new(
+                    required(s.right, "intersection.right")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+            },
+            Node::MapValues(m) => Self::MapValues {
+                input: Box::new(
+                    required(m.input, "map_values.input")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+                output_type: m.output_type.try_into()?,
+                mapping: m.mapping.into_iter().map(Into::into).collect(),
+                default: m
+                    .default_value
+                    .map(Into::into)
+                    .unwrap_or(ValueLiteral::Null),
+            },
+            Node::MathValues(m) => Self::MathValues {
+                input: Box::new(
+                    required(m.input, "math_values.input")?
+                        .as_ref()
+                        .clone()
+                        .try_into()?,
+                ),
+                operator: m.operator.try_into()?,
+                operand: required(m.operand, "math_values.operand")?.try_into()?,
+            },
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ExecuteQuery
+// ---------------------------------------------------------------------------
 
 pub struct ExecuteQuery {
     pub request: ExecuteQueryRequest,
@@ -270,20 +393,26 @@ pub struct ExecuteQuery {
     pub limit: Option<usize>,
 }
 
-pub fn execute_query_request_to_domain(
-    req: pb::ExecuteQueryRequest,
-) -> Result<ExecuteQuery, Status> {
-    let value_type = req.value_type.map(table_data_type_to_domain).transpose()?;
-    let spatial_ids = spatial_ids_to_domain(req.spatial_ids)?;
-    let query = query_node_to_domain(required(req.query, "query")?)?;
+impl TryFrom<pb::ExecuteQueryRequest> for ExecuteQuery {
+    type Error = Status;
 
-    Ok(ExecuteQuery {
-        request: ExecuteQueryRequest {
-            value_type,
-            spatial_ids,
-            query,
-        },
-        format: output_format_to_domain(req.format),
-        limit: req.limit.map(|v| v as usize),
-    })
+    fn try_from(req: pb::ExecuteQueryRequest) -> Result<Self, Self::Error> {
+        let value_type = req.value_type.map(TryInto::try_into).transpose()?;
+        let spatial_ids: Vec<_> = req
+            .spatial_ids
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, _>>()?;
+        let query = required(req.query, "query")?.try_into()?;
+
+        Ok(Self {
+            request: ExecuteQueryRequest {
+                value_type,
+                spatial_ids,
+                query,
+            },
+            format: req.format.into(),
+            limit: req.limit.map(|v| v as usize),
+        })
+    }
 }

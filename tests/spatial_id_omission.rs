@@ -1,31 +1,20 @@
 //! LMDB バックエンド向けの結合テスト。TiKV バックエンドのビルドでは対象外。
 #![cfg(feature = "backend-lmdb")]
 
-use kasane::models::spatial_id::{RawFlexId, RawRangeId, SpatialId};
+use kasane::models::spatial_id::SpatialId;
 use kasane::services::helpers::spatial_ids::to_spatial_id_set;
+use kasane_logic::{FlexId, RangeId, ZoomLevel};
 
 fn range(z: u8, f: Option<[i32; 2]>, x: Option<[u32; 2]>, y: Option<[u32; 2]>) -> SpatialId {
-    SpatialId::RangeId(RawRangeId {
-        z,
-        f,
-        x,
-        y,
-        i: None,
-        t: None,
-    })
+    let zoom = ZoomLevel::new(z).unwrap();
+    let f = f.unwrap_or([zoom.f_min(), zoom.f_max()]);
+    let x = x.unwrap_or([0, zoom.xy_max()]);
+    let y = y.unwrap_or([0, zoom.xy_max()]);
+    SpatialId::RangeId(RangeId::new(z, f, x, y).unwrap())
 }
 
 fn flex(fz: u8, fi: i32, xz: u8, xi: u32, yz: u8, yi: u32) -> SpatialId {
-    SpatialId::FlexId(RawFlexId {
-        f_zoomlevel: fz,
-        f_index: fi,
-        x_zoomlevel: xz,
-        x_index: xi,
-        y_zoomlevel: yz,
-        y_index: yi,
-        t_zoomlevel: None,
-        t_index: None,
-    })
+    SpatialId::FlexId(FlexId::new(fz, fi, xz, xi, yz, yi).unwrap())
 }
 
 #[test]

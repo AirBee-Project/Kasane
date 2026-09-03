@@ -1,5 +1,6 @@
+use crate::models::ValueLiteral;
 use crate::models::spatial_id::SpatialId;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// 同一空間に複数の値が集まったときの集約規則。
 #[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -22,34 +23,30 @@ pub enum MergePolicyKind {
 }
 
 /// 値フィルタの条件。
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(tag = "mode", rename_all = "camelCase")]
 pub enum FilterCondition {
     /// `value` に一致する値だけを残す
-    Equals { value: serde_json::Value },
+    Equals { value: ValueLiteral },
     /// 値が `min..=max`に入る値だけを残す
     InRange {
-        #[serde(default)]
-        min: Option<serde_json::Value>,
-        #[serde(default)]
-        max: Option<serde_json::Value>,
+        min: Option<ValueLiteral>,
+        max: Option<ValueLiteral>,
     },
     /// 値が `min..=max`に入る値を取り除く
     NotInRange {
-        #[serde(default)]
-        min: Option<serde_json::Value>,
-        #[serde(default)]
-        max: Option<serde_json::Value>,
+        min: Option<ValueLiteral>,
+        max: Option<ValueLiteral>,
     },
 }
 
 /// 対応表エントリ
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct MappingEntry {
     /// 変換前の値
-    pub from: serde_json::Value,
+    pub from: ValueLiteral,
     /// 変換後の値
-    pub to: serde_json::Value,
+    pub to: ValueLiteral,
 }
 
 /// 計算用のオペランド（整数と小数の両方を受け付ける）
@@ -197,7 +194,7 @@ pub enum QueryNode {
     Merge {
         left: Box<Self>,
         right: Box<Self>,
-        default: serde_json::Value,
+        default: ValueLiteral,
         policy: MergePolicyKind,
     },
 
@@ -215,7 +212,7 @@ pub enum QueryNode {
         /// 変換前後の対応表。`from` の重複は 400 で拒否される。
         mapping: Vec<MappingEntry>,
         /// 対応表に存在しない値に使う既定値
-        default: serde_json::Value,
+        default: ValueLiteral,
     },
 
     /// 値に対して四則演算を行う
@@ -275,9 +272,8 @@ impl QueryNode {
 }
 
 /// Tableに対するQueryを表現する型
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ExecuteQueryRequest {
-    #[serde(default)]
     pub value_type: Option<crate::models::database::table::TableDataType>,
     pub spatial_ids: Vec<SpatialId>,
     pub query: QueryNode,

@@ -5,6 +5,11 @@ package kasane;
 import "common.proto";
 import "data.proto";
 
+service QueryService {
+  // 複数のテーブルを対象にクエリ式を実行し、指定した空間IDの結果を取得する。
+  rpc Execute(ExecuteQueryRequest) returns (SearchDataResponse);
+}
+
 // 同一空間に複数の値が集まったときの集約規則。
 enum MergePolicyKind {
   MERGE_POLICY_KIND_UNSPECIFIED = 0;
@@ -175,9 +180,4 @@ message ExecuteQueryRequest {
   QueryNode query = 3;
   OutputFormat format = 4;
   optional uint64 limit = 5;
-}
-
-service QueryService {
-  // 複数のテーブルを対象にクエリ式を実行し、指定した空間IDの結果を取得する。
-  rpc Execute(ExecuteQueryRequest) returns (SearchDataResponse);
 }

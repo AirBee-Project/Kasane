@@ -24,13 +24,11 @@ pub mod users;
 
 pub mod pb {
     include!(concat!(env!("OUT_DIR"), "/kasane.rs"));
-
     pub const FILE_DESCRIPTOR_SET: &[u8] =
         include_bytes!(concat!(env!("OUT_DIR"), "/kasane_descriptor.bin"));
 }
 
-/// 指定アドレスへバインドする。`serve` と分けてあるのは、テストがポート `0`
-/// （OS 割り当て）で実際に選ばれたポートを、サーブ開始前に知る必要があるため。
+/// 指定アドレスへバインドする。`serve` と分けてあるのは、テストがポート `0` （OS 割り当て）で実際に選ばれたポートを、サーブ開始前に知る必要があるため。
 pub fn bind(app_state: AppState, addr: SocketAddr) -> std::io::Result<BoundServer> {
     let incoming = TcpIncoming::bind(addr)?;
     let local_addr = incoming.local_addr()?;
@@ -59,7 +57,6 @@ impl BoundServer {
     ) -> Result<(), tonic::transport::Error> {
         let app_state = self.app_state;
         let (health_reporter, health_service) = tonic_health::server::health_reporter();
-        // 互いに独立な更新なので、7回直列に待たず並行に走らせる。
         tokio::join!(
             health_reporter
                 .set_serving::<pb::system_service_server::SystemServiceServer<system::SystemServiceImpl>>(),
@@ -124,7 +121,6 @@ impl BoundServer {
         );
 
         Server::builder()
-            // grpc-web はブラウザの fetch/XHR で叩けるよう HTTP/1.1 でも受ける。
             .accept_http1(true)
             .layer(tower_http::trace::TraceLayer::new_for_grpc())
             .layer(grpc_web_cors_layer())
@@ -143,9 +139,8 @@ impl BoundServer {
     }
 }
 
-/// `KASANE_CORS_ALLOWED_ORIGINS`（カンマ区切り）で許可オリジンを絞れる。未設定なら全オリジン
-/// 許可（Bearer トークン方式で Cookie を使わないため、絞らなくてもただちに悪用できるわけでは
-/// ない）。`grpc-status`/`grpc-message` はブラウザの grpc-web クライアントが読めるよう公開する。
+/// `KASANE_CORS_ALLOWED_ORIGINS`でCORSを絞れる。
+/// 未設定なら全てのアクセスを許可する。
 fn grpc_web_cors_layer() -> tower_http::cors::CorsLayer {
     use tower_http::cors::{AllowOrigin, CorsLayer};
 

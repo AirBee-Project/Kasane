@@ -1,16 +1,13 @@
 use tonic::{Request, Response, Status};
 
 use super::auth_ctx::authenticate;
-use super::convert_data::{
-    output_format_to_domain, spatial_ids_to_domain, typed_value_to_json,
-    zoom_level_policy_to_domain,
-};
 use super::pb::{
     InsertDataRequest, InsertDataResponse, RemoveDataRequest, RemoveDataResponse,
     SearchDataRequest, SearchDataResponse, UpsertDataRequest, UpsertDataResponse,
     data_service_server::DataService,
 };
 use crate::AppState;
+use crate::models::ValueLiteral;
 use crate::models::database::table::data::GetDataQuery;
 
 pub struct DataServiceImpl {
@@ -26,10 +23,14 @@ impl DataService for DataServiceImpl {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
-        let spatial_ids = spatial_ids_to_domain(req.spatial_ids)?;
-        let zoom_level_policy = zoom_level_policy_to_domain(req.zoom_level_policy);
+        let spatial_ids: Vec<_> = req
+            .spatial_ids
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, _>>()?;
+        let zoom_level_policy = req.zoom_level_policy.into();
         let query = GetDataQuery {
-            format: output_format_to_domain(req.format),
+            format: req.format.into(),
             limit: req.limit.map(|v| v as usize),
         };
 
@@ -53,9 +54,13 @@ impl DataService for DataServiceImpl {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
-        let spatial_ids = spatial_ids_to_domain(req.spatial_ids)?;
-        let zoom_level_policy = zoom_level_policy_to_domain(req.zoom_level_policy);
-        let value = typed_value_to_json(req.value);
+        let spatial_ids: Vec<_> = req
+            .spatial_ids
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, _>>()?;
+        let zoom_level_policy = req.zoom_level_policy.into();
+        let value = req.value.map(Into::into).unwrap_or(ValueLiteral::Null);
 
         crate::services::database::table::data::insert::insert(
             &self.app_state,
@@ -77,9 +82,13 @@ impl DataService for DataServiceImpl {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
-        let spatial_ids = spatial_ids_to_domain(req.spatial_ids)?;
-        let zoom_level_policy = zoom_level_policy_to_domain(req.zoom_level_policy);
-        let value = typed_value_to_json(req.value);
+        let spatial_ids: Vec<_> = req
+            .spatial_ids
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, _>>()?;
+        let zoom_level_policy = req.zoom_level_policy.into();
+        let value = req.value.map(Into::into).unwrap_or(ValueLiteral::Null);
 
         crate::services::database::table::data::upsert::upsert(
             &self.app_state,
@@ -101,8 +110,12 @@ impl DataService for DataServiceImpl {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
-        let spatial_ids = spatial_ids_to_domain(req.spatial_ids)?;
-        let zoom_level_policy = zoom_level_policy_to_domain(req.zoom_level_policy);
+        let spatial_ids: Vec<_> = req
+            .spatial_ids
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, _>>()?;
+        let zoom_level_policy = req.zoom_level_policy.into();
 
         crate::services::database::table::data::remove::remove(
             &self.app_state,

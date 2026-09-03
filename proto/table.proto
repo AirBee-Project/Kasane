@@ -4,6 +4,15 @@ package kasane;
 
 import "common.proto";
 
+service TableService {
+  rpc Create(CreateTableRequest) returns (TableSummary);
+  rpc Get(GetTableRequest) returns (TableInfo);
+  rpc List(ListTablesRequest) returns (ListTablesResponse);
+  rpc Update(UpdateTableRequest) returns (UpdateTableResponse);
+  rpc Delete(DeleteTableRequest) returns (DeleteTableResponse);
+  rpc Copy(CopyTableRequest) returns (TableSummary);
+}
+
 // 一覧で返す軽量ビュー。件数は含まない。
 message TableSummary {
   string name = 1;
@@ -14,7 +23,7 @@ message TableSummary {
   bool is_temporal = 6;
 }
 
-// 単一テーブルの詳細情報。保持する空間ID(FlexId)の総数 `count` を必ず含む。
+// 単一テーブルの詳細情報。保持する空間ID(FlexId)の総数 `count` を含む。
 message TableInfo {
   string name = 1;
   TableDataType data_type = 2;
@@ -127,13 +136,4 @@ message CopyTableRequest {
   string table_name = 2;
   optional string copy_db_name = 3;
   string copy_table_name = 4;
-}
-
-service TableService {
-  rpc Create(CreateTableRequest) returns (TableSummary);
-  rpc Get(GetTableRequest) returns (TableInfo);
-  rpc List(ListTablesRequest) returns (ListTablesResponse);
-  rpc Update(UpdateTableRequest) returns (UpdateTableResponse);
-  rpc Delete(DeleteTableRequest) returns (DeleteTableResponse);
-  rpc Copy(CopyTableRequest) returns (TableSummary);
 }

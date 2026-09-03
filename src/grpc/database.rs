@@ -1,7 +1,6 @@
 use tonic::{Request, Response, Status};
 
 use super::auth_ctx::authenticate;
-use super::convert::parse_description_update;
 use super::pb::{
     CopyDatabaseRequest, CreateDatabaseRequest, DatabaseInfo, DeleteDatabaseRequest,
     DeleteDatabaseResponse, GetDatabaseRequest, ListDatabasesRequest, ListDatabasesResponse,
@@ -72,7 +71,7 @@ impl DatabaseService for DatabaseServiceImpl {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
-        let description = parse_description_update(req.description_update);
+        let description = req.description_update.map(Into::into);
 
         crate::services::database::update(
             &self.app_state,

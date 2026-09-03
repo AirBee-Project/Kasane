@@ -1,10 +1,6 @@
 use tonic::{Request, Response, Status};
 
 use super::auth_ctx::authenticate;
-use super::convert::{
-    parse_description_update, parse_table_constraints_update, table_constraints_to_domain,
-    table_data_type_to_domain,
-};
 use super::pb::{
     CopyTableRequest, CreateTableRequest, DeleteTableRequest, DeleteTableResponse, GetTableRequest,
     ListTablesRequest, ListTablesResponse, TableInfo, TableSummary, UpdateTableRequest,
@@ -28,9 +24,9 @@ impl TableService for TableServiceImpl {
 
         let domain_req = DomainCreateTableRequest {
             name: req.name.clone(),
-            data_type: table_data_type_to_domain(req.data_type)?,
+            data_type: req.data_type.try_into()?,
             max_zoom_level: req.max_zoom_level as u8,
-            constraints: table_constraints_to_domain(req.constraints)?,
+            constraints: req.constraints.map(TryInto::try_into).transpose()?,
             description: req.description,
             value_index: req.value_index,
             is_temporal: req.is_temporal,
@@ -83,8 +79,8 @@ impl TableService for TableServiceImpl {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
-        let constraints = parse_table_constraints_update(req.constraints_update)?;
-        let description = parse_description_update(req.description_update);
+        let constraints = req.constraints_update.map(TryInto::try_into).transpose()?;
+        let description = req.description_update.map(Into::into);
 
         crate::services::database::table::update::table_update(
             self.app_state.clone(),

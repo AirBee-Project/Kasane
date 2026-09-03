@@ -1,37 +1,33 @@
-use crate::models::spatial_id::{RawFlexId, RawRangeId, RawSingleId};
-use serde::{Deserialize, Serialize};
+use kasane_logic::{FlexId, RangeId, SingleId};
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(untagged)]
+use crate::models::ValueLiteral;
+
+#[derive(Debug, Clone)]
 pub enum GetDataResponse {
     Single(GetDataResponseSingle),
     Range(GetDataResponseRange),
     Flex(GetDataResponseFlex),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct GetDataResponseSingle {
-    pub dictionary: Vec<serde_json::Value>,
-    pub data: Vec<DataGroup<RawSingleId>>,
+    pub dictionary: Vec<ValueLiteral>,
+    pub data: Vec<DataGroup<SingleId>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct GetDataResponseRange {
-    pub dictionary: Vec<serde_json::Value>,
-    pub data: Vec<DataGroup<RawRangeId>>,
+    pub dictionary: Vec<ValueLiteral>,
+    pub data: Vec<DataGroup<RangeId>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct GetDataResponseFlex {
-    pub dictionary: Vec<serde_json::Value>,
-    pub data: Vec<DataGroup<RawFlexId>>,
+    pub dictionary: Vec<ValueLiteral>,
+    pub data: Vec<DataGroup<FlexId>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct DataGroup<T> {
     pub value_ref: usize,
     pub spatial_ids: Vec<T>,

@@ -4,6 +4,17 @@ package kasane;
 
 import "common.proto";
 
+service UserService {
+  rpc List(ListUsersRequest) returns (ListUsersResponse);
+  rpc Create(CreateUserRequest) returns (CreateUserResponse);
+  rpc Get(GetUserRequest) returns (UserInfo);
+  rpc Delete(DeleteUserRequest) returns (DeleteUserResponse);
+  rpc UpdatePassword(UpdatePasswordRequest) returns (UpdatePasswordResponse);
+  rpc GetPrivileges(GetPrivilegesRequest) returns (PrivilegesResponse);
+  rpc GrantPrivilege(GrantPrivilegeRequest) returns (GrantPrivilegeResponse);
+  rpc RevokePrivilege(RevokePrivilegeRequest) returns (RevokePrivilegeResponse);
+}
+
 // API 上の権限ルール表現。保存形式は UUID ベースだが、外部には
 // データベース名・テーブル名で見せる（付与時に名前解決する）。
 message PrivilegeRule {
@@ -127,14 +138,3 @@ message RevokePrivilegeRequest {
 }
 
 message RevokePrivilegeResponse {}
-
-service UserService {
-  rpc List(ListUsersRequest) returns (ListUsersResponse);
-  rpc Create(CreateUserRequest) returns (CreateUserResponse);
-  rpc Get(GetUserRequest) returns (UserInfo);
-  rpc Delete(DeleteUserRequest) returns (DeleteUserResponse);
-  rpc UpdatePassword(UpdatePasswordRequest) returns (UpdatePasswordResponse);
-  rpc GetPrivileges(GetPrivilegesRequest) returns (PrivilegesResponse);
-  rpc GrantPrivilege(GrantPrivilegeRequest) returns (GrantPrivilegeResponse);
-  rpc RevokePrivilege(RevokePrivilegeRequest) returns (RevokePrivilegeResponse);
-}

@@ -19,7 +19,7 @@ pub async fn upsert(
     db_name: &str,
     table_name: &str,
     spatial_ids: &[SpatialId],
-    value: serde_json::Value,
+    value: crate::models::ValueLiteral,
     zoom_level_policy: &ZoomLevelPolicy,
 ) -> Result<(), AppError> {
     let table = authorized_table(app_state, user, db_name, table_name, UserRole::Write).await?;

@@ -4,6 +4,13 @@ package kasane;
 
 import "common.proto";
 
+service DataService {
+  rpc Search(SearchDataRequest) returns (SearchDataResponse);
+  rpc Insert(InsertDataRequest) returns (InsertDataResponse);
+  rpc Upsert(UpsertDataRequest) returns (UpsertDataResponse);
+  rpc Remove(RemoveDataRequest) returns (RemoveDataResponse);
+}
+
 // 検索結果として返す空間IDの表現形式。
 enum OutputFormat {
   OUTPUT_FORMAT_UNSPECIFIED = 0;
@@ -66,10 +73,3 @@ message RemoveDataRequest {
 }
 
 message RemoveDataResponse {}
-
-service DataService {
-  rpc Search(SearchDataRequest) returns (SearchDataResponse);
-  rpc Insert(InsertDataRequest) returns (InsertDataResponse);
-  rpc Upsert(UpsertDataRequest) returns (UpsertDataResponse);
-  rpc Remove(RemoveDataRequest) returns (RemoveDataResponse);
-}

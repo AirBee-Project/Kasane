@@ -2,6 +2,15 @@ syntax = "proto3";
 
 package kasane;
 
+service DatabaseService {
+  rpc Create(CreateDatabaseRequest) returns (DatabaseInfo);
+  rpc Get(GetDatabaseRequest) returns (DatabaseInfo);
+  rpc List(ListDatabasesRequest) returns (ListDatabasesResponse);
+  rpc Update(UpdateDatabaseRequest) returns (UpdateDatabaseResponse);
+  rpc Delete(DeleteDatabaseRequest) returns (DeleteDatabaseResponse);
+  rpc Copy(CopyDatabaseRequest) returns (DatabaseInfo);
+}
+
 message DatabaseInfo {
   string name = 1;
   optional string description = 2;
@@ -48,13 +57,4 @@ message DeleteDatabaseResponse {}
 message CopyDatabaseRequest {
   string db_name = 1;
   string copy_name = 2;
-}
-
-service DatabaseService {
-  rpc Create(CreateDatabaseRequest) returns (DatabaseInfo);
-  rpc Get(GetDatabaseRequest) returns (DatabaseInfo);
-  rpc List(ListDatabasesRequest) returns (ListDatabasesResponse);
-  rpc Update(UpdateDatabaseRequest) returns (UpdateDatabaseResponse);
-  rpc Delete(DeleteDatabaseRequest) returns (DeleteDatabaseResponse);
-  rpc Copy(CopyDatabaseRequest) returns (DatabaseInfo);
 }
