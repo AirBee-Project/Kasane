@@ -9,14 +9,12 @@ use tonic_web::GrpcWebLayer;
 use crate::AppState;
 
 pub mod auth;
-pub mod auth_ctx;
 pub mod convert;
 pub mod convert_data;
 pub mod convert_query;
 pub mod convert_users;
 pub mod data;
 pub mod database;
-pub mod interceptor;
 pub mod query;
 pub mod system;
 pub mod table;
@@ -84,7 +82,7 @@ impl BoundServer {
             system::SystemServiceImpl {
                 app_state: app_state.clone(),
             },
-            interceptor::require_auth,
+            auth::require_auth,
         );
         let auth_service = pb::auth_service_server::AuthServiceServer::new(auth::AuthServiceImpl {
             app_state: app_state.clone(),
@@ -93,31 +91,31 @@ impl BoundServer {
             database::DatabaseServiceImpl {
                 app_state: app_state.clone(),
             },
-            interceptor::require_auth,
+            auth::require_auth,
         );
         let table_service = pb::table_service_server::TableServiceServer::with_interceptor(
             table::TableServiceImpl {
                 app_state: app_state.clone(),
             },
-            interceptor::require_auth,
+            auth::require_auth,
         );
         let data_service = pb::data_service_server::DataServiceServer::with_interceptor(
             data::DataServiceImpl {
                 app_state: app_state.clone(),
             },
-            interceptor::require_auth,
+            auth::require_auth,
         );
         let query_service = pb::query_service_server::QueryServiceServer::with_interceptor(
             query::QueryServiceImpl {
                 app_state: app_state.clone(),
             },
-            interceptor::require_auth,
+            auth::require_auth,
         );
         let user_service = pb::user_service_server::UserServiceServer::with_interceptor(
             users::UserServiceImpl {
                 app_state: app_state.clone(),
             },
-            interceptor::require_auth,
+            auth::require_auth,
         );
 
         Server::builder()

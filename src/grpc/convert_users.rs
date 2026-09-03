@@ -9,10 +9,6 @@ use crate::models::users::{
     PrivilegeTarget as DomainPrivilegeTarget, UserRole as DomainUserRole,
 };
 
-// ---------------------------------------------------------------------------
-// UserRole
-// ---------------------------------------------------------------------------
-
 impl TryFrom<pb::UserRole> for DomainUserRole {
     type Error = Status;
 
@@ -52,10 +48,6 @@ impl From<DomainUserRole> for i32 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// DataRole
-// ---------------------------------------------------------------------------
-
 impl TryFrom<pb::DataRole> for DomainDataRole {
     type Error = Status;
 
@@ -92,10 +84,6 @@ impl From<DomainDataRole> for i32 {
         pb::DataRole::from(role) as i32
     }
 }
-
-// ---------------------------------------------------------------------------
-// PrivilegeRule
-// ---------------------------------------------------------------------------
 
 impl TryFrom<pb::PrivilegeRule> for DomainPrivilegeRule {
     type Error = Status;
@@ -147,10 +135,6 @@ impl From<DomainPrivilegeRule> for pb::PrivilegeRule {
         Self { scope: Some(scope) }
     }
 }
-
-// ---------------------------------------------------------------------------
-// PrivilegeTarget
-// ---------------------------------------------------------------------------
 
 impl TryFrom<pb::PrivilegeTarget> for DomainPrivilegeTarget {
     type Error = Status;

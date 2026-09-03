@@ -16,8 +16,7 @@ use crate::repositories::CatalogRepository;
 /// 認証済みユーザーを運ぶための包み。
 ///
 /// 権限判定は [`User`] 側にあり `Deref` 越しに使う。認可のドメインロジックを gRPC 層へ
-/// 漏らさないため。JWT の検証とこの型の組み立ては [`crate::grpc::interceptor`] /
-/// [`crate::grpc::auth_ctx`] が行う。
+/// 漏らさないため。JWT の検証とこの型の組み立ては [`crate::grpc::auth`] が行う。
 #[derive(Clone)]
 pub struct AuthUser {
     pub user: User,

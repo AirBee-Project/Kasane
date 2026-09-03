@@ -16,10 +16,6 @@ fn required<T>(value: Option<T>, field: &str) -> Result<T, Status> {
     value.ok_or_else(|| Status::invalid_argument(format!("{field} must be set")))
 }
 
-// ---------------------------------------------------------------------------
-// MergePolicyKind
-// ---------------------------------------------------------------------------
-
 impl TryFrom<pb::MergePolicyKind> for MergePolicyKind {
     type Error = Status;
 
@@ -47,10 +43,6 @@ impl TryFrom<i32> for MergePolicyKind {
     }
 }
 
-// ---------------------------------------------------------------------------
-// MathOperator
-// ---------------------------------------------------------------------------
-
 impl TryFrom<pb::MathOperator> for MathOperator {
     type Error = Status;
 
@@ -75,10 +67,6 @@ impl TryFrom<i32> for MathOperator {
     }
 }
 
-// ---------------------------------------------------------------------------
-// FalloffPattern
-// ---------------------------------------------------------------------------
-
 impl From<pb::FalloffPattern> for FalloffPattern {
     fn from(value: pb::FalloffPattern) -> Self {
         match value {
@@ -95,10 +83,6 @@ impl From<i32> for FalloffPattern {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Direction
-// ---------------------------------------------------------------------------
-
 impl TryFrom<i32> for Direction {
     type Error = Status;
 
@@ -111,10 +95,6 @@ impl TryFrom<i32> for Direction {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// MathOperand
-// ---------------------------------------------------------------------------
 
 impl TryFrom<pb::MathOperand> for MathOperand {
     type Error = Status;
@@ -130,10 +110,6 @@ impl TryFrom<pb::MathOperand> for MathOperand {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// FilterCondition
-// ---------------------------------------------------------------------------
 
 impl TryFrom<pb::FilterCondition> for FilterCondition {
     type Error = Status;
@@ -156,10 +132,6 @@ impl TryFrom<pb::FilterCondition> for FilterCondition {
     }
 }
 
-// ---------------------------------------------------------------------------
-// MappingEntry
-// ---------------------------------------------------------------------------
-
 impl From<pb::MappingEntry> for MappingEntry {
     fn from(entry: pb::MappingEntry) -> Self {
         Self {
@@ -168,10 +140,6 @@ impl From<pb::MappingEntry> for MappingEntry {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// QueryNode
-// ---------------------------------------------------------------------------
 
 impl TryFrom<pb::QueryNode> for QueryNode {
     type Error = Status;
@@ -382,10 +350,6 @@ impl TryFrom<pb::QueryNode> for QueryNode {
         })
     }
 }
-
-// ---------------------------------------------------------------------------
-// ExecuteQuery
-// ---------------------------------------------------------------------------
 
 pub struct ExecuteQuery {
     pub request: ExecuteQueryRequest,

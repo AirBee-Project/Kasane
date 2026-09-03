@@ -35,7 +35,7 @@ flowchart TD
 
 - proto（`proto/kasane/v1/*.proto`）から生成された gRPC サービス・メッセージ型（`grpc::pb`）と、各サービスの実装（`grpc::database`, `grpc::table` 等）を置く。
 - `grpc::convert*` が proto のメッセージ型とドメイン型（`models`）の相互変換を担う。
-- 認証は `grpc::interceptor`（JWT の検証）と `grpc::auth_ctx`（利用者レコードの読み直しと `AuthUser` の組み立て）に分かれる。
+- 認証は `grpc::auth`（JWT の検証、利用者レコードの読み直しと `AuthUser` の組み立て、Login RPC）が集約して担う。
 - ドメインロジックや DB 操作は持たない。
 
 ### `services`

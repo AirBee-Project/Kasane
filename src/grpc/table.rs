@@ -1,6 +1,6 @@
 use tonic::{Request, Response, Status};
 
-use super::auth_ctx::authenticate;
+use super::auth::authenticate;
 use super::pb::{
     CopyTableRequest, CreateTableRequest, DeleteTableRequest, DeleteTableResponse, GetTableRequest,
     ListTablesRequest, ListTablesResponse, TableInfo, TableSummary, UpdateTableRequest,

@@ -1,6 +1,6 @@
 use tonic::{Request, Response, Status};
 
-use super::auth_ctx::authenticate;
+use super::auth::authenticate;
 use super::convert_query::ExecuteQuery;
 use super::pb::{ExecuteQueryRequest, SearchDataResponse, query_service_server::QueryService};
 use crate::AppState;

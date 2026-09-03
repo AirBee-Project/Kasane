@@ -1,6 +1,6 @@
 use tonic::{Request, Response, Status};
 
-use super::auth_ctx::authenticate;
+use super::auth::authenticate;
 use super::pb::{
     GetSystemInfoRequest, GetSystemInfoResponse, system_service_server::SystemService,
 };
