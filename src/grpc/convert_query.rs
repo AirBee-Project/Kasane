@@ -6,7 +6,6 @@ use tonic::Status;
 
 use super::convert::enum_from_i32;
 use super::pb;
-use crate::models::ValueLiteral;
 use crate::models::query::{
     Direction, ExecuteQueryRequest, FalloffPattern, FilterCondition, MappingEntry, MathOperand,
     MathOperator, MergePolicyKind, QueryNode,
@@ -14,6 +13,11 @@ use crate::models::query::{
 
 fn required<T>(value: Option<T>, field: &str) -> Result<T, Status> {
     value.ok_or_else(|| Status::invalid_argument(format!("{field} must be set")))
+}
+
+fn required_node(node: Option<Box<pb::QueryNode>>, field: &str) -> Result<Box<QueryNode>, Status> {
+    let boxed = required(node, field)?;
+    Ok(Box::new((*boxed).try_into()?))
 }
 
 impl TryFrom<pb::MergePolicyKind> for MergePolicyKind {
@@ -118,7 +122,7 @@ impl TryFrom<pb::FilterCondition> for FilterCondition {
         use pb::filter_condition::Mode;
         match required(condition.mode, "condition.mode")? {
             Mode::Equals(e) => Ok(Self::Equals {
-                value: e.value.map(Into::into).unwrap_or(ValueLiteral::Null),
+                value: e.value.map(Into::into).unwrap_or_default(),
             }),
             Mode::InRange(r) => Ok(Self::InRange {
                 min: r.min.map(Into::into),
@@ -135,8 +139,8 @@ impl TryFrom<pb::FilterCondition> for FilterCondition {
 impl From<pb::MappingEntry> for MappingEntry {
     fn from(entry: pb::MappingEntry) -> Self {
         Self {
-            from: entry.from.map(Into::into).unwrap_or(ValueLiteral::Null),
-            to: entry.to.map(Into::into).unwrap_or(ValueLiteral::Null),
+            from: entry.from.map(Into::into).unwrap_or_default(),
+            to: entry.to.map(Into::into).unwrap_or_default(),
         }
     }
 }
@@ -153,97 +157,52 @@ impl TryFrom<pb::QueryNode> for QueryNode {
                 table: s.table,
             },
             Node::FilterValues(f) => Self::FilterValues {
-                input: Box::new(
-                    required(f.input, "filter_values.input")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
+                input: required_node(f.input, "filter_values.input")?,
                 condition: required(f.condition, "filter_values.condition")?.try_into()?,
             },
             Node::ShiftX(s) => Self::ShiftX {
-                input: Box::new(
-                    required(s.input, "shift_x.input")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
+                input: required_node(s.input, "shift_x.input")?,
                 z: s.z as u8,
                 index: s.index,
             },
             Node::ShiftY(s) => Self::ShiftY {
-                input: Box::new(
-                    required(s.input, "shift_y.input")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
+                input: required_node(s.input, "shift_y.input")?,
                 z: s.z as u8,
                 index: s.index,
             },
             Node::ShiftF(s) => Self::ShiftF {
-                input: Box::new(
-                    required(s.input, "shift_f.input")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
+                input: required_node(s.input, "shift_f.input")?,
                 z: s.z as u8,
                 index: s.index,
             },
             Node::ZoomOut(z0) => Self::ZoomOut {
-                input: Box::new(
-                    required(z0.input, "zoom_out.input")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
+                input: required_node(z0.input, "zoom_out.input")?,
                 z: z0.z as u8,
                 policy: z0.policy.try_into()?,
             },
             Node::ExtrudeX(e) => Self::ExtrudeX {
-                input: Box::new(
-                    required(e.input, "extrude_x.input")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
+                input: required_node(e.input, "extrude_x.input")?,
                 z: e.z as u8,
                 start: e.start,
                 end: e.end,
                 policy: e.policy.try_into()?,
             },
             Node::ExtrudeY(e) => Self::ExtrudeY {
-                input: Box::new(
-                    required(e.input, "extrude_y.input")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
+                input: required_node(e.input, "extrude_y.input")?,
                 z: e.z as u8,
                 start: e.start,
                 end: e.end,
                 policy: e.policy.try_into()?,
             },
             Node::ExtrudeF(e) => Self::ExtrudeF {
-                input: Box::new(
-                    required(e.input, "extrude_f.input")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
+                input: required_node(e.input, "extrude_f.input")?,
                 z: e.z as u8,
                 start: e.start,
                 end: e.end,
                 policy: e.policy.try_into()?,
             },
             Node::FalloffX(f) => Self::FalloffX {
-                input: Box::new(
-                    required(f.input, "falloff_x.input")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
+                input: required_node(f.input, "falloff_x.input")?,
                 z: f.z as u8,
                 radius: f.radius,
                 pattern: f.pattern.into(),
@@ -251,12 +210,7 @@ impl TryFrom<pb::QueryNode> for QueryNode {
                 policy: f.policy.try_into()?,
             },
             Node::FalloffY(f) => Self::FalloffY {
-                input: Box::new(
-                    required(f.input, "falloff_y.input")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
+                input: required_node(f.input, "falloff_y.input")?,
                 z: f.z as u8,
                 radius: f.radius,
                 pattern: f.pattern.into(),
@@ -264,12 +218,7 @@ impl TryFrom<pb::QueryNode> for QueryNode {
                 policy: f.policy.try_into()?,
             },
             Node::FalloffF(f) => Self::FalloffF {
-                input: Box::new(
-                    required(f.input, "falloff_f.input")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
+                input: required_node(f.input, "falloff_f.input")?,
                 z: f.z as u8,
                 radius: f.radius,
                 pattern: f.pattern.into(),
@@ -277,73 +226,27 @@ impl TryFrom<pb::QueryNode> for QueryNode {
                 policy: f.policy.try_into()?,
             },
             Node::Merge(m) => Self::Merge {
-                left: Box::new(
-                    required(m.left, "merge.left")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
-                right: Box::new(
-                    required(m.right, "merge.right")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
-                default: m
-                    .default_value
-                    .map(Into::into)
-                    .unwrap_or(ValueLiteral::Null),
+                left: required_node(m.left, "merge.left")?,
+                right: required_node(m.right, "merge.right")?,
+                default: m.default_value.map(Into::into).unwrap_or_default(),
                 policy: m.policy.try_into()?,
             },
             Node::Difference(s) => Self::Difference {
-                left: Box::new(
-                    required(s.left, "difference.left")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
-                right: Box::new(
-                    required(s.right, "difference.right")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
+                left: required_node(s.left, "difference.left")?,
+                right: required_node(s.right, "difference.right")?,
             },
             Node::Intersection(s) => Self::Intersection {
-                left: Box::new(
-                    required(s.left, "intersection.left")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
-                right: Box::new(
-                    required(s.right, "intersection.right")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
+                left: required_node(s.left, "intersection.left")?,
+                right: required_node(s.right, "intersection.right")?,
             },
             Node::MapValues(m) => Self::MapValues {
-                input: Box::new(
-                    required(m.input, "map_values.input")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
+                input: required_node(m.input, "map_values.input")?,
                 output_type: m.output_type.try_into()?,
                 mapping: m.mapping.into_iter().map(Into::into).collect(),
-                default: m
-                    .default_value
-                    .map(Into::into)
-                    .unwrap_or(ValueLiteral::Null),
+                default: m.default_value.map(Into::into).unwrap_or_default(),
             },
             Node::MathValues(m) => Self::MathValues {
-                input: Box::new(
-                    required(m.input, "math_values.input")?
-                        .as_ref()
-                        .clone()
-                        .try_into()?,
-                ),
+                input: required_node(m.input, "math_values.input")?,
                 operator: m.operator.try_into()?,
                 operand: required(m.operand, "math_values.operand")?.try_into()?,
             },

@@ -68,7 +68,7 @@ impl TableService for TableServiceImpl {
             crate::services::database::table::list::list(&self.app_state, &req.db_name, &auth_user)
                 .await?;
         Ok(Response::new(ListTablesResponse {
-            tables: tables.0.into_iter().map(Into::into).collect(),
+            tables: tables.into_iter().map(Into::into).collect(),
         }))
     }
 

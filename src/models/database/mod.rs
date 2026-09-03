@@ -14,22 +14,4 @@ pub struct DatabaseInfoResponse {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateDatabaseRequest {
-    pub name: String,
-    pub description: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UpdateDatabaseRequest {
-    pub new_name: Option<String>,
-    #[serde(default, deserialize_with = "crate::models::helpers::double_option")]
-    pub description: Option<Option<String>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CopyDatabaseRequest {
-    pub copy_name: String,
-}
-
 pub mod table;

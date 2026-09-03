@@ -1,11 +1,7 @@
 use crate::models::users::{Scope, User, UserRole};
 use crate::repositories::{CatalogRepository, ReadRepository, Storage};
 use crate::services::auth::{reaches, visible_database};
-use crate::{
-    AppState,
-    error::AppError,
-    models::database::table::{TableListResponse, TableSummary},
-};
+use crate::{AppState, error::AppError, models::database::table::TableSummary};
 
 /// テーブル一覧を返す。呼び出したユーザーが Read 以上で到達できるテーブルだけに絞る。
 ///
@@ -19,7 +15,7 @@ pub async fn list(
     app_state: &AppState,
     db_name: &str,
     user: &User,
-) -> Result<TableListResponse, AppError> {
+) -> Result<Vec<TableSummary>, AppError> {
     let owned = db_name.to_string();
     let user = user.clone();
 
@@ -44,17 +40,5 @@ pub async fn list(
         })
         .await?;
 
-    Ok(TableListResponse(
-        tables
-            .into_iter()
-            .map(|table| TableSummary {
-                name: table.name,
-                data_type: table.data_type,
-                max_zoom_level: table.max_zoom_level,
-                constraints: table.constraints,
-                description: table.description,
-                is_temporal: table.is_temporal,
-            })
-            .collect(),
-    ))
+    Ok(tables.into_iter().map(Into::into).collect())
 }

@@ -16,19 +16,6 @@ pub struct UpdatePasswordRequest {
     pub password: String,
 }
 
-/// `global` スコープに対する権限の設定リクエスト。制御面の `admin` を指定できる唯一の入口。
-#[derive(Debug, Deserialize)]
-pub struct SetGlobalPrivilegeRequest {
-    pub role: super::entity::UserRole,
-}
-
-/// データベース・テーブルスコープに対する権限の設定リクエスト。
-/// ロールは [`DataRole`](super::entity::DataRole) なので `admin` は表現できない。
-#[derive(Debug, Deserialize)]
-pub struct SetDataPrivilegeRequest {
-    pub role: super::entity::DataRole,
-}
-
 /// 1 ページで返す利用者数の既定値と上限。
 pub const DEFAULT_USER_PAGE: usize = 100;
 pub const MAX_USER_PAGE: usize = 1000;

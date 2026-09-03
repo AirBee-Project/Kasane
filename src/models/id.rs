@@ -33,6 +33,34 @@ macro_rules! uuid_newtype {
             }
         }
 
+        impl std::ops::Deref for $name {
+            type Target = Uuid;
+
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
+        impl AsRef<Uuid> for $name {
+            fn as_ref(&self) -> &Uuid {
+                &self.0
+            }
+        }
+
+        impl AsRef<[u8]> for $name {
+            fn as_ref(&self) -> &[u8] {
+                self.0.as_bytes()
+            }
+        }
+
+        impl TryFrom<&[u8]> for $name {
+            type Error = uuid::Error;
+
+            fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+                Ok(Self(Uuid::from_slice(bytes)?))
+            }
+        }
+
         impl From<Uuid> for $name {
             fn from(uuid: Uuid) -> Self {
                 Self(uuid)

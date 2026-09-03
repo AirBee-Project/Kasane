@@ -23,13 +23,3 @@ pub struct UserListResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next: Option<String>,
 }
-
-/// `GET /users/{username}/privileges` のレスポンス。
-///
-/// 個々のルールの追加・変更・削除は、対象ごとのサブリソース
-/// （`.../privileges/global`、`.../privileges/databases/{db_name}` など）へ
-/// `PUT` / `DELETE` する。
-#[derive(Debug, Serialize)]
-pub struct PrivilegesResponse {
-    pub privileges: Vec<PrivilegeRule>,
-}

@@ -6,9 +6,10 @@ use super::database::table::TableDataType;
 /// Kasane が扱うプリミティブな値リテラル。
 ///
 /// テーブルの値、クエリの動的リテラル、検索結果の辞書などで使われる。
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 #[serde(untagged)]
 pub enum ValueLiteral {
+    #[default]
     Null,
     Bool(bool),
     Int(i64),

@@ -7,3 +7,21 @@ pub enum SpatialId {
     RangeId(RangeId),
     FlexId(FlexId),
 }
+
+impl From<SingleId> for SpatialId {
+    fn from(id: SingleId) -> Self {
+        Self::SingleId(id)
+    }
+}
+
+impl From<RangeId> for SpatialId {
+    fn from(id: RangeId) -> Self {
+        Self::RangeId(id)
+    }
+}
+
+impl From<FlexId> for SpatialId {
+    fn from(id: FlexId) -> Self {
+        Self::FlexId(id)
+    }
+}

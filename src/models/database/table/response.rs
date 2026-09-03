@@ -26,6 +26,3 @@ pub struct TableInfoResponse {
     /// データが時間IDを持つかどうか。
     pub is_temporal: bool,
 }
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct TableListResponse(pub Vec<TableSummary>);

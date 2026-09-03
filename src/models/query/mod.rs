@@ -1,10 +1,8 @@
 use crate::models::ValueLiteral;
 use crate::models::spatial_id::SpatialId;
-use serde::{Deserialize, Serialize};
 
 /// 同一空間に複数の値が集まったときの集約規則。
-#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MergePolicyKind {
     /// 後の値で上書きする
     Overwrite,
@@ -23,8 +21,7 @@ pub enum MergePolicyKind {
 }
 
 /// 値フィルタの条件。
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(tag = "mode", rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FilterCondition {
     /// `value` に一致する値だけを残す
     Equals { value: ValueLiteral },
@@ -41,7 +38,7 @@ pub enum FilterCondition {
 }
 
 /// 対応表エントリ
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MappingEntry {
     /// 変換前の値
     pub from: ValueLiteral,
@@ -50,16 +47,14 @@ pub struct MappingEntry {
 }
 
 /// 計算用のオペランド（整数と小数の両方を受け付ける）
-#[derive(Debug, Deserialize, Clone, Copy, PartialEq)]
-#[serde(untagged)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MathOperand {
     Int(i64),
     Float(f64),
 }
 
 /// 四則演算の演算子
-#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MathOperator {
     Add,
     Subtract,
@@ -67,8 +62,7 @@ pub enum MathOperator {
     Divide,
 }
 
-#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FalloffPattern {
     #[default]
     Linear,
@@ -88,8 +82,7 @@ impl From<FalloffPattern>
     }
 }
 
-#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
     Upper,
     Lower,
@@ -104,15 +97,13 @@ impl From<Direction> for kasane_logic::spatial_id::helpers::Side {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub enum QueryNode {
     /// 演算の起点。読み出し対象のテーブルを指定する。
     Source { database: String, table: String },
 
     FilterValues {
         input: Box<Self>,
-        #[serde(flatten)]
         condition: FilterCondition,
     },
 
@@ -160,9 +151,7 @@ pub enum QueryNode {
         input: Box<Self>,
         z: u8,
         radius: u32,
-        #[serde(default)]
         pattern: FalloffPattern,
-        #[serde(default)]
         direction: Option<Direction>,
         policy: MergePolicyKind,
     },
@@ -171,9 +160,7 @@ pub enum QueryNode {
         input: Box<Self>,
         z: u8,
         radius: u32,
-        #[serde(default)]
         pattern: FalloffPattern,
-        #[serde(default)]
         direction: Option<Direction>,
         policy: MergePolicyKind,
     },
@@ -182,9 +169,7 @@ pub enum QueryNode {
         input: Box<Self>,
         z: u8,
         radius: u32,
-        #[serde(default)]
         pattern: FalloffPattern,
-        #[serde(default)]
         direction: Option<Direction>,
         policy: MergePolicyKind,
     },

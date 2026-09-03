@@ -48,25 +48,3 @@ pub enum UpdateTableConstraints {
         remove_choices: Option<Vec<String>>,
     },
 }
-
-#[derive(Debug, Deserialize)]
-/// テーブルの名前変更または制約を更新する
-pub struct UpdateTableRequest {
-    pub name: Option<String>,
-    /// 更新後の値に対する制約。指定しない場合は制約を削除する。
-    #[serde(default, deserialize_with = "crate::models::helpers::double_option")]
-    pub constraints: Option<Option<UpdateTableConstraints>>,
-
-    #[serde(default, deserialize_with = "crate::models::helpers::double_option")]
-    pub description: Option<Option<String>>,
-
-    /// 時間ロックの解除。`true` のみ指定可能。
-    pub is_temporal: Option<bool>,
-}
-
-#[derive(Debug, serde::Deserialize)]
-/// テーブルのコピーを行う
-pub struct CopyTableRequest {
-    pub copy_db_name: Option<String>,
-    pub copy_table_name: String,
-}
