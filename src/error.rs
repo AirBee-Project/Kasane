@@ -166,7 +166,7 @@ pub enum AppError {
     InvalidPrivilege { reason: String },
     #[error("Invalid name: {reason}")]
     InvalidName { reason: String },
-    #[error("Invalid Spatial ID: {reason}")]
+    #[error("Invalid spatial ID: {reason}")]
     InvalidSpatialId { reason: String },
     /// リクエストのフィールドが未設定・範囲外など、gRPC変換層での汎用的な検証失敗。
     #[error("Invalid argument: {reason}")]
@@ -271,20 +271,12 @@ impl AppError {
     }
 }
 
-/// `code()` の機械可読コードは `google.rpc.ErrorInfo.reason` として details に載せる。
-/// gRPC のクライアントは JSON 時代と同じ文字列で分岐できる。
-const GRPC_ERROR_DOMAIN: &str = "kasane";
-
 impl From<AppError> for tonic::Status {
     fn from(err: AppError) -> Self {
         use tonic_types::{ErrorDetails, StatusExt};
 
         let mut details = ErrorDetails::new();
-        details.set_error_info(
-            err.code(),
-            GRPC_ERROR_DOMAIN,
-            std::collections::HashMap::new(),
-        );
+        details.set_error_info(err.code(), "kasane", std::collections::HashMap::new());
         tonic::Status::with_error_details(err.grpc_code(), err.to_string(), details)
     }
 }
