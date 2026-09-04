@@ -1,0 +1,15 @@
+info:
+  name: health
+  type: grpc
+  seq: 2
+  tags:
+    - System
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /grpc.health.v1.Health/Check
+  methodType: unary
+  message: |-
+    {
+      "service": ""
+    }

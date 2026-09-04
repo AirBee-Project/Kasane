@@ -1,0 +1,19 @@
+info:
+  name: create
+  type: grpc
+  seq: 1
+  tags:
+    - Databases
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.DatabaseService/Create
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {
+      "name": "dev_db",
+      "description": "開発・デバッグ用データベース"
+    }

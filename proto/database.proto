@@ -3,11 +3,17 @@ syntax = "proto3";
 package kasane;
 
 service DatabaseService {
+  // データベースを新規作成する。
   rpc Create(CreateDatabaseRequest) returns (DatabaseInfo);
+  // データベースの詳細情報を取得する。
   rpc Get(GetDatabaseRequest) returns (DatabaseInfo);
+  // アクセス可能なデータベースの一覧を取得する。
   rpc List(ListDatabasesRequest) returns (ListDatabasesResponse);
+  // データベースの名前または説明文を更新する。
   rpc Update(UpdateDatabaseRequest) returns (UpdateDatabaseResponse);
+  // データベースと配下のテーブルを削除する。
   rpc Delete(DeleteDatabaseRequest) returns (DeleteDatabaseResponse);
+  // データベースを丸ごと複製する。
   rpc Copy(CopyDatabaseRequest) returns (DatabaseInfo);
 }
 

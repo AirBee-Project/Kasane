@@ -108,7 +108,10 @@ pub async fn generate_jwt(app_state: &AppState, username: &str) -> Result<String
 pub fn verify_jwt(token: &str) -> Result<Claims, AppError> {
     let validation = Validation::default();
     let token_data = decode::<Claims>(token, &DecodingKey::from_secret(jwt_secret()), &validation)
-        .map_err(|_| AppError::Auth(AuthError::InvalidToken))?;
+        .map_err(|e| {
+            tracing::warn!("verify_jwt failed: {e}; token received: {token:?}");
+            AppError::Auth(AuthError::InvalidToken)
+        })?;
 
     Ok(token_data.claims)
 }

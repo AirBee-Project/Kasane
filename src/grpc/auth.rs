@@ -69,14 +69,31 @@ pub fn require_auth(mut request: Request<()>) -> Result<Request<()>, Status> {
 }
 
 fn extract_claims(request: &Request<()>) -> Result<Claims, AppError> {
-    let value = request
-        .metadata()
-        .get("authorization")
-        .ok_or(AuthError::MissingToken)?;
-    let value = value.to_str().map_err(|_| AuthError::MalformedHeader)?;
-    let token = value
-        .strip_prefix("Bearer ")
-        .ok_or(AuthError::MalformedHeader)?;
+    let value = match request.metadata().get("authorization") {
+        Some(v) => v,
+        None => {
+            tracing::warn!("extract_claims: 'authorization' metadata is missing");
+            return Err(AuthError::MissingToken.into());
+        }
+    };
+    let value = match value.to_str() {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(
+                "extract_claims: 'authorization' metadata is not valid ASCII/UTF-8: {e}"
+            );
+            return Err(AuthError::MalformedHeader.into());
+        }
+    };
+    let token = match value.strip_prefix("Bearer ") {
+        Some(t) => t,
+        None => {
+            tracing::warn!(
+                "extract_claims: 'authorization' metadata does not start with 'Bearer ': {value:?}"
+            );
+            return Err(AuthError::MalformedHeader.into());
+        }
+    };
     verify_jwt(token)
 }
 

@@ -136,17 +136,22 @@ grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
 
 ### 権限管理
 
-対象ごとの RPC で設定・剥奪します。剥奪はロールを問わず対象ごと落とすので、「`manage` を指定したが実際は `read` だったので何も消えなかった」は起きません。
+権限の付与は `UserService.GrantPrivilege`、剥奪は `UserService.RevokePrivilege` で行います。剥奪はロールを問わず対象ごと落とすので、「`manage` を指定したが実際は `read` だったので何も消えなかった」は起きません。
 
-- `UserService.GetPrivileges`: 権限一覧の取得
-- `UserService.SetGlobalPrivilege` / `DeleteGlobalPrivilege`
-- `UserService.SetDatabasePrivilege` / `DeleteDatabasePrivilege`
-- `UserService.SetTablePrivilege` / `DeleteTablePrivilege`
+- `UserService.GetPrivileges`: 保持する権限一覧の取得
+- `UserService.GrantPrivilege`: 権限ルールの付与（既存ルールは置換）
+- `UserService.RevokePrivilege`: 対象リソースに対する権限の剥奪
 
 ```bash
+# テーブルへの権限付与
 grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
-  -d '{"username": "alice", "db_name": "sensors", "table_name": "temperature", "role": "DATA_ROLE_WRITE"}' \
-  localhost:5172 kasane.UserService/SetTablePrivilege
+  -d '{"username": "alice", "privilege": {"table": {"db_name": "sensors", "table_name": "temperature", "role": "DATA_ROLE_WRITE"}}}' \
+  localhost:5172 kasane.UserService/GrantPrivilege
+
+# テーブルからの権限剥奪
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
+  -d '{"username": "alice", "target": {"table": {"db_name": "sensors", "table_name": "temperature"}}}' \
+  localhost:5172 kasane.UserService/RevokePrivilege
 ```
 
 root の権限は変更できません（`root_protected`）。

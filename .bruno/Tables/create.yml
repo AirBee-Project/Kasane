@@ -1,0 +1,23 @@
+info:
+  name: create
+  type: grpc
+  seq: 1
+  tags:
+    - Tables
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.TableService/Create
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {
+      "db_name": "dev_db",
+      "name": "dev_table",
+      "data_type": 1,
+      "max_zoom_level": 25,
+      "description": "開発・デバッグ用テーブル",
+      "is_temporal": true
+    }

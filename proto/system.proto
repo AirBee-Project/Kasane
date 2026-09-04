@@ -6,6 +6,7 @@ package kasane;
 // `grpc.health.v1.Health` サービス（`tonic-health`）が別途担い、
 // このサービスには含めない。
 service SystemService {
+  // サーバーの稼働ステータスとバージョン情報を取得する。
   rpc GetSystemInfo(GetSystemInfoRequest) returns (GetSystemInfoResponse);
 }
 

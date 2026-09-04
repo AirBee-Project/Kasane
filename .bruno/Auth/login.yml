@@ -1,0 +1,39 @@
+info:
+  name: login
+  type: grpc
+  seq: 1
+  tags:
+    - Auth
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.AuthService/Login
+  methodType: unary
+  message: |-
+    {
+      "username": "{{userName}}",
+      "password": "{{password}}"
+    }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        const body = (typeof res.getBody === "function") ? res.getBody() : (res && res.body ? res.body : res);
+        const token = body && (body.token || (body.data && body.data.token));
+        if (token) {
+          bru.setVar("accessToken", token);
+          bru.setEnvVar("accessToken", token);
+          console.log("トークンを自動保存しました:", token);
+        } else {
+          console.warn("トークンが見つかりませんでした:", body);
+        }
+    - type: after-response
+      code: |-
+        const body = (typeof res.getBody === "function") ? res.getBody() : (res && res.body ? res.body : res);
+        const token = body && (body.token || (body.data && body.data.token));
+        if (token) {
+          bru.setVar("accessToken", token);
+          bru.setEnvVar("accessToken", token);
+          console.log("トークンを自動保存しました:", token);
+        }

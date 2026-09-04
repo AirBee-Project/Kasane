@@ -1,0 +1,16 @@
+info:
+  name: list
+  type: grpc
+  seq: 1
+  tags:
+    - Users
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.UserService/List
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {}

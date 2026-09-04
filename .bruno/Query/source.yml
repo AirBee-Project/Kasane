@@ -1,0 +1,32 @@
+info:
+  name: source
+  type: grpc
+  seq: 1
+  tags:
+    - Query
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.QueryService/Execute
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {
+      "spatial_ids": [
+        {
+          "z": 20,
+          "f": 0,
+          "x": 100,
+          "y": 100
+        }
+      ],
+      "query": {
+        "source": {
+          "db_name": "dev_db",
+          "table_name": "dev_table"
+        }
+      },
+      "format": 1
+    }

@@ -1,0 +1,16 @@
+info:
+  name: info
+  type: grpc
+  seq: 1
+  tags:
+    - System
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.SystemService/GetSystemInfo
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {}

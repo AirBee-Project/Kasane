@@ -4,6 +4,7 @@ package kasane;
 
 // 認証不要（このサービスだけ AuthInterceptor の対象外）。
 service AuthService {
+  // 利用者名とパスワードで認証し、JWT トークンを発行する。
   rpc Login(LoginRequest) returns (LoginResponse);
 }
 

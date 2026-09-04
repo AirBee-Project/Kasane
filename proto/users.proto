@@ -5,13 +5,21 @@ package kasane;
 import "common.proto";
 
 service UserService {
+  // 登録されている利用者の一覧をページネーションで取得する。
   rpc List(ListUsersRequest) returns (ListUsersResponse);
+  // 新しい利用者を登録する（作成時の権限付与も可能）。
   rpc Create(CreateUserRequest) returns (CreateUserResponse);
+  // 利用者の詳細情報と保持する権限一覧を取得する。
   rpc Get(GetUserRequest) returns (UserInfo);
+  // 利用者を削除する（root は削除不可）。
   rpc Delete(DeleteUserRequest) returns (DeleteUserResponse);
+  // 利用者のパスワードを変更し、既存トークンを失効させる。
   rpc UpdatePassword(UpdatePasswordRequest) returns (UpdatePasswordResponse);
+  // 利用者が保持する有効な権限ルール一覧を取得する。
   rpc GetPrivileges(GetPrivilegesRequest) returns (PrivilegesResponse);
+  // 利用者に権限ルールを付与する（既存ルールは置換）。
   rpc GrantPrivilege(GrantPrivilegeRequest) returns (GrantPrivilegeResponse);
+  // 利用者から対象リソースに対する権限を剥奪する。
   rpc RevokePrivilege(RevokePrivilegeRequest) returns (RevokePrivilegeResponse);
 }
 

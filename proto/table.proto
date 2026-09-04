@@ -5,11 +5,17 @@ package kasane;
 import "common.proto";
 
 service TableService {
+  // テーブルを新規作成する。
   rpc Create(CreateTableRequest) returns (TableSummary);
+  // テーブルの詳細情報（空間IDの総数 count を含む）を取得する。
   rpc Get(GetTableRequest) returns (TableInfo);
+  // データベース内のテーブル一覧を取得する。
   rpc List(ListTablesRequest) returns (ListTablesResponse);
+  // テーブルの名前、制約、説明文、または時間ロック設定を更新する。
   rpc Update(UpdateTableRequest) returns (UpdateTableResponse);
+  // テーブルを削除する。
   rpc Delete(DeleteTableRequest) returns (DeleteTableResponse);
+  // テーブルを複製する。
   rpc Copy(CopyTableRequest) returns (TableSummary);
 }
 

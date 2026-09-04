@@ -1,0 +1,28 @@
+info:
+  name: search
+  type: grpc
+  seq: 2
+  tags:
+    - Data
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.DataService/Search
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {
+      "db_name": "dev_db",
+      "table_name": "dev_table",
+      "spatial_ids": [
+        {
+          "z": 20,
+          "f": 0,
+          "x": 100,
+          "y": 100
+        }
+      ],
+      "format": 1
+    }

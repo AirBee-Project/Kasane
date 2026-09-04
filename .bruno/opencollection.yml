@@ -1,0 +1,14 @@
+opencollection: 1.0.0
+
+info:
+  name: kasane
+bundled: false
+config:
+  protobuf:
+    importPaths:
+      - path: ../proto
+extensions:
+  bruno:
+    ignore:
+      - node_modules
+      - .git

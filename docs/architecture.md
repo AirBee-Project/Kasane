@@ -11,7 +11,7 @@ flowchart TD
     Main[main.rs / lib.rs] --> Grpc[grpc]
     Grpc --> Service[services]
     Service --> Repository[repositories]
-    Repository --> Redb[(redb)]
+    Repository --> Storage[(LMDB / TiKV)]
 
     Grpc --> Convert[grpc::convert*]
     Convert --> Model[models]
@@ -33,7 +33,7 @@ flowchart TD
 
 ### `grpc`
 
-- proto（`proto/kasane/v1/*.proto`）から生成された gRPC サービス・メッセージ型（`grpc::pb`）と、各サービスの実装（`grpc::database`, `grpc::table` 等）を置く。
+- proto（`proto/*.proto`）から生成された gRPC サービス・メッセージ型（`grpc::pb`）と、各サービスの実装（`grpc::database`, `grpc::table` 等）を置く。
 - `grpc::convert*` が proto のメッセージ型とドメイン型（`models`）の相互変換を担う。
 - 認証は `grpc::auth`（JWT の検証、利用者レコードの読み直しと `AuthUser` の組み立て、Login RPC）が集約して担う。
 - ドメインロジックや DB 操作は持たない。
@@ -47,10 +47,10 @@ flowchart TD
 
 ### `repositories`
 
-- `redb` へのアクセスを隠蔽する。
+- ストレージバックエンド（LMDB / TiKV）へのアクセスを隠蔽する。
 - テーブルの open / get / insert / remove などの低レベル操作を担当する。
 - 業務ルールは持たない。
-- `redb` の型や詳細を上位層に公開しない。
+- バックエンド固有の型や詳細を上位層に公開しない。
 - データの整合性確保は services 層の責務である。
 
 ### `models`
@@ -61,14 +61,14 @@ flowchart TD
 
 ### `error`
 
-- アプリケーション全体で共通に扱うエラーを定義する。
-- HTTP への変換責務もここで持つ。
+- アプリケーション全体で共通に扱うエラー（`AppError`, `AuthError`）を定義する。
+- gRPC の `tonic::Status` および `google.rpc.ErrorInfo`（機械可読コード）への変換責務もここで持つ。
 - 各層は `AppError` に寄せてエラーを返す。
 
-### `db_init`
+### `backend`
 
-- `redb` の初期化と内部テーブル定義を担当する。
-- 実行時の基盤構築に限定し、業務ロジックは持たない。
+- LMDB（`heed`）または TiKV の接続初期化と基盤構築を担当する。
+- 業務ロジックは持たない。
 
 ## 依存ルール
 
@@ -76,8 +76,8 @@ flowchart TD
 
 - `grpc` -> `services`, `models`, `error`
 - `services` -> `repositories`, `models`, `error`, `helpers`
-- `repositories` -> `db_init`, `models`, `error`, `redb`
-- `main.rs` / `lib.rs` -> `grpc`, `db_init`, `AppState`
+- `repositories` -> `models`, `error`, ストレージエンジン
+- `main.rs` / `lib.rs` -> `grpc`, `backend`, `AppState`
 
 ### 禁止したい依存
 
@@ -89,10 +89,10 @@ flowchart TD
 
 `TableService` 系の RPC は次の順序で処理されます。
 
-1. `grpc::interceptor` が JWT を検証し、`grpc::auth_ctx` が利用者レコードを読み直す。
+1. `grpc::auth` が JWT を検証し、最新の利用者レコードから `AuthUser` を構築する。
 2. `grpc::table` が proto のメッセージをドメイン型へ変換し、service を呼ぶ。
 3. `services` がバリデーションとトランザクション管理を行う。
-4. `repositories` が `redb` を使って実データを読み書きする。
+4. `repositories` がストレージエンジン（LMDB または TiKV）を使って実データを読み書きする。
 5. `error` が失敗を `tonic::Status` に変換する。
 
 ## 補足

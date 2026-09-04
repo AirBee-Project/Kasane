@@ -1,0 +1,19 @@
+info:
+  name: delete
+  type: grpc
+  seq: 4
+  tags:
+    - Tables
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.TableService/Delete
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {
+      "db_name": "dev_db",
+      "table_name": "dev_table"
+    }
