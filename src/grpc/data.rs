@@ -1,6 +1,9 @@
+use std::pin::Pin;
+use tokio_stream::Stream;
 use tonic::{Request, Response, Status};
 
 use super::auth::authenticate;
+use super::convert_data::{DEFAULT_CHUNK_SIZE, data_response_to_chunks};
 use super::pb::{
     InsertDataRequest, InsertDataResponse, RemoveDataRequest, RemoveDataResponse,
     SearchDataRequest, SearchDataResponse, UpsertDataRequest, UpsertDataResponse,
@@ -16,10 +19,13 @@ pub struct DataServiceImpl {
 
 #[tonic::async_trait]
 impl DataService for DataServiceImpl {
+    type SearchStream =
+        Pin<Box<dyn Stream<Item = Result<SearchDataResponse, Status>> + Send + 'static>>;
+
     async fn search(
         &self,
         request: Request<SearchDataRequest>,
-    ) -> Result<Response<SearchDataResponse>, Status> {
+    ) -> Result<Response<Self::SearchStream>, Status> {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
@@ -44,7 +50,9 @@ impl DataService for DataServiceImpl {
             &query,
         )
         .await?;
-        Ok(Response::new(result.into()))
+        let chunks = data_response_to_chunks(result, DEFAULT_CHUNK_SIZE);
+        let stream = tokio_stream::iter(chunks.into_iter().map(Ok));
+        Ok(Response::new(Box::pin(stream)))
     }
 
     async fn insert(

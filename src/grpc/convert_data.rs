@@ -340,3 +340,109 @@ impl From<GetDataResponse> for pb::SearchDataResponse {
         }
     }
 }
+
+/// ストリーミング送信時の 1 チャンクあたりの既定の空間ID数。
+pub const DEFAULT_CHUNK_SIZE: usize = 2000;
+
+fn chunk_groups<T>(
+    dictionary: &[ValueLiteral],
+    data: Vec<DataGroup<T>>,
+    chunk_size: usize,
+    id_to_pb: impl Fn(T) -> pb::SpatialId,
+) -> Vec<pb::SearchDataResponse> {
+    if data.is_empty() {
+        return Vec::new();
+    }
+
+    let mut chunks = Vec::new();
+    let mut current_dict_values: Vec<pb::TypedValue> = Vec::new();
+    let mut orig_to_chunk_dict: std::collections::HashMap<usize, usize> =
+        std::collections::HashMap::new();
+    let mut current_data: Vec<pb::DataGroup> = Vec::new();
+    let mut current_count = 0;
+
+    for group in data {
+        let orig_ref = group.value_ref;
+        let mut ids_iter = group.spatial_ids.into_iter();
+
+        loop {
+            let remaining_capacity = chunk_size.saturating_sub(current_count);
+            if remaining_capacity == 0 && current_count > 0 {
+                chunks.push(pb::SearchDataResponse {
+                    dictionary: std::mem::take(&mut current_dict_values),
+                    data: std::mem::take(&mut current_data),
+                });
+                orig_to_chunk_dict.clear();
+                current_count = 0;
+                continue;
+            }
+
+            let batch: Vec<_> = ids_iter
+                .by_ref()
+                .take(if remaining_capacity > 0 {
+                    remaining_capacity
+                } else {
+                    chunk_size
+                })
+                .collect();
+            if batch.is_empty() {
+                break;
+            }
+
+            let batch_len = batch.len();
+            let chunk_ref = *orig_to_chunk_dict.entry(orig_ref).or_insert_with(|| {
+                let idx = current_dict_values.len();
+                let val_literal = dictionary
+                    .get(orig_ref)
+                    .cloned()
+                    .unwrap_or(ValueLiteral::Null);
+                current_dict_values.push(val_literal.into());
+                idx
+            });
+
+            current_data.push(pb::DataGroup {
+                value_ref: chunk_ref as u64,
+                spatial_ids: batch.into_iter().map(&id_to_pb).collect(),
+            });
+            current_count += batch_len;
+        }
+    }
+
+    if !current_data.is_empty() {
+        chunks.push(pb::SearchDataResponse {
+            dictionary: current_dict_values,
+            data: current_data,
+        });
+    }
+
+    chunks
+}
+
+/// [`GetDataResponse`] を指定したチャンクサイズごとの [`pb::SearchDataResponse`] に分割する。
+pub fn data_response_to_chunks(
+    response: GetDataResponse,
+    chunk_size: usize,
+) -> Vec<pb::SearchDataResponse> {
+    let chunk_size = if chunk_size == 0 {
+        DEFAULT_CHUNK_SIZE
+    } else {
+        chunk_size
+    };
+    match response {
+        GetDataResponse::Single(GetDataResponseSingle { dictionary, data }) => {
+            chunk_groups(&dictionary, data, chunk_size, |id| pb::SpatialId {
+                kind: Some(pb::spatial_id::Kind::SingleId(id.into())),
+            })
+        }
+        GetDataResponse::Range(GetDataResponseRange { dictionary, data }) => {
+            chunk_groups(&dictionary, data, chunk_size, |id| pb::SpatialId {
+                kind: Some(pb::spatial_id::Kind::RangeId(id.into())),
+            })
+        }
+        GetDataResponse::Flex(GetDataResponseFlex { dictionary, data }) => {
+            chunk_groups(&dictionary, data, chunk_size, |id| pb::SpatialId {
+                kind: Some(pb::spatial_id::Kind::FlexId(id.into())),
+            })
+        }
+    }
+}

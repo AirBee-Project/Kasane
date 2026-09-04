@@ -2,7 +2,7 @@ use kasane::grpc::pb;
 
 use crate::common::TestApp;
 use crate::common::builders::{self, num};
-use crate::common::data::{put_data, search_data, to_result_map};
+use crate::common::data::{collect_search_stream, put_data, search_data, to_result_map};
 
 #[tokio::test]
 /// 複数の空間IDを一度に指定してデータを検索・取得できることを検証する。
@@ -69,19 +69,22 @@ async fn test_table_data_get_format_options() {
     let query = vec![builders::single_id(20, 0, 10, 10)];
 
     // Test RangeId
-    let res_range = test_app
-        .data()
-        .search(pb::SearchDataRequest {
-            db_name: "test_db".to_string(),
-            table_name: table_name.to_string(),
-            spatial_ids: query.clone(),
-            zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
-            format: pb::OutputFormat::RangeId as i32,
-            limit: None,
-        })
-        .await
-        .unwrap()
-        .into_inner();
+    let res_range = collect_search_stream(
+        test_app
+            .data()
+            .search(pb::SearchDataRequest {
+                db_name: "test_db".to_string(),
+                table_name: table_name.to_string(),
+                spatial_ids: query.clone(),
+                zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
+                format: pb::OutputFormat::RangeId as i32,
+                limit: None,
+            })
+            .await
+            .unwrap()
+            .into_inner(),
+    )
+    .await;
 
     let group = res_range.data.first().unwrap();
     let first_id = group.spatial_ids.first().unwrap();
@@ -91,19 +94,22 @@ async fn test_table_data_get_format_options() {
     }
 
     // Test FlexId
-    let res_flex = test_app
-        .data()
-        .search(pb::SearchDataRequest {
-            db_name: "test_db".to_string(),
-            table_name: table_name.to_string(),
-            spatial_ids: query,
-            zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
-            format: pb::OutputFormat::FlexId as i32,
-            limit: None,
-        })
-        .await
-        .unwrap()
-        .into_inner();
+    let res_flex = collect_search_stream(
+        test_app
+            .data()
+            .search(pb::SearchDataRequest {
+                db_name: "test_db".to_string(),
+                table_name: table_name.to_string(),
+                spatial_ids: query,
+                zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
+                format: pb::OutputFormat::FlexId as i32,
+                limit: None,
+            })
+            .await
+            .unwrap()
+            .into_inner(),
+    )
+    .await;
 
     let group_flex = res_flex.data.first().unwrap();
     let first_id_flex = group_flex.spatial_ids.first().unwrap();

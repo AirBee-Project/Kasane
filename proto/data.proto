@@ -5,8 +5,8 @@ package kasane;
 import "common.proto";
 
 service DataService {
-  // 指定された空間IDに合致するデータを検索し、値辞書形式で取得する。
-  rpc Search(SearchDataRequest) returns (SearchDataResponse);
+  // 指定された空間IDに合致するデータを検索し、値辞書形式でストリーミング取得する。
+  rpc Search(SearchDataRequest) returns (stream SearchDataResponse);
   // テーブルにデータを挿入する（既存データとの重複がある場合はエラー）。
   rpc Insert(InsertDataRequest) returns (InsertDataResponse);
   // テーブルにデータを更新または挿入する。

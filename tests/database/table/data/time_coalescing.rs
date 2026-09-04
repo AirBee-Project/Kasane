@@ -9,7 +9,7 @@ use kasane::grpc::pb;
 
 use crate::common::TestApp;
 use crate::common::builders::{self, num};
-use crate::common::data::{put_data, search_data};
+use crate::common::data::{collect_search_stream, put_data, search_data};
 
 #[tokio::test]
 async fn read_back_coalesces_a_non_power_of_two_calendar_interval() {
@@ -80,19 +80,22 @@ async fn read_back_coalesces_adjacent_segments_into_a_range() {
         (0, 1),
     )];
 
-    let result = test_app
-        .data()
-        .search(pb::SearchDataRequest {
-            db_name: "test_db".to_string(),
-            table_name: "test_table".to_string(),
-            spatial_ids: range_query,
-            zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
-            format: pb::OutputFormat::RangeId as i32,
-            limit: None,
-        })
-        .await
-        .unwrap()
-        .into_inner();
+    let result = collect_search_stream(
+        test_app
+            .data()
+            .search(pb::SearchDataRequest {
+                db_name: "test_db".to_string(),
+                table_name: "test_table".to_string(),
+                spatial_ids: range_query,
+                zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
+                format: pb::OutputFormat::RangeId as i32,
+                limit: None,
+            })
+            .await
+            .unwrap()
+            .into_inner(),
+    )
+    .await;
 
     assert_eq!(result.data.len(), 1);
     let group = &result.data[0];

@@ -1,0 +1,24 @@
+info:
+  name: grant_database
+  type: grpc
+  seq: 3
+  tags:
+    - Users
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.UserService/GrantPrivilege
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {
+      "username": "alice",
+      "privilege": {
+        "database": {
+          "db_name": "dev_db",
+          "role": "DATA_ROLE_MANAGE"
+        }
+      }
+    }

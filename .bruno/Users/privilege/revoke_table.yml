@@ -1,0 +1,24 @@
+info:
+  name: revoke_table
+  type: grpc
+  seq: 7
+  tags:
+    - Users
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.UserService/RevokePrivilege
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {
+      "username": "alice",
+      "target": {
+        "table": {
+          "db_name": "dev_db",
+          "table_name": "dev_table"
+        }
+      }
+    }

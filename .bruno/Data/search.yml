@@ -8,7 +8,7 @@ info:
 grpc:
   url: "{{baseUrl}}"
   method: /kasane.DataService/Search
-  methodType: unary
+  methodType: server_streaming
   metadata:
     - name: authorization
       value: "Bearer {{accessToken}}"

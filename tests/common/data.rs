@@ -75,13 +75,61 @@ pub async fn patch_data(
         .expect("upsert failed");
 }
 
+/// ストリームを受信し、単一の [`pb::SearchDataResponse`] にマージして返す。
+pub async fn collect_search_stream(
+    mut stream: tonic::Streaming<pb::SearchDataResponse>,
+) -> pb::SearchDataResponse {
+    let mut dictionary = Vec::new();
+    let mut data = Vec::new();
+
+    while let Some(chunk) = stream
+        .message()
+        .await
+        .expect("failed to receive stream chunk")
+    {
+        let chunk_dict = chunk.dictionary;
+        let mut chunk_to_global_ref: HashMap<u64, u64> = HashMap::new();
+
+        for (chunk_ref, val) in chunk_dict.into_iter().enumerate() {
+            let global_ref = if let Some(idx) = dictionary.iter().position(|d| d == &val) {
+                idx as u64
+            } else {
+                let idx = dictionary.len() as u64;
+                dictionary.push(val);
+                idx
+            };
+            chunk_to_global_ref.insert(chunk_ref as u64, global_ref);
+        }
+
+        for group in chunk.data {
+            let new_ref = chunk_to_global_ref
+                .get(&group.value_ref)
+                .copied()
+                .unwrap_or(group.value_ref);
+            if let Some(existing) = data
+                .iter_mut()
+                .find(|g: &&mut pb::DataGroup| g.value_ref == new_ref)
+            {
+                existing.spatial_ids.extend(group.spatial_ids);
+            } else {
+                data.push(pb::DataGroup {
+                    value_ref: new_ref,
+                    spatial_ids: group.spatial_ids,
+                });
+            }
+        }
+    }
+
+    pb::SearchDataResponse { dictionary, data }
+}
+
 /// `test_db` の `table_name` を検索する（`format` は常に `singleId`）。
 pub async fn search_data(
     test_app: &TestApp,
     table_name: &str,
     spatial_ids: Vec<pb::SpatialId>,
 ) -> pb::SearchDataResponse {
-    test_app
+    let stream = test_app
         .data()
         .search(pb::SearchDataRequest {
             db_name: "test_db".to_string(),
@@ -93,7 +141,8 @@ pub async fn search_data(
         })
         .await
         .expect("search failed")
-        .into_inner()
+        .into_inner();
+    collect_search_stream(stream).await
 }
 
 /// `search_data` の結果の先頭エントリのデータ値と空間IDを検証する。

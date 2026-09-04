@@ -6,8 +6,8 @@ import "common.proto";
 import "data.proto";
 
 service QueryService {
-  // 複数のテーブルを対象にクエリ式を実行し、指定した空間IDの結果を取得する。
-  rpc Execute(ExecuteQueryRequest) returns (SearchDataResponse);
+  // 複数のテーブルを対象にクエリ式を実行し、指定した空間IDの結果をストリーミング取得する。
+  rpc Execute(ExecuteQueryRequest) returns (stream SearchDataResponse);
 }
 
 // 同一空間に複数の値が集まったときの集約規則。

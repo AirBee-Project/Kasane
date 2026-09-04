@@ -1,0 +1,18 @@
+info:
+  name: get
+  type: grpc
+  seq: 1
+  tags:
+    - Users
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.UserService/GetPrivileges
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {
+      "username": "root"
+    }

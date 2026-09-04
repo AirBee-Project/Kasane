@@ -1,0 +1,18 @@
+info:
+  name: delete
+  type: grpc
+  seq: 5
+  tags:
+    - Users
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.UserService/Delete
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {
+      "username": "alice"
+    }

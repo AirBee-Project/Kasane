@@ -32,11 +32,8 @@ async fn execute_query(
     test_app: &TestApp,
     request: pb::ExecuteQueryRequest,
 ) -> Result<pb::SearchDataResponse, tonic::Status> {
-    test_app
-        .query()
-        .execute(request)
-        .await
-        .map(tonic::Response::into_inner)
+    let stream = test_app.query().execute(request).await?.into_inner();
+    Ok(crate::common::data::collect_search_stream(stream).await)
 }
 
 /// レスポンスに含まれる空間IDの総数。

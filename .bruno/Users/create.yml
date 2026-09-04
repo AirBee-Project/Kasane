@@ -1,0 +1,20 @@
+info:
+  name: create
+  type: grpc
+  seq: 3
+  tags:
+    - Users
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.UserService/Create
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {
+      "username": "alice",
+      "password": "secret123",
+      "privileges": []
+    }

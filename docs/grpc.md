@@ -13,8 +13,8 @@ Kasane は gRPC（[tonic](https://github.com/hyperium/tonic)）のみで通信�
 | `auth.proto` | `AuthService` | ログイン（認証不要） |
 | `database.proto` | `DatabaseService` | データベースの CRUD・コピー |
 | `table.proto` | `TableService` | テーブルの CRUD・コピー |
-| `data.proto` | `DataService` | 空間IDと値の検索・挿入・更新・削除 |
-| `query.proto` | `QueryService` | クロステーブルのクエリ式実行 |
+| `data.proto` | `DataService` | 空間IDと値の検索（Server Streaming）・挿入・更新・削除 |
+| `query.proto` | `QueryService` | クロステーブルのクエリ式実行（Server Streaming） |
 | `users.proto` | `UserService` | ユーザーと権限の管理 |
 | `common.proto` | - | `SpatialId` / `TableConstraints` 等、リソース横断の共有型 |
 
@@ -53,6 +53,8 @@ grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
 許可オリジンは `KASANE_CORS_ALLOWED_ORIGINS`（カンマ区切り）で絞れます。未設定時は全オリジンを
 許可します（Bearer トークン方式で Cookie を使わないため、絞らなくてもただちに悪用できるわけ
 ではありません）。
+
+`DataService.Search` および `QueryService.Execute` の Server Streaming は gRPC-Web でも完全にサポートされており、ブラウザ側で `for await (const chunk of client.search(req))` のようにストリーミング受信が可能です（大量データ取得時もブラウザ側のメモリ消費を抑えられます）。
 
 ## 動的に API を探索する
 

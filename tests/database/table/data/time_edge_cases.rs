@@ -14,7 +14,7 @@ use tonic_types::StatusExt;
 
 use crate::common::TestApp;
 use crate::common::builders::{self, num};
-use crate::common::data::{put_data, search_data};
+use crate::common::data::{collect_search_stream, put_data, search_data};
 
 async fn setup(test_app: &TestApp) {
     test_app.create_database("test_db").await;
@@ -68,7 +68,7 @@ async fn search_range(
     test_app: &TestApp,
     spatial_ids: Vec<pb::SpatialId>,
 ) -> pb::SearchDataResponse {
-    test_app
+    let stream = test_app
         .data()
         .search(pb::SearchDataRequest {
             db_name: "test_db".to_string(),
@@ -80,7 +80,8 @@ async fn search_range(
         })
         .await
         .unwrap()
-        .into_inner()
+        .into_inner();
+    collect_search_stream(stream).await
 }
 
 /// `format=flexId` で検索する。
@@ -88,7 +89,7 @@ async fn search_flex(
     test_app: &TestApp,
     spatial_ids: Vec<pb::SpatialId>,
 ) -> pb::SearchDataResponse {
-    test_app
+    let stream = test_app
         .data()
         .search(pb::SearchDataRequest {
             db_name: "test_db".to_string(),
@@ -100,7 +101,8 @@ async fn search_flex(
         })
         .await
         .unwrap()
-        .into_inner()
+        .into_inner();
+    collect_search_stream(stream).await
 }
 
 fn single_id_i_only(z: u32, f: i32, x: u32, y: u32, i: u64) -> pb::SpatialId {
