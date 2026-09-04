@@ -36,8 +36,11 @@ use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, Endpoint};
 
 use kasane::grpc::pb;
+use kasane::models::id::PrincipalId;
+use kasane::models::users::{PrivilegeRule, UserRole};
 use kasane::repositories::tikv::{TikvConfig, TikvDb};
 use kasane::repositories::{Storage, WriteRepository};
+use kasane::services::auth::hash_password;
 
 fn env_usize(name: &str, default: usize) -> usize {
     std::env::var(name)
@@ -62,10 +65,13 @@ impl Interceptor for TokenInterceptor {
 type DataClient =
     pb::data_service_client::DataServiceClient<InterceptedService<Channel, TokenInterceptor>>;
 
-/// gRPC サーバーを ephemeral ポートで起動し、root トークン付きの `DataServiceClient` を返す。
-async fn spawn_server(db: TikvDb) -> (DataClient, tokio::sync::oneshot::Sender<()>) {
+/// gRPC サーバーを ephemeral ポートで起動し、`username` のトークン付きの `DataServiceClient` を返す。
+async fn spawn_server(
+    db: TikvDb,
+    username: &str,
+) -> (DataClient, tokio::sync::oneshot::Sender<()>) {
     let app_state = kasane::AppState::new(db);
-    let token = kasane::services::auth::generate_jwt(&app_state, "root")
+    let token = kasane::services::auth::generate_jwt(&app_state, username)
         .await
         .unwrap();
 
@@ -147,8 +153,16 @@ async fn bench_concurrent_writes() {
     let db = TikvDb::connect(config).await.expect("TiKV に接続できない");
 
     let db_name = format!("bench_{}", uuid::Uuid::now_v7().simple());
+    // `root` は他のテストと共有するクラスタの唯一の管理者アカウントで、削除・再作成される
+    // 契約テストがある（`tikv.rs` の `the_default_admin_is_seeded_exactly_once_and_never_resurrected`
+    // を参照）。並列実行中にそれと踏み合うと、ベンチの間だけ有効なはずのトークンが
+    // 途中で失効する。ここだけで使い捨てる専用ユーザーを都度作り、`root` のライフサイクル
+    // から切り離す。
+    let bench_username = format!("bench_user_{}", uuid::Uuid::now_v7().simple());
+    let bench_password_hash = hash_password("bench").expect("パスワードのハッシュ化に失敗");
     {
         let db_name = db_name.clone();
+        let bench_username = bench_username.clone();
         db.write(async move |w| {
             w.database_create(&db_name, None).await?;
             w.table_create(
@@ -161,13 +175,22 @@ async fn bench_concurrent_writes() {
                 false,
                 true,
             )
+            .await?;
+            w.create_user(
+                &bench_username,
+                PrincipalId(uuid::Uuid::now_v7()),
+                bench_password_hash.clone(),
+                &[PrivilegeRule::Global {
+                    role: UserRole::Admin,
+                }],
+            )
             .await
         })
         .await
         .unwrap();
     }
 
-    let (client, _shutdown) = spawn_server(db.clone()).await;
+    let (client, _shutdown) = spawn_server(db.clone(), &bench_username).await;
 
     let measure = async |at: &Option<String>| match at {
         Some(endpoint) => store_used_bytes(endpoint).await,
@@ -280,6 +303,9 @@ async fn bench_concurrent_writes() {
     let db_name2 = db_name.clone();
     let _ = db
         .write(async move |w| w.database_remove(&db_name2).await)
+        .await;
+    let _ = db
+        .write(async move |w| w.delete_user(&bench_username).await)
         .await;
 
     assert_eq!(
