@@ -82,11 +82,11 @@ async fn hash_password_off_thread(password: String) -> Result<String, AppError> 
 }
 
 /// root は削除・権限変更の対象にできない。
-fn require_not_root(username: &str) -> Result<String, AppError> {
+fn require_not_root(username: &str) -> Result<(), AppError> {
     if username == crate::repositories::ROOT_USERNAME {
         return Err(AuthError::RootProtected.into());
     }
-    Ok(username.to_string())
+    Ok(())
 }
 
 #[tracing::instrument(skip_all, fields(username = %req.username))]
@@ -107,7 +107,8 @@ pub async fn create_user(app_state: &AppState, req: CreateUserRequest) -> Result
 
 #[tracing::instrument(skip_all, fields(username = %username))]
 pub async fn delete_user(app_state: &AppState, username: &str) -> Result<(), AppError> {
-    let username = require_not_root(username)?;
+    require_not_root(username)?;
+    let username = username.to_string();
     app_state
         .db
         .write(async move |w| w.delete_user(&username).await)
@@ -136,7 +137,8 @@ pub async fn grant_privilege(
     username: &str,
     rule: PrivilegeRule,
 ) -> Result<(), AppError> {
-    let username = require_not_root(username)?;
+    require_not_root(username)?;
+    let username = username.to_string();
     app_state
         .db
         .write(async move |w| w.grant_privilege(&username, &rule).await)
@@ -150,7 +152,8 @@ pub async fn revoke_privilege(
     username: &str,
     target: PrivilegeTarget,
 ) -> Result<(), AppError> {
-    let username = require_not_root(username)?;
+    require_not_root(username)?;
+    let username = username.to_string();
     app_state
         .db
         .write(async move |w| w.revoke_privilege(&username, &target).await)

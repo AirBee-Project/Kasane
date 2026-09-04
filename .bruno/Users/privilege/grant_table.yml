@@ -1,0 +1,25 @@
+info:
+  name: grant_table
+  type: grpc
+  seq: 4
+  tags:
+    - Users
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.UserService/GrantPrivilege
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {
+      "username": "alice",
+      "privilege": {
+        "table": {
+          "db_name": "dev_db",
+          "table_name": "dev_table",
+          "role": "DATA_ROLE_WRITE"
+        }
+      }
+    }

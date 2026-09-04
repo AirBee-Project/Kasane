@@ -1,27 +1,20 @@
-use axum::{
-    body::Body,
-    http::{Request, StatusCode},
-};
-use http_body_util::BodyExt;
-use tower::ServiceExt;
+use kasane::grpc::pb;
 
 use crate::common::TestApp;
+use crate::common::builders::{num, range_id, single_id};
 use crate::common::data::put_data;
 
 async fn get_table_count(test_app: &TestApp, table_name: &str) -> u64 {
-    let req = Request::builder()
-        .method("GET")
-        .uri(format!("/databases/test_db/tables/{}", table_name))
-        .body(Body::empty())
-        .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body_bytes = response.into_body().collect().await.unwrap().to_bytes();
-    let body_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-
-    body_json["count"].as_u64().unwrap()
+    test_app
+        .table()
+        .get(pb::GetTableRequest {
+            db_name: "test_db".to_string(),
+            table_name: table_name.to_string(),
+        })
+        .await
+        .unwrap()
+        .into_inner()
+        .count
 }
 
 #[tokio::test]
@@ -38,50 +31,28 @@ async fn test_table_count_dynamic() {
     assert_eq!(count, 0, "Initial count should be 0");
 
     // 1件目のデータを挿入
-    let single_id_query_1 =
-        serde_json::json!([{ "z": 20, "f": 0, "x": 100, "y": 100, "type": "singleId" }]);
-    put_data(
-        &test_app,
-        "count_test_table",
-        &serde_json::json!({ "value": 1, "spatial_ids": single_id_query_1 }),
-    )
-    .await;
+    let single_id_1 = single_id(20, 0, 100, 100);
+    put_data(&test_app, "count_test_table", num(1.0), vec![single_id_1]).await;
 
     let count = get_table_count(&test_app, "count_test_table").await;
     assert_eq!(count, 1, "Count should be 1 after one insert");
 
     // 2件目のデータを挿入
-    let single_id_query_2 =
-        serde_json::json!([{ "z": 20, "f": 0, "x": 200, "y": 200, "type": "singleId" }]);
-    put_data(
-        &test_app,
-        "count_test_table",
-        &serde_json::json!({ "value": 2, "spatial_ids": single_id_query_2 }),
-    )
-    .await;
+    let single_id_2 = single_id(20, 0, 200, 200);
+    put_data(&test_app, "count_test_table", num(2.0), vec![single_id_2]).await;
 
     let count = get_table_count(&test_app, "count_test_table").await;
     assert_eq!(count, 2, "Count should be 2 after second insert");
 
     // 既存のデータを上書き（count は 2 のまま変わらないこと）
-    put_data(
-        &test_app,
-        "count_test_table",
-        &serde_json::json!({ "value": 3, "spatial_ids": single_id_query_2 }),
-    )
-    .await;
+    put_data(&test_app, "count_test_table", num(3.0), vec![single_id_2]).await;
 
     let count = get_table_count(&test_app, "count_test_table").await;
     assert_eq!(count, 2, "Count should remain 2 after overwrite");
 
     // range を使って範囲で挿入（例: z=21 の FlexId を 4 つ追加）
-    let range_id_query = serde_json::json!([{ "z": 21, "f": [0,0], "x": [1000, 1001], "y": [1000, 1001], "type": "rangeId" }]);
-    put_data(
-        &test_app,
-        "count_test_table",
-        &serde_json::json!({ "value": 4, "spatial_ids": range_id_query }),
-    )
-    .await;
+    let range = range_id(21, Some((0, 0)), Some((1000, 1001)), Some((1000, 1001)));
+    put_data(&test_app, "count_test_table", num(4.0), vec![range]).await;
 
     let count = get_table_count(&test_app, "count_test_table").await;
     assert_eq!(
@@ -90,18 +61,16 @@ async fn test_table_count_dynamic() {
     );
 
     // 1件目のデータを削除
-    let req = Request::builder()
-        .method("DELETE")
-        .uri("/databases/test_db/tables/count_test_table/data")
-        .header(axum::http::header::CONTENT_TYPE, "application/json")
-        .body(Body::from(
-            serde_json::to_string(&serde_json::json!({ "spatial_ids": single_id_query_1 }))
-                .unwrap(),
-        ))
+    test_app
+        .data()
+        .remove(pb::RemoveDataRequest {
+            db_name: "test_db".to_string(),
+            table_name: "count_test_table".to_string(),
+            spatial_ids: vec![single_id_1],
+            zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
+        })
+        .await
         .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
     let count = get_table_count(&test_app, "count_test_table").await;
     assert_eq!(count, 2, "Count should be 2 after deleting 1 item");

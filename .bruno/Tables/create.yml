@@ -1,107 +1,23 @@
 info:
   name: create
-  type: http
-  seq: 3
+  type: grpc
+  seq: 1
   tags:
-    - tables
+    - Tables
 
-http:
-  method: POST
-  url: "{{baseUrl}}/databases/:db_name/tables"
-  params:
-    - name: db_name
-      value: ""
-      type: path
-  body:
-    type: json
-    data: |-
-      {
-        "name": "example_table",
-        "data_type": "Text",
-        "max_zoom_level": 25,
-        "is_temporal": true,
-        "description": "テーブルの説明文です"
-      }
-  auth:
-    type: bearer
-    token: "{{accessToken}}"
-
-settings:
-  encodeUrl: true
-  timeout: 0
-  followRedirects: true
-  maxRedirects: 5
-
-examples:
-  - name: 201 Response
-    description: Table created
-    request:
-      url: "{{baseUrl}}/databases/:db_name/tables"
-      method: POST
-      params:
-        - name: db_name
-          value: ""
-          type: path
-      body:
-        type: json
-        data: |-
-          {
-            "name": "example_table",
-            "data_type": "Text",
-            "max_zoom_level": 25,
-            "description": "テーブルの説明文です"
-          }
-    response:
-      status: 201
-      statusText: Created
-      body:
-        type: text
-        data: ""
-  - name: 400 Response
-    description: Invalid request
-    request:
-      url: "{{baseUrl}}/databases/:db_name/tables"
-      method: POST
-      params:
-        - name: db_name
-          value: ""
-          type: path
-      body:
-        type: json
-        data: |-
-          {
-            "name": "example_table",
-            "data_type": "Text",
-            "max_zoom_level": 25,
-            "description": "テーブルの説明文です"
-          }
-    response:
-      status: 400
-      statusText: Bad Request
-      body:
-        type: text
-        data: ""
-  - name: 409 Response
-    description: Table already exists
-    request:
-      url: "{{baseUrl}}/databases/:db_name/tables"
-      method: POST
-      params:
-        - name: db_name
-          value: ""
-          type: path
-      body:
-        type: json
-        data: |-
-          {
-            "name": "example_table",
-            "data_type": "Text",
-            "max_zoom_level": 25,
-            "description": "テーブルの説明文です"
-          }
-    response:
-      status: 409
-      statusText: Conflict
-      body:
-        type: text
-        data: ""
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.TableService/Create
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {
+      "db_name": "dev_db",
+      "name": "dev_table",
+      "data_type": 1,
+      "max_zoom_level": 25,
+      "description": "開発・デバッグ用テーブル",
+      "is_temporal": true
+    }

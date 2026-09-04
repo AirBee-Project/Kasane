@@ -1,10 +1,10 @@
 use crate::{
     AppState,
     error::AppError,
-    middleware::auth::authorize_path,
     models::database::table::TableSummary,
     models::users::{User, UserRole},
     repositories::{Storage, WriteRepository},
+    services::auth::authorize_path,
 };
 
 #[allow(clippy::too_many_arguments)]

@@ -1,0 +1,149 @@
+syntax = "proto3";
+
+package kasane;
+
+// リソース横断で使う共有型。
+
+enum NullValue {
+  NULL_VALUE = 0;
+}
+
+// 動的な値（Text, Int, Boolean, Presence/Null）。
+// 64bit整数の精度を完全に保持し、JSON中継を排する。
+message TypedValue {
+  oneof kind {
+    string string_val = 1;
+    int64 int_val = 2;
+    bool bool_val = 3;
+    NullValue null_val = 4;
+  }
+}
+
+// 区間表現用の範囲型（両端を含む閉区間 [min, max]）。
+message Int32Range {
+  int32 min = 1;
+  int32 max = 2;
+}
+
+message Uint32Range {
+  uint32 min = 1;
+  uint32 max = 2;
+}
+
+message Uint64Range {
+  uint64 min = 1;
+  uint64 max = 2;
+}
+
+// 通常の時空間ID（`{z}/{f}/{x}/{y}_{i}/{t}` 形式に対応）。
+// `i`/`t` は両方指定するか、両方省略して「全時間」を表す。
+message SingleId {
+  // 空間ズームレベル
+  uint32 z = 1;
+  // Fインデックス（高さ）
+  int32 f = 2;
+  // Xインデックス
+  uint32 x = 3;
+  // Yインデックス
+  uint32 y = 4;
+  // 時間間隔（秒）
+  optional uint64 i = 5;
+  // 時間インデックス
+  optional uint64 t = 6;
+}
+
+// 区間表現の時空間ID。省略された軸はその軸全体を表す。
+message RangeId {
+  // 空間ズームレベル
+  uint32 z = 1;
+  // Fインデックス（高さ）の区間（省略時は全範囲）
+  optional Int32Range f = 2;
+  // Xインデックスの区間（省略時は全範囲）
+  optional Uint32Range x = 3;
+  // Yインデックスの区間（省略時は全範囲）
+  optional Uint32Range y = 4;
+  // 時間間隔（秒）
+  optional uint64 i = 5;
+  // 時間インデックスの区間（省略時は全時間）
+  optional Uint64Range t = 6;
+}
+
+// 4軸すべてを「ズームレベル + インデックス」で表す拡張時空間ID（内部表現 FlexId に 1:1 対応）。
+message FlexId {
+  uint32 f_zoomlevel = 1;
+  int32 f_index = 2;
+  uint32 x_zoomlevel = 3;
+  uint32 x_index = 4;
+  uint32 y_zoomlevel = 5;
+  uint32 y_index = 6;
+  optional uint32 t_zoomlevel = 7;
+  optional uint64 t_index = 8;
+}
+
+message SpatialId {
+  oneof kind {
+    SingleId single_id = 1;
+    RangeId range_id = 2;
+    FlexId flex_id = 3;
+  }
+}
+
+// テーブルの max_zoom_level を超える空間IDが入力された場合の処理方針。
+enum ZoomLevelPolicy {
+  ZOOM_LEVEL_POLICY_UNSPECIFIED = 0;
+  ZOOM_LEVEL_POLICY_ERROR = 1;
+  ZOOM_LEVEL_POLICY_IGNORE = 2;
+  ZOOM_LEVEL_POLICY_NORMALIZE = 3;
+}
+
+// --- テーブルの値の型と制約 ---
+
+enum TableDataType {
+  TABLE_DATA_TYPE_UNSPECIFIED = 0;
+  TABLE_DATA_TYPE_TEXT = 1;
+  TABLE_DATA_TYPE_INT = 2;
+  TABLE_DATA_TYPE_BOOLEAN = 3;
+  TABLE_DATA_TYPE_ENUM = 4;
+  TABLE_DATA_TYPE_PRESENCE = 5;
+}
+
+// テーブルの値に対する制約。`Presence`/`Boolean` には制約を指定できない。
+// 内部実装用の Enum choices <-> ID マッピングは公開 API の対象外（サーバー内部でのみ保持）。
+message TableConstraints {
+  message Text {
+    optional uint64 min_length = 1;
+    optional uint64 max_length = 2;
+  }
+  message Int {
+    optional int64 min = 1;
+    optional int64 max = 2;
+  }
+  message Enum {
+    repeated string choices = 1;
+  }
+  oneof kind {
+    Text text = 1;
+    Int int = 2;
+    Enum enum_constraint = 3;
+  }
+}
+
+// --- ユーザー権限 ---
+
+// 権限の強さ。数値が大きいほど強く、上位は下位をすべて含む。
+// `admin` は制御面（ユーザー管理）専用で `global` スコープにのみ現れる。
+enum UserRole {
+  USER_ROLE_UNSPECIFIED = 0;
+  USER_ROLE_READ = 1;
+  USER_ROLE_WRITE = 2;
+  USER_ROLE_MANAGE = 3;
+  USER_ROLE_ADMIN = 4;
+}
+
+// データ面（database/table スコープ）で指定できるロール。`admin` を含まない。
+enum DataRole {
+  DATA_ROLE_UNSPECIFIED = 0;
+  DATA_ROLE_READ = 1;
+  DATA_ROLE_WRITE = 2;
+  DATA_ROLE_MANAGE = 3;
+}

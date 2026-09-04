@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package kasane;
+
+import "common.proto";
+
+service DataService {
+  // 指定された空間IDに合致するデータを検索し、値辞書形式でストリーミング取得する。
+  rpc Search(SearchDataRequest) returns (stream SearchDataResponse);
+  // テーブルにデータを挿入する（既存データとの重複がある場合はエラー）。
+  rpc Insert(InsertDataRequest) returns (InsertDataResponse);
+  // テーブルにデータを更新または挿入する。
+  rpc Upsert(UpsertDataRequest) returns (UpsertDataResponse);
+  // テーブルから指定された空間IDのデータを削除する。
+  rpc Remove(RemoveDataRequest) returns (RemoveDataResponse);
+}
+
+// 検索結果として返す空間IDの表現形式。
+enum OutputFormat {
+  OUTPUT_FORMAT_UNSPECIFIED = 0;
+  OUTPUT_FORMAT_SINGLE_ID = 1;
+  OUTPUT_FORMAT_RANGE_ID = 2;
+  OUTPUT_FORMAT_FLEX_ID = 3;
+}
+
+// `dictionary[value_ref]` が対応する値。同じ値を持つ空間IDをまとめる。
+message DataGroup {
+  uint64 value_ref = 1;
+  repeated SpatialId spatial_ids = 2;
+}
+
+// `Search`/`QueryService.Execute` の共通レスポンス形状。
+// `spatial_ids` の中身がどの `oneof kind` になるかは、要求した `OutputFormat` で揃う。
+message SearchDataResponse {
+  repeated TypedValue dictionary = 1;
+  repeated DataGroup data = 2;
+}
+
+// **必要な権限**: `table` / `read`
+message SearchDataRequest {
+  string db_name = 1;
+  string table_name = 2;
+  repeated SpatialId spatial_ids = 3;
+  ZoomLevelPolicy zoom_level_policy = 4;
+  OutputFormat format = 5;
+  optional uint64 limit = 6;
+}
+
+// **必要な権限**: `table` / `write`
+message InsertDataRequest {
+  string db_name = 1;
+  string table_name = 2;
+  TypedValue value = 3;
+  repeated SpatialId spatial_ids = 4;
+  ZoomLevelPolicy zoom_level_policy = 5;
+}
+
+message InsertDataResponse {}
+
+// **必要な権限**: `table` / `write`
+message UpsertDataRequest {
+  string db_name = 1;
+  string table_name = 2;
+  TypedValue value = 3;
+  repeated SpatialId spatial_ids = 4;
+  ZoomLevelPolicy zoom_level_policy = 5;
+}
+
+message UpsertDataResponse {}
+
+// **必要な権限**: `table` / `write`
+message RemoveDataRequest {
+  string db_name = 1;
+  string table_name = 2;
+  repeated SpatialId spatial_ids = 3;
+  ZoomLevelPolicy zoom_level_policy = 4;
+}
+
+message RemoveDataResponse {}

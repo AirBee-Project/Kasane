@@ -10,7 +10,8 @@ use crate::repositories::traits::DecodeFn;
 use crate::{
     error::AppError,
     models::{
-        database::table::{JsonValueType, TableConstraints, TableDataType},
+        ValueLiteral, ValueType,
+        database::table::{TableConstraints, TableDataType},
         query::MergePolicyKind,
     },
 };
@@ -54,21 +55,9 @@ pub fn incompatible_source(
     }
 }
 
-/// リクエスト中の JSON リテラルの種別（エラー報告用）。
-fn json_value_type(value: &serde_json::Value) -> JsonValueType {
-    match value {
-        serde_json::Value::String(_) => JsonValueType::String,
-        serde_json::Value::Number(_) => JsonValueType::Number,
-        serde_json::Value::Bool(_) => JsonValueType::Bool,
-        serde_json::Value::Array(_) => JsonValueType::Array,
-        serde_json::Value::Object(_) => JsonValueType::Object,
-        serde_json::Value::Null => JsonValueType::Null,
-    }
-}
-
-fn type_mismatch(value: &serde_json::Value, expected: JsonValueType) -> AppError {
+fn type_mismatch(value: &ValueLiteral, expected: ValueType) -> AppError {
     AppError::ValueTypeMismatch {
-        actual: json_value_type(value),
+        actual: value.value_type(),
         expected,
     }
 }
@@ -98,7 +87,7 @@ fn check_range<T: PartialOrd + std::fmt::Display>(
 
 // --- Value ---
 
-/// アプリで扱える値型。格納・復元・JSON 変換・クエリ演算を型ごとに引き受ける。
+/// アプリで扱える値型。格納・復元・リテラル変換・クエリ演算を型ごとに引き受ける。
 pub trait Value: SafeValue + Ord + 'static {
     /// エラーメッセージ用の型名。
     fn type_name() -> &'static str;
@@ -113,11 +102,11 @@ pub trait Value: SafeValue + Ord + 'static {
     /// `Self` を格納バイト列へ符号化する（`constraints` の範囲・選択肢検証込み）。
     fn encode(&self, constraints: Option<&TableConstraints>) -> Result<Vec<u8>, AppError>;
 
-    /// レスポンス用の JSON へ。
-    fn to_json(&self) -> serde_json::Value;
+    /// レスポンス用の [`ValueLiteral`] へ。
+    fn to_value(&self) -> ValueLiteral;
 
     /// リクエスト中のリテラル（挿入値・フィルタ境界・merge の既定値）から作る。
-    fn from_json(value: &serde_json::Value) -> Result<Self, AppError>;
+    fn from_value(value: &ValueLiteral) -> Result<Self, AppError>;
 
     fn zoom_out(q: Query<Self>, z: u8, p: MergePolicyKind) -> Result<Query<Self>, AppError>;
 
@@ -330,17 +319,14 @@ impl Value for i64 {
         Ok(self.to_be_bytes().to_vec())
     }
 
-    fn to_json(&self) -> serde_json::Value {
-        serde_json::Value::from(*self)
+    fn to_value(&self) -> ValueLiteral {
+        ValueLiteral::Int(*self)
     }
 
-    fn from_json(value: &serde_json::Value) -> Result<Self, AppError> {
+    fn from_value(value: &ValueLiteral) -> Result<Self, AppError> {
         value
             .as_i64()
-            .ok_or_else(|| AppError::NumericValueOutOfRange {
-                actual: value.to_string(),
-                expected: "Int".to_string(),
-            })
+            .ok_or_else(|| type_mismatch(value, ValueType::Int))
     }
 
     impl_ops!(i64, dispatch_full);
@@ -475,15 +461,15 @@ impl Value for String {
         }
     }
 
-    fn to_json(&self) -> serde_json::Value {
-        serde_json::Value::String(self.clone())
+    fn to_value(&self) -> ValueLiteral {
+        ValueLiteral::String(self.clone())
     }
 
-    fn from_json(value: &serde_json::Value) -> Result<Self, AppError> {
+    fn from_value(value: &ValueLiteral) -> Result<Self, AppError> {
         value
             .as_str()
             .map(std::string::ToString::to_string)
-            .ok_or_else(|| type_mismatch(value, JsonValueType::String))
+            .ok_or_else(|| type_mismatch(value, ValueType::String))
     }
 
     impl_ops!(String, dispatch_ord);
@@ -510,14 +496,14 @@ impl Value for bool {
         Ok(vec![*self as u8])
     }
 
-    fn to_json(&self) -> serde_json::Value {
-        serde_json::Value::Bool(*self)
+    fn to_value(&self) -> ValueLiteral {
+        ValueLiteral::Bool(*self)
     }
 
-    fn from_json(value: &serde_json::Value) -> Result<Self, AppError> {
+    fn from_value(value: &ValueLiteral) -> Result<Self, AppError> {
         value
             .as_bool()
-            .ok_or_else(|| type_mismatch(value, JsonValueType::Bool))
+            .ok_or_else(|| type_mismatch(value, ValueType::Bool))
     }
 
     impl_ops!(bool, dispatch_ord);
@@ -544,15 +530,15 @@ impl Value for () {
         Ok(Vec::new())
     }
 
-    fn to_json(&self) -> serde_json::Value {
-        serde_json::Value::Null
+    fn to_value(&self) -> ValueLiteral {
+        ValueLiteral::Null
     }
 
-    fn from_json(value: &serde_json::Value) -> Result<Self, AppError> {
+    fn from_value(value: &ValueLiteral) -> Result<Self, AppError> {
         if value.is_null() {
             Ok(())
         } else {
-            Err(type_mismatch(value, JsonValueType::Null))
+            Err(type_mismatch(value, ValueType::Null))
         }
     }
 

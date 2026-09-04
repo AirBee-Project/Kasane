@@ -1,53 +1,19 @@
 info:
   name: create
-  type: http
-  seq: 3
+  type: grpc
+  seq: 1
   tags:
-    - databases
+    - Databases
 
-http:
-  method: POST
-  url: "{{baseUrl}}/databases"
-  body:
-    type: json
-    data: |-
-      {
-        "name": "",
-        "description": "データベースの説明文"
-      }
-  auth:
-    type: bearer
-    token: "{{accessToken}}"
-
-settings:
-  encodeUrl: true
-  timeout: 0
-  followRedirects: true
-  maxRedirects: 5
-
-examples:
-  - name: 201 Response
-    description: Created successfully
-    request:
-      url: "{{baseUrl}}/databases"
-      method: POST
-      body:
-        type: json
-        data: |-
-          {
-            "name": "",
-            "description": "データベースの説明文"
-          }
-    response:
-      status: 201
-      statusText: Created
-      headers:
-        - name: Content-Type
-          value: application/json
-      body:
-        type: json
-        data: |-
-          {
-            "name": "",
-            "description": "データベースの説明文"
-          }
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.DatabaseService/Create
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {
+      "name": "dev_db",
+      "description": "開発・デバッグ用データベース"
+    }

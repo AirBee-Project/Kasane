@@ -1,4 +1,4 @@
-//! 格納バイト列と JSON の相互変換。
+//! 格納バイト列と値リテラル ([`ValueLiteral`]) の相互変換。
 //!
 //! 型ごとの符号化・復号・検証は [`crate::services::query::value::Value`] が一手に引き受け、
 //! ここは `data_type` から具体型へ単型化して trait を呼ぶだけの薄い入口。`search`（復元）も
@@ -7,7 +7,10 @@
 use crate::{
     error::{AppError, Stored},
     for_value_type,
-    models::database::table::{TableConstraints, TableDataType},
+    models::{
+        ValueLiteral,
+        database::table::{TableConstraints, TableDataType},
+    },
     services::query::value::Value,
 };
 
@@ -20,7 +23,7 @@ use crate::{
 /// 前提（件数 1 の葉は必ず上限内に収まる）を保証している。
 pub const MAX_STORED_VALUE_BYTES: usize = 256 * 1024;
 
-/// JSON の値を、テーブルのデータ型に基づいて解釈し、格納バイト列へ変換する（制約検証込み）。
+/// 値リテラルを、テーブルのデータ型に基づいて解釈し、格納バイト列へ変換する（制約検証込み）。
 ///
 /// **サイズ上限（[`MAX_STORED_VALUE_BYTES`]）はここでは検証しない。** この関数はテーブルの
 /// 制約変更時の既存データ再検証（`validate_existing_data`）からも呼ばれる。上限は「これから
@@ -32,13 +35,13 @@ pub const MAX_STORED_VALUE_BYTES: usize = 256 * 1024;
 pub fn interpret_value(
     expected_type: TableDataType,
     constraints: Option<&TableConstraints>,
-    value: serde_json::Value,
+    value: ValueLiteral,
 ) -> Result<Vec<u8>, AppError> {
     fn imp<V: Value>(
-        value: &serde_json::Value,
+        value: &ValueLiteral,
         constraints: Option<&TableConstraints>,
     ) -> Result<Vec<u8>, AppError> {
-        V::from_json(value)?.encode(constraints)
+        V::from_value(value)?.encode(constraints)
     }
     for_value_type!(expected_type, imp, &value, constraints)
 }
@@ -59,18 +62,18 @@ pub fn enforce_max_stored_size(encoded: &[u8]) -> Result<(), AppError> {
     Ok(())
 }
 
-/// 格納バイト列を、テーブルのデータ型に基づいて JSON 値へ復元する。
+/// 格納バイト列を、テーブルのデータ型に基づいて [`ValueLiteral`] へ復元する。
 pub fn restore_value(
     expected_type: TableDataType,
     constraints: Option<&TableConstraints>,
     value: &[u8],
-) -> Result<serde_json::Value, AppError> {
+) -> Result<ValueLiteral, AppError> {
     fn imp<V: Value>(
         bytes: &[u8],
         constraints: Option<&TableConstraints>,
-    ) -> Result<serde_json::Value, AppError> {
+    ) -> Result<ValueLiteral, AppError> {
         let decode = V::decoder(constraints)?;
-        decode(bytes).map(|v| v.to_json()).ok_or_else(|| {
+        decode(bytes).map(|v| v.to_value()).ok_or_else(|| {
             AppError::corrupt(
                 Stored::Value,
                 format!("bytes are not a valid {}", V::type_name()),

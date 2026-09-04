@@ -1,85 +1,39 @@
 info:
   name: login
-  type: http
+  type: grpc
   seq: 1
   tags:
     - Auth
 
-http:
-  method: POST
-  url: "{{baseUrl}}/auth/login"
-  body:
-    type: json
-    data: |-
-      {
-        "username": "{{userName}}",
-        "password": "{{password}}"
-      }
-  auth: inherit
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.AuthService/Login
+  methodType: unary
+  message: |-
+    {
+      "username": "{{userName}}",
+      "password": "{{password}}"
+    }
 
 runtime:
   scripts:
+    - type: tests
+      code: |-
+        const body = (typeof res.getBody === "function") ? res.getBody() : (res && res.body ? res.body : res);
+        const token = body && (body.token || (body.data && body.data.token));
+        if (token) {
+          bru.setVar("accessToken", token);
+          bru.setEnvVar("accessToken", token);
+          console.log("トークンを自動保存しました:", token);
+        } else {
+          console.warn("トークンが見つかりませんでした:", body);
+        }
     - type: after-response
       code: |-
-        if (res && res.body) {
-          console.log("Response Body:", res.body);
-          const token = res.body.token; 
-          if (token) {
-            bru.setEnvVar("accessToken", token);
-            console.log("トークンを保存しました:", token);
-          } else {
-            console.warn("トークンが見つかりませんでした。レスポンス構造を確認してください。");
-          }
-        } else {
-          console.error("レスポンスが空か、正しく取得できませんでした。");
+        const body = (typeof res.getBody === "function") ? res.getBody() : (res && res.body ? res.body : res);
+        const token = body && (body.token || (body.data && body.data.token));
+        if (token) {
+          bru.setVar("accessToken", token);
+          bru.setEnvVar("accessToken", token);
+          console.log("トークンを自動保存しました:", token);
         }
-
-settings:
-  encodeUrl: true
-  timeout: 0
-  followRedirects: true
-  maxRedirects: 5
-
-examples:
-  - name: 200 Response
-    description: Login successful
-    request:
-      url: "{{baseUrl}}/auth/login"
-      method: POST
-      body:
-        type: json
-        data: |-
-          {
-            "username": "root",
-            "password": "password"
-          }
-    response:
-      status: 200
-      statusText: OK
-      headers:
-        - name: Content-Type
-          value: application/json
-      body:
-        type: json
-        data: |-
-          {
-            "token": ""
-          }
-  - name: 401 Response
-    description: Unauthorized
-    request:
-      url: "{{baseUrl}}/auth/login"
-      method: POST
-      body:
-        type: json
-        data: |-
-          {
-            "username": "root",
-            "password": "password"
-          }
-    response:
-      status: 401
-      statusText: Unauthorized
-      body:
-        type: text
-        data: ""

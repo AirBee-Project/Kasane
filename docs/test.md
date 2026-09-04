@@ -20,6 +20,14 @@ cargo test --no-default-features --features "backend-tikv,gen-fixtures" \
 ```
 
 # デバッグ
-開発中にコードが正しく動いているかを確認したい場面があると思う。その時にいちいちJsonを書いて、curlしたくないと思うので、Brunoを導入する。`.bruno`フォルダを開くことで、いくつかのテストパターンを開くことができる。`.bruno`はデバッグ用のテストツール群である。
+開発中にサーバーが正しく動いているかを確認したい場合、サーバー側で `ServerReflection` が有効になっているため、`grpcurl` や Buf Studio、Postman、および **Bruno** などの gRPC クライアントから対話的に RPC を呼び出してデバッグできます（詳細は `docs/grpc.md` を参照）。
+
+## Bruno による GUI デバッグ
+リポジトリ直下の `.bruno` フォルダは Bruno（v2.10.0+ / v3.1+）のコレクションとして構成されています。
+
+1. **コレクションを開く**: Bruno の「Open Collection」から本リポジトリの `.bruno` フォルダを選択して開きます。
+2. **環境の選択**: 右上の環境プルダウンから `dev`（`baseUrl: 127.0.0.1:5172`）を選択します。
+3. **認証**: `Auth/login` を実行し、レスポンスの `token` 文字列をコピーして、環境変数 `dev` の `accessToken`（Current Value）に貼り付けます（※現在の Bruno では gRPC の自動スクリプト実行が未対応のため）。
+4. **リクエスト実行**: `Databases/create`（`dev_db` 作成）や `Tables/create`（`dev_table` 作成）、`Data/insert`、`Data/search` などのリクエストをそのまま呼び出して動作確認やデバッグが行えます（トークンは 24 時間有効です）。
 
 原則として、削除や変更には消極的で、追加には積極的である。これはあくまで指針であり、必要であれば削除することもある。

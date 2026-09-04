@@ -1,10 +1,8 @@
-use axum::{
-    body::Body,
-    http::{Request, StatusCode},
-};
-use tower::ServiceExt;
+use kasane::grpc::pb;
 
 use crate::common::TestApp;
+use crate::common::builders::{num, single_id};
+use crate::common::data::put_data;
 
 #[tokio::test]
 /// テーブルが正常に削除され、再取得できないことを検証する。
@@ -16,23 +14,23 @@ async fn test_delete_table_success() {
         .create_table("test_db", "table_to_delete", "Int", 25)
         .await;
 
-    let req = Request::builder()
-        .method("DELETE")
-        .uri("/databases/test_db/tables/table_to_delete")
-        .body(Body::empty())
+    test_app
+        .table()
+        .delete(pb::DeleteTableRequest {
+            db_name: "test_db".to_string(),
+            table_name: "table_to_delete".to_string(),
+        })
+        .await
         .unwrap();
 
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
-
-    let get_req = Request::builder()
-        .method("GET")
-        .uri("/databases/test_db/tables/table_to_delete")
-        .body(Body::empty())
-        .unwrap();
-
-    let get_response = test_app.app.clone().oneshot(get_req).await.unwrap();
-    assert_eq!(get_response.status(), StatusCode::NOT_FOUND);
+    let result = test_app
+        .table()
+        .get(pb::GetTableRequest {
+            db_name: "test_db".to_string(),
+            table_name: "table_to_delete".to_string(),
+        })
+        .await;
+    assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
 }
 
 #[tokio::test]
@@ -45,15 +43,14 @@ async fn test_delete_table_not_found() {
         .create_table("test_db", "example_table", "Int", 25)
         .await;
 
-    let req = Request::builder()
-        .method("DELETE")
-        .uri("/databases/test_db/tables/non_existent_table")
-        .body(Body::empty())
-        .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let result = test_app
+        .table()
+        .delete(pb::DeleteTableRequest {
+            db_name: "test_db".to_string(),
+            table_name: "non_existent_table".to_string(),
+        })
+        .await;
+    assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
 }
 
 #[tokio::test]
@@ -68,43 +65,35 @@ async fn test_delete_table_cache_bug() {
         .create_table("test_db", table_name, "Int", 25)
         .await;
 
-    let single_id_query = serde_json::json!([
-        { "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }
-    ]);
-    crate::common::data::put_data(
+    put_data(
         &test_app,
         table_name,
-        &serde_json::json!({ "value": 1, "spatial_ids": single_id_query }),
+        num(1.0),
+        vec![single_id(20, 0, 931386, 412905)],
     )
     .await;
 
-    let req = Request::builder()
-        .method("DELETE")
-        .uri(format!("/databases/test_db/tables/{}", table_name))
-        .body(Body::empty())
-        .unwrap();
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
-
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables")
-        .header("Content-Type", "application/json")
-        .body(Body::from(
-            serde_json::to_string(&serde_json::json!({
-                "name": table_name,
-                "data_type": "Int",
-                "max_zoom_level": 25
-            }))
-            .unwrap(),
-        ))
+    test_app
+        .table()
+        .delete(pb::DeleteTableRequest {
+            db_name: "test_db".to_string(),
+            table_name: table_name.to_string(),
+        })
+        .await
         .unwrap();
 
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-
-    assert_eq!(
-        response.status(),
-        StatusCode::CREATED,
-        "Table should be recreatable after deletion"
-    );
+    test_app
+        .table()
+        .create(pb::CreateTableRequest {
+            db_name: "test_db".to_string(),
+            name: table_name.to_string(),
+            data_type: pb::TableDataType::Int as i32,
+            max_zoom_level: 25,
+            constraints: None,
+            description: None,
+            value_index: false,
+            is_temporal: true,
+        })
+        .await
+        .expect("Table should be recreatable after deletion");
 }

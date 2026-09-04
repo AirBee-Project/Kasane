@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 #[repr(u8)]
-#[derive(Debug, Deserialize, Serialize, ToSchema, Clone, PartialEq, Eq, Hash, Copy)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Hash, Copy)]
 /// Table内の時空間IDに付与する値の型。
 pub enum TableDataType {
     /// 文字列
@@ -39,11 +38,10 @@ impl TableDataType {
 /// - `Enum`: 許容される選択肢の制約（`choices`）
 ///
 /// `Presence` および `Boolean` には制約を指定できない。
-#[derive(Debug, Deserialize, Serialize, ToSchema, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(tag = "type")]
 pub enum TableConstraints {
     /// `Text` 型に対する制約。
-    #[schema(example = json!({"type": "Text", "min_length": 1, "max_length": 100}))]
     Text {
         /// 最小文字数
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -53,7 +51,6 @@ pub enum TableConstraints {
         max_length: Option<usize>,
     },
     /// `Int` 型に対する制約。
-    #[schema(example = json!({"type": "Int", "min": 0, "max": 100}))]
     Int {
         /// 最小値（境界値を含む）
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -63,7 +60,6 @@ pub enum TableConstraints {
         max: Option<i64>,
     },
     /// `Enum` 型に対する制約。
-    #[schema(example = json!({"type": "Enum", "choices": ["red", "blue", "green"]}))]
     Enum {
         /// 許容される文字列の配列
         choices: Vec<String>,
@@ -78,17 +74,6 @@ pub enum TableConstraints {
 
 fn is_zero(num: &u16) -> bool {
     *num == 0
-}
-
-impl From<TableDataType> for JsonValueType {
-    fn from(value: TableDataType) -> Self {
-        match value {
-            TableDataType::Text | TableDataType::Enum => Self::String,
-            TableDataType::Int => Self::Number,
-            TableDataType::Boolean => Self::Bool,
-            TableDataType::Presence => Self::Null,
-        }
-    }
 }
 
 impl TableConstraints {
@@ -269,14 +254,4 @@ impl TableConstraints {
         }
         Ok(())
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum JsonValueType {
-    String,
-    Number,
-    Bool,
-    Array,
-    Object,
-    Null,
 }

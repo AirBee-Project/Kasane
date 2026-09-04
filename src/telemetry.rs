@@ -128,7 +128,8 @@ impl Drop for TelemetryGuard {
     }
 }
 
-const DEFAULT_FILTER: &str = "info,kasane=info,kasane_logic=debug,tikv_client=warn,tower_http=info,axum_tracing_opentelemetry=error,otel::tracing=info";
+const DEFAULT_FILTER: &str =
+    "info,kasane=info,kasane_logic=debug,tikv_client=warn,tower_http=info,otel::tracing=info";
 
 /// `RUST_LOG` の値をそのまま使わず、noisy な外部クレートの抑制と kasane-logic の詳細トレースを
 /// 常時追記する。デプロイ環境の `RUST_LOG` を変更せずにこの2つを効かせるため。
@@ -234,7 +235,6 @@ pub mod metrics {
         use std::sync::OnceLock;
 
         struct Instruments {
-            http_duration: Histogram<f64>,
             write_attempts: Counter<u64>,
             write_duration: Histogram<f64>,
             read_duration: Histogram<f64>,
@@ -247,11 +247,6 @@ pub mod metrics {
             I.get_or_init(|| {
                 let m = global::meter("kasane");
                 Instruments {
-                    http_duration: m
-                        .f64_histogram("http.server.request.duration")
-                        .with_unit("s")
-                        .with_description("Duration of inbound HTTP requests.")
-                        .build(),
                     write_attempts: m
                         .u64_counter("kasane.storage.write.attempts")
                         .with_description("Write transaction attempts, split by outcome.")
@@ -276,17 +271,6 @@ pub mod metrics {
                         .build(),
                 }
             })
-        }
-
-        pub fn http_request(method: &str, route: String, status: u16, seconds: f64) {
-            instruments().http_duration.record(
-                seconds,
-                &[
-                    KeyValue::new("http.request.method", method.to_string()),
-                    KeyValue::new("http.route", route),
-                    KeyValue::new("http.response.status_code", status as i64),
-                ],
-            );
         }
 
         pub fn write_attempt(outcome: WriteOutcome) {
@@ -323,7 +307,6 @@ pub mod metrics {
     #[cfg(not(feature = "production"))]
     mod imp {
         use super::WriteOutcome;
-        pub fn http_request(_: &str, _: String, _: u16, _: f64) {}
         pub fn write_attempt(_: WriteOutcome) {}
         pub fn write_transaction(_: f64) {}
         pub fn read_transaction(_: f64) {}
@@ -331,7 +314,5 @@ pub mod metrics {
         pub fn gc_reclaimed(_: usize) {}
     }
 
-    pub use imp::{
-        gc_reclaimed, http_request, read_transaction, write_attempt, write_batch, write_transaction,
-    };
+    pub use imp::{gc_reclaimed, read_transaction, write_attempt, write_batch, write_transaction};
 }

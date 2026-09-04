@@ -1,9 +1,4 @@
-use axum::{
-    body::{Body, to_bytes},
-    http::{Request, StatusCode},
-};
-use serde_json::Value;
-use tower::ServiceExt;
+use kasane::grpc::pb;
 
 use crate::common::TestApp;
 
@@ -13,43 +8,34 @@ async fn test_create_table_success() {
     let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
-    let create_body = serde_json::json!({
-        "name": "new_table",
-        "data_type": "Int",
-        "max_zoom_level": 25
-    });
-
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables")
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
+    test_app
+        .table()
+        .create(pb::CreateTableRequest {
+            db_name: "test_db".to_string(),
+            name: "new_table".to_string(),
+            data_type: pb::TableDataType::Int as i32,
+            max_zoom_level: 25,
+            constraints: None,
+            description: None,
+            value_index: false,
+            is_temporal: true,
+        })
+        .await
         .unwrap();
 
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
+    let info = test_app
+        .table()
+        .get(pb::GetTableRequest {
+            db_name: "test_db".to_string(),
+            table_name: "new_table".to_string(),
+        })
+        .await
+        .unwrap()
+        .into_inner();
 
-    assert_eq!(response.status(), StatusCode::CREATED);
-    assert_eq!(
-        response.headers().get("Location").unwrap(),
-        "/databases/test_db/tables/new_table"
-    );
-
-    let req = Request::builder()
-        .method("GET")
-        .uri("/databases/test_db/tables/new_table")
-        .body(Body::empty())
-        .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let json: Value = serde_json::from_slice(&body).unwrap();
-
-    assert_eq!(json["name"], "new_table");
-    assert_eq!(json["data_type"], "Int");
-    assert_eq!(json["max_zoom_level"], 25);
+    assert_eq!(info.name, "new_table");
+    assert_eq!(info.data_type, pb::TableDataType::Int as i32);
+    assert_eq!(info.max_zoom_level, 25);
 }
 
 #[tokio::test]
@@ -62,39 +48,34 @@ async fn test_create_table_conflict() {
         .create_table("test_db", "existing_table", "Int", 25)
         .await;
 
-    let create_body = serde_json::json!({
-        "name": "existing_table",
-        "data_type": "Int",
-        "max_zoom_level": 20
-    });
+    let result = test_app
+        .table()
+        .create(pb::CreateTableRequest {
+            db_name: "test_db".to_string(),
+            name: "existing_table".to_string(),
+            data_type: pb::TableDataType::Int as i32,
+            max_zoom_level: 20,
+            constraints: None,
+            description: None,
+            value_index: false,
+            is_temporal: true,
+        })
+        .await;
+    assert_eq!(result.unwrap_err().code(), tonic::Code::AlreadyExists);
 
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables")
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
-        .unwrap();
+    let info = test_app
+        .table()
+        .get(pb::GetTableRequest {
+            db_name: "test_db".to_string(),
+            table_name: "existing_table".to_string(),
+        })
+        .await
+        .unwrap()
+        .into_inner();
 
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-
-    assert_eq!(response.status(), StatusCode::CONFLICT);
-
-    let req = Request::builder()
-        .method("GET")
-        .uri("/databases/test_db/tables/existing_table")
-        .body(Body::empty())
-        .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let json: Value = serde_json::from_slice(&body).unwrap();
-
-    assert_eq!(json["name"], "existing_table");
-    assert_eq!(json["data_type"], "Int");
-    assert_eq!(json["max_zoom_level"], 25);
+    assert_eq!(info.name, "existing_table");
+    assert_eq!(info.data_type, pb::TableDataType::Int as i32);
+    assert_eq!(info.max_zoom_level, 25);
 }
 
 #[tokio::test]
@@ -103,30 +84,30 @@ async fn test_create_table_max_zoom_level_too_large() {
     let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
-    let create_body = serde_json::json!({
-        "name": "too_deep",
-        "data_type": "Int",
-        "max_zoom_level": 31
-    });
-
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables")
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
-        .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let result = test_app
+        .table()
+        .create(pb::CreateTableRequest {
+            db_name: "test_db".to_string(),
+            name: "too_deep".to_string(),
+            data_type: pb::TableDataType::Int as i32,
+            max_zoom_level: 31,
+            constraints: None,
+            description: None,
+            value_index: false,
+            is_temporal: true,
+        })
+        .await;
+    assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
 
     // 検証で弾かれているので、テーブルは作成されていない。
-    let req = Request::builder()
-        .method("GET")
-        .uri("/databases/test_db/tables/too_deep")
-        .body(Body::empty())
-        .unwrap();
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let result = test_app
+        .table()
+        .get(pb::GetTableRequest {
+            db_name: "test_db".to_string(),
+            table_name: "too_deep".to_string(),
+        })
+        .await;
+    assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
 }
 
 #[tokio::test]
@@ -135,21 +116,20 @@ async fn test_create_table_max_zoom_level_boundary_ok() {
     let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
-    let create_body = serde_json::json!({
-        "name": "boundary_table",
-        "data_type": "Int",
-        "max_zoom_level": 30
-    });
-
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables")
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
+    test_app
+        .table()
+        .create(pb::CreateTableRequest {
+            db_name: "test_db".to_string(),
+            name: "boundary_table".to_string(),
+            data_type: pb::TableDataType::Int as i32,
+            max_zoom_level: 30,
+            constraints: None,
+            description: None,
+            value_index: false,
+            is_temporal: true,
+        })
+        .await
         .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::CREATED);
 }
 
 #[tokio::test]
@@ -160,66 +140,71 @@ async fn test_create_table_enum_choice_length_limits() {
 
     // 1. 256文字の選択肢（エラーになるべき）
     let long_choice = "a".repeat(256);
-    let create_body_too_long = serde_json::json!({
-        "name": "too_long_enum",
-        "data_type": "Enum",
-        "max_zoom_level": 25,
-        "constraints": {
-            "type": "Enum",
-            "choices": [long_choice]
-        }
-    });
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables")
-        .header("Content-Type", "application/json")
-        .body(Body::from(
-            serde_json::to_string(&create_body_too_long).unwrap(),
-        ))
-        .unwrap();
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let result = test_app
+        .table()
+        .create(pb::CreateTableRequest {
+            db_name: "test_db".to_string(),
+            name: "too_long_enum".to_string(),
+            data_type: pb::TableDataType::Enum as i32,
+            max_zoom_level: 25,
+            constraints: Some(pb::TableConstraints {
+                kind: Some(pb::table_constraints::Kind::EnumConstraint(
+                    pb::table_constraints::Enum {
+                        choices: vec![long_choice],
+                    },
+                )),
+            }),
+            description: None,
+            value_index: false,
+            is_temporal: true,
+        })
+        .await;
+    assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
 
     // 2. 空文字の選択肢（エラーになるべき）
-    let create_body_empty = serde_json::json!({
-        "name": "empty_enum",
-        "data_type": "Enum",
-        "max_zoom_level": 25,
-        "constraints": {
-            "type": "Enum",
-            "choices": [""]
-        }
-    });
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables")
-        .header("Content-Type", "application/json")
-        .body(Body::from(
-            serde_json::to_string(&create_body_empty).unwrap(),
-        ))
-        .unwrap();
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let result = test_app
+        .table()
+        .create(pb::CreateTableRequest {
+            db_name: "test_db".to_string(),
+            name: "empty_enum".to_string(),
+            data_type: pb::TableDataType::Enum as i32,
+            max_zoom_level: 25,
+            constraints: Some(pb::TableConstraints {
+                kind: Some(pb::table_constraints::Kind::EnumConstraint(
+                    pb::table_constraints::Enum {
+                        choices: vec![String::new()],
+                    },
+                )),
+            }),
+            description: None,
+            value_index: false,
+            is_temporal: true,
+        })
+        .await;
+    assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
 
     // 3. 255文字の選択肢（成功するべき）
     let border_choice = "a".repeat(255);
-    let create_body_ok = serde_json::json!({
-        "name": "ok_enum",
-        "data_type": "Enum",
-        "max_zoom_level": 25,
-        "constraints": {
-            "type": "Enum",
-            "choices": [border_choice]
-        }
-    });
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables")
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&create_body_ok).unwrap()))
+    test_app
+        .table()
+        .create(pb::CreateTableRequest {
+            db_name: "test_db".to_string(),
+            name: "ok_enum".to_string(),
+            data_type: pb::TableDataType::Enum as i32,
+            max_zoom_level: 25,
+            constraints: Some(pb::TableConstraints {
+                kind: Some(pb::table_constraints::Kind::EnumConstraint(
+                    pb::table_constraints::Enum {
+                        choices: vec![border_choice],
+                    },
+                )),
+            }),
+            description: None,
+            value_index: false,
+            is_temporal: true,
+        })
+        .await
         .unwrap();
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::CREATED);
 }
 
 #[tokio::test]
@@ -228,36 +213,32 @@ async fn test_create_table_description() {
     let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
-    let create_body = serde_json::json!({
-        "name": "desc_table",
-        "data_type": "Int",
-        "max_zoom_level": 25,
-        "description": "This is a test table."
-    });
-
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables")
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
+    test_app
+        .table()
+        .create(pb::CreateTableRequest {
+            db_name: "test_db".to_string(),
+            name: "desc_table".to_string(),
+            data_type: pb::TableDataType::Int as i32,
+            max_zoom_level: 25,
+            constraints: None,
+            description: Some("This is a test table.".to_string()),
+            value_index: false,
+            is_temporal: true,
+        })
+        .await
         .unwrap();
 
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::CREATED);
+    let info = test_app
+        .table()
+        .get(pb::GetTableRequest {
+            db_name: "test_db".to_string(),
+            table_name: "desc_table".to_string(),
+        })
+        .await
+        .unwrap()
+        .into_inner();
 
-    let req = Request::builder()
-        .method("GET")
-        .uri("/databases/test_db/tables/desc_table")
-        .body(Body::empty())
-        .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let json: Value = serde_json::from_slice(&body).unwrap();
-
-    assert_eq!(json["description"], "This is a test table.");
+    assert_eq!(info.description.as_deref(), Some("This is a test table."));
 }
 
 #[tokio::test]
@@ -268,20 +249,18 @@ async fn test_create_table_description_too_long() {
 
     let long_desc = "a".repeat(kasane::models::database::MAX_DESCRIPTION_LENGTH + 1);
 
-    let create_body = serde_json::json!({
-        "name": "desc_table_too_long",
-        "data_type": "Int",
-        "max_zoom_level": 25,
-        "description": long_desc
-    });
-
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables")
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
-        .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let result = test_app
+        .table()
+        .create(pb::CreateTableRequest {
+            db_name: "test_db".to_string(),
+            name: "desc_table_too_long".to_string(),
+            data_type: pb::TableDataType::Int as i32,
+            max_zoom_level: 25,
+            constraints: None,
+            description: Some(long_desc),
+            value_index: false,
+            is_temporal: true,
+        })
+        .await;
+    assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
 }

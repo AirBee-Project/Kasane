@@ -1,0 +1,23 @@
+info:
+  name: grant_global
+  type: grpc
+  seq: 2
+  tags:
+    - Users
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.UserService/GrantPrivilege
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {
+      "username": "alice",
+      "privilege": {
+        "global": {
+          "role": "USER_ROLE_ADMIN"
+        }
+      }
+    }

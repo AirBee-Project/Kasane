@@ -1,9 +1,13 @@
 //! 値に注目したクエリ（値フィルタ）と、全データ型への対応の検証。
 
-use axum::http::StatusCode;
+use kasane::grpc::pb;
 
-use super::{post_query, single_id, total_ids, values};
+use super::{execute_query, request, single_id, total_ids, values};
 use crate::common::TestApp;
+use crate::common::builders::{
+    self, boolean, extrude_f, extrude_x, falloff_x, filter_equals, filter_in_range,
+    filter_not_in_range, map_values, mapping_entry, merge, num, shift_x, text, zoom_out,
+};
 use crate::common::data::put_data;
 
 /// `test_db` に指定型のテーブルを作り、`(x, 値)` を書き込む。
@@ -11,25 +15,58 @@ async fn seed(
     test_app: &TestApp,
     table: &str,
     data_type: &str,
-    flex_ids: &[(i64, serde_json::Value)],
+    flex_ids: &[(i64, pb::TypedValue)],
 ) {
     test_app.create_table("test_db", table, data_type, 25).await;
     for (x, v) in flex_ids {
-        put_data(
-            test_app,
-            table,
-            &serde_json::json!({ "value": v, "spatial_ids": [single_id(*x)] }),
-        )
-        .await;
+        put_data(test_app, table, v.clone(), vec![single_id(*x)]).await;
     }
 }
 
-fn source(table: &str) -> serde_json::Value {
-    serde_json::json!({ "type": "source", "database": "test_db", "table": table })
+fn source(table: &str) -> pb::QueryNode {
+    builders::source("test_db", table)
 }
 
-fn ids(base: i64, count: i64) -> Vec<serde_json::Value> {
+fn ids(base: i64, count: i64) -> Vec<pb::SpatialId> {
     (0..count).map(|i| single_id(base + i)).collect()
+}
+
+fn value_as_bool(v: &pb::TypedValue) -> Option<bool> {
+    match &v.kind {
+        Some(pb::typed_value::Kind::BoolVal(b)) => Some(*b),
+        _ => None,
+    }
+}
+
+fn dictionary_strings(result: &pb::SearchDataResponse) -> Vec<&str> {
+    result
+        .dictionary
+        .iter()
+        .map(|v| builders::value_as_str(v).expect("expected a string"))
+        .collect()
+}
+
+/// `test_db` に `Enum` テーブルを作る（`create_table` は制約を渡せないので直接リクエストする）。
+async fn create_enum_table(app: &TestApp, table: &str, choices: &[&str]) {
+    app.table()
+        .create(pb::CreateTableRequest {
+            db_name: "test_db".to_string(),
+            name: table.to_string(),
+            data_type: pb::TableDataType::Enum as i32,
+            max_zoom_level: 25,
+            constraints: Some(pb::TableConstraints {
+                kind: Some(pb::table_constraints::Kind::EnumConstraint(
+                    pb::table_constraints::Enum {
+                        choices: choices.iter().map(|s| s.to_string()).collect(),
+                    },
+                )),
+            }),
+            description: None,
+            value_index: false,
+            is_temporal: true,
+        })
+        .await
+        .unwrap();
 }
 
 /// ある値のみを残す。
@@ -41,28 +78,15 @@ async fn filter_equals_keeps_only_that_value() {
         &app,
         "t_eq",
         "Int",
-        &[
-            (700000, serde_json::json!(1)),
-            (700001, serde_json::json!(5)),
-            (700002, serde_json::json!(10)),
-        ],
+        &[(700000, num(1.0)), (700001, num(5.0)), (700002, num(10.0))],
     )
     .await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": ids(700000, 3),
-            "query": {
-                "type": "filterValues", "mode": "equals", "value": 5,
-                "input": source("t_eq")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
+    let query = filter_equals(source("t_eq"), num(5.0));
+    let result = execute_query(&app, request(ids(700000, 3), query))
+        .await
+        .unwrap();
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(values(&result), vec![5]);
     assert_eq!(total_ids(&result), 1);
 }
@@ -77,28 +101,19 @@ async fn filter_in_range_is_inclusive() {
         "t_in",
         "Int",
         &[
-            (710000, serde_json::json!(1)),
-            (710001, serde_json::json!(5)),
-            (710002, serde_json::json!(10)),
-            (710003, serde_json::json!(20)),
+            (710000, num(1.0)),
+            (710001, num(5.0)),
+            (710002, num(10.0)),
+            (710003, num(20.0)),
         ],
     )
     .await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": ids(710000, 4),
-            "query": {
-                "type": "filterValues", "mode": "inRange", "min": 5, "max": 10,
-                "input": source("t_in")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
+    let query = filter_in_range(source("t_in"), Some(num(5.0)), Some(num(10.0)));
+    let result = execute_query(&app, request(ids(710000, 4), query))
+        .await
+        .unwrap();
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(values(&result), vec![5, 10], "境界を含むこと");
 }
 
@@ -112,28 +127,19 @@ async fn filter_not_in_range_keeps_the_outside() {
         "t_out",
         "Int",
         &[
-            (720000, serde_json::json!(1)),
-            (720001, serde_json::json!(5)),
-            (720002, serde_json::json!(10)),
-            (720003, serde_json::json!(20)),
+            (720000, num(1.0)),
+            (720001, num(5.0)),
+            (720002, num(10.0)),
+            (720003, num(20.0)),
         ],
     )
     .await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": ids(720000, 4),
-            "query": {
-                "type": "filterValues", "mode": "notInRange", "min": 5, "max": 10,
-                "input": source("t_out")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
+    let query = filter_not_in_range(source("t_out"), Some(num(5.0)), Some(num(10.0)));
+    let result = execute_query(&app, request(ids(720000, 4), query))
+        .await
+        .unwrap();
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(values(&result), vec![1, 20]);
 }
 
@@ -147,29 +153,23 @@ async fn filter_works_on_text_values() {
         "t_words",
         "Text",
         &[
-            (760000, serde_json::json!("apple")),
-            (760001, serde_json::json!("banana")),
-            (760002, serde_json::json!("cherry")),
+            (760000, text("apple")),
+            (760001, text("banana")),
+            (760002, text("cherry")),
         ],
     )
     .await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": ids(760000, 3),
-            "query": {
-                "type": "filterValues", "mode": "equals", "value": "banana",
-                "input": source("t_words")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
+    let query = filter_equals(source("t_words"), text("banana"));
+    let result = execute_query(&app, request(ids(760000, 3), query))
+        .await
+        .unwrap();
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(total_ids(&result), 1);
-    assert_eq!(result["dictionary"][0], serde_json::json!("banana"));
+    assert_eq!(
+        builders::value_as_str(&result.dictionary[0]),
+        Some("banana")
+    );
 }
 
 /// Boolean テーブルにもクエリを適用できる。
@@ -181,29 +181,17 @@ async fn supports_boolean_tables() {
         &app,
         "t_flag",
         "Boolean",
-        &[
-            (770000, serde_json::json!(true)),
-            (770001, serde_json::json!(false)),
-        ],
+        &[(770000, boolean(true)), (770001, boolean(false))],
     )
     .await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": ids(770000, 2),
-            "query": {
-                "type": "filterValues", "mode": "equals", "value": true,
-                "input": source("t_flag")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
+    let query = filter_equals(source("t_flag"), boolean(true));
+    let result = execute_query(&app, request(ids(770000, 2), query))
+        .await
+        .unwrap();
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(total_ids(&result), 1);
-    assert_eq!(result["dictionary"][0], serde_json::json!(true));
+    assert_eq!(value_as_bool(&result.dictionary[0]), Some(true));
 }
 
 /// 64bit 相当の大きな整数値にもクエリを適用できる（`Int` = i64）。
@@ -215,78 +203,53 @@ async fn supports_large_int_values() {
         &app,
         "t_big",
         "Int",
-        &[
-            (778000, serde_json::json!(1_000_000_000_000i64)),
-            (778001, serde_json::json!(1i64)),
-        ],
+        &[(778000, num(1_000_000_000_000.0)), (778001, num(1.0))],
     )
     .await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": ids(778000, 2),
-            "query": {
-                "type": "filterValues", "mode": "inRange", "min": 1_000_000i64,
-                "input": source("t_big")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
+    let query = filter_in_range(source("t_big"), Some(num(1_000_000.0)), None);
+    let result = execute_query(&app, request(ids(778000, 2), query))
+        .await
+        .unwrap();
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(total_ids(&result), 1);
     assert_eq!(
-        result["dictionary"][0],
-        serde_json::json!(1_000_000_000_000i64)
+        builders::value_as_f64(&result.dictionary[0]),
+        Some(1_000_000_000_000.0)
     );
 }
 
-/// 算術を要する演算子は非数値型では 400 になる。
+/// 算術を要する演算子は非数値型では InvalidArgument になる。
 #[tokio::test]
 async fn rejects_arithmetic_operator_on_text() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(&app, "t_txt3", "Text", &[]).await;
 
-    let (status, _) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": ids(780000, 1),
-            "query": {
-                "type": "falloffX", "z": 20, "radius": 2, "policy": "max",
-                "input": source("t_txt3")
-            }
-        }),
-        "",
-    )
-    .await;
+    let query = falloff_x(
+        source("t_txt3"),
+        20,
+        2,
+        pb::FalloffPattern::Linear,
+        None,
+        pb::MergePolicyKind::Max,
+    );
+    let result = execute_query(&app, request(ids(780000, 1), query)).await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
 }
 
-/// 数値専用の `MergePolicy` を非数値型に使うと 400 になる。
+/// 数値専用の `MergePolicy` を非数値型に使うと InvalidArgument になる。
 #[tokio::test]
 async fn rejects_numeric_policy_on_text() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
     seed(&app, "t_txt4", "Text", &[]).await;
 
-    let (status, _) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": ids(785000, 1),
-            "query": {
-                "type": "zoomOut", "z": 19, "policy": "sum",
-                "input": source("t_txt4")
-            }
-        }),
-        "",
-    )
-    .await;
+    let query = zoom_out(source("t_txt4"), 19, pb::MergePolicyKind::Sum);
+    let result = execute_query(&app, request(ids(785000, 1), query)).await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
 }
 
 /// 演算子を挟まないクエリで、対象領域の全 FlexId が返ること。
@@ -301,26 +264,19 @@ async fn source_only_returns_all_flex_ids() {
         "t_multi",
         "Int",
         &[
-            (790000, serde_json::json!(1)),
-            (790001, serde_json::json!(5)),
-            (790002, serde_json::json!(10)),
-            (790003, serde_json::json!(20)),
+            (790000, num(1.0)),
+            (790001, num(5.0)),
+            (790002, num(10.0)),
+            (790003, num(20.0)),
         ],
     )
     .await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": ids(790000, 4),
-            "query": source("t_multi")
-        }),
-        "?format=singleId",
-    )
-    .await;
+    let result = execute_query(&app, request(ids(790000, 4), source("t_multi")))
+        .await
+        .unwrap();
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
-    assert_eq!(values(&result), vec![1, 5, 10, 20], "body: {result}");
+    assert_eq!(values(&result), vec![1, 5, 10, 20]);
 }
 
 // ---------------------------------------------------------------------------
@@ -328,100 +284,61 @@ async fn source_only_returns_all_flex_ids() {
 //
 // クエリは遅延評価（`run_on_subset`）でしか実行されないため、そこで
 // `validate()` を通していないと、範囲外パラメータを持つ演算子が FlexId を黙って
-// 捨てて「エラーではなく空の結果 (200)」を返してしまう。以下はその退行を防ぐ。
+// 捨てて「エラーではなく空の結果」を返してしまう。以下はその退行を防ぐ。
 // ---------------------------------------------------------------------------
 
-/// `extrudeX` の座標がそのズームレベルの範囲外なら 400。
+/// `extrudeX` の座標がそのズームレベルの範囲外なら InvalidArgument。
 #[tokio::test]
 async fn rejects_extrude_x_coordinate_out_of_range() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
-    seed(&app, "t_ex_x", "Int", &[(760000, serde_json::json!(1))]).await;
+    seed(&app, "t_ex_x", "Int", &[(760000, num(1.0))]).await;
 
     // z=5 の X 上限は 31。9999 は範囲外。
-    let (status, body) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": ids(760000, 1),
-            "query": {
-                "type": "extrudeX", "z": 5, "start": 0, "end": 9999, "policy": "max",
-                "input": source("t_ex_x")
-            }
-        }),
-        "",
-    )
-    .await;
+    let query = extrude_x(source("t_ex_x"), 5, 0, 9999, pb::MergePolicyKind::Max);
+    let result = execute_query(&app, request(ids(760000, 1), query)).await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST, "body: {body}");
+    assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
 }
 
-/// `extrudeF` の高度がそのズームレベルの範囲外なら 400。
+/// `extrudeF` の高度がそのズームレベルの範囲外なら InvalidArgument。
 #[tokio::test]
 async fn rejects_extrude_f_coordinate_out_of_range() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
-    seed(&app, "t_ex_f", "Int", &[(761000, serde_json::json!(1))]).await;
+    seed(&app, "t_ex_f", "Int", &[(761000, num(1.0))]).await;
 
-    let (status, body) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": ids(761000, 1),
-            "query": {
-                "type": "extrudeF", "z": 5, "start": 0, "end": 99999, "policy": "max",
-                "input": source("t_ex_f")
-            }
-        }),
-        "",
-    )
-    .await;
+    let query = extrude_f(source("t_ex_f"), 5, 0, 99999, pb::MergePolicyKind::Max);
+    let result = execute_query(&app, request(ids(761000, 1), query)).await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST, "body: {body}");
+    assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
 }
 
-/// 値フィルタの下限が上限を上回っていたら 400。
+/// 値フィルタの下限が上限を上回っていたら InvalidArgument。
 #[tokio::test]
 async fn rejects_inverted_filter_range() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
-    seed(&app, "t_inv", "Int", &[(762000, serde_json::json!(5))]).await;
+    seed(&app, "t_inv", "Int", &[(762000, num(5.0))]).await;
 
-    let (status, body) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": ids(762000, 1),
-            "query": {
-                "type": "filterValues", "mode": "inRange", "min": 100, "max": 1,
-                "input": source("t_inv")
-            }
-        }),
-        "",
-    )
-    .await;
+    let query = filter_in_range(source("t_inv"), Some(num(100.0)), Some(num(1.0)));
+    let result = execute_query(&app, request(ids(762000, 1), query)).await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST, "body: {body}");
+    assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
 }
 
-/// 範囲内のパラメータなら従来どおり 200 で通ること（上の3件の裏取り）。
+/// 範囲内のパラメータなら従来どおり通ること（上の3件の裏取り）。
 #[tokio::test]
 async fn accepts_in_range_operator_parameters() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
-    seed(&app, "t_ok", "Int", &[(763000, serde_json::json!(7))]).await;
+    seed(&app, "t_ok", "Int", &[(763000, num(7.0))]).await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": ids(763000, 1),
-            "query": {
-                "type": "filterValues", "mode": "inRange", "min": 1, "max": 100,
-                "input": source("t_ok")
-            }
-        }),
-        "",
-    )
-    .await;
+    let query = filter_in_range(source("t_ok"), Some(num(1.0)), Some(num(100.0)));
+    let result = execute_query(&app, request(ids(763000, 1), query))
+        .await
+        .unwrap();
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(values(&result), vec![7]);
     assert_eq!(total_ids(&result), 1);
 }
@@ -443,39 +360,27 @@ async fn zero_limit_leaves_no_orphan_dictionary_entries() {
         &app,
         "t_lim",
         "Int",
-        &[
-            (770000, serde_json::json!(1)),
-            (770001, serde_json::json!(2)),
-        ],
+        &[(770000, num(1.0)), (770001, num(2.0))],
     )
     .await;
 
-    let (status, result) = post_query(
+    let result = execute_query(
         &app,
-        &serde_json::json!({
-            "spatial_ids": ids(770000, 2),
-            "query": source("t_lim")
-        }),
-        "?limit=0",
+        pb::ExecuteQueryRequest {
+            limit: Some(0),
+            ..request(ids(770000, 2), source("t_lim"))
+        },
     )
-    .await;
+    .await
+    .unwrap();
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
+    assert_eq!(total_ids(&result), 0, "limit=0 なのに空間IDが出ている");
     assert_eq!(
-        total_ids(&result),
+        result.dictionary.len(),
         0,
-        "limit=0 なのに空間IDが出ている: {result}"
+        "参照されない辞書エントリが残っている"
     );
-
-    let dict_len = result["dictionary"]
-        .as_array()
-        .map_or(0, std::vec::Vec::len);
-    let group_len = result["data"].as_array().map_or(0, std::vec::Vec::len);
-    assert_eq!(
-        dict_len, 0,
-        "参照されない辞書エントリが残っている: {result}"
-    );
-    assert_eq!(dict_len, group_len);
+    assert_eq!(result.dictionary.len(), result.data.len());
 }
 
 /// `limit` を掛けたときも、辞書エントリ数とグループ数が一致すること。
@@ -488,34 +393,29 @@ async fn limit_keeps_dictionary_and_groups_consistent() {
         "t_lim1",
         "Int",
         &[
-            (773000, serde_json::json!(1)),
-            (773001, serde_json::json!(2)),
-            (773002, serde_json::json!(3)),
-            (773003, serde_json::json!(4)),
+            (773000, num(1.0)),
+            (773001, num(2.0)),
+            (773002, num(3.0)),
+            (773003, num(4.0)),
         ],
     )
     .await;
 
-    let (status, result) = post_query(
+    let result = execute_query(
         &app,
-        &serde_json::json!({
-            "spatial_ids": ids(773000, 4),
-            "query": source("t_lim1")
-        }),
-        "?limit=2",
+        pb::ExecuteQueryRequest {
+            limit: Some(2),
+            ..request(ids(773000, 4), source("t_lim1"))
+        },
     )
-    .await;
+    .await
+    .unwrap();
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
-    assert_eq!(total_ids(&result), 2, "limit が効いていない: {result}");
-
-    let dict_len = result["dictionary"]
-        .as_array()
-        .map_or(0, std::vec::Vec::len);
-    let group_len = result["data"].as_array().map_or(0, std::vec::Vec::len);
+    assert_eq!(total_ids(&result), 2, "limit が効いていない");
     assert_eq!(
-        dict_len, group_len,
-        "参照されない辞書エントリが残っている: {result}"
+        result.dictionary.len(),
+        result.data.len(),
+        "参照されない辞書エントリが残っている"
     );
 }
 
@@ -531,29 +431,27 @@ async fn limit_truncates_the_results() {
         "t_lim2",
         "Int",
         &[
-            (771000, serde_json::json!(40)),
-            (771001, serde_json::json!(10)),
-            (771002, serde_json::json!(30)),
-            (771003, serde_json::json!(20)),
+            (771000, num(40.0)),
+            (771001, num(10.0)),
+            (771002, num(30.0)),
+            (771003, num(20.0)),
         ],
     )
     .await;
 
-    let (status, result) = post_query(
+    let result = execute_query(
         &app,
-        &serde_json::json!({
-            "spatial_ids": ids(771000, 4),
-            "query": source("t_lim2")
-        }),
-        "?limit=2",
+        pb::ExecuteQueryRequest {
+            limit: Some(2),
+            ..request(ids(771000, 4), source("t_lim2"))
+        },
     )
-    .await;
+    .await
+    .unwrap();
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(total_ids(&result), 2);
-    // Which exact values are returned depends on the iteration order of the underlying storage,
-    // so we only assert that exactly 2 values/groups are returned.
-    assert_eq!(values(&result).len(), 2, "body: {result}");
+    // どの値が返るかは基盤ストレージの走査順に依存するため、件数だけを検証する。
+    assert_eq!(values(&result).len(), 2);
 }
 
 /// `limit` 無指定なら全件返ること（上の2件の裏取り）。
@@ -566,25 +464,18 @@ async fn no_limit_returns_every_flex_id() {
         "t_lim3",
         "Int",
         &[
-            (772000, serde_json::json!(40)),
-            (772001, serde_json::json!(10)),
-            (772002, serde_json::json!(30)),
-            (772003, serde_json::json!(20)),
+            (772000, num(40.0)),
+            (772001, num(10.0)),
+            (772002, num(30.0)),
+            (772003, num(20.0)),
         ],
     )
     .await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": ids(772000, 4),
-            "query": source("t_lim3")
-        }),
-        "",
-    )
-    .await;
+    let result = execute_query(&app, request(ids(772000, 4), source("t_lim3")))
+        .await
+        .unwrap();
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(total_ids(&result), 4);
     assert_eq!(values(&result), vec![10, 20, 30, 40]);
 }
@@ -593,29 +484,7 @@ async fn no_limit_returns_every_flex_id() {
 // value_type の明示
 // ---------------------------------------------------------------------------
 
-/// `Enum` テーブルを作る（`create_table` は制約を渡せないので直接リクエストする）。
-async fn create_enum_table(app: &TestApp, table: &str, choices: &[&str]) {
-    use axum::body::Body;
-    use axum::http::Request;
-    use tower::ServiceExt;
-
-    let body = serde_json::json!({
-        "name": table,
-        "data_type": "Enum",
-        "max_zoom_level": 25,
-        "constraints": { "type": "Enum", "choices": choices }
-    });
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables")
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&body).unwrap()))
-        .unwrap();
-    let res = app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(res.status(), StatusCode::CREATED);
-}
-
-/// `data_type` が異なるソースは、既定では推論できず 400 になる。
+/// `data_type` が異なるソースは、既定では推論できず InvalidArgument になる。
 ///
 /// `Text` と `Enum` はどちらも文字列として復元されるが、推論は `data_type` の
 /// 同一性で判定するため弾かれる。
@@ -623,28 +492,23 @@ async fn create_enum_table(app: &TestApp, table: &str, choices: &[&str]) {
 async fn mixed_text_and_enum_sources_need_explicit_value_type() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
-    seed(&app, "t_txt_m", "Text", &[(790000, serde_json::json!("a"))]).await;
+    seed(&app, "t_txt_m", "Text", &[(790000, text("a"))]).await;
     create_enum_table(&app, "t_enum_m", &["a", "b"]).await;
-    put_data(
-        &app,
-        "t_enum_m",
-        &serde_json::json!({ "value": "b", "spatial_ids": [single_id(790000)] }),
-    )
-    .await;
+    put_data(&app, "t_enum_m", text("b"), vec![single_id(790000)]).await;
 
-    let query = serde_json::json!({
-        "type": "merge", "default": "", "policy": "max",
-        "left": source("t_txt_m"),
-        "right": source("t_enum_m")
-    });
+    let query = merge(
+        source("t_txt_m"),
+        source("t_enum_m"),
+        text(""),
+        pb::MergePolicyKind::Max,
+    );
 
-    let (status, _) = post_query(
-        &app,
-        &serde_json::json!({ "spatial_ids": ids(790000, 1), "query": query }),
-        "?format=singleId",
-    )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST, "推論できてはいけない");
+    let result = execute_query(&app, request(ids(790000, 1), query)).await;
+    assert_eq!(
+        result.unwrap_err().code(),
+        tonic::Code::InvalidArgument,
+        "推論できてはいけない"
+    );
 }
 
 /// `value_type` を明示すれば、`Text` と `Enum` のソースを1つのクエリで混ぜられる。
@@ -654,54 +518,48 @@ async fn mixed_text_and_enum_sources_need_explicit_value_type() {
 async fn explicit_value_type_unifies_text_and_enum_sources() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
-    seed(&app, "t_txt_u", "Text", &[(791000, serde_json::json!("a"))]).await;
+    seed(&app, "t_txt_u", "Text", &[(791000, text("a"))]).await;
     create_enum_table(&app, "t_enum_u", &["a", "b"]).await;
-    put_data(
-        &app,
-        "t_enum_u",
-        &serde_json::json!({ "value": "b", "spatial_ids": [single_id(791000)] }),
-    )
-    .await;
+    put_data(&app, "t_enum_u", text("b"), vec![single_id(791000)]).await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "value_type": "Text",
-            "spatial_ids": ids(791000, 1),
-            "query": {
-                "type": "merge", "default": "", "policy": "max",
-                "left": source("t_txt_u"),
-                "right": source("t_enum_u")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
+    let query = merge(
+        source("t_txt_u"),
+        source("t_enum_u"),
+        text(""),
+        pb::MergePolicyKind::Max,
+    );
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
+    let result = execute_query(
+        &app,
+        pb::ExecuteQueryRequest {
+            value_type: Some(pb::TableDataType::Text as i32),
+            ..request(ids(791000, 1), query)
+        },
+    )
+    .await
+    .unwrap();
+
     // Enum 側は ID ではなく選択肢の文字列として読める。max("a", "b") = "b"
-    assert_eq!(result["dictionary"][0], serde_json::json!("b"));
+    assert_eq!(builders::value_as_str(&result.dictionary[0]), Some("b"));
 }
 
-/// 指定した `value_type` として読めない `data_type` のソースがあれば 400。
+/// 指定した `value_type` として読めない `data_type` のソースがあれば InvalidArgument。
 #[tokio::test]
 async fn explicit_value_type_rejects_unreadable_source() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
-    seed(&app, "t_int_x", "Int", &[(792000, serde_json::json!(1))]).await;
+    seed(&app, "t_int_x", "Int", &[(792000, num(1.0))]).await;
 
-    let (status, _) = post_query(
+    let result = execute_query(
         &app,
-        &serde_json::json!({
-            "value_type": "Text",
-            "spatial_ids": ids(792000, 1),
-            "query": source("t_int_x")
-        }),
-        "?format=singleId",
+        pb::ExecuteQueryRequest {
+            value_type: Some(pb::TableDataType::Text as i32),
+            ..request(ids(792000, 1), source("t_int_x"))
+        },
     )
     .await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
 }
 
 // ---------------------------------------------------------------------------
@@ -709,7 +567,7 @@ async fn explicit_value_type_rejects_unreadable_source() {
 //
 // クエリ結果の解像度は演算子が決めるものであり、入力テーブルの `max_zoom_level`
 // （＝そのテーブルが保存する最小 FlexId ）とは別物。要求空間IDを `max_zoom_level` で
-// 丸めていた頃は、クエリ自身が生成した FlexId を指名できず 400 になっていた。
+// 丸めていた頃は、クエリ自身が生成した FlexId を指名できず InvalidArgument になっていた。
 // ---------------------------------------------------------------------------
 
 /// `max_zoom_level` より細かい空間IDで、クエリが生成した FlexId を指名できる。
@@ -724,35 +582,28 @@ async fn accepts_targets_finer_than_source_max_zoom_level() {
     put_data(
         &app,
         "t_fine",
-        &serde_json::json!({
-            "value": 7,
-            "spatial_ids": [{ "z": 20, "f": 0, "x": 800000, "y": 500000, "type": "singleId" }]
-        }),
+        num(7.0),
+        vec![builders::single_id(20, 0, 800000, 500000)],
     )
     .await;
 
     // z=25 で 1 FlexId 分ずらす（z=20 FlexId の 1/32）
-    let query =
-        serde_json::json!({ "type": "shiftX", "z": 25, "index": 1, "input": source("t_fine") });
+    let query = shift_x(source("t_fine"), 25, 1);
 
-    let (status, result) = post_query(
+    let result = execute_query(
         &app,
-        &serde_json::json!({
+        pb::ExecuteQueryRequest {
             // 元の FlexId(z=20, x=800000) を z=25 へ落とすと x=25600000。shift 後は +1。
-            "spatial_ids": [{ "z": 25, "f": 0, "x": 25600001, "y": 16000000, "type": "singleId" }],
-            "query": query
-        }),
-        "?format=flexId",
+            spatial_ids: vec![builders::single_id(25, 0, 25600001, 16000000)],
+            format: pb::OutputFormat::FlexId as i32,
+            ..request(vec![], query)
+        },
     )
-    .await;
+    .await
+    .unwrap();
 
-    assert_eq!(
-        status,
-        StatusCode::OK,
-        "max_zoom_level より細かい要求が弾かれている: {result}"
-    );
     assert_eq!(values(&result), vec![7]);
-    assert!(total_ids(&result) > 0, "FlexId が返っていない: {result}");
+    assert!(total_ids(&result) > 0, "FlexId が返っていない");
 }
 
 /// 粗い側（`max_zoom_level` 未満）の要求は従来どおり通る。
@@ -764,24 +615,22 @@ async fn accepts_targets_coarser_than_source_max_zoom_level() {
     put_data(
         &app,
         "t_coarse",
-        &serde_json::json!({
-            "value": 3,
-            "spatial_ids": [{ "z": 20, "f": 0, "x": 800000, "y": 500000, "type": "singleId" }]
-        }),
+        num(3.0),
+        vec![builders::single_id(20, 0, 800000, 500000)],
     )
     .await;
 
-    let (status, result) = post_query(
+    let result = execute_query(
         &app,
-        &serde_json::json!({
-            "spatial_ids": [{ "z": 18, "f": 0, "x": 200000, "y": 125000, "type": "singleId" }],
-            "query": source("t_coarse")
-        }),
-        "?format=flexId",
+        pb::ExecuteQueryRequest {
+            spatial_ids: vec![builders::single_id(18, 0, 200000, 125000)],
+            format: pb::OutputFormat::FlexId as i32,
+            ..request(vec![], source("t_coarse"))
+        },
     )
-    .await;
+    .await
+    .unwrap();
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(values(&result), vec![3]);
 }
 
@@ -792,17 +641,13 @@ async fn rejects_zoom_level_beyond_absolute_maximum() {
     app.create_database("test_db").await;
     app.create_table("test_db", "t_zmax", "Int", 20).await;
 
-    let (status, _) = post_query(
+    let result = execute_query(
         &app,
-        &serde_json::json!({
-            "spatial_ids": [{ "z": 40, "f": 0, "x": 1, "y": 1, "type": "singleId" }],
-            "query": source("t_zmax")
-        }),
-        "",
+        request(vec![builders::single_id(40, 0, 1, 1)], source("t_zmax")),
     )
     .await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
 }
 
 /// Text を Int へ変換し、対応表に無い値は `default` になる。
@@ -815,36 +660,31 @@ async fn map_values_converts_types_and_applies_fallback() {
         "t_map",
         "Text",
         &[
-            (800000, serde_json::json!("Sunny")),
-            (800001, serde_json::json!("Cloudy")),
-            (800002, serde_json::json!("Rainy")),
-            (800003, serde_json::json!("Unknown")),
+            (800000, text("Sunny")),
+            (800001, text("Cloudy")),
+            (800002, text("Rainy")),
+            (800003, text("Unknown")),
         ],
     )
     .await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "value_type": "Int",
-            "spatial_ids": ids(800000, 4),
-            "query": {
-                "type": "mapValues",
-                "output_type": "Int",
-                "mapping": [
-                    { "from": "Sunny", "to": 100 },
-                    { "from": "Cloudy", "to": 50 },
-                    { "from": "Rainy", "to": 0 }
-                ],
-                "default": -1,
-                "input": source("t_map")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
+    let mapping = vec![
+        mapping_entry(text("Sunny"), num(100.0)),
+        mapping_entry(text("Cloudy"), num(50.0)),
+        mapping_entry(text("Rainy"), num(0.0)),
+    ];
+    let query = map_values(source("t_map"), pb::TableDataType::Int, mapping, num(-1.0));
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
+    let result = execute_query(
+        &app,
+        pb::ExecuteQueryRequest {
+            value_type: Some(pb::TableDataType::Int as i32),
+            ..request(ids(800000, 4), query)
+        },
+    )
+    .await
+    .unwrap();
+
     // "Unknown" だけが対応表に無いので -1 になる。
     assert_eq!(values(&result), vec![-1, 0, 50, 100]);
     assert_eq!(total_ids(&result), 4);
@@ -859,40 +699,33 @@ async fn map_values_converts_int_to_text() {
         &app,
         "t_map_int",
         "Int",
-        &[
-            (801000, serde_json::json!(1)),
-            (801001, serde_json::json!(2)),
-            (801002, serde_json::json!(3)),
-        ],
+        &[(801000, num(1.0)), (801001, num(2.0)), (801002, num(3.0))],
     )
     .await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "value_type": "Text",
-            "spatial_ids": ids(801000, 3),
-            "query": {
-                "type": "mapValues",
-                "output_type": "Text",
-                "mapping": [
-                    { "from": 1, "to": "One" },
-                    { "from": 2, "to": "Two" }
-                ],
-                "default": "Other",
-                "input": source("t_map_int")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::OK, "body: {result}");
-    // 辞書は値の昇順。3 は対応表に無いので "Other" になる。
-    assert_eq!(
-        result["dictionary"],
-        serde_json::json!(["One", "Other", "Two"])
+    let mapping = vec![
+        mapping_entry(num(1.0), text("One")),
+        mapping_entry(num(2.0), text("Two")),
+    ];
+    let query = map_values(
+        source("t_map_int"),
+        pb::TableDataType::Text,
+        mapping,
+        text("Other"),
     );
+
+    let result = execute_query(
+        &app,
+        pb::ExecuteQueryRequest {
+            value_type: Some(pb::TableDataType::Text as i32),
+            ..request(ids(801000, 3), query)
+        },
+    )
+    .await
+    .unwrap();
+
+    // 辞書は値の昇順。3 は対応表に無いので "Other" になる。
+    assert_eq!(dictionary_strings(&result), vec!["One", "Other", "Two"]);
     assert_eq!(total_ids(&result), 3);
 }
 
@@ -905,34 +738,31 @@ async fn map_values_converts_boolean_to_int() {
         &app,
         "t_map_bool",
         "Boolean",
-        &[
-            (802000, serde_json::json!(true)),
-            (802001, serde_json::json!(false)),
-        ],
+        &[(802000, boolean(true)), (802001, boolean(false))],
     )
     .await;
 
-    let (status, result) = post_query(
+    let mapping = vec![
+        mapping_entry(boolean(true), num(1.0)),
+        mapping_entry(boolean(false), num(0.0)),
+    ];
+    let query = map_values(
+        source("t_map_bool"),
+        pb::TableDataType::Int,
+        mapping,
+        num(-1.0),
+    );
+
+    let result = execute_query(
         &app,
-        &serde_json::json!({
-            "value_type": "Int",
-            "spatial_ids": ids(802000, 2),
-            "query": {
-                "type": "mapValues",
-                "output_type": "Int",
-                "mapping": [
-                    { "from": true, "to": 1 },
-                    { "from": false, "to": 0 }
-                ],
-                "default": -1,
-                "input": source("t_map_bool")
-            }
-        }),
-        "?format=singleId",
+        pb::ExecuteQueryRequest {
+            value_type: Some(pb::TableDataType::Int as i32),
+            ..request(ids(802000, 2), query)
+        },
     )
-    .await;
+    .await
+    .unwrap();
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
     assert_eq!(values(&result), vec![0, 1]);
     assert_eq!(total_ids(&result), 2);
 }
@@ -942,34 +772,21 @@ async fn map_values_converts_boolean_to_int() {
 async fn map_values_infers_type_from_output_type() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
-    seed(
-        &app,
-        "t_map_missing_vt",
-        "Int",
-        &[(804000, serde_json::json!(1))],
-    )
-    .await;
+    seed(&app, "t_map_missing_vt", "Int", &[(804000, num(1.0))]).await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": ids(804000, 1),
-            "query": {
-                "type": "mapValues",
-                "output_type": "Text",
-                "mapping": [
-                    { "from": 1, "to": "One" }
-                ],
-                "default": "Other",
-                "input": source("t_map_missing_vt")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
+    let mapping = vec![mapping_entry(num(1.0), text("One"))];
+    let query = map_values(
+        source("t_map_missing_vt"),
+        pb::TableDataType::Text,
+        mapping,
+        text("Other"),
+    );
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
-    assert_eq!(result["dictionary"], serde_json::json!(["One"]));
+    let result = execute_query(&app, request(ids(804000, 1), query))
+        .await
+        .unwrap();
+
+    assert_eq!(dictionary_strings(&result), vec!["One"]);
     assert_eq!(total_ids(&result), 1);
 }
 
@@ -978,45 +795,33 @@ async fn map_values_infers_type_from_output_type() {
 async fn map_values_as_both_merge_operands() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
-    seed(
-        &app,
-        "t_map_merge",
-        "Int",
-        &[(805000, serde_json::json!(1))],
-    )
-    .await;
+    seed(&app, "t_map_merge", "Int", &[(805000, num(1.0))]).await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "value_type": "Text",
-            "spatial_ids": ids(805000, 1),
-            "query": {
-                "type": "merge",
-                "policy": "min",
-                "default": "Z",
-                "left": {
-                    "type": "mapValues",
-                    "output_type": "Text",
-                    "mapping": [{ "from": 1, "to": "A" }],
-                    "default": "Z",
-                    "input": source("t_map_merge")
-                },
-                "right": {
-                    "type": "mapValues",
-                    "output_type": "Text",
-                    "mapping": [{ "from": 1, "to": "B" }],
-                    "default": "Z",
-                    "input": source("t_map_merge")
-                }
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
+    let left = map_values(
+        source("t_map_merge"),
+        pb::TableDataType::Text,
+        vec![mapping_entry(num(1.0), text("A"))],
+        text("Z"),
+    );
+    let right = map_values(
+        source("t_map_merge"),
+        pb::TableDataType::Text,
+        vec![mapping_entry(num(1.0), text("B"))],
+        text("Z"),
+    );
+    let query = merge(left, right, text("Z"), pb::MergePolicyKind::Min);
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
-    assert_eq!(result["dictionary"], serde_json::json!(["A"]));
+    let result = execute_query(
+        &app,
+        pb::ExecuteQueryRequest {
+            value_type: Some(pb::TableDataType::Text as i32),
+            ..request(ids(805000, 1), query)
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(dictionary_strings(&result), vec!["A"]);
     assert_eq!(total_ids(&result), 1);
 }
 
@@ -1025,69 +830,60 @@ async fn map_values_as_both_merge_operands() {
 async fn map_values_nested_infers_input_type_automatically() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
-    seed(&app, "t_map_nest", "Int", &[(805100, serde_json::json!(1))]).await;
+    seed(&app, "t_map_nest", "Int", &[(805100, num(1.0))]).await;
 
-    let inner = serde_json::json!({
-        "type": "mapValues",
-        "output_type": "Text",
-        "mapping": [{ "from": 1, "to": "One" }],
-        "default": "X",
-        "input": source("t_map_nest")
-    });
+    let inner = map_values(
+        source("t_map_nest"),
+        pb::TableDataType::Text,
+        vec![mapping_entry(num(1.0), text("One"))],
+        text("X"),
+    );
+    let query = map_values(
+        inner,
+        pb::TableDataType::Int,
+        vec![mapping_entry(text("One"), num(11.0))],
+        num(-1.0),
+    );
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "spatial_ids": ids(805100, 1),
-            "query": {
-                "type": "mapValues",
-                "output_type": "Int",
-                "mapping": [{ "from": "One", "to": 11 }],
-                "default": -1,
-                "input": inner
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "body: {result}");
+    let result = execute_query(&app, request(ids(805100, 1), query))
+        .await
+        .unwrap();
     assert_eq!(values(&result), vec![11]);
 }
 
-/// `from` が重複した対応表は 400 で拒否される。
+/// `from` が重複した対応表は InvalidArgument で拒否される。
 #[tokio::test]
 async fn map_values_rejects_duplicate_mapping_keys() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
-    seed(&app, "t_map_dup", "Int", &[(806000, serde_json::json!(1))]).await;
+    seed(&app, "t_map_dup", "Int", &[(806000, num(1.0))]).await;
 
-    let (status, result) = post_query(
+    let mapping = vec![
+        mapping_entry(num(1.0), text("One")),
+        mapping_entry(num(1.0), text("Uno")),
+    ];
+    let query = map_values(
+        source("t_map_dup"),
+        pb::TableDataType::Text,
+        mapping,
+        text("Other"),
+    );
+
+    let result = execute_query(
         &app,
-        &serde_json::json!({
-            "value_type": "Text",
-            "spatial_ids": ids(806000, 1),
-            "query": {
-                "type": "mapValues",
-                "output_type": "Text",
-                "mapping": [
-                    { "from": 1, "to": "One" },
-                    { "from": 1, "to": "Uno" }
-                ],
-                "default": "Other",
-                "input": source("t_map_dup")
-            }
-        }),
-        "?format=singleId",
+        pb::ExecuteQueryRequest {
+            value_type: Some(pb::TableDataType::Text as i32),
+            ..request(ids(806000, 1), query)
+        },
     )
     .await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let err = result.unwrap_err();
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
     assert!(
-        result["error"]
-            .as_str()
-            .unwrap()
-            .contains("duplicate mapping key"),
-        "error: {result}"
+        err.message().contains("duplicate mapping key"),
+        "message: {}",
+        err.message()
     );
 }
 
@@ -1096,33 +892,26 @@ async fn map_values_rejects_duplicate_mapping_keys() {
 async fn map_values_allows_empty_mapping() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
-    seed(
-        &app,
-        "t_map_empty",
-        "Int",
-        &[(807000, serde_json::json!(1))],
-    )
-    .await;
+    seed(&app, "t_map_empty", "Int", &[(807000, num(1.0))]).await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "value_type": "Text",
-            "spatial_ids": ids(807000, 1),
-            "query": {
-                "type": "mapValues",
-                "output_type": "Text",
-                "mapping": [],
-                "default": "Other",
-                "input": source("t_map_empty")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
+    let query = map_values(
+        source("t_map_empty"),
+        pb::TableDataType::Text,
+        vec![],
+        text("Other"),
+    );
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
-    assert_eq!(result["dictionary"], serde_json::json!(["Other"]));
+    let result = execute_query(
+        &app,
+        pb::ExecuteQueryRequest {
+            value_type: Some(pb::TableDataType::Text as i32),
+            ..request(ids(807000, 1), query)
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(dictionary_strings(&result), vec!["Other"]);
     assert_eq!(total_ids(&result), 1);
 }
 
@@ -1132,40 +921,30 @@ async fn map_values_supports_enum_source() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
     create_enum_table(&app, "t_map_enum", &["A", "B"]).await;
-    put_data(
-        &app,
-        "t_map_enum",
-        &serde_json::json!({ "value": "A", "spatial_ids": [single_id(809000)] }),
-    )
-    .await;
-    put_data(
-        &app,
-        "t_map_enum",
-        &serde_json::json!({ "value": "B", "spatial_ids": [single_id(809001)] }),
-    )
-    .await;
+    put_data(&app, "t_map_enum", text("A"), vec![single_id(809000)]).await;
+    put_data(&app, "t_map_enum", text("B"), vec![single_id(809001)]).await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "value_type": "Int",
-            "spatial_ids": ids(809000, 2),
-            "query": {
-                "type": "mapValues",
-                "output_type": "Int",
-                "mapping": [
-                    { "from": "A", "to": 10 },
-                    { "from": "B", "to": 20 }
-                ],
-                "default": 0,
-                "input": source("t_map_enum")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
+    let mapping = vec![
+        mapping_entry(text("A"), num(10.0)),
+        mapping_entry(text("B"), num(20.0)),
+    ];
+    let query = map_values(
+        source("t_map_enum"),
+        pb::TableDataType::Int,
+        mapping,
+        num(0.0),
+    );
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
+    let result = execute_query(
+        &app,
+        pb::ExecuteQueryRequest {
+            value_type: Some(pb::TableDataType::Int as i32),
+            ..request(ids(809000, 2), query)
+        },
+    )
+    .await
+    .unwrap();
+
     assert_eq!(values(&result), vec![10, 20]);
     assert_eq!(total_ids(&result), 2);
 }
@@ -1180,79 +959,66 @@ async fn map_values_keeps_missing_flex_ids() {
         "t_map_missing_flex_id",
         "Int",
         &[
-            (810000, serde_json::json!(1)),
+            (810000, num(1.0)),
             // 810001 には値を置かない
-            (810002, serde_json::json!(3)),
+            (810002, num(3.0)),
         ],
     )
     .await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            "value_type": "Text",
-            // 3 件問い合わせるが、ソースにあるのは 2 件だけ。
-            "spatial_ids": ids(810000, 3),
-            "query": {
-                "type": "mapValues",
-                "output_type": "Text",
-                "mapping": [
-                    { "from": 1, "to": "One" }
-                ],
-                "default": "Other",
-                "input": source("t_map_missing_flex_id")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
+    let query = map_values(
+        source("t_map_missing_flex_id"),
+        pb::TableDataType::Text,
+        vec![mapping_entry(num(1.0), text("One"))],
+        text("Other"),
+    );
 
-    assert_eq!(status, StatusCode::OK, "body: {result}");
+    let result = execute_query(
+        &app,
+        pb::ExecuteQueryRequest {
+            value_type: Some(pb::TableDataType::Text as i32),
+            // 3 件問い合わせるが、ソースにあるのは 2 件だけ。
+            ..request(ids(810000, 3), query)
+        },
+    )
+    .await
+    .unwrap();
+
     // 1 -> "One"、3 -> default の "Other"。空の 810001 は "Other" にならない。
-    assert_eq!(result["dictionary"], serde_json::json!(["One", "Other"]));
+    assert_eq!(dictionary_strings(&result), vec!["One", "Other"]);
     assert_eq!(total_ids(&result), 2);
 }
 
-/// `output_type` がリクエストの `value_type` と食い違う場合は 400 で拒否される
+/// `output_type` がリクエストの `value_type` と食い違う場合は InvalidArgument で拒否される
 /// （`output_type` は宣言だけでなく、実際に使われる値型と一致することを検証される）。
 #[tokio::test]
 async fn map_values_rejects_output_type_mismatch() {
     let app = TestApp::new().await;
     app.create_database("test_db").await;
-    seed(
+    seed(&app, "t_map_output_mismatch", "Int", &[(812000, num(1.0))]).await;
+
+    // クエリ全体の値型は Text だが、mapValues の output_type は Int だと主張している。
+    let query = map_values(
+        source("t_map_output_mismatch"),
+        pb::TableDataType::Int,
+        vec![mapping_entry(num(1.0), text("5"))],
+        text("-1"),
+    );
+
+    let result = execute_query(
         &app,
-        "t_map_output_mismatch",
-        "Int",
-        &[(812000, serde_json::json!(1))],
+        pb::ExecuteQueryRequest {
+            value_type: Some(pb::TableDataType::Text as i32),
+            ..request(ids(812000, 1), query)
+        },
     )
     .await;
 
-    let (status, result) = post_query(
-        &app,
-        &serde_json::json!({
-            // クエリ全体の値型は Text だが、mapValues の output_type は Int だと主張している。
-            "value_type": "Text",
-            "spatial_ids": ids(812000, 1),
-            "query": {
-                "type": "mapValues",
-                "output_type": "Int",
-                "mapping": [
-                    { "from": 1, "to": "5" }
-                ],
-                "default": "-1",
-                "input": source("t_map_output_mismatch")
-            }
-        }),
-        "?format=singleId",
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let err = result.unwrap_err();
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
     assert!(
-        result["error"]
-            .as_str()
-            .unwrap()
-            .contains("mapValues output_type"),
-        "error: {result}"
+        err.message().contains("mapValues output_type"),
+        "message: {}",
+        err.message()
     );
 }

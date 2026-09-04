@@ -1,11 +1,14 @@
 name: dev
 variables:
   - name: baseUrl
-    value: http://localhost:5172
+    value: 127.0.0.1:5172
+    description: ""
   - name: userName
     value: root
+    description: ""
   - name: password
     value: password
-  # Auth/login を実行すると after-response スクリプトが自動で設定する。
+    description: ""
   - name: accessToken
-    value: ""
+    value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJyb290IiwidWlkIjoiMDFhMDY5ZTAtYTY0ZC03OTYzLWEzYzgtOGUxNzc5NzhjNmNlIiwidmVyIjowLCJleHAiOjE3ODg1NjkzNjd9.wst9okZ-WJyoK_26_9LxUl8iybc1DX9fDiy6wMu_4H8
+    description: ""

@@ -1,16 +1,11 @@
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
-use crate::routes::create_router;
-
 pub mod backend;
 pub mod error;
-pub mod handlers;
-pub mod middleware;
+pub mod grpc;
 pub mod models;
-pub mod openapi;
 pub mod repositories;
-pub mod routes;
 pub mod services;
 pub mod telemetry;
 
@@ -46,8 +41,4 @@ fn query_concurrency_limit() -> usize {
                 .map(std::num::NonZeroUsize::get)
                 .unwrap_or(4)
         })
-}
-
-pub fn kasane(app_state: AppState) -> axum::Router {
-    create_router(app_state)
 }

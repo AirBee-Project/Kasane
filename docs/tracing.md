@@ -21,15 +21,13 @@ Kasaneは **1 リクエスト・1 バックグラウンドジョブに対応す�
 
 ### 層ごとの扱い
 
-- **HTTP/アプリケーション境界**: `tower_http::trace` と `OtelAxumLayer` に一任します。ここは変更していません
-- **ハンドラー層**: 引き続き `#[tracing::instrument]` を使いません。HTTP 境界のスパンとほぼ同じ内容になるためです
+- **gRPC 境界**: [`tower_http::trace::TraceLayer::new_for_grpc()`](../src/grpc/mod.rs) に一任します
+- **gRPC サービス層（`src/grpc/*`）**: 引き続き `#[tracing::instrument]` を使いません。gRPC 境界のスパンとほぼ同じ内容になるためです
 - **サービス層・リポジトリ層**: 意味のある操作単位（データベース／テーブル／ユーザー／ACL 行 1 つに対する 1 操作）には付けます。要素ごとに繰り返し呼ばれる内部関数には付けません
 
-## 1. HTTP/アプリケーション境界 (Edge)
+## 1. gRPC 境界 (Edge)
 
-`TraceLayer` により、HTTPメソッド、URI、全体的なレイテンシ、レスポンスのステータスコードが自動的に記録されます。`url.route` はテンプレート化されたルート（例: `/databases/{db_name}`）で、生パスではありません。
-
-`url.scheme` は追加のミドルウェア（[`middleware::scheme::normalize`](../src/middleware/scheme.rs)）で補っています。HTTP/1.1 の受信リクエストはそもそもスキームを持たない（origin-form）ため、何もしないと常に空になります。Kasane 自身は TLS を終端しないので、`X-Forwarded-Proto` があればそれを採用し、無ければ `http` とみなします。
+`TraceLayer::new_for_grpc()` により、gRPC メソッド（例: `/kasane.DatabaseService/Create`）、全体的なレイテンシ、`grpc-status` が自動的に記録されます。
 
 ## 2. エンドポイント設定
 
@@ -59,7 +57,6 @@ Kasaneは **1 リクエスト・1 バックグラウンドジョブに対応す�
 
 | 計器 | 種別 | 意味 |
 | --- | --- | --- |
-| `http.server.request.duration` | histogram (s) | HTTP リクエストの所要時間。`http.route` / `http.response.status_code` 別 |
 | `kasane.storage.write.attempts` | counter | 書き込みトランザクションの試行。`outcome`（`committed` / `conflict` / `lock_declared` / `stale` / `failed`）別 |
 | `kasane.storage.write.duration` | histogram (s) | 書き込みトランザクション全体の所要時間（リトライぶんも含む） |
 | `kasane.storage.read.duration` | histogram (s) | 読み取りトランザクションの所要時間 |
@@ -77,7 +74,7 @@ Kasaneは **1 リクエスト・1 バックグラウンドジョブに対応す�
 
 ログレベルの使い分けは変更していません。
 
-- **`error!`**: クリティカルな障害、予期せぬデータベースの切断、システムにおける不変条件の破壊（あってはならない状態）などに使用します。（注: 通常の `AppError` はHTTPステータスコードに変換され、`tower_http` が自動的に4xx/5xxとして記録します）
+- **`error!`**: クリティカルな障害、予期せぬデータベースの切断、システムにおける不変条件の破壊（あってはならない状態）などに使用します。（注: 通常の `AppError` は `tonic::Status` に変換され、`tower_http::trace::TraceLayer` が自動的に記録します）
 - **`warn!`**: 致命的ではないエラー、代替処理（フォールバック）の発生、不審だが仕様上有効なリクエストなどに使用します。
 - **`info!`**: 「データベースの初期化完了」や「サーバーの起動」など、ライフサイクル上の主要なイベントに使用します。**すべての関数の開始を告げる目的で `info!` を使用しないでください**（例: APIパスから明らかであるにも関わらず `info!("Creating table...")` のようにログを出さないこと）。
 - **`debug!` / `trace!`**: ローカル開発時に、内部状態を詳細に出力したい場合に使用します。これらは本番環境ではデフォルトで無効化されます。

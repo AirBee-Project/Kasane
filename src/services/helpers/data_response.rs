@@ -2,32 +2,31 @@
 //!
 //! `search` と `query` は値の作り方こそ違うが出力形は同一なので、整形を一本化する。
 
-use kasane_logic::{AllowedIntervals, FlexId, SpatialId as _, SpatialIdSet};
+use kasane_logic::{AllowedIntervals, FlexId, SpatialIdSet};
 
 use crate::{
     error::AppError,
-    models::{
-        database::table::data::{
-            DataGroup, GetDataResponse, GetDataResponseFlex, GetDataResponseRange,
-            GetDataResponseSingle, OutputFormat,
-        },
-        spatial_id::{RawFlexId, RawRangeId, RawSingleId},
+    models::database::table::data::{
+        DataGroup, GetDataResponse, GetDataResponseFlex, GetDataResponseRange,
+        GetDataResponseSingle, OutputFormat,
     },
 };
 
-/// `to_json` は値を JSON へ変換する。格納バイト列の復元や数値変換はそこで行う。
+use crate::models::ValueLiteral;
+
+/// `to_value` は値を [`ValueLiteral`] へ変換する。格納バイト列の復元や数値変換はそこで行う。
 pub fn build<V, F>(
     groups: impl IntoIterator<Item = (V, Vec<FlexId>)>,
     format: OutputFormat,
     limit: Option<usize>,
-    to_json: F,
+    to_value: F,
 ) -> Result<GetDataResponse, AppError>
 where
-    F: Fn(&V) -> Result<serde_json::Value, AppError>,
+    F: Fn(&V) -> Result<ValueLiteral, AppError>,
 {
     Ok(match format {
         OutputFormat::SingleId => {
-            let (dictionary, data) = build_groups(groups, limit, to_json, |flex_ids, left| {
+            let (dictionary, data) = build_groups(groups, limit, to_value, |flex_ids, left| {
                 // `flat_single_ids_in` は空間側も最大ズームへ均す（917 件 → 4242 件）。
                 let set: SpatialIdSet = flex_ids.into_iter().collect();
                 let mut out = Vec::new();
@@ -36,22 +35,7 @@ where
                         if !take_one(left) {
                             break 'ranges;
                         }
-                        let (i, t) = if single_id.is_whole_time() {
-                            (None, None)
-                        } else {
-                            (
-                                Some(single_id.time_interval().seconds()),
-                                Some(single_id.t()),
-                            )
-                        };
-                        out.push(RawSingleId {
-                            z: single_id.z(),
-                            f: single_id.f(),
-                            x: single_id.x(),
-                            y: single_id.y(),
-                            i,
-                            t,
-                        });
+                        out.push(single_id);
                     }
                 }
                 out
@@ -59,57 +43,27 @@ where
             GetDataResponse::Single(GetDataResponseSingle { dictionary, data })
         }
         OutputFormat::RangeId => {
-            let (dictionary, data) = build_groups(groups, limit, to_json, |flex_ids, left| {
+            let (dictionary, data) = build_groups(groups, limit, to_value, |flex_ids, left| {
                 let set: SpatialIdSet = flex_ids.into_iter().collect();
                 let mut out = Vec::new();
                 for range_id in set.range_ids_in(AllowedIntervals::calendar()) {
                     if !take_one(left) {
                         break;
                     }
-                    let (i, t) = if range_id.is_whole_time() {
-                        (None, None)
-                    } else {
-                        (
-                            Some(range_id.time_interval().seconds()),
-                            Some(range_id.t()), // RangeId returns [u64; 2] for t()
-                        )
-                    };
-                    // 出力では省略記法を使わず、常に具体的な範囲を書き出す。
-                    out.push(RawRangeId {
-                        z: range_id.z(),
-                        f: Some(range_id.f()),
-                        x: Some(range_id.x()),
-                        y: Some(range_id.y()),
-                        i,
-                        t,
-                    });
+                    out.push(range_id);
                 }
                 out
             })?;
             GetDataResponse::Range(GetDataResponseRange { dictionary, data })
         }
         OutputFormat::FlexId => {
-            let (dictionary, data) = build_groups(groups, limit, to_json, |flex_ids, left| {
+            let (dictionary, data) = build_groups(groups, limit, to_value, |flex_ids, left| {
                 let mut out = Vec::new();
                 for flex_id in flex_ids {
                     if !take_one(left) {
                         break;
                     }
-                    let (t_zoomlevel, t_index) = if flex_id.is_whole_time() {
-                        (None, None)
-                    } else {
-                        (Some(flex_id.t_zoomlevel()), Some(flex_id.t()))
-                    };
-                    out.push(RawFlexId {
-                        f_zoomlevel: flex_id.f_zoomlevel(),
-                        f_index: flex_id.f_index(),
-                        x_zoomlevel: flex_id.x_zoomlevel(),
-                        x_index: flex_id.x_index(),
-                        y_zoomlevel: flex_id.y_zoomlevel(),
-                        y_index: flex_id.y_index(),
-                        t_zoomlevel,
-                        t_index,
-                    });
+                    out.push(flex_id);
                 }
                 out
             })?;
@@ -126,11 +80,11 @@ where
 fn build_groups<V, I, F, E>(
     groups: impl IntoIterator<Item = (V, Vec<FlexId>)>,
     limit: Option<usize>,
-    to_json: F,
+    to_value: F,
     expand: E,
-) -> Result<(Vec<serde_json::Value>, Vec<DataGroup<I>>), AppError>
+) -> Result<(Vec<ValueLiteral>, Vec<DataGroup<I>>), AppError>
 where
-    F: Fn(&V) -> Result<serde_json::Value, AppError>,
+    F: Fn(&V) -> Result<ValueLiteral, AppError>,
     E: Fn(Vec<FlexId>, &mut Option<usize>) -> Vec<I>,
 {
     let mut dictionary = Vec::new();
@@ -143,7 +97,7 @@ where
         // 先に push すると、`limit` で `data` に載らなかった値が孤立した辞書項目として残る。
         if !spatial_ids.is_empty() {
             let value_ref = dictionary.len();
-            dictionary.push(to_json(&value)?);
+            dictionary.push(to_value(&value)?);
             data.push(DataGroup {
                 value_ref,
                 spatial_ids,

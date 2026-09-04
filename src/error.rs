@@ -1,11 +1,5 @@
-use crate::models::database::table::JsonValueType;
+use crate::models::ValueType;
 use crate::models::users::UserRole;
-use axum::{
-    Json,
-    http::StatusCode,
-    response::{IntoResponse, Response},
-};
-use serde_json::json;
 use std::fmt;
 
 /// エラーが指すリソースの種類
@@ -116,20 +110,6 @@ pub enum AuthError {
 }
 
 impl AuthError {
-    pub fn status(&self) -> StatusCode {
-        match self {
-            Self::MissingToken
-            | Self::MalformedHeader
-            | Self::InvalidToken
-            | Self::TokenRevoked
-            | Self::InvalidCredentials => StatusCode::UNAUTHORIZED,
-            Self::RequiresGlobalRole { .. }
-            | Self::NotSelfOrAdmin
-            | Self::InsufficientPrivilege { .. }
-            | Self::RootProtected => StatusCode::FORBIDDEN,
-        }
-    }
-
     /// クライアントが分岐に使える安定した機械可読コード。
     pub fn code(&self) -> &'static str {
         match self {
@@ -147,6 +127,20 @@ impl AuthError {
             Self::NotSelfOrAdmin => "not_self_or_admin",
             Self::InsufficientPrivilege { .. } => "insufficient_privilege",
             Self::RootProtected => "root_protected",
+        }
+    }
+
+    fn grpc_code(&self) -> tonic::Code {
+        match self {
+            Self::MissingToken
+            | Self::MalformedHeader
+            | Self::InvalidToken
+            | Self::TokenRevoked
+            | Self::InvalidCredentials => tonic::Code::Unauthenticated,
+            Self::RequiresGlobalRole { .. }
+            | Self::NotSelfOrAdmin
+            | Self::InsufficientPrivilege { .. }
+            | Self::RootProtected => tonic::Code::PermissionDenied,
         }
     }
 }
@@ -172,15 +166,16 @@ pub enum AppError {
     InvalidPrivilege { reason: String },
     #[error("Invalid name: {reason}")]
     InvalidName { reason: String },
-    #[error("Invalid Spatial ID: {reason}")]
+    #[error("Invalid spatial ID: {reason}")]
     InvalidSpatialId { reason: String },
+    /// リクエストのフィールドが未設定・範囲外など、gRPC変換層での汎用的な検証失敗。
+    #[error("Invalid argument: {reason}")]
+    InvalidArgument { reason: String },
     #[error("Value type mismatch: expected {expected:?}, got {actual:?}")]
     ValueTypeMismatch {
-        actual: JsonValueType,
-        expected: JsonValueType,
+        actual: ValueType,
+        expected: ValueType,
     },
-    #[error("Numeric value out of range: expected {expected}, got {actual}")]
-    NumericValueOutOfRange { actual: String, expected: String },
     #[error("Constraint violation: {reason}")]
     ConstraintViolation { reason: String },
     #[error("Zoom level policy violation: expected max {max_zoom_level}, got {input_zoom_level}")]
@@ -230,26 +225,6 @@ impl AppError {
         }
     }
 
-    fn status(&self) -> StatusCode {
-        match self {
-            Self::Auth(e) => e.status(),
-            Self::NotFound { .. } | Self::PrivilegeNotFound => StatusCode::NOT_FOUND,
-            Self::AlreadyExists { .. } | Self::Conflict(_) => StatusCode::CONFLICT,
-            Self::InvalidPrivilege { .. }
-            | Self::InvalidName { .. }
-            | Self::InvalidSpatialId { .. }
-            | Self::ValueTypeMismatch { .. }
-            | Self::NumericValueOutOfRange { .. }
-            | Self::ConstraintViolation { .. }
-            | Self::ZoomLevelPolicy { .. }
-            | Self::LogicError(_) => StatusCode::BAD_REQUEST,
-            Self::SchemaVersionMismatch { .. }
-            | Self::Corrupt { .. }
-            | Self::StorageError(_)
-            | Self::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-        }
-    }
-
     /// クライアントが分岐に使える安定した機械可読コード。
     fn code(&self) -> &'static str {
         match self {
@@ -260,8 +235,8 @@ impl AppError {
             Self::InvalidPrivilege { .. } => "invalid_privilege",
             Self::InvalidName { .. } => "invalid_name",
             Self::InvalidSpatialId { .. } => "invalid_spatial_id",
+            Self::InvalidArgument { .. } => "invalid_argument",
             Self::ValueTypeMismatch { .. } => "value_type_mismatch",
-            Self::NumericValueOutOfRange { .. } => "numeric_value_out_of_range",
             Self::ConstraintViolation { .. } => "constraint_violation",
             Self::ZoomLevelPolicy { .. } => "zoom_level_policy",
             Self::LogicError(_) => "logic_error",
@@ -272,11 +247,42 @@ impl AppError {
             Self::InternalError(_) => "internal_error",
         }
     }
+
+    fn grpc_code(&self) -> tonic::Code {
+        match self {
+            Self::Auth(e) => e.grpc_code(),
+            Self::NotFound { .. } | Self::PrivilegeNotFound => tonic::Code::NotFound,
+            Self::AlreadyExists { .. } => tonic::Code::AlreadyExists,
+            // 同時実行の食い違いは、存在確認だけで判定できる `AlreadyExists` とは区別する。
+            Self::Conflict(_) => tonic::Code::Aborted,
+            Self::InvalidPrivilege { .. }
+            | Self::InvalidName { .. }
+            | Self::InvalidSpatialId { .. }
+            | Self::InvalidArgument { .. }
+            | Self::ValueTypeMismatch { .. }
+            | Self::ConstraintViolation { .. }
+            | Self::ZoomLevelPolicy { .. }
+            | Self::LogicError(_) => tonic::Code::InvalidArgument,
+            Self::SchemaVersionMismatch { .. }
+            | Self::Corrupt { .. }
+            | Self::StorageError(_)
+            | Self::InternalError(_) => tonic::Code::Internal,
+        }
+    }
 }
 
-impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
-        let body = Json(json!({ "error": self.to_string(), "code": self.code() }));
-        (self.status(), body).into_response()
+impl From<AppError> for tonic::Status {
+    fn from(err: AppError) -> Self {
+        use tonic_types::{ErrorDetails, StatusExt};
+
+        let mut details = ErrorDetails::new();
+        details.set_error_info(err.code(), "kasane", std::collections::HashMap::new());
+        tonic::Status::with_error_details(err.grpc_code(), err.to_string(), details)
+    }
+}
+
+impl From<AuthError> for tonic::Status {
+    fn from(err: AuthError) -> Self {
+        AppError::from(err).into()
     }
 }

@@ -1,0 +1,18 @@
+info:
+  name: get
+  type: grpc
+  seq: 3
+  tags:
+    - Databases
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.DatabaseService/Get
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {
+      "db_name": "dev_db"
+    }

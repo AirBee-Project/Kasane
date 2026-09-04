@@ -1,0 +1,148 @@
+syntax = "proto3";
+
+package kasane;
+
+import "common.proto";
+
+service UserService {
+  // 登録されている利用者の一覧をページネーションで取得する。
+  rpc List(ListUsersRequest) returns (ListUsersResponse);
+  // 新しい利用者を登録する（作成時の権限付与も可能）。
+  rpc Create(CreateUserRequest) returns (CreateUserResponse);
+  // 利用者の詳細情報と保持する権限一覧を取得する。
+  rpc Get(GetUserRequest) returns (UserInfo);
+  // 利用者を削除する（root は削除不可）。
+  rpc Delete(DeleteUserRequest) returns (DeleteUserResponse);
+  // 利用者のパスワードを変更し、既存トークンを失効させる。
+  rpc UpdatePassword(UpdatePasswordRequest) returns (UpdatePasswordResponse);
+  // 利用者が保持する有効な権限ルール一覧を取得する。
+  rpc GetPrivileges(GetPrivilegesRequest) returns (PrivilegesResponse);
+  // 利用者に権限ルールを付与する（既存ルールは置換）。
+  rpc GrantPrivilege(GrantPrivilegeRequest) returns (GrantPrivilegeResponse);
+  // 利用者から対象リソースに対する権限を剥奪する。
+  rpc RevokePrivilege(RevokePrivilegeRequest) returns (RevokePrivilegeResponse);
+}
+
+// API 上の権限ルール表現。保存形式は UUID ベースだが、外部には
+// データベース名・テーブル名で見せる（付与時に名前解決する）。
+message PrivilegeRule {
+  // サーバー全体。`role` に `admin` を指定できるのはこのスコープだけ。
+  message Global {
+    UserRole role = 1;
+  }
+  // データベース配下すべて。`admin` は指定できない。
+  message Database {
+    string db_name = 1;
+    DataRole role = 2;
+  }
+  // 単一テーブル。`admin` は指定できない。
+  message Table {
+    string db_name = 1;
+    string table_name = 2;
+    DataRole role = 3;
+  }
+  oneof scope {
+    Global global = 1;
+    Database database = 2;
+    Table table = 3;
+  }
+}
+
+// 権限の剥奪対象を指定するメッセージ。
+message PrivilegeTarget {
+  message Global {}
+  message Database {
+    string db_name = 1;
+  }
+  message Table {
+    string db_name = 1;
+    string table_name = 2;
+  }
+  oneof target {
+    Global global = 1;
+    Database database = 2;
+    Table table = 3;
+  }
+}
+
+// 一覧で 1 利用者について返す概要。権限そのものは含まない。
+message UserSummary {
+  string username = 1;
+  optional UserRole global_role = 2;
+}
+
+message UserInfo {
+  string username = 1;
+  // 現在有効な権限ルール。既に削除されたデータベース／テーブルを指すルールは
+  // 解決できないため一覧に現れない。
+  repeated PrivilegeRule privileges = 2;
+}
+
+// **必要な権限**: `global` / `admin`
+message CreateUserRequest {
+  string username = 1;
+  string password = 2;
+  // 作成と同時に付与する権限。省略時は権限なし。
+  repeated PrivilegeRule privileges = 3;
+}
+
+message CreateUserResponse {}
+
+// **必要な権限**: 本人 または `global` / `admin`
+message GetUserRequest {
+  string username = 1;
+}
+
+// **必要な権限**: `global` / `admin`
+message DeleteUserRequest {
+  string username = 1;
+}
+
+message DeleteUserResponse {}
+
+// **必要な権限**: `global` / `admin`
+message ListUsersRequest {
+  // この利用者名より後ろから返す（前ページの `next` をそのまま渡す）。
+  optional string after = 1;
+  // 最大件数。既定 100、上限 1000。
+  optional uint32 limit = 2;
+}
+
+message ListUsersResponse {
+  repeated UserSummary users = 1;
+  // 続きがあるとき、次のリクエストの `after` に渡す利用者名。
+  optional string next = 2;
+}
+
+// **必要な権限**: 本人 または `global` / `admin`
+message UpdatePasswordRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message UpdatePasswordResponse {}
+
+// **必要な権限**: 本人 または `global` / `admin`
+message GetPrivilegesRequest {
+  string username = 1;
+}
+
+message PrivilegesResponse {
+  repeated PrivilegeRule privileges = 1;
+}
+
+// **必要な権限**: `global` / `admin`
+message GrantPrivilegeRequest {
+  string username = 1;
+  PrivilegeRule privilege = 2;
+}
+
+message GrantPrivilegeResponse {}
+
+// **必要な権限**: `global` / `admin`
+message RevokePrivilegeRequest {
+  string username = 1;
+  PrivilegeTarget target = 2;
+}
+
+message RevokePrivilegeResponse {}

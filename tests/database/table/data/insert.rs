@@ -1,11 +1,57 @@
-use axum::body::Body;
-use axum::http::{Request, StatusCode, header};
-use kasane::models::spatial_id::RawSingleId;
+use kasane::grpc::pb;
 use kasane_logic::{RangeId, SingleId};
-use tower::ServiceExt;
 
 use crate::common::TestApp;
+use crate::common::builders::{self, num, text};
 use crate::common::data::{assert_first_entry, put_data, search_data, to_result_map};
+
+async fn insert_raw(
+    test_app: &TestApp,
+    table_name: &str,
+    value: pb::TypedValue,
+    spatial_ids: Vec<pb::SpatialId>,
+) -> Result<(), tonic::Status> {
+    test_app
+        .data()
+        .insert(pb::InsertDataRequest {
+            db_name: "test_db".to_string(),
+            table_name: table_name.to_string(),
+            value: Some(value),
+            spatial_ids,
+            zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
+        })
+        .await
+        .map(|_| ())
+}
+
+fn null_value() -> pb::TypedValue {
+    pb::TypedValue {
+        kind: Some(pb::typed_value::Kind::NullVal(0)),
+    }
+}
+
+async fn create_table_with_constraints(
+    test_app: &TestApp,
+    name: &str,
+    data_type: pb::TableDataType,
+    max_zoom_level: u32,
+    constraints: Option<pb::TableConstraints>,
+) {
+    test_app
+        .table()
+        .create(pb::CreateTableRequest {
+            db_name: "test_db".to_string(),
+            name: name.to_string(),
+            data_type: data_type as i32,
+            max_zoom_level,
+            constraints,
+            description: None,
+            value_index: false,
+            is_temporal: true,
+        })
+        .await
+        .expect("create_table failed");
+}
 
 /// singleIdで指定した空間IDにデータを挿入し、同じ場所から正しく取得できるかを検証する。
 #[tokio::test]
@@ -16,22 +62,16 @@ async fn test_table_data_insert_single_id() {
         .create_table("test_db", "test_table", "Int", 25)
         .await;
 
-    let single_id_query =
-        serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
+    let single_id_query = vec![builders::single_id(20, 0, 931386, 412905)];
 
-    put_data(
-        &test_app,
-        "test_table",
-        &serde_json::json!({ "value": 3, "spatial_ids": single_id_query }),
-    )
-    .await;
+    put_data(&test_app, "test_table", num(3.0), single_id_query.clone()).await;
 
-    let result_json = search_data(&test_app, "test_table", &single_id_query).await;
+    let result = search_data(&test_app, "test_table", single_id_query).await;
 
     assert_first_entry(
-        &result_json,
-        3i64,
-        RawSingleId {
+        &result,
+        &num(3.0),
+        &pb::SingleId {
             z: 20,
             f: 0,
             x: 931386,
@@ -48,42 +88,32 @@ async fn test_table_data_insert_int_range_constraint() {
     let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
-    // min/max 付きの Int テーブルを作る（create_table ヘルパは制約を取らないので生リクエスト）。
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(
-            serde_json::json!({
-                "name": "test_table",
-                "data_type": "Int",
-                "max_zoom_level": 25,
-                "constraints": { "type": "Int", "min": -128, "max": 127 }
-            })
-            .to_string(),
-        ))
-        .unwrap();
-    assert_eq!(
-        test_app.app.clone().oneshot(req).await.unwrap().status(),
-        StatusCode::CREATED
-    );
-
-    let single_id_query =
-        serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
-
-    // Valid value
-    put_data(
+    create_table_with_constraints(
         &test_app,
         "test_table",
-        &serde_json::json!({ "value": 127, "spatial_ids": single_id_query }),
+        pb::TableDataType::Int,
+        25,
+        Some(pb::TableConstraints {
+            kind: Some(pb::table_constraints::Kind::Int(
+                pb::table_constraints::Int {
+                    min: Some(-128),
+                    max: Some(127),
+                },
+            )),
+        }),
     )
     .await;
 
-    let result_json = search_data(&test_app, "test_table", &single_id_query).await;
+    let single_id_query = vec![builders::single_id(20, 0, 931386, 412905)];
+
+    // Valid value
+    put_data(&test_app, "test_table", num(127.0), single_id_query.clone()).await;
+
+    let result = search_data(&test_app, "test_table", single_id_query.clone()).await;
     assert_first_entry(
-        &result_json,
-        127i64,
-        RawSingleId {
+        &result,
+        &num(127.0),
+        &pb::SingleId {
             z: 20,
             f: 0,
             x: 931386,
@@ -94,20 +124,10 @@ async fn test_table_data_insert_int_range_constraint() {
     );
 
     // Invalid value (Out of range)
-    let req = Request::builder()
-        .method("PUT")
-        .uri("/databases/test_db/tables/test_table/data")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(
-            serde_json::to_string(
-                &serde_json::json!({ "value": 128, "spatial_ids": single_id_query }),
-            )
-            .unwrap(),
-        ))
-        .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let err = insert_raw(&test_app, "test_table", num(128.0), single_id_query)
+        .await
+        .expect_err("out-of-range value must be rejected");
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
 }
 
 /// singleIdで指定した空間IDに、テーブルの型と一致しない値を挿入した際にエラーが返るかを検証する。
@@ -119,24 +139,12 @@ async fn test_table_data_insert_single_id_error() {
         .create_table("test_db", "test_table", "Int", 25)
         .await;
 
-    let single_id_query =
-        serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
+    let single_id_query = vec![builders::single_id(20, 0, 931386, 412905)];
 
-    let req = Request::builder()
-        .method("PUT")
-        .uri(format!("/databases/test_db/tables/{}/data", "test_table"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(
-            serde_json::to_string(
-                &serde_json::json!({ "value": "SampleText", "spatial_ids": single_id_query }),
-            )
-            .unwrap(),
-        ))
-        .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let err = insert_raw(&test_app, "test_table", text("SampleText"), single_id_query)
+        .await
+        .expect_err("type mismatch must be rejected");
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
 }
 
 /// 不正なsingleIdを入力した際にエラーが返るかを検証する。
@@ -148,24 +156,12 @@ async fn test_table_data_insert_single_id_logic_error() {
         .create_table("test_db", "test_table", "Text", 25)
         .await;
 
-    let single_id_query =
-        serde_json::json!([{ "z": 3, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
+    let single_id_query = vec![builders::single_id(3, 0, 931386, 412905)];
 
-    let req = Request::builder()
-        .method("PUT")
-        .uri(format!("/databases/test_db/tables/{}/data", "test_table"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(
-            serde_json::to_string(
-                &serde_json::json!({ "value": "SampleText", "spatial_ids": single_id_query }),
-            )
-            .unwrap(),
-        ))
-        .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let err = insert_raw(&test_app, "test_table", text("SampleText"), single_id_query)
+        .await
+        .expect_err("invalid spatial id must be rejected");
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
 }
 
 /// 2つのsingleIdに対してそれぞれデータが正しく挿入できるかを検証する。
@@ -177,33 +173,19 @@ async fn test_table_data_insert_two_single_id() {
         .create_table("test_db", "test_table", "Int", 25)
         .await;
 
-    let single_id_query_1 =
-        serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
+    let single_id_query_1 = vec![builders::single_id(20, 0, 931386, 412905)];
+    put_data(&test_app, "test_table", num(3.0), single_id_query_1.clone()).await;
 
-    put_data(
-        &test_app,
-        "test_table",
-        &serde_json::json!({ "value": 3, "spatial_ids": single_id_query_1 }),
-    )
-    .await;
+    let single_id_query_2 = vec![builders::single_id(20, -1, 931386, 412905)];
+    put_data(&test_app, "test_table", num(4.0), single_id_query_2.clone()).await;
 
-    let single_id_query_2 =
-        serde_json::json!([{ "z": 20, "f": -1, "x": 931386, "y": 412905, "type": "singleId" }]);
-
-    put_data(
-        &test_app,
-        "test_table",
-        &serde_json::json!({ "value": 4, "spatial_ids": single_id_query_2 }),
-    )
-    .await;
-
-    let result_json_1 = search_data(&test_app, "test_table", &single_id_query_1).await;
-    let result_json_2 = search_data(&test_app, "test_table", &single_id_query_2).await;
+    let result_1 = search_data(&test_app, "test_table", single_id_query_1).await;
+    let result_2 = search_data(&test_app, "test_table", single_id_query_2).await;
 
     assert_first_entry(
-        &result_json_1,
-        3i64,
-        RawSingleId {
+        &result_1,
+        &num(3.0),
+        &pb::SingleId {
             z: 20,
             f: 0,
             x: 931386,
@@ -214,9 +196,9 @@ async fn test_table_data_insert_two_single_id() {
     );
 
     assert_first_entry(
-        &result_json_2,
-        4i64,
-        RawSingleId {
+        &result_2,
+        &num(4.0),
+        &pb::SingleId {
             z: 20,
             f: -1,
             x: 931386,
@@ -236,22 +218,16 @@ async fn test_table_data_insert_single_id_overwrite() {
         .create_table("test_db", "test_table", "Int", 25)
         .await;
 
-    let single_id_query =
-        serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
+    let single_id_query = vec![builders::single_id(20, 0, 931386, 412905)];
 
-    put_data(
-        &test_app,
-        "test_table",
-        &serde_json::json!({ "value": 3, "spatial_ids": single_id_query }),
-    )
-    .await;
+    put_data(&test_app, "test_table", num(3.0), single_id_query.clone()).await;
 
-    let result_json = search_data(&test_app, "test_table", &single_id_query).await;
+    let result = search_data(&test_app, "test_table", single_id_query.clone()).await;
 
     assert_first_entry(
-        &result_json,
-        3i64,
-        RawSingleId {
+        &result,
+        &num(3.0),
+        &pb::SingleId {
             z: 20,
             f: 0,
             x: 931386,
@@ -261,19 +237,14 @@ async fn test_table_data_insert_single_id_overwrite() {
         },
     );
 
-    put_data(
-        &test_app,
-        "test_table",
-        &serde_json::json!({ "value": 4, "spatial_ids": single_id_query }),
-    )
-    .await;
+    put_data(&test_app, "test_table", num(4.0), single_id_query.clone()).await;
 
-    let result_json = search_data(&test_app, "test_table", &single_id_query).await;
+    let result = search_data(&test_app, "test_table", single_id_query).await;
 
     assert_first_entry(
-        &result_json,
-        4i64,
-        RawSingleId {
+        &result,
+        &num(4.0),
+        &pb::SingleId {
             z: 20,
             f: 0,
             x: 931386,
@@ -293,23 +264,29 @@ async fn test_table_data_insert_range_id_overwrite() {
         .create_table("test_db", "test_table_text", "Text", 25)
         .await;
 
-    let range_id_query = serde_json::json!([{ "z": 18, "f": [0,0], "x": [232846,232850], "y": [103226,103240], "type": "rangeId" }]);
+    let range_id_query = vec![builders::range_id(
+        18,
+        Some((0, 0)),
+        Some((232846, 232850)),
+        Some((103226, 103240)),
+    )];
 
     put_data(
         &test_app,
         "test_table_text",
-        &serde_json::json!({ "value": "猫(Cat)", "spatial_ids": range_id_query }),
+        text("猫(Cat)"),
+        range_id_query.clone(),
     )
     .await;
 
-    let result_json = search_data(&test_app, "test_table_text", &range_id_query).await;
-    let result_map: std::collections::HashMap<RawSingleId, String> = to_result_map(&result_json);
+    let result = search_data(&test_app, "test_table_text", range_id_query.clone()).await;
+    let result_map = to_result_map::<String>(&result);
 
     let mut result: Vec<SingleId> = result_map
         .iter()
-        .flat_map(|(raw_id, value)| {
+        .flat_map(|(&(z, f, x, y), value)| {
             assert_eq!(value, "猫(Cat)");
-            SingleId::new(raw_id.z, raw_id.f, raw_id.x, raw_id.y)
+            SingleId::new(z as u8, f, x, y)
                 .unwrap()
                 .spatial_children_at_zoom(18)
                 .unwrap()
@@ -327,18 +304,19 @@ async fn test_table_data_insert_range_id_overwrite() {
     put_data(
         &test_app,
         "test_table_text",
-        &serde_json::json!({ "value": "犬(Dog)", "spatial_ids": range_id_query }),
+        text("犬(Dog)"),
+        range_id_query.clone(),
     )
     .await;
 
-    let result_json = search_data(&test_app, "test_table_text", &range_id_query).await;
-    let result_map: std::collections::HashMap<RawSingleId, String> = to_result_map(&result_json);
+    let result = search_data(&test_app, "test_table_text", range_id_query).await;
+    let result_map = to_result_map::<String>(&result);
 
     let mut result: Vec<SingleId> = result_map
         .iter()
-        .flat_map(|(raw_id, value)| {
+        .flat_map(|(&(z, f, x, y), value)| {
             assert_eq!(value, "犬(Dog)");
-            SingleId::new(raw_id.z, raw_id.f, raw_id.x, raw_id.y)
+            SingleId::new(z as u8, f, x, y)
                 .unwrap()
                 .spatial_children_at_zoom(18)
                 .unwrap()
@@ -363,23 +341,22 @@ async fn test_table_data_insert_range_id() {
         .create_table("test_db", "test_table", "Int", 25)
         .await;
 
-    let range_id_query = serde_json::json!([{ "z": 20, "f": [0, 100], "x": [931380, 931386], "y": [412900, 412905], "type": "rangeId" }]);
+    let range_id_query = vec![builders::range_id(
+        20,
+        Some((0, 100)),
+        Some((931380, 931386)),
+        Some((412900, 412905)),
+    )];
 
-    put_data(
-        &test_app,
-        "test_table",
-        &serde_json::json!({ "value": 3, "spatial_ids": range_id_query }),
-    )
-    .await;
+    put_data(&test_app, "test_table", num(3.0), range_id_query.clone()).await;
 
-    let single_id_query =
-        serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
-    let result_json = search_data(&test_app, "test_table", &single_id_query).await;
+    let single_id_query = vec![builders::single_id(20, 0, 931386, 412905)];
+    let result = search_data(&test_app, "test_table", single_id_query).await;
 
     assert_first_entry(
-        &result_json,
-        3i64,
-        RawSingleId {
+        &result,
+        &num(3.0),
+        &pb::SingleId {
             z: 20,
             f: 0,
             x: 931386,
@@ -389,8 +366,8 @@ async fn test_table_data_insert_range_id() {
         },
     );
 
-    let result_json = search_data(&test_app, "test_table", &range_id_query).await;
-    let result_map = to_result_map::<i64>(&result_json);
+    let result = search_data(&test_app, "test_table", range_id_query).await;
+    let result_map = to_result_map::<i64>(&result);
 
     assert_eq!(result_map.len(), 917);
 
@@ -401,9 +378,9 @@ async fn test_table_data_insert_range_id() {
 
     let mut result: Vec<SingleId> = result_map
         .iter()
-        .flat_map(|(raw_id, &value)| {
+        .flat_map(|(&(z, f, x, y), &value)| {
             assert_eq!(value, 3);
-            SingleId::new(raw_id.z, raw_id.f, raw_id.x, raw_id.y)
+            SingleId::new(z as u8, f, x, y)
                 .unwrap()
                 .spatial_children_at_zoom(20)
                 .unwrap()
@@ -425,39 +402,18 @@ async fn test_table_data_overload_insert() {
         .create_table("test_db", "test_table", "Text", 30)
         .await;
 
-    let query1 =
-        serde_json::json!([{ "z": 20, "f": 0, "x": 931386, "y": 412905, "type": "singleId" }]);
+    let query1 = vec![builders::single_id(20, 0, 931386, 412905)];
+    put_data(&test_app, "test_table", text("A"), query1.clone()).await;
 
-    put_data(
-        &test_app,
-        "test_table",
-        &serde_json::json!({ "value": "A", "spatial_ids": query1 }),
-    )
-    .await;
+    let query2 = vec![builders::single_id(21, 0, 1862772, 825810)];
+    put_data(&test_app, "test_table", text("B"), query2).await;
 
-    let query2 =
-        serde_json::json!([{ "z": 21, "f": 0, "x": 1862772, "y": 825810, "type": "singleId" }]);
-
-    put_data(
-        &test_app,
-        "test_table",
-        &serde_json::json!({ "value": "B", "spatial_ids": query2 }),
-    )
-    .await;
-
-    let result_json = search_data(&test_app, "test_table", &query1).await;
-    let result_map = to_result_map::<String>(&result_json);
+    let result = search_data(&test_app, "test_table", query1).await;
+    let result_map = to_result_map::<String>(&result);
 
     assert_eq!(result_map.len(), 8);
 
-    let overload_single_id = RawSingleId {
-        z: 21,
-        f: 0,
-        x: 1862772,
-        y: 825810,
-        i: None,
-        t: None,
-    };
+    let overload_single_id = (21u32, 0i32, 1862772u32, 825810u32);
 
     for (raw_single_id, value) in result_map {
         if raw_single_id == overload_single_id {
@@ -482,21 +438,15 @@ async fn test_table_data_recursive_merge() {
     for f in 0..4 {
         for y in 0..4 {
             for x in 0..4 {
-                let single_id_query =
-                    serde_json::json!([{ "z": 20, "f": f, "x": x, "y": y, "type": "singleId" }]);
-                put_data(
-                    &test_app,
-                    table_name,
-                    &serde_json::json!({ "value": 7, "spatial_ids": single_id_query }),
-                )
-                .await;
+                let single_id_query = vec![builders::single_id(20, f, x, y)];
+                put_data(&test_app, table_name, num(7.0), single_id_query).await;
             }
         }
     }
 
-    let search_query = serde_json::json!([{ "z": 18, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
-    let result_json = search_data(&test_app, table_name, &search_query).await;
-    let result_map = to_result_map::<i64>(&result_json);
+    let search_query = vec![builders::single_id(18, 0, 0, 0)];
+    let result = search_data(&test_app, table_name, search_query).await;
+    let result_map = to_result_map::<i64>(&result);
 
     assert_eq!(
         result_map.len(),
@@ -505,11 +455,11 @@ async fn test_table_data_recursive_merge() {
         result_map
     );
 
-    let (raw_id, &value) = result_map.iter().next().unwrap();
-    assert_eq!(raw_id.z, 18);
-    assert_eq!(raw_id.f, 0);
-    assert_eq!(raw_id.x, 0);
-    assert_eq!(raw_id.y, 0);
+    let (&(z, f, x, y), &value) = result_map.iter().next().unwrap();
+    assert_eq!(z, 18);
+    assert_eq!(f, 0);
+    assert_eq!(x, 0);
+    assert_eq!(y, 0);
     assert_eq!(value, 7);
 }
 
@@ -525,26 +475,16 @@ async fn test_table_data_isolation() {
     test_app.create_table("test_db", table1, "Int", 25).await;
     test_app.create_table("test_db", table2, "Int", 25).await;
 
-    let query = serde_json::json!([{ "z": 20, "f": 0, "x": 100, "y": 100, "type": "singleId" }]);
+    let query = vec![builders::single_id(20, 0, 100, 100)];
 
-    put_data(
-        &test_app,
-        table1,
-        &serde_json::json!({ "value": 1, "spatial_ids": query }),
-    )
-    .await;
-    put_data(
-        &test_app,
-        table2,
-        &serde_json::json!({ "value": 2, "spatial_ids": query }),
-    )
-    .await;
+    put_data(&test_app, table1, num(1.0), query.clone()).await;
+    put_data(&test_app, table2, num(2.0), query.clone()).await;
 
-    let res1 = search_data(&test_app, table1, &query).await;
+    let res1 = search_data(&test_app, table1, query.clone()).await;
     assert_first_entry(
         &res1,
-        1i64,
-        RawSingleId {
+        &num(1.0),
+        &pb::SingleId {
             z: 20,
             f: 0,
             x: 100,
@@ -554,11 +494,11 @@ async fn test_table_data_isolation() {
         },
     );
 
-    let res2 = search_data(&test_app, table2, &query).await;
+    let res2 = search_data(&test_app, table2, query).await;
     assert_first_entry(
         &res2,
-        2i64,
-        RawSingleId {
+        &num(2.0),
+        &pb::SingleId {
             z: 20,
             f: 0,
             x: 100,
@@ -580,23 +520,12 @@ async fn test_table_data_max_zoom_enforcement() {
         .create_table("test_db", table_name, "Int", 10)
         .await;
 
-    let high_zoom_query =
-        serde_json::json!([{ "z": 11, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
+    let high_zoom_query = vec![builders::single_id(11, 0, 0, 0)];
 
-    let req = Request::builder()
-        .method("PUT")
-        .uri(format!("/databases/test_db/tables/{}/data", table_name))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(
-            serde_json::to_string(
-                &serde_json::json!({ "value": 100, "spatial_ids": high_zoom_query }),
-            )
-            .unwrap(),
-        ))
-        .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let err = insert_raw(&test_app, table_name, num(100.0), high_zoom_query)
+        .await
+        .expect_err("zoom level beyond max_zoom_level must be rejected");
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
 }
 
 #[tokio::test]
@@ -610,27 +539,17 @@ async fn test_table_data_deep_split() {
         .create_table("test_db", table_name, "Int", 25)
         .await;
 
-    let parent_query = serde_json::json!([{ "z": 18, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
-    put_data(
-        &test_app,
-        table_name,
-        &serde_json::json!({ "value": 100, "spatial_ids": parent_query }),
-    )
-    .await;
+    let parent_query = vec![builders::single_id(18, 0, 0, 0)];
+    put_data(&test_app, table_name, num(100.0), parent_query).await;
 
-    let child_query = serde_json::json!([{ "z": 20, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
-    put_data(
-        &test_app,
-        table_name,
-        &serde_json::json!({ "value": 200, "spatial_ids": child_query }),
-    )
-    .await;
+    let child_query = vec![builders::single_id(20, 0, 0, 0)];
+    put_data(&test_app, table_name, num(200.0), child_query.clone()).await;
 
-    let res_child = search_data(&test_app, table_name, &child_query).await;
+    let res_child = search_data(&test_app, table_name, child_query).await;
     assert_first_entry(
         &res_child,
-        200i64,
-        RawSingleId {
+        &num(200.0),
+        &pb::SingleId {
             z: 20,
             f: 0,
             x: 0,
@@ -640,13 +559,12 @@ async fn test_table_data_deep_split() {
         },
     );
 
-    let sibling_query =
-        serde_json::json!([{ "z": 20, "f": 0, "x": 1, "y": 0, "type": "singleId" }]);
-    let res_sibling = search_data(&test_app, table_name, &sibling_query).await;
+    let sibling_query = vec![builders::single_id(20, 0, 1, 0)];
+    let res_sibling = search_data(&test_app, table_name, sibling_query).await;
     assert_first_entry(
         &res_sibling,
-        100i64,
-        RawSingleId {
+        &num(100.0),
+        &pb::SingleId {
             z: 20,
             f: 0,
             x: 1,
@@ -663,40 +581,40 @@ async fn test_table_data_insert_enum_success() {
     let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
-    let create_body = serde_json::json!({
-        "name": "enum_table",
-        "data_type": "Enum",
-        "max_zoom_level": 25,
-        "constraints": {
-            "type": "Enum",
-            "choices": ["Apple", "Banana", "Orange"]
-        }
-    });
+    create_table_with_constraints(
+        &test_app,
+        "enum_table",
+        pb::TableDataType::Enum,
+        25,
+        Some(pb::TableConstraints {
+            kind: Some(pb::table_constraints::Kind::EnumConstraint(
+                pb::table_constraints::Enum {
+                    choices: vec![
+                        "Apple".to_string(),
+                        "Banana".to_string(),
+                        "Orange".to_string(),
+                    ],
+                },
+            )),
+        }),
+    )
+    .await;
 
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
-        .unwrap();
-
-    test_app.app.clone().oneshot(req).await.unwrap();
-
-    let single_id_query =
-        serde_json::json!([{ "z": 20, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
+    let single_id_query = vec![builders::single_id(20, 0, 0, 0)];
 
     put_data(
         &test_app,
         "enum_table",
-        &serde_json::json!({ "value": "Banana", "spatial_ids": single_id_query }),
+        text("Banana"),
+        single_id_query.clone(),
     )
     .await;
 
-    let result_json = search_data(&test_app, "enum_table", &single_id_query).await;
+    let result = search_data(&test_app, "enum_table", single_id_query).await;
     assert_first_entry(
-        &result_json,
-        "Banana".to_string(),
-        RawSingleId {
+        &result,
+        &text("Banana"),
+        &pb::SingleId {
             z: 20,
             f: 0,
             x: 0,
@@ -713,42 +631,31 @@ async fn test_table_data_insert_enum_failure() {
     let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
-    let create_body = serde_json::json!({
-        "name": "enum_table",
-        "data_type": "Enum",
-        "max_zoom_level": 25,
-        "constraints": {
-            "type": "Enum",
-            "choices": ["Apple", "Banana", "Orange"]
-        }
-    });
+    create_table_with_constraints(
+        &test_app,
+        "enum_table",
+        pb::TableDataType::Enum,
+        25,
+        Some(pb::TableConstraints {
+            kind: Some(pb::table_constraints::Kind::EnumConstraint(
+                pb::table_constraints::Enum {
+                    choices: vec![
+                        "Apple".to_string(),
+                        "Banana".to_string(),
+                        "Orange".to_string(),
+                    ],
+                },
+            )),
+        }),
+    )
+    .await;
 
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
-        .unwrap();
+    let single_id_query = vec![builders::single_id(20, 0, 0, 0)];
 
-    test_app.app.clone().oneshot(req).await.unwrap();
-
-    let single_id_query =
-        serde_json::json!([{ "z": 20, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
-
-    let req = Request::builder()
-        .method("PUT")
-        .uri(format!("/databases/test_db/tables/{}/data", "enum_table"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(
-            serde_json::to_string(
-                &serde_json::json!({ "value": "Grape", "spatial_ids": single_id_query }),
-            )
-            .unwrap(),
-        ))
-        .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let err = insert_raw(&test_app, "enum_table", text("Grape"), single_id_query)
+        .await
+        .expect_err("value outside the enum choices must be rejected");
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
 }
 
 #[tokio::test]
@@ -757,37 +664,31 @@ async fn test_table_data_insert_presence_success() {
     let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
-    let create_body = serde_json::json!({
-        "name": "presence_table",
-        "data_type": "Presence",
-        "max_zoom_level": 25
-    });
+    create_table_with_constraints(
+        &test_app,
+        "presence_table",
+        pb::TableDataType::Presence,
+        25,
+        None,
+    )
+    .await;
 
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
-        .unwrap();
-
-    test_app.app.clone().oneshot(req).await.unwrap();
-
-    let single_id_query =
-        serde_json::json!([{ "z": 20, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
+    let single_id_query = vec![builders::single_id(20, 0, 0, 0)];
 
     put_data(
         &test_app,
         "presence_table",
-        &serde_json::json!({ "value": null, "spatial_ids": single_id_query }),
+        null_value(),
+        single_id_query.clone(),
     )
     .await;
 
-    let result_json = search_data(&test_app, "presence_table", &single_id_query).await;
+    let result = search_data(&test_app, "presence_table", single_id_query).await;
 
     assert_first_entry(
-        &result_json,
-        serde_json::Value::Null,
-        RawSingleId {
+        &result,
+        &null_value(),
+        &pb::SingleId {
             z: 20,
             f: 0,
             x: 0,
@@ -804,41 +705,26 @@ async fn test_table_data_insert_presence_failure() {
     let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
 
-    let create_body = serde_json::json!({
-        "name": "presence_table",
-        "data_type": "Presence",
-        "max_zoom_level": 25
-    });
+    create_table_with_constraints(
+        &test_app,
+        "presence_table",
+        pb::TableDataType::Presence,
+        25,
+        None,
+    )
+    .await;
 
-    let req = Request::builder()
-        .method("POST")
-        .uri("/databases/test_db/tables")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(&create_body).unwrap()))
-        .unwrap();
+    let single_id_query = vec![builders::single_id(20, 0, 0, 0)];
 
-    test_app.app.clone().oneshot(req).await.unwrap();
-
-    let single_id_query =
-        serde_json::json!([{ "z": 20, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
-
-    let req = Request::builder()
-        .method("PUT")
-        .uri(format!(
-            "/databases/test_db/tables/{}/data",
-            "presence_table"
-        ))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(
-            serde_json::to_string(
-                &serde_json::json!({ "value": "some_value", "spatial_ids": single_id_query }),
-            )
-            .unwrap(),
-        ))
-        .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let err = insert_raw(
+        &test_app,
+        "presence_table",
+        text("some_value"),
+        single_id_query,
+    )
+    .await
+    .expect_err("non-null value into a Presence table must be rejected");
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
 }
 
 #[tokio::test]
@@ -854,24 +740,18 @@ async fn test_table_data_insert_value_exceeds_max_size() {
         .create_table("test_db", "text_table", "Text", 25)
         .await;
 
-    let single_id_query =
-        serde_json::json!([{ "z": 20, "f": 0, "x": 0, "y": 0, "type": "singleId" }]);
+    let single_id_query = vec![builders::single_id(20, 0, 0, 0)];
 
     // MAX_STORED_VALUE_BYTES (256 KiB) を超える文字列。
     let oversized_value = "a".repeat(257 * 1024);
 
-    let req = Request::builder()
-        .method("PUT")
-        .uri("/databases/test_db/tables/text_table/data")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(
-            serde_json::to_string(
-                &serde_json::json!({ "value": oversized_value, "spatial_ids": single_id_query }),
-            )
-            .unwrap(),
-        ))
-        .unwrap();
-
-    let response = test_app.app.clone().oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let err = insert_raw(
+        &test_app,
+        "text_table",
+        text(&oversized_value),
+        single_id_query,
+    )
+    .await
+    .expect_err("value exceeding MAX_STORED_VALUE_BYTES must be rejected");
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
 }

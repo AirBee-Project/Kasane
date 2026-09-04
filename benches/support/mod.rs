@@ -5,11 +5,11 @@ use std::sync::OnceLock;
 use kasane::models::database::table::TableDataType;
 use kasane::models::database::table::data::ZoomLevelPolicy;
 use kasane::models::database::table::{CreateTableRequest, data::GetDataQuery};
-use kasane::models::spatial_id::{RawFlexId, RawRangeId, SpatialId};
+use kasane::models::spatial_id::SpatialId;
 use kasane::models::users::User;
 use kasane::repositories::{ReadRepository, Storage};
 use kasane::{AppState, backend::Db};
-use kasane_logic::{AllowedIntervals, FlexId, SpatialId as _, SpatialIdSet, SpatialIdTable};
+use kasane_logic::{AllowedIntervals, FlexId, SpatialIdSet, SpatialIdTable};
 
 pub const DB_NAME: &str = "bench";
 
@@ -81,21 +81,7 @@ pub fn risk_data() -> &'static RiskData {
 
         let coverage = coverage_set
             .range_ids_in(AllowedIntervals::calendar())
-            .map(|range_id| {
-                let (i, t) = if range_id.is_whole_time() {
-                    (None, None)
-                } else {
-                    (Some(range_id.time_interval().seconds()), Some(range_id.t()))
-                };
-                SpatialId::RangeId(RawRangeId {
-                    z: range_id.z(),
-                    f: Some(range_id.f()),
-                    x: Some(range_id.x()),
-                    y: Some(range_id.y()),
-                    i,
-                    t,
-                })
-            })
+            .map(SpatialId::RangeId)
             .collect();
 
         RiskData { by_value, coverage }
@@ -103,21 +89,7 @@ pub fn risk_data() -> &'static RiskData {
 }
 
 fn flex_id_to_spatial_id(id: &FlexId) -> SpatialId {
-    let (t_zoomlevel, t_index) = if id.is_whole_time() {
-        (None, None)
-    } else {
-        (Some(id.t_zoomlevel()), Some(id.t()))
-    };
-    SpatialId::FlexId(RawFlexId {
-        f_zoomlevel: id.f_zoomlevel(),
-        f_index: id.f_index(),
-        x_zoomlevel: id.x_zoomlevel(),
-        x_index: id.x_index(),
-        y_zoomlevel: id.y_zoomlevel(),
-        y_index: id.y_index(),
-        t_zoomlevel,
-        t_index,
-    })
+    SpatialId::FlexId(*id)
 }
 
 /// 建物リスクデータを実際に書き込み経路（`services::database::table::data::insert`）で
@@ -158,7 +130,7 @@ pub fn load_risk_table(
                 DB_NAME,
                 table_name,
                 ids,
-                serde_json::json!(value),
+                (*value).into(),
                 &ZoomLevelPolicy::Error,
             )
             .await

@@ -1,9 +1,9 @@
 use crate::{
     AppState,
     error::AppError,
-    middleware::auth::authorize_path,
     models::users::{User, UserRole},
     repositories::{Storage, WriteRepository},
+    services::auth::authorize_path,
 };
 
 /// 認可を書き込みトランザクションの中で行う。

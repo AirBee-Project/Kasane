@@ -1,0 +1,19 @@
+info:
+  name: get
+  type: grpc
+  seq: 3
+  tags:
+    - Tables
+
+grpc:
+  url: "{{baseUrl}}"
+  method: /kasane.TableService/Get
+  methodType: unary
+  metadata:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+  message: |-
+    {
+      "db_name": "dev_db",
+      "table_name": "dev_table"
+    }

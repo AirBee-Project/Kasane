@@ -17,7 +17,7 @@ pub async fn insert(
     db_name: &str,
     table_name: &str,
     spatial_ids: &[SpatialId],
-    value: serde_json::Value,
+    value: crate::models::ValueLiteral,
     zoom_level_policy: &ZoomLevelPolicy,
 ) -> Result<(), AppError> {
     // 認可とメタデータ取得が同じ読み取りで済む。以前は認可で引いた名前を捨てて

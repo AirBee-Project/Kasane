@@ -31,13 +31,16 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use axum::Router;
-use axum::body::Body;
-use axum::http::{Request, StatusCode};
-use tower::ServiceExt;
+use tonic::service::Interceptor;
+use tonic::service::interceptor::InterceptedService;
+use tonic::transport::{Channel, Endpoint};
 
+use kasane::grpc::pb;
+use kasane::models::id::PrincipalId;
+use kasane::models::users::{PrivilegeRule, UserRole};
 use kasane::repositories::tikv::{TikvConfig, TikvDb};
 use kasane::repositories::{Storage, WriteRepository};
+use kasane::services::auth::hash_password;
 
 fn env_usize(name: &str, default: usize) -> usize {
     std::env::var(name)
@@ -47,24 +50,56 @@ fn env_usize(name: &str, default: usize) -> usize {
         .unwrap_or(default)
 }
 
-/// 全リクエストに root の資格情報を差し込んだルータを作る。
-async fn build_app(db: TikvDb) -> Router {
+#[derive(Clone)]
+struct TokenInterceptor(String);
+
+impl Interceptor for TokenInterceptor {
+    fn call(&mut self, mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+        if let Ok(value) = self.0.parse() {
+            req.metadata_mut().insert("authorization", value);
+        }
+        Ok(req)
+    }
+}
+
+type DataClient =
+    pb::data_service_client::DataServiceClient<InterceptedService<Channel, TokenInterceptor>>;
+
+/// gRPC サーバーを ephemeral ポートで起動し、`username` のトークン付きの `DataServiceClient` を返す。
+async fn spawn_server(
+    db: TikvDb,
+    username: &str,
+) -> (DataClient, tokio::sync::oneshot::Sender<()>) {
     let app_state = kasane::AppState::new(db);
-    let token = kasane::services::auth::generate_jwt(&app_state, "root")
+    let token = kasane::services::auth::generate_jwt(&app_state, username)
         .await
         .unwrap();
-    let auth = axum::http::HeaderValue::from_str(&format!("Bearer {token}")).unwrap();
 
-    kasane::kasane(app_state).layer(axum::middleware::from_fn(
-        move |mut req: axum::extract::Request, next: axum::middleware::Next| {
-            let auth = auth.clone();
-            async move {
-                req.headers_mut()
-                    .insert(axum::http::header::AUTHORIZATION, auth);
-                next.run(req).await
-            }
-        },
-    ))
+    let bound = kasane::grpc::bind(app_state, "127.0.0.1:0".parse().unwrap())
+        .expect("failed to bind an ephemeral port for the bench gRPC server");
+    let addr = bound.local_addr();
+
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    tokio::spawn(async move {
+        let _ = bound
+            .serve(async {
+                let _ = shutdown_rx.await;
+            })
+            .await;
+    });
+
+    let channel = Endpoint::from_shared(format!("http://{addr}"))
+        .unwrap()
+        .connect()
+        .await
+        .expect("failed to connect to the bench gRPC server");
+
+    let client = pb::data_service_client::DataServiceClient::with_interceptor(
+        channel,
+        TokenInterceptor(format!("Bearer {token}")),
+    );
+
+    (client, shutdown_tx)
 }
 
 /// PD から全ストアの使用量合計を取る。取れなければ `None`（計測は続行する）。
@@ -118,8 +153,16 @@ async fn bench_concurrent_writes() {
     let db = TikvDb::connect(config).await.expect("TiKV に接続できない");
 
     let db_name = format!("bench_{}", uuid::Uuid::now_v7().simple());
+    // `root` は他のテストと共有するクラスタの唯一の管理者アカウントで、削除・再作成される
+    // 契約テストがある（`tikv.rs` の `the_default_admin_is_seeded_exactly_once_and_never_resurrected`
+    // を参照）。並列実行中にそれと踏み合うと、ベンチの間だけ有効なはずのトークンが
+    // 途中で失効する。ここだけで使い捨てる専用ユーザーを都度作り、`root` のライフサイクル
+    // から切り離す。
+    let bench_username = format!("bench_user_{}", uuid::Uuid::now_v7().simple());
+    let bench_password_hash = hash_password("bench").expect("パスワードのハッシュ化に失敗");
     {
         let db_name = db_name.clone();
+        let bench_username = bench_username.clone();
         db.write(async move |w| {
             w.database_create(&db_name, None).await?;
             w.table_create(
@@ -132,14 +175,22 @@ async fn bench_concurrent_writes() {
                 false,
                 true,
             )
+            .await?;
+            w.create_user(
+                &bench_username,
+                PrincipalId(uuid::Uuid::now_v7()),
+                bench_password_hash.clone(),
+                &[PrivilegeRule::Global {
+                    role: UserRole::Admin,
+                }],
+            )
             .await
         })
         .await
         .unwrap();
     }
 
-    let app = build_app(db.clone()).await;
-    let uri = format!("/databases/{db_name}/tables/t/data");
+    let (client, _shutdown) = spawn_server(db.clone(), &bench_username).await;
 
     let measure = async |at: &Option<String>| match at {
         Some(endpoint) => store_used_bytes(endpoint).await,
@@ -153,7 +204,7 @@ async fn bench_concurrent_writes() {
     let started = Instant::now();
     let mut tasks = Vec::with_capacity(writers);
     for _ in 0..writers {
-        let (app, uri) = (app.clone(), uri.clone());
+        let (mut client, db_name) = (client.clone(), db_name.clone());
         let (next, failures) = (next.clone(), failures.clone());
 
         // 遅延は各タスクが自前で持ち、合流してから束ねる。共有ロックを計測ループの
@@ -168,33 +219,34 @@ async fn bench_concurrent_writes() {
 
                 // 空間的に密な ID。連番の x なので同じリーフに集中し、
                 // PLATEAU の一括投入と同じ「同じシャードの奪い合い」を再現する。
-                let body = serde_json::json!({
-                    "value": i as i64,
-                    "spatial_ids": [{
-                        "type": "singleId", "z": 20, "f": 0, "x": i, "y": 0
+                let request = pb::InsertDataRequest {
+                    db_name: db_name.clone(),
+                    table_name: "t".to_string(),
+                    value: Some(pb::TypedValue {
+                        kind: Some(pb::typed_value::Kind::IntVal(i as i64)),
+                    }),
+                    spatial_ids: vec![pb::SpatialId {
+                        kind: Some(pb::spatial_id::Kind::SingleId(pb::SingleId {
+                            z: 20,
+                            f: 0,
+                            x: i as u32,
+                            y: 0,
+                            i: None,
+                            t: None,
+                        })),
                     }],
-                });
-
-                let req = Request::builder()
-                    .method("PUT")
-                    .uri(&uri)
-                    .header("Content-Type", "application/json")
-                    .body(Body::from(serde_json::to_vec(&body).unwrap()))
-                    .unwrap();
+                    zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
+                };
 
                 let at = Instant::now();
-                let response = app.clone().oneshot(req).await.unwrap();
+                let result = client.insert(request).await;
                 let elapsed = at.elapsed();
 
-                if response.status() != StatusCode::OK && response.status() != StatusCode::CREATED {
+                if let Err(status) = result {
                     // 最初の 1 件だけ中身を出す。全滅しているのが競合ではなく
                     // 要求の作り方の間違い、という取り違えを防ぐため。
                     if failures.fetch_add(1, Ordering::Relaxed) == 0 {
-                        let status = response.status();
-                        let body = axum::body::to_bytes(response.into_body(), 64 * 1024)
-                            .await
-                            .unwrap_or_default();
-                        eprintln!("最初の失敗: {status} {}", String::from_utf8_lossy(&body));
+                        eprintln!("最初の失敗: {} {}", status.code(), status.message());
                     }
                 }
                 mine.push(elapsed);
@@ -251,6 +303,9 @@ async fn bench_concurrent_writes() {
     let db_name2 = db_name.clone();
     let _ = db
         .write(async move |w| w.database_remove(&db_name2).await)
+        .await;
+    let _ = db
+        .write(async move |w| w.delete_user(&bench_username).await)
         .await;
 
     assert_eq!(

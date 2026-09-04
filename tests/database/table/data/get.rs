@@ -1,6 +1,8 @@
+use kasane::grpc::pb;
+
 use crate::common::TestApp;
-use crate::common::data::{put_data, search_data, to_result_map};
-use kasane::models::spatial_id::RawSingleId;
+use crate::common::builders::{self, num};
+use crate::common::data::{collect_search_stream, put_data, search_data, to_result_map};
 
 #[tokio::test]
 /// 複数の空間IDを一度に指定してデータを検索・取得できることを検証する。
@@ -13,62 +15,37 @@ async fn test_table_data_get_multiple() {
         .create_table("test_db", table_name, "Int", 25)
         .await;
 
-    let id1 = RawSingleId {
-        z: 20,
-        f: 0,
-        x: 10,
-        y: 10,
-        i: None,
-        t: None,
-    };
-    let id2 = RawSingleId {
-        z: 20,
-        f: 0,
-        x: 20,
-        y: 20,
-        i: None,
-        t: None,
-    };
+    let id1 = (20, 0, 10, 10);
+    let id2 = (20, 0, 20, 20);
 
     put_data(
         &test_app,
         table_name,
-        &serde_json::json!({
-            "value": 100,
-            "spatial_ids": [{ "z": 20, "f": 0, "x": 10, "y": 10, "type": "singleId" }]
-        }),
+        num(100.0),
+        vec![builders::single_id(20, 0, 10, 10)],
     )
     .await;
 
     put_data(
         &test_app,
         table_name,
-        &serde_json::json!({
-            "value": 200,
-            "spatial_ids": [{ "z": 20, "f": 0, "x": 20, "y": 20, "type": "singleId" }]
-        }),
+        num(200.0),
+        vec![builders::single_id(20, 0, 20, 20)],
     )
     .await;
 
-    let query = serde_json::json!([
-        { "z": 20, "f": 0, "x": 10, "y": 10, "type": "singleId" },
-        { "z": 20, "f": 0, "x": 20, "y": 20, "type": "singleId" }
-    ]);
+    let query = vec![
+        builders::single_id(20, 0, 10, 10),
+        builders::single_id(20, 0, 20, 20),
+    ];
 
-    let result_json = search_data(&test_app, table_name, &query).await;
-    let result_map = to_result_map::<i64>(&result_json);
+    let result = search_data(&test_app, table_name, query).await;
+    let result_map = to_result_map::<i64>(&result);
 
     assert_eq!(result_map.len(), 2);
     assert_eq!(result_map[&id1], 100);
     assert_eq!(result_map[&id2], 200);
 }
-
-use axum::{
-    body::Body,
-    http::{Request, StatusCode, header},
-};
-use http_body_util::BodyExt;
-use tower::ServiceExt;
 
 #[tokio::test]
 /// RangeIdと FlexId でのレスポンスフォーマットを検証する。
@@ -84,62 +61,60 @@ async fn test_table_data_get_format_options() {
     put_data(
         &test_app,
         table_name,
-        &serde_json::json!({
-            "value": 500,
-            "spatial_ids": [{ "z": 20, "f": 0, "x": 10, "y": 10, "type": "singleId" }]
-        }),
+        num(500.0),
+        vec![builders::single_id(20, 0, 10, 10)],
     )
     .await;
 
-    let query = serde_json::json!([
-        { "z": 20, "f": 0, "x": 10, "y": 10, "type": "singleId" }
-    ]);
-
-    let body = serde_json::json!({ "spatial_ids": query });
+    let query = vec![builders::single_id(20, 0, 10, 10)];
 
     // Test RangeId
-    let req_range = Request::builder()
-        .method("POST")
-        .uri(format!(
-            "/databases/test_db/tables/{}/data/search?format=rangeId",
-            table_name
-        ))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(&body).unwrap()))
-        .unwrap();
+    let res_range = collect_search_stream(
+        test_app
+            .data()
+            .search(pb::SearchDataRequest {
+                db_name: "test_db".to_string(),
+                table_name: table_name.to_string(),
+                spatial_ids: query.clone(),
+                zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
+                format: pb::OutputFormat::RangeId as i32,
+                limit: None,
+            })
+            .await
+            .unwrap()
+            .into_inner(),
+    )
+    .await;
 
-    let res_range = test_app.app.clone().oneshot(req_range).await.unwrap();
-    assert_eq!(res_range.status(), StatusCode::OK);
-    let bytes_range = res_range.into_body().collect().await.unwrap().to_bytes();
-    let json_range: serde_json::Value = serde_json::from_slice(&bytes_range).unwrap();
-
-    let spatial_ids = json_range["data"][0]["spatialIds"].as_array().unwrap();
-    assert!(spatial_ids[0].get("z").is_some());
-    assert!(spatial_ids[0].get("f").is_some());
-    assert!(spatial_ids[0].get("x").is_some());
-    assert!(spatial_ids[0].get("y").is_some());
+    let group = res_range.data.first().unwrap();
+    let first_id = group.spatial_ids.first().unwrap();
+    match &first_id.kind {
+        Some(pb::spatial_id::Kind::RangeId(_)) => {}
+        other => panic!("expected a RangeId, got {other:?}"),
+    }
 
     // Test FlexId
-    let req_flex = Request::builder()
-        .method("POST")
-        .uri(format!(
-            "/databases/test_db/tables/{}/data/search?format=flexId",
-            table_name
-        ))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(&body).unwrap()))
-        .unwrap();
+    let res_flex = collect_search_stream(
+        test_app
+            .data()
+            .search(pb::SearchDataRequest {
+                db_name: "test_db".to_string(),
+                table_name: table_name.to_string(),
+                spatial_ids: query,
+                zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
+                format: pb::OutputFormat::FlexId as i32,
+                limit: None,
+            })
+            .await
+            .unwrap()
+            .into_inner(),
+    )
+    .await;
 
-    let res_flex = test_app.app.clone().oneshot(req_flex).await.unwrap();
-    assert_eq!(res_flex.status(), StatusCode::OK);
-    let bytes_flex = res_flex.into_body().collect().await.unwrap().to_bytes();
-    let json_flex: serde_json::Value = serde_json::from_slice(&bytes_flex).unwrap();
-
-    let spatial_ids_flex = json_flex["data"][0]["spatialIds"].as_array().unwrap();
-    assert!(spatial_ids_flex[0].get("fZoomlevel").is_some());
-    assert!(spatial_ids_flex[0].get("fIndex").is_some());
-    assert!(spatial_ids_flex[0].get("xZoomlevel").is_some());
-    assert!(spatial_ids_flex[0].get("xIndex").is_some());
-    assert!(spatial_ids_flex[0].get("yZoomlevel").is_some());
-    assert!(spatial_ids_flex[0].get("yIndex").is_some());
+    let group_flex = res_flex.data.first().unwrap();
+    let first_id_flex = group_flex.spatial_ids.first().unwrap();
+    match &first_id_flex.kind {
+        Some(pb::spatial_id::Kind::FlexId(_)) => {}
+        other => panic!("expected a FlexId, got {other:?}"),
+    }
 }
