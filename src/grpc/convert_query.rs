@@ -1,7 +1,4 @@
-//! クエリ DSL (`QueryNode` とその周辺) の変換。レスポンス側は `SearchDataResponse` を
-//! そのまま使う（[`super::convert_data`]）ため、ここは
-//! リクエスト方向（proto → ドメイン）だけを持つ。
-
+//! Query関連の変換
 use tonic::Status;
 
 use super::convert::enum_from_i32;
