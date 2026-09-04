@@ -3,13 +3,13 @@ use tokio_stream::Stream;
 use tonic::{Request, Response, Status};
 
 use super::auth::authenticate;
+use super::convert::required;
 use super::convert_data::{DEFAULT_CHUNK_SIZE, data_response_to_chunks};
 use super::pb::{
     InsertDataRequest, InsertDataResponse, RemoveDataRequest, RemoveDataResponse,
     SearchDataRequest, SearchDataResponse, UpsertDataRequest, UpsertDataResponse,
     data_service_server::DataService,
 };
-use super::convert::required;
 use crate::AppState;
 use crate::models::database::table::data::GetDataQuery;
 
