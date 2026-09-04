@@ -470,7 +470,6 @@ async fn test_read_privileges() {
             spatial_ids: vec![single_id(0, 0, 0, 0)],
             zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
             format: pb::OutputFormat::SingleId as i32,
-            limit: None,
         })
         .await
         .expect("read user should be able to search data");
@@ -593,7 +592,6 @@ async fn test_no_privileges() {
             spatial_ids: vec![single_id(0, 0, 0, 0)],
             zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
             format: pb::OutputFormat::SingleId as i32,
-            limit: None,
         })
         .await
         .unwrap_err();
@@ -636,7 +634,6 @@ async fn test_query_authorization() {
             spatial_ids: vec![single_id(0, 0, 0, 0)],
             query: Some(source("db_a", "t_a")),
             format: pb::OutputFormat::SingleId as i32,
-            limit: None,
         })
         .await
         .expect("querying db_a alone should be allowed");
@@ -655,7 +652,6 @@ async fn test_query_authorization() {
                 pb::MergePolicyKind::Sum,
             )),
             format: pb::OutputFormat::SingleId as i32,
-            limit: None,
         })
         .await
         .unwrap_err();
@@ -1407,7 +1403,6 @@ async fn test_query_authorization_is_table_scoped() {
         spatial_ids: vec![range_id(5, Some((0, 0)), Some((0, 1)), Some((0, 1)))],
         query: Some(source("q_db", table)),
         format: pb::OutputFormat::Unspecified as i32,
-        limit: None,
     };
 
     // 権限のあるテーブルへのクエリは通る
@@ -1451,7 +1446,6 @@ async fn test_missing_table_reports_not_found_consistently() {
         spatial_ids: vec![range_id(5, Some((0, 0)), Some((0, 1)), Some((0, 1)))],
         query: Some(source("consistent_db", "ghost")),
         format: pb::OutputFormat::Unspecified as i32,
-        limit: None,
     };
 
     // 単一テーブル経路: テーブルが無いので NotFound
@@ -1602,7 +1596,6 @@ async fn test_global_read_can_read_everything_but_write_nothing() {
             spatial_ids: vec![range_id(5, Some((0, 0)), Some((0, 1)), Some((0, 1)))],
             query: Some(source("beta_db", "t_two")),
             format: pb::OutputFormat::Unspecified as i32,
-            limit: None,
         })
         .await
         .expect("query should succeed");

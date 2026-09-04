@@ -36,7 +36,6 @@ async fn test_search_streaming_chunks() {
             spatial_ids: ids,
             zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
             format: pb::OutputFormat::SingleId as i32,
-            limit: None,
         })
         .await
         .expect("search stream request failed")
@@ -44,13 +43,12 @@ async fn test_search_streaming_chunks() {
 
     let mut chunk_count = 0;
     let mut total_ids_received = 0;
+    let mut dictionary_entries_received = 0;
 
     while let Some(chunk) = stream.message().await.expect("failed to receive chunk") {
         chunk_count += 1;
-        assert!(
-            !chunk.dictionary.is_empty(),
-            "chunk should have non-empty dictionary"
-        );
+        // 辞書はストリーム全体で共有されるので、初出チャンクにしか載らない。
+        dictionary_entries_received += chunk.dictionary.len();
         let chunk_ids: usize = chunk.data.iter().map(|g| g.spatial_ids.len()).sum();
         assert!(
             chunk_ids <= DEFAULT_CHUNK_SIZE,
@@ -65,6 +63,10 @@ async fn test_search_streaming_chunks() {
         "expected at least 3 chunks, got {chunk_count}"
     );
     assert_eq!(total_ids_received, total_count as usize);
+    assert_eq!(
+        dictionary_entries_received, 1,
+        "single distinct value should register in the shared dictionary exactly once"
+    );
 }
 
 #[tokio::test]
@@ -92,7 +94,6 @@ async fn test_query_execute_streaming_chunks() {
             spatial_ids: ids,
             query: Some(query_node),
             format: pb::OutputFormat::SingleId as i32,
-            limit: None,
         })
         .await
         .expect("query execute stream request failed")
@@ -100,6 +101,7 @@ async fn test_query_execute_streaming_chunks() {
 
     let mut chunk_count = 0;
     let mut total_ids_received = 0;
+    let mut dictionary_entries_received = 0;
 
     while let Some(chunk) = stream
         .message()
@@ -107,10 +109,7 @@ async fn test_query_execute_streaming_chunks() {
         .expect("failed to receive query chunk")
     {
         chunk_count += 1;
-        assert!(
-            !chunk.dictionary.is_empty(),
-            "chunk should have non-empty dictionary"
-        );
+        dictionary_entries_received += chunk.dictionary.len();
         let chunk_ids: usize = chunk.data.iter().map(|g| g.spatial_ids.len()).sum();
         assert!(
             chunk_ids <= DEFAULT_CHUNK_SIZE,
@@ -125,4 +124,8 @@ async fn test_query_execute_streaming_chunks() {
         "expected at least 2 chunks, got {chunk_count}"
     );
     assert_eq!(total_ids_received, total_count as usize);
+    assert_eq!(
+        dictionary_entries_received, 1,
+        "single distinct value should register in the shared dictionary exactly once"
+    );
 }

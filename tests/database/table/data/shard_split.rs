@@ -66,7 +66,7 @@ fn dynamic_shard_splits_and_reads_back() {
     // 3. 全域を range クエリして、分割後も全 5000 FlexId が読めることを検証。
     let mut query = SpatialIdSet::new();
     query.insert(RangeId::new(20, [0, 0], [0, (n - 1) * 4], [0, 0]).unwrap());
-    let got = r.data_get_impl(table_id, query, None).unwrap();
+    let got = r.data_get_impl(table_id, query).unwrap();
 
     let mut xs: HashSet<u32> = HashSet::new();
     for (value, flex_ids) in got {

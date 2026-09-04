@@ -26,7 +26,6 @@ pub async fn get(
     let spatial_ids = spatial_ids.to_vec();
     let zoom_level_policy = *zoom_level_policy;
     let query_format = query.format;
-    let query_limit = query.limit;
     let user = auth_user.user.clone();
 
     // レスポンス組み立ては CPU 処理なので、外へ出して明示的に blocking タスクへ渡す。
@@ -62,7 +61,7 @@ pub async fn get(
                 &zoom_level_policy,
                 false,
             )?;
-            let groups = db.data_get(table.id, ids, query_limit).await?;
+            let groups = db.data_get(table.id, ids).await?;
             Ok((table, groups))
         })
         .await?;
@@ -70,7 +69,7 @@ pub async fn get(
     let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
         span.in_scope(|| {
-            data_response::build(groups, query_format, query_limit, |bytes| {
+            data_response::build(groups, query_format, |bytes| {
                 restore_value(table.data_type, table.constraints.as_ref(), bytes)
             })
         })

@@ -222,7 +222,7 @@ fn writes_without_indexing_leave_the_value_index_empty() {
     );
 
     // それでも本体は普通に読める（索引の有無はデータの見え方を変えない）。
-    let groups = r.data_get_impl(plain, ids(7), None).unwrap();
+    let groups = r.data_get_impl(plain, ids(7)).unwrap();
     let values: Vec<&Vec<u8>> = groups.iter().map(|(value, _)| value).collect();
     assert_eq!(
         values,

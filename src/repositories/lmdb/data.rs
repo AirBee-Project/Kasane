@@ -33,22 +33,14 @@ impl<'a> KasaneDbRead<'a> {
         &self,
         table_id: crate::models::id::TableId,
         ids: SpatialIdSet,
-        limit: Option<usize>,
     ) -> Result<ValueGroups, AppError> {
         let mut flex_ids_iter = ids.flex_ids();
-        let counter = std::sync::atomic::AtomicUsize::new(0);
         let mut global_by_value = ValueMap::default();
 
-        // 数百万件の全件ルーティングを踏ませないよう、打ち切れる粒度に区切る。
+        // 数百万件を一度にルーティングへ渡すとその分のメモリを一度に確保するので、区切る。
         const ROUTING_BATCH_SIZE: usize = 65536;
 
         loop {
-            if let Some(limit) = limit
-                && counter.load(std::sync::atomic::Ordering::Relaxed) >= limit
-            {
-                break;
-            }
-
             let mut batch = Vec::with_capacity(ROUTING_BATCH_SIZE.min(1024));
             for _ in 0..ROUTING_BATCH_SIZE {
                 if let Some(id) = flex_ids_iter.next() {
@@ -71,11 +63,6 @@ impl<'a> KasaneDbRead<'a> {
 
             if !parallel {
                 for (region, queries) in by_leaf {
-                    if let Some(limit) = limit
-                        && counter.load(std::sync::atomic::Ordering::Relaxed) >= limit
-                    {
-                        break;
-                    }
                     Self::resolve_leaf(
                         &self.db.tables_data,
                         &self.read_txn,
@@ -83,8 +70,6 @@ impl<'a> KasaneDbRead<'a> {
                         &region,
                         &queries,
                         &mut global_by_value,
-                        limit,
-                        Some(&counter),
                     )?;
                 }
             } else {
@@ -106,11 +91,6 @@ impl<'a> KasaneDbRead<'a> {
                             .map_err(|e| AppError::InternalError(e.to_string()))?;
                         let mut local = ValueMap::default();
                         for (region, queries) in chunk {
-                            if let Some(limit) = limit
-                                && counter.load(std::sync::atomic::Ordering::Relaxed) >= limit
-                            {
-                                break;
-                            }
                             Self::resolve_leaf(
                                 &tables_data,
                                 &txn,
@@ -118,8 +98,6 @@ impl<'a> KasaneDbRead<'a> {
                                 region,
                                 queries,
                                 &mut local,
-                                limit,
-                                Some(&counter),
                             )?;
                         }
                         Ok(local)
@@ -145,7 +123,6 @@ impl<'a> KasaneDbRead<'a> {
     ///
     /// 葉ローカルの辞書インデックス（`u32`）で先にグルーピングするのは、値バイト列で直接
     /// ハッシュすると結果 FlexId の数だけ長いバイト列をハッシュすることになるため。
-    #[allow(clippy::too_many_arguments)]
     fn resolve_leaf(
         tables_data: &heed::Database<super::keys::TableIdAndFlexId, heed::types::Bytes>,
         txn: &heed::RoTxn<heed::WithoutTls>,
@@ -153,42 +130,16 @@ impl<'a> KasaneDbRead<'a> {
         region: &FlexId,
         queries: &[FlexId],
         by_value: &mut ValueMap,
-        limit: Option<usize>,
-        counter: Option<&std::sync::atomic::AtomicUsize>,
     ) -> Result<(), AppError> {
         let Some(arch) = shard::load_leaf_archived(tables_data, txn, table_id, region)? else {
             return Ok(());
         };
 
-        let mut local_count = 0;
-        let batch_size = limit.unwrap_or(0).clamp(1, 256);
-
         let mut local: FxHashMap<u32, Vec<FlexId>> = FxHashMap::default();
         for query_flex in queries {
-            if let (Some(limit), Some(counter)) = (limit, counter)
-                && counter.load(std::sync::atomic::Ordering::Relaxed) >= limit
-            {
-                break;
-            }
             arch.get_indexed(query_flex, |got_flex, packed| {
-                if let (Some(limit), Some(counter)) = (limit, counter) {
-                    if counter.load(std::sync::atomic::Ordering::Relaxed) >= limit {
-                        return;
-                    }
-                    local_count += 1;
-                    if local_count >= batch_size {
-                        counter.fetch_add(local_count, std::sync::atomic::Ordering::Relaxed);
-                        local_count = 0;
-                    }
-                }
                 local.entry(packed).or_default().push(got_flex);
             });
-        }
-
-        if let (Some(_limit), Some(counter)) = (limit, counter)
-            && local_count > 0
-        {
-            counter.fetch_add(local_count, std::sync::atomic::Ordering::Relaxed);
         }
 
         // 葉に現れた distinct 値の数だけ実バイト列へ復元する。

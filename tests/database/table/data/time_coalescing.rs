@@ -89,7 +89,6 @@ async fn read_back_coalesces_adjacent_segments_into_a_range() {
                 spatial_ids: range_query,
                 zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
                 format: pb::OutputFormat::RangeId as i32,
-                limit: None,
             })
             .await
             .unwrap()

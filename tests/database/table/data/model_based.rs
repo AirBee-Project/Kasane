@@ -75,7 +75,7 @@ fn read_all(db: &kasane::repositories::lmdb::AppDb, table_id: TableId) -> HashMa
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), db);
     let mut query = SpatialIdSet::new();
     query.insert(RangeId::new(Z, [F, F], [0, W - 1], [0, H - 1]).unwrap());
-    let got = r.data_get_impl(table_id, query, None).unwrap();
+    let got = r.data_get_impl(table_id, query).unwrap();
 
     let mut actual = HashMap::new();
     for (value, flex_ids) in got {

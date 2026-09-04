@@ -1,8 +1,6 @@
 //! 読み取りの入口。`TikvRead` に生やす固有メソッドはここだけ。
 //! 降下（ネットワーク）は [`routing`](super::routing)、葉の解決（CPU）はここが持つ。
 
-use std::sync::atomic::{AtomicUsize, Ordering};
-
 use kasane_logic::{FlexId, RangeId, SpatialIdSet};
 use rustc_hash::FxHashMap;
 use tracing::Instrument;
@@ -24,19 +22,14 @@ impl<R: Reader> TikvRead<'_, R> {
         &self,
         table_id: TableId,
         ids: SpatialIdSet,
-        limit: Option<usize>,
     ) -> Result<ValueGroups, AppError> {
         let mut by_value = ValueMap::default();
-        let mut held = 0usize;
 
-        // 区切るのは打ち切りの粒度であって、1 リクエストのキー数ではない（`kv::BATCH_KEYS`）。
+        // 区切るのは 1 リクエストのキー数の粒度（`kv::BATCH_KEYS`）。
         const ROUTING_BATCH_SIZE: usize = 8192;
         let mut iter = ids.flex_ids();
 
         loop {
-            if limit.is_some_and(|l| held >= l) {
-                break;
-            }
             let batch: Vec<FlexId> = iter.by_ref().take(ROUTING_BATCH_SIZE).collect();
             if batch.is_empty() {
                 break;
@@ -45,10 +38,9 @@ impl<R: Reader> TikvRead<'_, R> {
             let routed = route_leaves_batched(&self.txn, table_id, &batch)
                 .await?
                 .leaves;
-            let partial = resolve_leaves(routed, limit, held).await?;
+            let partial = resolve_leaves(routed).await?;
 
             for (value, flex_ids) in partial {
-                held += flex_ids.len();
                 merge_into(&mut by_value, &value, flex_ids);
             }
         }
@@ -152,12 +144,7 @@ impl<R: Reader> TikvRead<'_, R> {
 ///
 /// 葉ローカルの辞書インデックス（`u32`）で先にグルーピングするのは、値バイト列で直接ハッシュ
 /// すると結果 FlexId の数だけ長いバイト列をハッシュすることになるため。
-fn resolve_leaf(
-    leaf: &RoutedLeaf,
-    by_value: &mut ValueMap,
-    limit: Option<usize>,
-    counter: &AtomicUsize,
-) -> Result<(), AppError> {
+fn resolve_leaf(leaf: &RoutedLeaf, by_value: &mut ValueMap) -> Result<(), AppError> {
     // 未作成領域にはデータが無い。
     let Some(node) = &leaf.node else {
         return Ok(());
@@ -165,30 +152,10 @@ fn resolve_leaf(
     let arch = archived_leaf(node.entry())?;
 
     let mut local: FxHashMap<u32, Vec<FlexId>> = FxHashMap::default();
-    // カウンタへの反映をまとめる粒度。1 件ごとに触ると原子操作が支配的になる。
-    let batch = limit.unwrap_or(0).clamp(1, 256);
-    let mut counted = 0usize;
-
     for query in &leaf.queries {
-        if limit.is_some_and(|l| counter.load(Ordering::Relaxed) >= l) {
-            break;
-        }
         arch.get_indexed(query, |got, packed| {
-            if let Some(limit) = limit {
-                if counter.load(Ordering::Relaxed) >= limit {
-                    return;
-                }
-                counted += 1;
-                if counted >= batch {
-                    counter.fetch_add(counted, Ordering::Relaxed);
-                    counted = 0;
-                }
-            }
             local.entry(packed).or_default().push(got);
         });
-    }
-    if counted > 0 {
-        counter.fetch_add(counted, Ordering::Relaxed);
     }
 
     // 葉に現れた distinct 値の数だけ実バイト列へ復元する。
@@ -201,11 +168,7 @@ fn resolve_leaf(
 /// 部分マップを作って最後にマージできるのは、同一 FlexId が 1 つの葉にしか属さないため。
 ///
 /// 走査は非同期ワーカーを占有しないよう blocking タスクの上で行う。
-async fn resolve_leaves(
-    leaves: Vec<RoutedLeaf>,
-    limit: Option<usize>,
-    held: usize,
-) -> Result<ValueMap, AppError> {
+async fn resolve_leaves(leaves: Vec<RoutedLeaf>) -> Result<ValueMap, AppError> {
     if leaves.is_empty() {
         return Ok(ValueMap::default());
     }
@@ -213,14 +176,10 @@ async fn resolve_leaves(
     let span = tracing::Span::current();
     tokio::task::spawn_blocking(move || {
         span.in_scope(|| {
-            let counter = AtomicUsize::new(held);
             let resolve_chunk = |chunk: &[RoutedLeaf]| -> Result<ValueMap, AppError> {
                 let mut out = ValueMap::default();
                 for leaf in chunk {
-                    if limit.is_some_and(|l| counter.load(Ordering::Relaxed) >= l) {
-                        break;
-                    }
-                    resolve_leaf(leaf, &mut out, limit, &counter)?;
+                    resolve_leaf(leaf, &mut out)?;
                 }
                 Ok(out)
             };

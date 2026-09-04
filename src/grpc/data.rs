@@ -37,7 +37,6 @@ impl DataService for DataServiceImpl {
         let zoom_level_policy = req.zoom_level_policy.into();
         let query = GetDataQuery {
             format: req.format.into(),
-            limit: req.limit.map(|v| v as usize),
         };
 
         let result = crate::services::database::table::data::get::get(

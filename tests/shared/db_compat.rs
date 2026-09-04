@@ -353,7 +353,7 @@ pub async fn read_actual<S: Storage>(db: &S) -> Expected {
         let mut ids = SpatialIdSet::new();
         ids.insert(SingleId::new(20, 0, PROBE_HIT, 0).unwrap());
         let groups = db
-            .read(async move |r| r.data_get(int_id, ids.clone(), None).await)
+            .read(async move |r| r.data_get(int_id, ids.clone()).await)
             .await
             .unwrap();
         groups.into_iter().next().map(|(value, _)| value)

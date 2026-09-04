@@ -14,7 +14,7 @@ use tonic_types::StatusExt;
 
 use crate::common::TestApp;
 use crate::common::builders::{self, num};
-use crate::common::data::{collect_search_stream, put_data, search_data};
+use crate::common::data::{collect_search_stream, group_value, put_data, search_data};
 
 async fn setup(test_app: &TestApp) {
     test_app.create_database("test_db").await;
@@ -76,7 +76,6 @@ async fn search_range(
             spatial_ids,
             zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
             format: pb::OutputFormat::RangeId as i32,
-            limit: None,
         })
         .await
         .unwrap()
@@ -97,7 +96,6 @@ async fn search_flex(
             spatial_ids,
             zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
             format: pb::OutputFormat::FlexId as i32,
-            limit: None,
         })
         .await
         .unwrap()
@@ -608,7 +606,7 @@ async fn overwrite_replaces_the_value_at_the_same_time_segment() {
         result.data
     );
     let group = &result.data[0];
-    let value = result.dictionary.get(group.value_ref as usize).unwrap();
+    let value = group_value(&result.dictionary, group);
     assert_eq!(value, &num(2.0));
 }
 
