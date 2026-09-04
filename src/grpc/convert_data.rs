@@ -285,64 +285,11 @@ impl From<DomainSpatialId> for pb::SpatialId {
     }
 }
 
-fn data_group_to_pb<T>(
-    group: DataGroup<T>,
-    id_to_pb: impl Fn(T) -> pb::SpatialId,
-) -> pb::DataGroup {
-    pb::DataGroup {
-        value_ref: group.value_ref as u64,
-        spatial_ids: group.spatial_ids.into_iter().map(id_to_pb).collect(),
-    }
-}
-
-impl From<GetDataResponse> for pb::SearchDataResponse {
-    fn from(response: GetDataResponse) -> Self {
-        match response {
-            GetDataResponse::Single(GetDataResponseSingle { dictionary, data }) => {
-                pb::SearchDataResponse {
-                    dictionary: dictionary.into_iter().map(Into::into).collect(),
-                    data: data
-                        .into_iter()
-                        .map(|g| {
-                            data_group_to_pb(g, |id| pb::SpatialId {
-                                kind: Some(pb::spatial_id::Kind::SingleId(id.into())),
-                            })
-                        })
-                        .collect(),
-                }
-            }
-            GetDataResponse::Range(GetDataResponseRange { dictionary, data }) => {
-                pb::SearchDataResponse {
-                    dictionary: dictionary.into_iter().map(Into::into).collect(),
-                    data: data
-                        .into_iter()
-                        .map(|g| {
-                            data_group_to_pb(g, |id| pb::SpatialId {
-                                kind: Some(pb::spatial_id::Kind::RangeId(id.into())),
-                            })
-                        })
-                        .collect(),
-                }
-            }
-            GetDataResponse::Flex(GetDataResponseFlex { dictionary, data }) => {
-                pb::SearchDataResponse {
-                    dictionary: dictionary.into_iter().map(Into::into).collect(),
-                    data: data
-                        .into_iter()
-                        .map(|g| {
-                            data_group_to_pb(g, |id| pb::SpatialId {
-                                kind: Some(pb::spatial_id::Kind::FlexId(id.into())),
-                            })
-                        })
-                        .collect(),
-                }
-            }
-        }
-    }
-}
-
 /// ストリーミング送信時の 1 チャンクあたりの既定の空間ID数。
 pub const DEFAULT_CHUNK_SIZE: usize = 2000;
+
+/// ストリーム全体で辞書に載せられる値の種類数の上限。超えた分は `inline_value` で送る。
+const MAX_DICTIONARY_ENTRIES: usize = 4096;
 
 fn chunk_groups<T>(
     dictionary: &[ValueLiteral],
@@ -355,9 +302,10 @@ fn chunk_groups<T>(
     }
 
     let mut chunks = Vec::new();
-    let mut current_dict_values: Vec<pb::TypedValue> = Vec::new();
-    let mut orig_to_chunk_dict: std::collections::HashMap<usize, usize> =
+    // チャンク境界でリセットしない（辞書はストリーム全体で共有する）。
+    let mut orig_to_dict_ref: std::collections::HashMap<usize, u64> =
         std::collections::HashMap::new();
+    let mut current_dict_values: Vec<pb::TypedValue> = Vec::new();
     let mut current_data: Vec<pb::DataGroup> = Vec::new();
     let mut current_count = 0;
 
@@ -372,7 +320,6 @@ fn chunk_groups<T>(
                     dictionary: std::mem::take(&mut current_dict_values),
                     data: std::mem::take(&mut current_data),
                 });
-                orig_to_chunk_dict.clear();
                 current_count = 0;
                 continue;
             }
@@ -390,18 +337,26 @@ fn chunk_groups<T>(
             }
 
             let batch_len = batch.len();
-            let chunk_ref = *orig_to_chunk_dict.entry(orig_ref).or_insert_with(|| {
-                let idx = current_dict_values.len();
-                let val_literal = dictionary
-                    .get(orig_ref)
-                    .cloned()
-                    .unwrap_or(ValueLiteral::Null);
-                current_dict_values.push(val_literal.into());
-                idx
-            });
+            let value = match orig_to_dict_ref.get(&orig_ref) {
+                Some(&dict_ref) => pb::data_group::Value::DictRef(dict_ref),
+                None => {
+                    let val_literal = dictionary
+                        .get(orig_ref)
+                        .cloned()
+                        .unwrap_or(ValueLiteral::Null);
+                    if orig_to_dict_ref.len() < MAX_DICTIONARY_ENTRIES {
+                        let dict_ref = orig_to_dict_ref.len() as u64;
+                        orig_to_dict_ref.insert(orig_ref, dict_ref);
+                        current_dict_values.push(val_literal.into());
+                        pb::data_group::Value::DictRef(dict_ref)
+                    } else {
+                        pb::data_group::Value::InlineValue(val_literal.into())
+                    }
+                }
+            };
 
             current_data.push(pb::DataGroup {
-                value_ref: chunk_ref as u64,
+                value: Some(value),
                 spatial_ids: batch.into_iter().map(&id_to_pb).collect(),
             });
             current_count += batch_len;

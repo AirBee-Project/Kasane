@@ -23,14 +23,17 @@ enum OutputFormat {
   OUTPUT_FORMAT_FLEX_ID = 3;
 }
 
-// `dictionary[value_ref]` が対応する値。同じ値を持つ空間IDをまとめる。
+// dict_ref はストリーム全体で共有する辞書（SearchDataResponse.dictionary を受信順に
+// 連結したもの）への添字。辞書が上限に達した後の新規値は inline_value になる。
 message DataGroup {
-  uint64 value_ref = 1;
-  repeated SpatialId spatial_ids = 2;
+  oneof value {
+    uint64 dict_ref = 1;
+    TypedValue inline_value = 2;
+  }
+  repeated SpatialId spatial_ids = 3;
 }
 
-// `Search`/`QueryService.Execute` の共通レスポンス形状。
-// `spatial_ids` の中身がどの `oneof kind` になるかは、要求した `OutputFormat` で揃う。
+// dictionary はメッセージをまたいで累積する辞書への追加分のみを運ぶ。
 message SearchDataResponse {
   repeated TypedValue dictionary = 1;
   repeated DataGroup data = 2;
@@ -43,7 +46,6 @@ message SearchDataRequest {
   repeated SpatialId spatial_ids = 3;
   ZoomLevelPolicy zoom_level_policy = 4;
   OutputFormat format = 5;
-  optional uint64 limit = 6;
 }
 
 // **必要な権限**: `table` / `write`

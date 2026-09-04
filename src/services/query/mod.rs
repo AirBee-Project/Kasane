@@ -418,7 +418,6 @@ pub async fn execute(
 
     let app_state = app_state.clone();
     let format = query_params.format;
-    let limit = query_params.limit;
 
     // Queryの同時実行を制限する
     let _permit = app_state
@@ -442,7 +441,7 @@ pub async fn execute(
 
             // 作業木は単一の値型で組まれるため、ここで値型ごとに単型化する。
             for_value_type!(
-                value_type, run, &app_state, &request, &tables, &snapshot, format, limit, &token
+                value_type, run, &app_state, &request, &tables, &snapshot, format, &token
             )
         })
     })
@@ -456,7 +455,6 @@ fn run<V: Value>(
     tables: &ResolvedTables,
     snapshot: &QuerySnapshot,
     format: OutputFormat,
-    limit: Option<usize>,
     token: &kasane_logic::CancellationToken,
 ) -> Result<GetDataResponse, AppError> {
     let targets = to_spatial_id_set(&request.spatial_ids)?;
@@ -466,7 +464,7 @@ fn run<V: Value>(
     if bounds.is_empty() {
         // 対象領域が空。クエリを走らせるまでもない。
         let empty: Vec<(V, Vec<kasane_logic::FlexId>)> = Vec::new();
-        return data_response::build(empty, format, limit, |v| Ok(v.to_value()));
+        return data_response::build(empty, format, |v| Ok(v.to_value()));
     }
 
     // --- フェーズ 1: DSL → kasane-logic AST の翻訳 ---
@@ -486,29 +484,18 @@ fn run<V: Value>(
         .into_iter()
         .filter(|(flex_id, _)| targets.get(flex_id).next().is_some());
 
-    let by_value = group_by_value(flex_ids, limit);
-    data_response::build(by_value, format, limit, |v| Ok(v.to_value()))
+    let by_value = group_by_value(flex_ids);
+    data_response::build(by_value, format, |v| Ok(v.to_value()))
 }
 
 /// FlexId 列を値ごとにグループ化する。
-///
-/// `limit` は値の昇順で上位を返すのが本来だが、高速化のため順序を問わず打ち切る。
-/// `singleId` 形式では 1 つの `FlexId` が複数へ展開されるので、出力が不足することはない。
 fn group_by_value<V: Value>(
     flex_ids: impl Iterator<Item = (kasane_logic::FlexId, V)>,
-    limit: Option<usize>,
 ) -> BTreeMap<V, Vec<kasane_logic::FlexId>> {
     let mut by_value: BTreeMap<V, Vec<kasane_logic::FlexId>> = BTreeMap::new();
-    let mut held = 0usize;
 
     for (flex_id, value) in flex_ids {
         by_value.entry(value).or_default().push(flex_id);
-        held += 1;
-
-        let Some(limit) = limit else { continue };
-        if held >= limit {
-            break;
-        }
     }
 
     by_value

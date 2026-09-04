@@ -78,7 +78,7 @@ fn shard_splits_on_byte_size_even_with_few_entries() {
 
     let mut query = SpatialIdSet::new();
     query.insert(RangeId::new(20, [0, 0], [0, n - 1], [0, 0]).unwrap());
-    let got = r.data_get_impl(table_id, query, None).unwrap();
+    let got = r.data_get_impl(table_id, query).unwrap();
 
     let mut xs: HashSet<u32> = HashSet::new();
     for (got_value, flex_ids) in got {

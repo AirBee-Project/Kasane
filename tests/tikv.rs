@@ -133,7 +133,7 @@ async fn insert_from_both(
 /// 指定した FlexId 群のうち、実際に読み戻せた件数。
 async fn count_readable(db: &TikvDb, table_id: TableId, ids: SpatialIdSet) -> usize {
     let groups = db
-        .read(async move |r| r.data_get(table_id, ids.clone(), None).await)
+        .read(async move |r| r.data_get(table_id, ids.clone()).await)
         .await
         .unwrap();
     groups.iter().map(|(_, ids)| ids.len()).sum()
@@ -250,7 +250,7 @@ async fn table_and_data_roundtrip() {
 
     let groups = {
         let ids = ids.clone();
-        db.read(async move |r| r.data_get(table.id, ids.clone(), None).await)
+        db.read(async move |r| r.data_get(table.id, ids.clone()).await)
             .await
             .unwrap()
     };
@@ -448,7 +448,7 @@ async fn concurrent_writers_on_the_same_leaf_do_not_lose_updates() {
         all.insert(SingleId::new(20, 0, x, 0).unwrap());
     }
     let groups = a
-        .read(async move |r| r.data_get(table.id, all.clone(), None).await)
+        .read(async move |r| r.data_get(table.id, all.clone()).await)
         .await
         .unwrap();
     let actual: usize = groups.iter().map(|(_, ids)| ids.len()).sum();

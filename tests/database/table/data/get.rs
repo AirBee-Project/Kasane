@@ -78,7 +78,6 @@ async fn test_table_data_get_format_options() {
                 spatial_ids: query.clone(),
                 zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
                 format: pb::OutputFormat::RangeId as i32,
-                limit: None,
             })
             .await
             .unwrap()
@@ -103,7 +102,6 @@ async fn test_table_data_get_format_options() {
                 spatial_ids: query,
                 zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
                 format: pb::OutputFormat::FlexId as i32,
-                limit: None,
             })
             .await
             .unwrap()

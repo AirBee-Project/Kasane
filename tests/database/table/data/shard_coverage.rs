@@ -40,7 +40,7 @@ fn insert_into_empty_region_after_split_is_not_lost() {
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
     let mut q = SpatialIdSet::new();
     q.insert(target);
-    let got = r.data_get_impl(table_id, q, None).unwrap();
+    let got = r.data_get_impl(table_id, q).unwrap();
     let total: usize = got.iter().map(|(_, fids)| fids.len()).sum();
     assert_eq!(
         total, 1,

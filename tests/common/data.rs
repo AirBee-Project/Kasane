@@ -76,6 +76,8 @@ pub async fn patch_data(
 }
 
 /// ストリームを受信し、単一の [`pb::SearchDataResponse`] にマージして返す。
+///
+/// `dictionary` はストリーム全体で共有する辞書への追加分なので、受信順に連結するだけでよい。
 pub async fn collect_search_stream(
     mut stream: tonic::Streaming<pb::SearchDataResponse>,
 ) -> pb::SearchDataResponse {
@@ -87,40 +89,25 @@ pub async fn collect_search_stream(
         .await
         .expect("failed to receive stream chunk")
     {
-        let chunk_dict = chunk.dictionary;
-        let mut chunk_to_global_ref: HashMap<u64, u64> = HashMap::new();
-
-        for (chunk_ref, val) in chunk_dict.into_iter().enumerate() {
-            let global_ref = if let Some(idx) = dictionary.iter().position(|d| d == &val) {
-                idx as u64
-            } else {
-                let idx = dictionary.len() as u64;
-                dictionary.push(val);
-                idx
-            };
-            chunk_to_global_ref.insert(chunk_ref as u64, global_ref);
-        }
-
-        for group in chunk.data {
-            let new_ref = chunk_to_global_ref
-                .get(&group.value_ref)
-                .copied()
-                .unwrap_or(group.value_ref);
-            if let Some(existing) = data
-                .iter_mut()
-                .find(|g: &&mut pb::DataGroup| g.value_ref == new_ref)
-            {
-                existing.spatial_ids.extend(group.spatial_ids);
-            } else {
-                data.push(pb::DataGroup {
-                    value_ref: new_ref,
-                    spatial_ids: group.spatial_ids,
-                });
-            }
-        }
+        dictionary.extend(chunk.dictionary);
+        data.extend(chunk.data);
     }
 
     pb::SearchDataResponse { dictionary, data }
+}
+
+/// `DataGroup.value` を、辞書参照ならその実体、直値ならそのまま解決する。
+pub fn group_value<'a>(
+    dictionary: &'a [pb::TypedValue],
+    group: &'a pb::DataGroup,
+) -> &'a pb::TypedValue {
+    match &group.value {
+        Some(pb::data_group::Value::DictRef(r)) => {
+            dictionary.get(*r as usize).expect("dict_ref out of range")
+        }
+        Some(pb::data_group::Value::InlineValue(v)) => v,
+        None => panic!("DataGroup.value is not set"),
+    }
 }
 
 /// `test_db` の `table_name` を検索する（`format` は常に `singleId`）。
@@ -137,7 +124,6 @@ pub async fn search_data(
             spatial_ids,
             zoom_level_policy: pb::ZoomLevelPolicy::Error as i32,
             format: pb::OutputFormat::SingleId as i32,
-            limit: None,
         })
         .await
         .expect("search failed")
@@ -152,10 +138,7 @@ pub fn assert_first_entry(
     expected_id: &pb::SingleId,
 ) {
     let group = result.data.first().expect("no data groups");
-    let actual_value = result
-        .dictionary
-        .get(group.value_ref as usize)
-        .expect("value_ref out of range");
+    let actual_value = group_value(&result.dictionary, group);
     assert_eq!(actual_value, expected_value);
 
     let first_id = group.spatial_ids.first().expect("no spatial ids");
@@ -180,9 +163,7 @@ pub fn to_result_map<T: FromPbValue>(
     let mut map = HashMap::new();
 
     for group in &result.data {
-        let Some(value) = result.dictionary.get(group.value_ref as usize) else {
-            continue;
-        };
+        let value = group_value(&result.dictionary, group);
         for id in &group.spatial_ids {
             if let Some(pb::spatial_id::Kind::SingleId(s)) = &id.kind {
                 map.insert((s.z, s.f, s.x, s.y), T::from_pb_value(value));

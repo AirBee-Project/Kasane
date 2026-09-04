@@ -70,12 +70,8 @@ pub trait ReadRepository: CatalogRepository {
 
     async fn table_count(&self, table_id: TableId) -> Result<u64, AppError>;
 
-    async fn data_get(
-        &self,
-        table_id: TableId,
-        ids: SpatialIdSet,
-        limit: Option<usize>,
-    ) -> Result<ValueGroups, AppError>;
+    async fn data_get(&self, table_id: TableId, ids: SpatialIdSet)
+    -> Result<ValueGroups, AppError>;
 
     async fn data_filter_eq(
         &self,

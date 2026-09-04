@@ -143,9 +143,8 @@ impl<R: Reader> ReadRepository for TikvRead<'_, R> {
         &self,
         table_id: TableId,
         ids: SpatialIdSet,
-        limit: Option<usize>,
     ) -> Result<ValueGroups, AppError> {
-        self.data_get_impl(table_id, ids, limit).await
+        self.data_get_impl(table_id, ids).await
     }
 
     async fn data_filter_eq(

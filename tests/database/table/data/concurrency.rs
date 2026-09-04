@@ -2,7 +2,7 @@ use kasane::grpc::pb;
 
 use crate::common::TestApp;
 use crate::common::builders::{self, num};
-use crate::common::data::search_data;
+use crate::common::data::{group_value, search_data};
 
 /// Group Commit (WriteBatcher) が正しく複数リクエストを並行処理し、
 /// 空間インデックスが破損せずに全データが保存されるかを検証する。
@@ -56,10 +56,7 @@ async fn test_table_data_concurrent_group_commit() {
     let mut total_ids = 0;
 
     for group in &result.data {
-        let value = result
-            .dictionary
-            .get(group.value_ref as usize)
-            .expect("value_ref out of range");
+        let value = group_value(&result.dictionary, group);
         let actual_data = builders::value_as_f64(value).expect("expected a number") as usize;
         assert!(actual_data < num_tasks as usize, "Unexpected value found");
         found_values[actual_data] = true;

@@ -19,7 +19,6 @@ pub enum OutputFormat {
 #[derive(Debug, Default, Clone, Copy)]
 pub struct GetDataQuery {
     pub format: OutputFormat,
-    pub limit: Option<usize>,
 }
 
 #[derive(Debug, Clone)]

@@ -17,14 +17,13 @@ fn single_id(x: i64) -> pb::SpatialId {
     builders::single_id(20, 0, x as u32, 500000)
 }
 
-/// 既定値（`format=singleId`, `limit` 無指定, `value_type` 推論）のリクエストを組み立てる。
+/// 既定値（`format=singleId`, `value_type` 推論）のリクエストを組み立てる。
 fn request(spatial_ids: Vec<pb::SpatialId>, query: pb::QueryNode) -> pb::ExecuteQueryRequest {
     pb::ExecuteQueryRequest {
         value_type: None,
         spatial_ids,
         query: Some(query),
         format: pb::OutputFormat::SingleId as i32,
-        limit: None,
     }
 }
 
@@ -46,7 +45,7 @@ fn values(result: &pb::SearchDataResponse) -> Vec<i64> {
     let mut out: Vec<i64> = result
         .data
         .iter()
-        .filter_map(|g| result.dictionary.get(g.value_ref as usize))
+        .map(|g| crate::common::data::group_value(&result.dictionary, g))
         .filter_map(builders::value_as_f64)
         .map(|n| n as i64)
         .collect();

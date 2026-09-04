@@ -253,7 +253,6 @@ impl TryFrom<pb::QueryNode> for QueryNode {
 pub struct ExecuteQuery {
     pub request: ExecuteQueryRequest,
     pub format: crate::models::database::table::data::OutputFormat,
-    pub limit: Option<usize>,
 }
 
 impl TryFrom<pb::ExecuteQueryRequest> for ExecuteQuery {
@@ -275,7 +274,6 @@ impl TryFrom<pb::ExecuteQueryRequest> for ExecuteQuery {
                 query,
             },
             format: req.format.into(),
-            limit: req.limit.map(|v| v as usize),
         })
     }
 }

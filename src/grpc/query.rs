@@ -28,7 +28,6 @@ impl QueryService for QueryServiceImpl {
         let parsed: ExecuteQuery = req.try_into()?;
         let query_params = GetDataQuery {
             format: parsed.format,
-            limit: parsed.limit,
         };
 
         let result = crate::services::query::execute(

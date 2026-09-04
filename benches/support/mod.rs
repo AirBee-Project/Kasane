@@ -143,6 +143,5 @@ pub fn load_risk_table(
 pub fn default_query_params() -> GetDataQuery {
     GetDataQuery {
         format: kasane::models::database::table::data::OutputFormat::RangeId,
-        limit: None,
     }
 }

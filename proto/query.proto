@@ -179,5 +179,4 @@ message ExecuteQueryRequest {
   repeated SpatialId spatial_ids = 2;
   QueryNode query = 3;
   OutputFormat format = 4;
-  optional uint64 limit = 5;
 }
