@@ -25,7 +25,7 @@ impl TableService for TableServiceImpl {
         let domain_req = DomainCreateTableRequest {
             name: req.name.clone(),
             data_type: req.data_type.try_into()?,
-            max_zoom_level: req.max_zoom_level as u8,
+            max_zoom_level: super::convert::u8_from_u32(req.max_zoom_level, "max_zoom_level")?,
             constraints: req.constraints.map(TryInto::try_into).transpose()?,
             description: req.description,
             value_index: req.value_index,

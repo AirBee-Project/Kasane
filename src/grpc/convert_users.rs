@@ -2,8 +2,9 @@
 
 use tonic::Status;
 
-use super::convert::enum_from_i32;
+use super::convert::{enum_from_i32, required};
 use super::pb;
+use crate::error::AppError;
 use crate::models::users::{
     DataRole as DomainDataRole, PrivilegeRule as DomainPrivilegeRule,
     PrivilegeTarget as DomainPrivilegeTarget, UserRole as DomainUserRole,
@@ -18,7 +19,10 @@ impl TryFrom<pb::UserRole> for DomainUserRole {
             pb::UserRole::Write => Ok(Self::Write),
             pb::UserRole::Manage => Ok(Self::Manage),
             pb::UserRole::Admin => Ok(Self::Admin),
-            pb::UserRole::Unspecified => Err(Status::invalid_argument("role must be specified")),
+            pb::UserRole::Unspecified => Err(AppError::InvalidArgument {
+                reason: "role must be specified".to_string(),
+            }
+            .into()),
         }
     }
 }
@@ -56,7 +60,10 @@ impl TryFrom<pb::DataRole> for DomainDataRole {
             pb::DataRole::Read => Ok(Self::Read),
             pb::DataRole::Write => Ok(Self::Write),
             pb::DataRole::Manage => Ok(Self::Manage),
-            pb::DataRole::Unspecified => Err(Status::invalid_argument("role must be specified")),
+            pb::DataRole::Unspecified => Err(AppError::InvalidArgument {
+                reason: "role must be specified".to_string(),
+            }
+            .into()),
         }
     }
 }
@@ -90,10 +97,7 @@ impl TryFrom<pb::PrivilegeRule> for DomainPrivilegeRule {
 
     fn try_from(rule: pb::PrivilegeRule) -> Result<Self, Self::Error> {
         use pb::privilege_rule::Scope;
-        match rule
-            .scope
-            .ok_or_else(|| Status::invalid_argument("privilege.scope must be set"))?
-        {
+        match required(rule.scope, "privilege.scope")? {
             Scope::Global(g) => Ok(Self::Global {
                 role: g.role.try_into()?,
             }),
@@ -141,10 +145,7 @@ impl TryFrom<pb::PrivilegeTarget> for DomainPrivilegeTarget {
 
     fn try_from(target: pb::PrivilegeTarget) -> Result<Self, Self::Error> {
         use pb::privilege_target::Target;
-        match target
-            .target
-            .ok_or_else(|| Status::invalid_argument("privilege_target.target must be set"))?
-        {
+        match required(target.target, "privilege_target.target")? {
             Target::Global(_) => Ok(Self::Global),
             Target::Database(d) => Ok(Self::Database { db_name: d.db_name }),
             Target::Table(t) => Ok(Self::Table {

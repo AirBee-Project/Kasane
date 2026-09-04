@@ -9,8 +9,8 @@ use super::pb::{
     SearchDataRequest, SearchDataResponse, UpsertDataRequest, UpsertDataResponse,
     data_service_server::DataService,
 };
+use super::convert::required;
 use crate::AppState;
-use crate::models::ValueLiteral;
 use crate::models::database::table::data::GetDataQuery;
 
 pub struct DataServiceImpl {
@@ -68,7 +68,7 @@ impl DataService for DataServiceImpl {
             .map(TryInto::try_into)
             .collect::<Result<_, _>>()?;
         let zoom_level_policy = req.zoom_level_policy.into();
-        let value = req.value.map(Into::into).unwrap_or(ValueLiteral::Null);
+        let value = required(req.value, "value")?.into();
 
         crate::services::database::table::data::insert::insert(
             &self.app_state,
@@ -96,7 +96,7 @@ impl DataService for DataServiceImpl {
             .map(TryInto::try_into)
             .collect::<Result<_, _>>()?;
         let zoom_level_policy = req.zoom_level_policy.into();
-        let value = req.value.map(Into::into).unwrap_or(ValueLiteral::Null);
+        let value = required(req.value, "value")?.into();
 
         crate::services::database::table::data::upsert::upsert(
             &self.app_state,

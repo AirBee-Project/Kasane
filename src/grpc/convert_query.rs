@@ -1,16 +1,13 @@
 //! Query関連の変換
 use tonic::Status;
 
-use super::convert::enum_from_i32;
+use super::convert::{enum_from_i32, required, u8_from_u32};
 use super::pb;
+use crate::error::AppError;
 use crate::models::query::{
     Direction, ExecuteQueryRequest, FalloffPattern, FilterCondition, MappingEntry, MathOperand,
     MathOperator, MergePolicyKind, QueryNode,
 };
-
-fn required<T>(value: Option<T>, field: &str) -> Result<T, Status> {
-    value.ok_or_else(|| Status::invalid_argument(format!("{field} must be set")))
-}
 
 fn required_node(node: Option<Box<pb::QueryNode>>, field: &str) -> Result<Box<QueryNode>, Status> {
     let boxed = required(node, field)?;
@@ -29,9 +26,10 @@ impl TryFrom<pb::MergePolicyKind> for MergePolicyKind {
             pb::MergePolicyKind::Min => Ok(Self::Min),
             pb::MergePolicyKind::Average => Ok(Self::Average),
             pb::MergePolicyKind::Difference => Ok(Self::Difference),
-            pb::MergePolicyKind::Unspecified => {
-                Err(Status::invalid_argument("policy must be specified"))
+            pb::MergePolicyKind::Unspecified => Err(AppError::InvalidArgument {
+                reason: "policy must be specified".to_string(),
             }
+            .into()),
         }
     }
 }
@@ -53,9 +51,10 @@ impl TryFrom<pb::MathOperator> for MathOperator {
             pb::MathOperator::Subtract => Ok(Self::Subtract),
             pb::MathOperator::Multiply => Ok(Self::Multiply),
             pb::MathOperator::Divide => Ok(Self::Divide),
-            pb::MathOperator::Unspecified => {
-                Err(Status::invalid_argument("operator must be specified"))
+            pb::MathOperator::Unspecified => Err(AppError::InvalidArgument {
+                reason: "operator must be specified".to_string(),
             }
+            .into()),
         }
     }
 }
@@ -92,7 +91,10 @@ impl TryFrom<i32> for Direction {
         match enum_from_i32(value, P::Unspecified) {
             P::Upper => Ok(Self::Upper),
             P::Lower => Ok(Self::Lower),
-            P::Unspecified => Err(Status::invalid_argument("direction must be specified")),
+            P::Unspecified => Err(AppError::InvalidArgument {
+                reason: "direction must be specified".to_string(),
+            }
+            .into()),
         }
     }
 }
@@ -102,10 +104,7 @@ impl TryFrom<pb::MathOperand> for MathOperand {
 
     fn try_from(operand: pb::MathOperand) -> Result<Self, Self::Error> {
         use pb::math_operand::Value as P;
-        match operand
-            .value
-            .ok_or_else(|| Status::invalid_argument("operand.value must be set"))?
-        {
+        match required(operand.value, "operand.value")? {
             P::IntValue(v) => Ok(Self::Int(v)),
             P::FloatValue(v) => Ok(Self::Float(v)),
         }
@@ -119,7 +118,7 @@ impl TryFrom<pb::FilterCondition> for FilterCondition {
         use pb::filter_condition::Mode;
         match required(condition.mode, "condition.mode")? {
             Mode::Equals(e) => Ok(Self::Equals {
-                value: e.value.map(Into::into).unwrap_or_default(),
+                value: required(e.value, "condition.equals.value")?.into(),
             }),
             Mode::InRange(r) => Ok(Self::InRange {
                 min: r.min.map(Into::into),
@@ -159,48 +158,48 @@ impl TryFrom<pb::QueryNode> for QueryNode {
             },
             Node::ShiftX(s) => Self::ShiftX {
                 input: required_node(s.input, "shift_x.input")?,
-                z: s.z as u8,
+                z: u8_from_u32(s.z, "shift_x.z")?,
                 index: s.index,
             },
             Node::ShiftY(s) => Self::ShiftY {
                 input: required_node(s.input, "shift_y.input")?,
-                z: s.z as u8,
+                z: u8_from_u32(s.z, "shift_y.z")?,
                 index: s.index,
             },
             Node::ShiftF(s) => Self::ShiftF {
                 input: required_node(s.input, "shift_f.input")?,
-                z: s.z as u8,
+                z: u8_from_u32(s.z, "shift_f.z")?,
                 index: s.index,
             },
             Node::ZoomOut(z0) => Self::ZoomOut {
                 input: required_node(z0.input, "zoom_out.input")?,
-                z: z0.z as u8,
+                z: u8_from_u32(z0.z, "zoom_out.z")?,
                 policy: z0.policy.try_into()?,
             },
             Node::ExtrudeX(e) => Self::ExtrudeX {
                 input: required_node(e.input, "extrude_x.input")?,
-                z: e.z as u8,
+                z: u8_from_u32(e.z, "extrude_x.z")?,
                 start: e.start,
                 end: e.end,
                 policy: e.policy.try_into()?,
             },
             Node::ExtrudeY(e) => Self::ExtrudeY {
                 input: required_node(e.input, "extrude_y.input")?,
-                z: e.z as u8,
+                z: u8_from_u32(e.z, "extrude_y.z")?,
                 start: e.start,
                 end: e.end,
                 policy: e.policy.try_into()?,
             },
             Node::ExtrudeF(e) => Self::ExtrudeF {
                 input: required_node(e.input, "extrude_f.input")?,
-                z: e.z as u8,
+                z: u8_from_u32(e.z, "extrude_f.z")?,
                 start: e.start,
                 end: e.end,
                 policy: e.policy.try_into()?,
             },
             Node::FalloffX(f) => Self::FalloffX {
                 input: required_node(f.input, "falloff_x.input")?,
-                z: f.z as u8,
+                z: u8_from_u32(f.z, "falloff_x.z")?,
                 radius: f.radius,
                 pattern: f.pattern.into(),
                 direction: f.direction.map(TryInto::try_into).transpose()?,
@@ -208,7 +207,7 @@ impl TryFrom<pb::QueryNode> for QueryNode {
             },
             Node::FalloffY(f) => Self::FalloffY {
                 input: required_node(f.input, "falloff_y.input")?,
-                z: f.z as u8,
+                z: u8_from_u32(f.z, "falloff_y.z")?,
                 radius: f.radius,
                 pattern: f.pattern.into(),
                 direction: f.direction.map(TryInto::try_into).transpose()?,
@@ -216,7 +215,7 @@ impl TryFrom<pb::QueryNode> for QueryNode {
             },
             Node::FalloffF(f) => Self::FalloffF {
                 input: required_node(f.input, "falloff_f.input")?,
-                z: f.z as u8,
+                z: u8_from_u32(f.z, "falloff_f.z")?,
                 radius: f.radius,
                 pattern: f.pattern.into(),
                 direction: f.direction.map(TryInto::try_into).transpose()?,

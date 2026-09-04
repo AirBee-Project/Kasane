@@ -109,7 +109,7 @@ pub fn verify_jwt(token: &str) -> Result<Claims, AppError> {
     let validation = Validation::default();
     let token_data = decode::<Claims>(token, &DecodingKey::from_secret(jwt_secret()), &validation)
         .map_err(|e| {
-            tracing::warn!("verify_jwt failed: {e}; token received: {token:?}");
+            tracing::warn!("verify_jwt failed: {e}");
             AppError::Auth(AuthError::InvalidToken)
         })?;
 

@@ -168,13 +168,14 @@ pub enum AppError {
     InvalidName { reason: String },
     #[error("Invalid Spatial ID: {reason}")]
     InvalidSpatialId { reason: String },
+    /// リクエストのフィールドが未設定・範囲外など、gRPC変換層での汎用的な検証失敗。
+    #[error("Invalid argument: {reason}")]
+    InvalidArgument { reason: String },
     #[error("Value type mismatch: expected {expected:?}, got {actual:?}")]
     ValueTypeMismatch {
         actual: ValueType,
         expected: ValueType,
     },
-    #[error("Numeric value out of range: expected {expected}, got {actual}")]
-    NumericValueOutOfRange { actual: String, expected: String },
     #[error("Constraint violation: {reason}")]
     ConstraintViolation { reason: String },
     #[error("Zoom level policy violation: expected max {max_zoom_level}, got {input_zoom_level}")]
@@ -234,8 +235,8 @@ impl AppError {
             Self::InvalidPrivilege { .. } => "invalid_privilege",
             Self::InvalidName { .. } => "invalid_name",
             Self::InvalidSpatialId { .. } => "invalid_spatial_id",
+            Self::InvalidArgument { .. } => "invalid_argument",
             Self::ValueTypeMismatch { .. } => "value_type_mismatch",
-            Self::NumericValueOutOfRange { .. } => "numeric_value_out_of_range",
             Self::ConstraintViolation { .. } => "constraint_violation",
             Self::ZoomLevelPolicy { .. } => "zoom_level_policy",
             Self::LogicError(_) => "logic_error",
@@ -257,8 +258,8 @@ impl AppError {
             Self::InvalidPrivilege { .. }
             | Self::InvalidName { .. }
             | Self::InvalidSpatialId { .. }
+            | Self::InvalidArgument { .. }
             | Self::ValueTypeMismatch { .. }
-            | Self::NumericValueOutOfRange { .. }
             | Self::ConstraintViolation { .. }
             | Self::ZoomLevelPolicy { .. }
             | Self::LogicError(_) => tonic::Code::InvalidArgument,

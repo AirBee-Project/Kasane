@@ -135,10 +135,7 @@ impl UserService for UserServiceImpl {
         let req = request.into_inner();
 
         check_global_admin(&auth_user)?;
-        let privilege = req
-            .privilege
-            .ok_or_else(|| Status::invalid_argument("privilege must be set"))?
-            .try_into()?;
+        let privilege = super::convert::required(req.privilege, "privilege")?.try_into()?;
 
         crate::services::users::grant_privilege(&self.app_state, &req.username, privilege).await?;
         Ok(Response::new(GrantPrivilegeResponse {}))
@@ -152,10 +149,7 @@ impl UserService for UserServiceImpl {
         let req = request.into_inner();
 
         check_global_admin(&auth_user)?;
-        let target = req
-            .target
-            .ok_or_else(|| Status::invalid_argument("target must be set"))?
-            .try_into()?;
+        let target = super::convert::required(req.target, "target")?.try_into()?;
 
         crate::services::users::revoke_privilege(&self.app_state, &req.username, target).await?;
         Ok(Response::new(RevokePrivilegeResponse {}))
