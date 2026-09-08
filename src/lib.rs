@@ -5,6 +5,9 @@ pub mod backend;
 pub mod error;
 pub mod grpc;
 pub mod models;
+pub mod proxy {
+    pub use kasane_proxy_core::*;
+}
 pub mod repositories;
 pub mod services;
 pub mod telemetry;

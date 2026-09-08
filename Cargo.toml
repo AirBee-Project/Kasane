@@ -1,3 +1,10 @@
+[workspace]
+members = [
+    ".",
+    "crates/kasane-proxy-core",
+    "adapters/worker-cloudflare",
+]
+
 [package]
 name = "kasane"
 version = "0.7.0"
@@ -5,6 +12,7 @@ edition = "2024"
 default-run = "kasane"
 
 [dependencies]
+kasane-proxy-core = { path = "crates/kasane-proxy-core" }
 dotenvy = "0.15"
 kasane-logic = { git = "https://github.com/AirBee-Project/Kasane-Logic.git", features = ["persist", "temporal_id", "unstable"] }
 tokio = { version = "1.52", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }

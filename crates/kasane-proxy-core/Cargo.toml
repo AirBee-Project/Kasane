@@ -1,0 +1,16 @@
+﻿[package]
+name = "kasane-proxy-core"
+version = "0.1.0"
+edition = "2024"
+description = "Platform-independent proxy core for Kasane"
+
+[dependencies]
+http = "1.2"
+bytes = "1.10"
+async-trait = "0.1"
+thiserror = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1.43", features = ["macros", "rt"] }
