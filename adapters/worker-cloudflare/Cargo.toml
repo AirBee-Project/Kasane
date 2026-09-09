@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "kasane-worker-cloudflare"
 version = "0.1.0"
 edition = "2024"
@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 worker = { version = "0.8", features = ["http"] }
 kasane-proxy-core = { path = "../../crates/kasane-proxy-core" }
+futures = "0.3"
 http = "1.2"
 bytes = "1.10"
 async-trait = "0.1"

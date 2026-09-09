@@ -8,10 +8,10 @@ use async_trait::async_trait;
 pub trait ProxyHttpClient: 'static {
     type Error: std::fmt::Display + 'static;
 
-    /// 任意のリクエストを Origin Kasane へ透過転送する
+    /// 任意のリクエストを転送先ベース URL へ転送する
     async fn forward(
         &self,
-        origin_base_url: &str,
+        target_base_url: &str,
         request: ProxyRequest,
     ) -> Result<ProxyResponse, Self::Error>;
 }

@@ -19,6 +19,7 @@ pub mod query;
 pub mod system;
 pub mod table;
 pub mod users;
+pub mod explorer;
 
 pub mod pb {
     include!(concat!(env!("OUT_DIR"), "/kasane.rs"));
@@ -122,6 +123,7 @@ impl BoundServer {
             .accept_http1(true)
             .layer(tower_http::trace::TraceLayer::new_for_grpc())
             .layer(grpc_web_cors_layer())
+            .layer(explorer::ExplorerLayer::new(kasane_proxy_core::EXPLORER_HTML))
             .layer(GrpcWebLayer::new())
             .add_service(health_service)
             .add_service(reflection_service)

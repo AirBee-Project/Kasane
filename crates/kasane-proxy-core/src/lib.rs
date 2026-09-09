@@ -5,10 +5,21 @@
 
 pub mod client;
 pub mod gateway;
+pub mod grpc_frame;
+pub mod merger;
+pub mod partition;
 pub mod types;
 
 pub use client::ProxyHttpClient;
 pub use gateway::{
     ProxyConfig, QUERY_EXECUTE_PATH, handle_proxy_request, is_query_execute_request,
 };
-pub use types::{ProxyRequest, ProxyResponse};
+pub use grpc_frame::{
+    GRPC_HEADER_SIZE, GrpcFrameError, decode_all_grpc_frames, decode_grpc_frame, encode_grpc_frame,
+};
+pub use merger::{StreamMerger, merge_query_streams};
+pub use partition::{QueryPartitionError, SubQueryTask, split_query};
+pub use types::{BoxStream, ProxyRequest, ProxyResponse, ProxyResponseBody};
+
+/// gRPC-Web Explorer の組み込み静的 HTML
+pub const EXPLORER_HTML: &str = include_str!("explorer.html");

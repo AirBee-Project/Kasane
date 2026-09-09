@@ -1,6 +1,12 @@
 //! `proto/*.proto` からRustの型を生成する
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if let Ok(protoc_path) = protoc_bin_vendored::protoc_bin_path() {
+        unsafe {
+            std::env::set_var("PROTOC", protoc_path);
+        }
+    }
+
     let proto_files = [
         "proto/common.proto",
         "proto/system.proto",

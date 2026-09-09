@@ -1,10 +1,14 @@
-﻿[package]
+[package]
 name = "kasane-proxy-core"
 version = "0.1.0"
 edition = "2024"
 description = "Platform-independent proxy core for Kasane"
 
 [dependencies]
+kasane-proto = { path = "../kasane-proto" }
+prost = "0.14"
+futures = "0.3"
+async-stream = "0.3"
 http = "1.2"
 bytes = "1.10"
 async-trait = "0.1"

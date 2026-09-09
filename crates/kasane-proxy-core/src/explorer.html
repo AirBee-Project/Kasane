@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="ja" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kasane gRPC-Web Explorer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.4.0/dist/protobuf.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#f0fdf4', 500: '#22c55e', 600: '#16a34a', 700: '#15803d' },
+            darkbg: '#0f172a',
+            darkpanel: '#1e293b',
+            darkborder: '#334155',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    pre code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+  </style>
+</head>
+<body class="bg-darkbg text-slate-200 min-h-screen flex flex-col font-sans">
+
+  <!-- Header -->
+  <header class="bg-darkpanel border-b border-darkborder px-6 py-3.5 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-50">
+    <div class="flex items-center space-x-3">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center font-bold text-white shadow-lg shadow-emerald-900/30">
+        K
+      </div>
+      <div>
+        <h1 class="font-bold text-lg leading-tight tracking-tight text-white flex items-center gap-2">
+          Kasane Explorer
+          <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800">gRPC-Web</span>
+        </h1>
+        <p class="text-xs text-slate-400">Interactive API & Streaming Console</p>
+      </div>
+    </div>
+
+    <!-- Endpoint & Token Config -->
+    <div class="flex items-center space-x-3 flex-1 max-w-2xl justify-end">
+      <div class="flex items-center bg-slate-900/80 rounded-md border border-darkborder px-2.5 py-1 text-xs w-72">
+        <span class="text-slate-400 font-mono mr-1.5">Target:</span>
+        <input type="text" id="endpointUrl" class="bg-transparent text-slate-200 outline-none w-full font-mono" placeholder="http://localhost:5172">
+      </div>
+      <div class="flex items-center bg-slate-900/80 rounded-md border border-darkborder px-2.5 py-1 text-xs w-56">
+        <span class="text-slate-400 font-mono mr-1.5">Bearer:</span>
+        <input type="password" id="authToken" class="bg-transparent text-slate-200 outline-none w-full font-mono" placeholder="JWT token (optional)">
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <div class="flex-1 flex overflow-hidden">
+    <!-- Sidebar: Services & Methods -->
+    <aside class="w-72 bg-darkpanel/70 border-r border-darkborder flex flex-col overflow-y-auto shrink-0">
+      <div class="p-3 border-b border-darkborder">
+        <input type="text" id="methodSearch" placeholder="Search methods..." class="w-full bg-slate-900 border border-darkborder rounded px-2.5 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:border-brand-500 outline-none">
+      </div>
+      <nav id="methodList" class="p-2 space-y-4 text-xs">
+        <!-- Injected via JavaScript -->
+      </nav>
+    </aside>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 flex flex-col min-w-0 bg-slate-950 overflow-y-auto">
+      <!-- Method Title Bar -->
+      <div class="bg-darkpanel/40 border-b border-darkborder px-6 py-3 flex items-center justify-between">
+        <div>
+          <div class="text-xs font-mono text-emerald-400 uppercase tracking-wider" id="currentService">TableService</div>
+          <h2 class="text-lg font-bold text-white flex items-center gap-2" id="currentMethod">
+            List
+            <span class="text-xs font-normal font-mono text-slate-400 px-2 py-0.5 rounded bg-slate-800" id="currentPath">/kasane.TableService/List</span>
+          </h2>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button id="btnFormatJson" class="text-xs px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-darkborder transition">
+            Format JSON
+          </button>
+          <button id="btnSend" class="text-xs px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-medium rounded shadow transition flex items-center gap-1.5">
+            <svg id="btnSpinner" class="hidden animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+            <span id="btnSendText">Execute</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Split Editor & Results -->
+      <div class="flex-1 p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-0">
+        <!-- Request Editor -->
+        <div class="flex flex-col bg-darkpanel rounded-lg border border-darkborder overflow-hidden">
+          <div class="bg-slate-900/90 px-4 py-2 border-b border-darkborder flex items-center justify-between text-xs">
+            <span class="font-semibold text-slate-300">Request Body (JSON)</span>
+            <div class="flex items-center space-x-2" id="presetButtons">
+              <!-- Preset buttons injected here -->
+            </div>
+          </div>
+          <div class="flex-1 p-3">
+            <textarea id="requestJson" class="w-full h-full bg-slate-950 font-mono text-xs text-emerald-300 p-3 rounded border border-darkborder focus:border-brand-500 outline-none resize-none" spellcheck="false"></textarea>
+          </div>
+        </div>
+
+        <!-- Response Viewer -->
+        <div class="flex flex-col bg-darkpanel rounded-lg border border-darkborder overflow-hidden">
+          <div class="bg-slate-900/90 px-4 py-2 border-b border-darkborder flex items-center justify-between text-xs">
+            <div class="flex items-center space-x-3">
+              <span class="font-semibold text-slate-300">Response</span>
+              <span id="resStatusBadge" class="hidden px-2 py-0.5 rounded text-[11px] font-mono font-medium"></span>
+              <span id="resTimeBadge" class="hidden text-slate-400 font-mono text-[11px]"></span>
+            </div>
+            <span id="streamCounter" class="hidden text-xs text-emerald-400 font-mono">0 messages received</span>
+          </div>
+
+          <!-- Messages Container -->
+          <div id="responseContainer" class="flex-1 p-4 overflow-y-auto space-y-3 font-mono text-xs">
+            <div class="text-slate-500 italic text-center py-16">
+              Press "Execute" to send request and inspect the response.
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // --- Proto Definitions (Minimal Inlined Schema for Web Explorer) ---
+    const PROTO_SCHEMA = `
+      syntax = "proto3";
+      package kasane;
+
+      enum NullValue { NULL_VALUE = 0; }
+      enum OutputFormat { OUTPUT_FORMAT_UNSPECIFIED = 0; OUTPUT_FORMAT_SINGLE_ID = 1; OUTPUT_FORMAT_RANGE_ID = 2; OUTPUT_FORMAT_FLEX_ID = 3; }
+      enum TableDataType { TABLE_DATA_TYPE_UNSPECIFIED = 0; STRING = 1; INT = 2; BOOL = 3; }
+      enum ZoomLevelPolicy { ZOOM_LEVEL_POLICY_UNSPECIFIED = 0; ERROR = 1; IGNORE = 2; NORMALIZE = 3; }
+
+      message TypedValue {
+        oneof kind {
+          string string_val = 1;
+          int64 int_val = 2;
+          bool bool_val = 3;
+          NullValue null_val = 4;
+        }
+      }
+
+      message SingleId {
+        uint32 z = 1;
+        int32 f = 2;
+        uint32 x = 3;
+        uint32 y = 4;
+        optional uint64 i = 5;
+        optional uint64 t = 6;
+      }
+
+      message SpatialId {
+        oneof kind {
+          SingleId single_id = 1;
+        }
+      }
+
+      message DataGroup {
+        oneof value {
+          uint64 dict_ref = 1;
+          TypedValue inline_value = 2;
+        }
+        repeated SpatialId spatial_ids = 3;
+      }
+
+      message SearchDataResponse {
+        repeated TypedValue dictionary = 1;
+        repeated DataGroup data = 2;
+      }
+
+      message ExecuteQueryRequest {
+        optional TableDataType value_type = 1;
+        repeated SpatialId spatial_ids = 2;
+        OutputFormat format = 4;
+      }
+
+      message SearchDataRequest {
+        string db_name = 1;
+        string table_name = 2;
+        repeated SpatialId spatial_ids = 3;
+        ZoomLevelPolicy zoom_level_policy = 4;
+        OutputFormat format = 5;
+      }
+
+      message ListTablesRequest { string db_name = 1; }
+      message ListTablesResponse { repeated string tables = 1; }
+
+      message CreateTableRequest {
+        string db_name = 1;
+        string table_name = 2;
+        TableDataType data_type = 3;
+        bool is_dynamic = 4;
+      }
+      message CreateTableResponse {}
+
+      message ListDatabasesRequest {}
+      message ListDatabasesResponse { repeated string databases = 1; }
+
+      message HealthRequest {}
+      message HealthResponse { string status = 1; }
+
+      message LoginRequest { string username = 1; string password = 2; }
+      message LoginResponse { string token = 1; }
+    `;
+
+    // Root proto object
+    let rootProto = null;
+    try {
+      rootProto = protobuf.parse(PROTO_SCHEMA).root;
+    } catch (e) {
+      console.error("Failed to parse inline proto schema:", e);
+    }
+
+    // Method Directory & Defaults
+    const METHODS = [
+      {
+        service: "QueryService",
+        method: "Execute",
+        path: "/kasane.QueryService/Execute",
+        reqType: "kasane.ExecuteQueryRequest",
+        resType: "kasane.SearchDataResponse",
+        isStream: true,
+        template: {
+          value_type: "STRING",
+          spatial_ids: [
+            { single_id: { z: 15, f: 0, x: 29090, y: 12900 } }
+          ],
+          format: "OUTPUT_FORMAT_SINGLE_ID"
+        }
+      },
+      {
+        service: "TableService",
+        method: "List",
+        path: "/kasane.TableService/List",
+        reqType: "kasane.ListTablesRequest",
+        resType: "kasane.ListTablesResponse",
+        template: { db_name: "default" }
+      },
+      {
+        service: "TableService",
+        method: "Create",
+        path: "/kasane.TableService/Create",
+        reqType: "kasane.CreateTableRequest",
+        resType: "kasane.CreateTableResponse",
+        template: {
+          db_name: "default",
+          table_name: "geo_events",
+          data_type: "STRING",
+          is_dynamic: false
+        }
+      },
+      {
+        service: "DataService",
+        method: "Search",
+        path: "/kasane.DataService/Search",
+        reqType: "kasane.SearchDataRequest",
+        resType: "kasane.SearchDataResponse",
+        isStream: true,
+        template: {
+          db_name: "default",
+          table_name: "geo_events",
+          spatial_ids: [
+            { single_id: { z: 15, f: 0, x: 29090, y: 12900 } }
+          ],
+          zoom_level_policy: "ZOOM_LEVEL_POLICY_UNSPECIFIED",
+          format: "OUTPUT_FORMAT_SINGLE_ID"
+        }
+      },
+      {
+        service: "DatabaseService",
+        method: "List",
+        path: "/kasane.DatabaseService/List",
+        reqType: "kasane.ListDatabasesRequest",
+        resType: "kasane.ListDatabasesResponse",
+        template: {}
+      },
+      {
+        service: "AuthService",
+        method: "Login",
+        path: "/kasane.AuthService/Login",
+        reqType: "kasane.LoginRequest",
+        resType: "kasane.LoginResponse",
+        template: { username: "admin", password: "password" }
+      },
+      {
+        service: "SystemService",
+        method: "Health",
+        path: "/kasane.SystemService/Health",
+        reqType: "kasane.HealthRequest",
+        resType: "kasane.HealthResponse",
+        template: {}
+      }
+    ];
+
+    let selectedMethod = METHODS[0];
+
+    // Initialize UI
+    document.addEventListener("DOMContentLoaded", () => {
+      // Set default target endpoint to current location origin
+      const currentOrigin = window.location.origin;
+      const endpointInput = document.getElementById("endpointUrl");
+      endpointInput.value = (currentOrigin.startsWith("http") ? currentOrigin : "http://localhost:5172");
+
+      renderMethodNav();
+      selectMethod(selectedMethod);
+
+      document.getElementById("btnSend").addEventListener("click", executeRpc);
+      document.getElementById("btnFormatJson").addEventListener("click", formatJson);
+      document.getElementById("methodSearch").addEventListener("input", filterMethods);
+    });
+
+    function renderMethodNav(filter = "") {
+      const list = document.getElementById("methodList");
+      list.innerHTML = "";
+
+      const grouped = {};
+      METHODS.forEach(m => {
+        if (filter && !m.service.toLowerCase().includes(filter) && !m.method.toLowerCase().includes(filter)) {
+          return;
+        }
+        if (!grouped[m.service]) grouped[m.service] = [];
+        grouped[m.service].push(m);
+      });
+
+      for (const [svc, methods] of Object.entries(grouped)) {
+        const section = document.createElement("div");
+        section.innerHTML = `<div class="px-2 py-1 font-semibold text-slate-400 uppercase tracking-wider text-[10px]">${svc}</div>`;
+        const ul = document.createElement("div");
+        ul.className = "space-y-0.5";
+
+        methods.forEach(m => {
+          const btn = document.createElement("button");
+          const isSelected = selectedMethod.path === m.path;
+          btn.className = `w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between transition ${
+            isSelected ? 'bg-brand-600/20 text-brand-400 border border-brand-500/30 font-medium' : 'text-slate-300 hover:bg-slate-800'
+          }`;
+          btn.innerHTML = `
+            <span>${m.method}</span>
+            ${m.isStream ? '<span class="text-[9px] px-1 py-0.2 bg-emerald-950 text-emerald-400 rounded border border-emerald-800">stream</span>' : ''}
+          `;
+          btn.onclick = () => selectMethod(m);
+          ul.appendChild(btn);
+        });
+
+        section.appendChild(ul);
+        list.appendChild(section);
+      }
+    }
+
+    function selectMethod(method) {
+      selectedMethod = method;
+      document.getElementById("currentService").textContent = method.service;
+      document.getElementById("currentMethod").innerHTML = `
+        ${method.method}
+        <span class="text-xs font-normal font-mono text-slate-400 px-2 py-0.5 rounded bg-slate-800">${method.path}</span>
+      `;
+      document.getElementById("requestJson").value = JSON.stringify(method.template, null, 2);
+      renderMethodNav(document.getElementById("methodSearch").value.toLowerCase());
+    }
+
+    function filterMethods(e) {
+      renderMethodNav(e.target.value.toLowerCase().trim());
+    }
+
+    function formatJson() {
+      try {
+        const val = JSON.parse(document.getElementById("requestJson").value);
+        document.getElementById("requestJson").value = JSON.stringify(val, null, 2);
+      } catch (e) {
+        alert("Invalid JSON: " + e.message);
+      }
+    }
+
+    // --- gRPC-Web Wire Encoding & Execution ---
+    async function executeRpc() {
+      const endpoint = document.getElementById("endpointUrl").value.replace(/\/+$/, "");
+      const token = document.getElementById("authToken").value.trim();
+      const url = `${endpoint}${selectedMethod.path}`;
+
+      const btnSend = document.getElementById("btnSend");
+      const btnText = document.getElementById("btnSendText");
+      const spinner = document.getElementById("btnSpinner");
+      const resContainer = document.getElementById("responseContainer");
+      const statusBadge = document.getElementById("resStatusBadge");
+      const timeBadge = document.getElementById("resTimeBadge");
+      const streamCounter = document.getElementById("streamCounter");
+
+      // UI state update
+      btnSend.disabled = true;
+      btnText.textContent = "Calling...";
+      spinner.classList.remove("hidden");
+      resContainer.innerHTML = "";
+      statusBadge.classList.add("hidden");
+      timeBadge.classList.add("hidden");
+      streamCounter.classList.add("hidden");
+
+      let jsonPayload;
+      try {
+        jsonPayload = JSON.parse(document.getElementById("requestJson").value);
+      } catch (e) {
+        alert("Invalid JSON: " + e.message);
+        resetBtn();
+        return;
+      }
+
+      // Encode Protobuf Payload
+      let protoBytes;
+      try {
+        const ReqMessage = rootProto.lookupType(selectedMethod.reqType);
+        const errMsg = ReqMessage.verify(jsonPayload);
+        if (errMsg) throw Error(errMsg);
+        const msg = ReqMessage.create(jsonPayload);
+        protoBytes = ReqMessage.encode(msg).finish();
+      } catch (e) {
+        // Fallback: encode empty if no schema
+        console.warn("Protobuf validation warning:", e);
+        protoBytes = new Uint8Array(0);
+      }
+
+      // Create 5-byte gRPC Frame: [0x00, len_u32_be...]
+      const frame = new Uint8Array(5 + protoBytes.length);
+      frame[0] = 0; // uncompressed
+      new DataView(frame.buffer).setUint32(1, protoBytes.length, false);
+      frame.set(protoBytes, 5);
+
+      const headers = {
+        "Content-Type": "application/grpc-web",
+        "X-Grpc-Web": "1"
+      };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const startTime = performance.now();
+      let messageCount = 0;
+
+      try {
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: headers,
+          body: frame
+        });
+
+        const elapsed = Math.round(performance.now() - startTime);
+        timeBadge.textContent = `${elapsed} ms`;
+        timeBadge.classList.remove("hidden");
+
+        if (!resp.ok) {
+          statusBadge.textContent = `HTTP ${resp.status}`;
+          statusBadge.className = "px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-red-950 text-red-400 border border-red-800";
+          statusBadge.classList.remove("hidden");
+          const errorText = await resp.text();
+          resContainer.innerHTML = `<div class="p-3 bg-red-950/40 border border-red-900 rounded text-red-300">${escapeHtml(errorText)}</div>`;
+          resetBtn();
+          return;
+        }
+
+        statusBadge.textContent = `HTTP 200 OK`;
+        statusBadge.className = "px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-emerald-950 text-emerald-400 border border-emerald-800";
+        statusBadge.classList.remove("hidden");
+
+        // Read Streaming Response
+        const reader = resp.body.getReader();
+        let buffer = new Uint8Array(0);
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          // Append chunk to buffer
+          const newBuf = new Uint8Array(buffer.length + value.length);
+          newBuf.set(buffer, 0);
+          newBuf.set(value, buffer.length);
+          buffer = newBuf;
+
+          // Parse gRPC Frames from buffer
+          while (buffer.length >= 5) {
+            const flag = buffer[0];
+            const msgLen = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength).getUint32(1, false);
+
+            if (buffer.length < 5 + msgLen) {
+              break; // Wait for more bytes
+            }
+
+            const framePayload = buffer.slice(5, 5 + msgLen);
+            buffer = buffer.slice(5 + msgLen);
+
+            if (flag === 0x80) {
+              // Trailers Frame (ASCII headers like grpc-status: 0)
+              const trailerText = new TextDecoder().decode(framePayload);
+              appendTrailerCard(resContainer, trailerText);
+            } else {
+              // Data Frame
+              messageCount++;
+              streamCounter.textContent = `${messageCount} message${messageCount > 1 ? 's' : ''}`;
+              streamCounter.classList.remove("hidden");
+
+              let decodedObj;
+              try {
+                const ResMessage = rootProto.lookupType(selectedMethod.resType);
+                decodedObj = ResMessage.decode(framePayload);
+              } catch (e) {
+                decodedObj = { _raw_bytes: Array.from(framePayload), _note: "Decoded as raw buffer" };
+              }
+
+              // If Login response, auto-save token
+              if (selectedMethod.path.includes("Login") && decodedObj.token) {
+                document.getElementById("authToken").value = decodedObj.token;
+              }
+
+              appendMessageCard(resContainer, messageCount, decodedObj);
+            }
+          }
+        }
+
+        if (messageCount === 0 && resContainer.children.length === 0) {
+          resContainer.innerHTML = `<div class="text-slate-400 italic p-4">Response completed with empty body.</div>`;
+        }
+
+      } catch (err) {
+        statusBadge.textContent = "Error";
+        statusBadge.className = "px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-red-950 text-red-400 border border-red-800";
+        statusBadge.classList.remove("hidden");
+        resContainer.innerHTML = `<div class="p-3 bg-red-950/40 border border-red-900 rounded text-red-300">Network / Fetch Error: ${escapeHtml(err.message)}</div>`;
+      } finally {
+        resetBtn();
+      }
+    }
+
+    function appendMessageCard(container, index, data) {
+      const card = document.createElement("div");
+      card.className = "bg-slate-900 border border-darkborder rounded-md overflow-hidden animate-fadeIn";
+      card.innerHTML = `
+        <div class="bg-slate-800/80 px-3 py-1 text-[11px] font-semibold text-slate-400 border-b border-darkborder flex justify-between">
+          <span>Message #${index}</span>
+          <span class="text-emerald-400 font-normal">Decoded Protobuf</span>
+        </div>
+        <div class="p-3 overflow-x-auto text-emerald-300">
+          <pre><code>${escapeHtml(JSON.stringify(data, null, 2))}</code></pre>
+        </div>
+      `;
+      container.appendChild(card);
+    }
+
+    function appendTrailerCard(container, trailers) {
+      const card = document.createElement("div");
+      card.className = "bg-slate-900/60 border border-slate-700/60 rounded-md p-2.5 text-[11px] text-slate-400 font-mono";
+      card.innerHTML = `
+        <div class="font-semibold text-slate-300 mb-1">gRPC Trailers:</div>
+        <pre class="text-slate-400 text-[10px]">${escapeHtml(trailers.trim())}</pre>
+      `;
+      container.appendChild(card);
+    }
+
+    function resetBtn() {
+      const btnSend = document.getElementById("btnSend");
+      const btnText = document.getElementById("btnSendText");
+      const spinner = document.getElementById("btnSpinner");
+      btnSend.disabled = false;
+      btnText.textContent = "Execute";
+      spinner.classList.add("hidden");
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+  </script>
+</body>
+</html>
