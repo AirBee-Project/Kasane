@@ -10,3 +10,5 @@ examples/
 openapi.json
 openapi.yaml
 README.md
+.cargo/
+rust-toolchain.toml
