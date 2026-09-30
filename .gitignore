@@ -23,9 +23,6 @@ Thumbs.db
 /default_kasane_db
 
 
-# craneliftの設定が書いてあるため
-.cargo/config.toml
-
 # OpenAPI generated files
 openapi.json
 openapi.yaml

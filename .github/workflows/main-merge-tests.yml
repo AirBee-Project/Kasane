@@ -32,6 +32,9 @@ jobs:
       - name: Install mold
         uses: rui314/setup-mold@v1
 
+      - name: Remove local-only nightly settings
+        run: rm -f .cargo/config.toml rust-toolchain.toml
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -89,6 +92,9 @@ jobs:
 
       - name: Install mold
         uses: rui314/setup-mold@v1
+
+      - name: Remove local-only nightly settings
+        run: rm -f .cargo/config.toml rust-toolchain.toml
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
