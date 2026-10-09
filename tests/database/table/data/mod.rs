@@ -1,15 +1,23 @@
+// `backend-lmdb` 限定のモジュールは LMDB の内部（シャード木・値インデックス）を直接検証する。
+#[cfg(feature = "backend-lmdb")]
 pub mod compaction;
 pub mod concurrency;
 pub mod get;
 pub mod insert;
+#[cfg(feature = "backend-lmdb")]
 pub mod model_based;
 pub mod remove;
+#[cfg(feature = "backend-lmdb")]
 pub mod shard_coverage;
+#[cfg(feature = "backend-lmdb")]
 pub mod shard_merge;
+#[cfg(feature = "backend-lmdb")]
 pub mod shard_split;
+#[cfg(feature = "backend-lmdb")]
 pub mod shard_split_bytes;
 pub mod streaming;
 pub mod time_coalescing;
 pub mod time_edge_cases;
 pub mod upsert;
+#[cfg(feature = "backend-lmdb")]
 pub mod value_filter;

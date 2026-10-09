@@ -27,5 +27,7 @@ fn root_password() -> String {
 
 #[cfg(feature = "backend-lmdb")]
 pub mod lmdb;
+#[cfg(feature = "backend-memory")]
+pub mod memory;
 #[cfg(feature = "backend-tikv")]
 pub mod tikv;

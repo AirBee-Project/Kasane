@@ -8,7 +8,9 @@ use crate::{
     },
     repositories::{ReadRepository, Storage},
     services::auth::AuthUser,
-    services::helpers::{data_response, spatial_ids::process_spatial_ids, value::restore_value},
+    services::helpers::{
+        data_response, run_blocking, spatial_ids::process_spatial_ids, value::restore_value,
+    },
 };
 
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
@@ -67,13 +69,12 @@ pub async fn get(
         .await?;
 
     let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || {
+    run_blocking(move || {
         span.in_scope(|| {
             data_response::build(groups, query_format, |bytes| {
                 restore_value(table.data_type, table.constraints.as_ref(), bytes)
             })
         })
     })
-    .await
-    .map_err(|e| AppError::InternalError(e.to_string()))?
+    .await?
 }

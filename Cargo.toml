@@ -4,11 +4,14 @@ version = "0.7.0"
 edition = "2024"
 default-run = "kasane"
 
+[workspace]
+members = [".", "wasm"]
+
 [dependencies]
-dotenvy = "0.15"
+dotenvy = { version = "0.15", optional = true }
 kasane-logic = { git = "https://github.com/AirBee-Project/Kasane-Logic.git", features = ["persist", "temporal_id", "unstable"] }
-tokio = { version = "1.52", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
-tokio-stream = "0.1"
+tokio = { version = "1.52", features = ["rt", "macros", "sync"] }
+tokio-stream = { version = "0.1", default-features = false, optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 uuid = { version = "1.23.4", features = ["v7", "fast-rng", "serde"] }
@@ -33,25 +36,55 @@ opentelemetry-appender-tracing = { version = "0.32", optional = true }
 tracing-opentelemetry = { version = "0.33.0", optional = true }
 mimalloc = { version = "0.1", optional = true }
 thiserror = "2.0.20"
-tower-http = { version = "0.7.0", features = ["cors", "trace"] }
-tonic = "0.14.6"
-prost = "0.14.4"
-tonic-web = "0.14.6"
-tonic-reflection = "0.14.6"
-tonic-health = "0.14.6"
-tonic-types = "0.14.6"
-tonic-prost = "0.14.6"
-http = "1.5.0"
+tower-http = { version = "0.7.0", features = ["cors", "trace"], optional = true }
+tonic = { version = "0.14.6", default-features = false, features = ["codegen"], optional = true }
+prost = { version = "0.14.4", optional = true }
+tonic-web = { version = "0.14.6", optional = true }
+tonic-reflection = { version = "0.14.6", optional = true }
+tonic-health = { version = "0.14.6", optional = true }
+tonic-types = { version = "0.14.6", optional = true }
+tonic-prost = { version = "0.14.6", optional = true }
+http = { version = "1.5.0", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { version = "1.23.4", features = ["js"] }
+getrandom = { version = "0.2", features = ["js"] }
 
 [features]
-default = ["backend-lmdb"]
-backend-lmdb = ["dep:heed"]
-backend-tikv = ["dep:tikv-client", "dep:crc32fast"]
+default = ["server", "backend-lmdb"]
+# proto のメッセージ型と各サービスの実装。通信路を持たないので Wasm でも使える。
+grpc = [
+    "dep:tokio-stream",
+    "dep:tonic",
+    "dep:prost",
+    "dep:tonic-types",
+    "dep:tonic-prost",
+]
+# gRPC サーバーとして待ち受けるための一式。
+server = [
+    "grpc",
+    "dep:dotenvy",
+    "dep:tower-http",
+    "dep:tonic-web",
+    "dep:tonic-reflection",
+    "dep:tonic-health",
+    "dep:http",
+    "tonic/transport",
+    "tonic/router",
+    "tokio/rt-multi-thread",
+    "tokio/net",
+    "tokio/signal",
+    "tokio/time",
+]
+backend-lmdb = ["dep:heed", "tokio/time"]
+backend-tikv = ["dep:tikv-client", "dep:crc32fast", "tokio/time"]
+backend-memory = []
 
 # 互換性テスト用
 gen-fixtures = []
 
 production = [
+    "server",
     "opentelemetry",
     "opentelemetry_sdk",
     "opentelemetry-otlp",
@@ -59,6 +92,11 @@ production = [
     "tracing-opentelemetry",
     "mimalloc",
 ]
+
+[[bin]]
+name = "kasane"
+path = "src/main.rs"
+required-features = ["server"]
 
 [dev-dependencies]
 tempfile = "3.27.0"

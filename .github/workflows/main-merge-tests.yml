@@ -14,6 +14,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "build.rs"
+      - "wasm/**"
       - ".github/workflows/**"
 
 concurrency:
@@ -81,6 +82,86 @@ jobs:
             --no-default-features \
             --features "production,backend-lmdb" \
             --run-ignored all
+
+  memory:
+    name: Verify (memory)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install mold
+        uses: rui314/setup-mold@v1
+
+      - name: Remove local-only nightly settings
+        run: rm -f .cargo/config.toml rust-toolchain.toml
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          profile: minimal
+          components: clippy
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "kasane"
+          key: memory
+
+      - name: Clippy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo clippy             --locked             --lib             --bins             --tests             --no-default-features             --features "server,backend-memory"             -- -D warnings
+
+      - name: Test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo nextest run             --locked             --lib             --bins             --tests             --no-default-features             --features "server,backend-memory"             --run-ignored all
+
+  wasm:
+    name: Verify (Wasm)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Remove local-only nightly settings
+        run: rm -f .cargo/config.toml rust-toolchain.toml
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          profile: minimal
+          components: clippy
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@wasm-pack
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "kasane"
+          key: wasm
+
+      - name: Clippy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo clippy             --locked             -p kasane-wasm             --target wasm32-unknown-unknown             --tests             -- -D warnings
+
+      - name: Test
+        run: wasm-pack test --node --release wasm
 
   tikv:
     name: Verify (TiKV)

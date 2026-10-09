@@ -29,6 +29,7 @@ impl Resource {
     }
 
     /// 代表的なリソースに対する `(見つからない, 既にある)` の語句
+    #[cfg(feature = "grpc")]
     const fn codes(self) -> (&'static str, &'static str) {
         match self {
             Self::Database => ("database_not_found", "database_already_exists"),
@@ -130,6 +131,7 @@ impl AuthError {
         }
     }
 
+    #[cfg(feature = "grpc")]
     fn grpc_code(&self) -> tonic::Code {
         match self {
             Self::MissingToken
@@ -226,6 +228,7 @@ impl AppError {
     }
 
     /// クライアントが分岐に使える安定した機械可読コード。
+    #[cfg(feature = "grpc")]
     fn code(&self) -> &'static str {
         match self {
             Self::Auth(e) => e.code(),
@@ -248,6 +251,7 @@ impl AppError {
         }
     }
 
+    #[cfg(feature = "grpc")]
     fn grpc_code(&self) -> tonic::Code {
         match self {
             Self::Auth(e) => e.grpc_code(),
@@ -271,6 +275,7 @@ impl AppError {
     }
 }
 
+#[cfg(feature = "grpc")]
 impl From<AppError> for tonic::Status {
     fn from(err: AppError) -> Self {
         use tonic_types::{ErrorDetails, StatusExt};
@@ -281,6 +286,7 @@ impl From<AppError> for tonic::Status {
     }
 }
 
+#[cfg(feature = "grpc")]
 impl From<AuthError> for tonic::Status {
     fn from(err: AuthError) -> Self {
         AppError::from(err).into()

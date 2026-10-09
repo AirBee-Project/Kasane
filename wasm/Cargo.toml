@@ -1,0 +1,33 @@
+[package]
+name = "kasane-wasm"
+version = "0.0.0"
+edition = "2024"
+description = "Kasane running in the browser, backed by in-memory storage"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+kasane = { path = "..", default-features = false, features = ["grpc", "backend-memory"] }
+js-sys = "0.3"
+prost = "0.14.4"
+tokio-stream = { version = "0.1", default-features = false }
+tonic = { version = "0.14.6", default-features = false }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+
+# rustc が既定で使う Wasm 拡張を、wasm-opt 側でも有効にしておく。
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = [
+    "-O",
+    "--enable-bulk-memory",
+    "--enable-nontrapping-float-to-int",
+    "--enable-sign-ext",
+    "--enable-mutable-globals",
+    "--enable-reference-types",
+    "--enable-multivalue",
+]
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"

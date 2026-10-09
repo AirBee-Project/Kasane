@@ -35,8 +35,21 @@ pub async fn insert(
     )?;
 
     // 1 件ずつ別トランザクションで書くと、同じリーフを何度も書き直しロックを奪い合う。
-    app_state
+    #[cfg(not(feature = "backend-memory"))]
+    return app_state
         .writes
         .insert(table.id, table.value_indexing(), ids, value)
-        .await
+        .await;
+
+    // 畳み込みのワーカーを動かす非同期ランタイムが Wasm には無い。メモリ上ではトランザクションの
+    // 固定費も無いので、畳んで得るものもない。
+    #[cfg(feature = "backend-memory")]
+    {
+        use crate::repositories::{Storage, WriteRepository};
+        let index = table.value_indexing();
+        app_state
+            .db
+            .write(async move |w| w.data_insert(table.id, index, ids, &value).await)
+            .await
+    }
 }

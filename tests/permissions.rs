@@ -1,5 +1,5 @@
-//! LMDB バックエンド向けの結合テスト。TiKV バックエンドのビルドでは対象外。
-#![cfg(feature = "backend-lmdb")]
+//! LMDB・メモリバックエンド向けの結合テスト。TiKV バックエンドのビルドでは対象外。
+#![cfg(all(feature = "server", not(feature = "backend-tikv")))]
 
 mod common;
 
@@ -1655,11 +1655,13 @@ async fn test_global_read_can_read_everything_but_write_nothing() {
 /// `table_id_index` に残っているテーブルの総数。到達不能になったテーブルの検出に使う。
 ///
 /// ストレージ内部の索引を直接数えるため、抽象 API ではなく LMDB のハンドルを直接使う。
+#[cfg(feature = "backend-lmdb")]
 fn indexed_table_count(app_state: &kasane::AppState) -> usize {
     let rtxn = app_state.db.env.read_txn().unwrap();
     app_state.db.table_id_index.len(&rtxn).unwrap() as usize
 }
 
+#[cfg(feature = "backend-lmdb")]
 #[tokio::test]
 /// データベースを削除すると、配下のテーブルが 1 つ残らず消えることを検証する。
 ///

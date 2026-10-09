@@ -119,12 +119,14 @@ pub struct TelemetryGuard(Providers);
 
 impl Drop for TelemetryGuard {
     fn drop(&mut self) {
-        match tokio::runtime::Handle::try_current() {
-            Ok(handle) if handle.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread => {
-                tokio::task::block_in_place(|| self.0.shutdown());
-            }
-            _ => self.0.shutdown(),
+        #[cfg(feature = "server")]
+        if let Ok(handle) = tokio::runtime::Handle::try_current()
+            && handle.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread
+        {
+            tokio::task::block_in_place(|| self.0.shutdown());
+            return;
         }
+        self.0.shutdown();
     }
 }
 

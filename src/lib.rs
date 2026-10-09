@@ -3,6 +3,7 @@ use tokio::sync::Semaphore;
 
 pub mod backend;
 pub mod error;
+#[cfg(feature = "grpc")]
 pub mod grpc;
 pub mod models;
 pub mod repositories;
@@ -13,6 +14,7 @@ pub mod telemetry;
 #[derive(Clone)]
 pub struct AppState {
     pub db: backend::Db,
+    #[cfg(not(feature = "backend-memory"))]
     pub writes: services::database::table::data::coalesce::WriteCoalescer,
     /// クエリの同時実行数を絞る
     pub query_concurrency: Arc<Semaphore>,
@@ -20,12 +22,11 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(db: backend::Db) -> Self {
-        let writes = services::database::table::data::coalesce::WriteCoalescer::new(db.clone());
-        let query_concurrency = Arc::new(Semaphore::new(query_concurrency_limit()));
         Self {
+            #[cfg(not(feature = "backend-memory"))]
+            writes: services::database::table::data::coalesce::WriteCoalescer::new(db.clone()),
             db,
-            writes,
-            query_concurrency,
+            query_concurrency: Arc::new(Semaphore::new(query_concurrency_limit())),
         }
     }
 }

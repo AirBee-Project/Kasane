@@ -1,23 +1,25 @@
 //! [`Storage`] trait 経由でのトランザクション境界が実際に機能することの検証。
 //!
-//! クロージャ方式の非同期 API が、実 LMDB に対して読み書き・コミット・
+//! クロージャ方式の非同期 API が、選択中のバックエンドに対して読み書き・コミット・
 //! エラー時の破棄まで期待どおりに振る舞うことを確かめる。
 //! TiKV バックエンドのビルドでは対象外（同等の検証は `tikv_backend.rs`）。
-#![cfg(feature = "backend-lmdb")]
+#![cfg(not(feature = "backend-tikv"))]
 
+use kasane::backend::Db;
 use kasane::error::AppError;
-use kasane::repositories::lmdb::initialize_database;
 use kasane::repositories::{ReadRepository, Storage, WriteRepository};
 
-fn temp_db() -> (tempfile::TempDir, kasane::repositories::lmdb::AppDb) {
+async fn temp_db() -> (tempfile::TempDir, Db) {
     let tmp = tempfile::TempDir::new().unwrap();
-    let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
+    let db = kasane::backend::open(tmp.path().to_str().unwrap())
+        .await
+        .unwrap();
     (tmp, db)
 }
 
 #[tokio::test]
 async fn write_then_read_through_trait() {
-    let (_tmp, db) = temp_db();
+    let (_tmp, db) = temp_db().await;
 
     let created = Storage::write(&db, async |w| {
         WriteRepository::database_create(w, "trait_db", Some("via trait".into())).await
@@ -38,7 +40,7 @@ async fn write_then_read_through_trait() {
 
 #[tokio::test]
 async fn error_in_closure_discards_the_transaction() {
-    let (_tmp, db) = temp_db();
+    let (_tmp, db) = temp_db().await;
 
     // 作成したうえでエラーを返す → コミットされないこと。
     let result: Result<(), AppError> = Storage::write(&db, async |w| {
@@ -61,7 +63,7 @@ async fn error_in_closure_discards_the_transaction() {
 
 #[tokio::test]
 async fn write_closure_sees_its_own_writes() {
-    let (_tmp, db) = temp_db();
+    let (_tmp, db) = temp_db().await;
 
     // 同一トランザクション内で、書いた直後に自分で読めること
     // （既存の重複チェックなどがこの性質に依存している）。
@@ -82,7 +84,7 @@ async fn meta_repository_defaults_work_over_async_lookups() {
     use kasane::models::users::{AclEntry, DataRole, PrivilegeRule, ResolvedPrivilege};
     use kasane::repositories::CatalogRepository;
 
-    let (_tmp, db) = temp_db();
+    let (_tmp, db) = temp_db().await;
 
     Storage::write(&db, async |w| {
         WriteRepository::database_create(w, "perm_db", None).await
@@ -129,12 +131,12 @@ mod acl_suite;
 /// ACL 行の保存が仕様どおりか（TiKV 側は `tikv.rs` が同じスイートを回す）。
 #[tokio::test]
 async fn acl_rows_behave_as_specified() {
-    let (_tmp, db) = temp_db();
+    let (_tmp, db) = temp_db().await;
     acl_suite::run(&db, "lmdb").await;
 }
 
 #[tokio::test]
 async fn acl_driven_listing_behaves_as_specified() {
-    let (_tmp, db) = temp_db();
+    let (_tmp, db) = temp_db().await;
     acl_suite::run_listing(&db, "lmdblist").await;
 }

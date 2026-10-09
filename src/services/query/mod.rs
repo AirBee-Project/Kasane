@@ -432,7 +432,7 @@ pub async fn execute(
 
     // クエリ演算は同期ブロッキング処理のため、async ワーカーを塞がない。
     let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || -> Result<GetDataResponse, AppError> {
+    crate::services::helpers::run_blocking(move || -> Result<GetDataResponse, AppError> {
         let _permit = _permit;
         span.in_scope(|| {
             let value_type = request
@@ -445,8 +445,7 @@ pub async fn execute(
             )
         })
     })
-    .await
-    .map_err(|e| AppError::InternalError(e.to_string()))?
+    .await?
 }
 
 fn run<V: Value>(

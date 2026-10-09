@@ -71,7 +71,8 @@ macro_rules! client_pair {
 impl TestApp {
     pub async fn new() -> Self {
         let temp_dir = tempfile::TempDir::new().unwrap();
-        let db = kasane::repositories::lmdb::initialize_database(temp_dir.path().to_str().unwrap())
+        let db = kasane::backend::open(temp_dir.path().to_str().unwrap())
+            .await
             .unwrap();
 
         let app_state = kasane::AppState::new(db);

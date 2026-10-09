@@ -76,9 +76,7 @@ pub async fn get_privileges(
 /// 逃がす。書き込みクロージャの中で回すと、バックエンドによっては非同期ランタイムを
 /// 塞いでしまう（クロージャはやり直しで複数回実行されうる点でも不利）。
 async fn hash_password_off_thread(password: String) -> Result<String, AppError> {
-    tokio::task::spawn_blocking(move || hash_password(&password))
-        .await
-        .map_err(|e| AppError::InternalError(e.to_string()))?
+    crate::services::helpers::run_blocking(move || hash_password(&password)).await?
 }
 
 /// root は削除・権限変更の対象にできない。

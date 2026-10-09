@@ -3,6 +3,7 @@
 //! クエリはシャードされた FlexTree を Kasane-Logic の入力源として読み、
 //! 対象領域だけを遅延評価する。ここではその end-to-end の挙動を検証する。
 
+#[cfg(feature = "backend-lmdb")]
 mod routing;
 mod values;
 

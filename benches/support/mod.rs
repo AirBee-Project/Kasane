@@ -20,19 +20,21 @@ pub struct BenchEnv {
     _temp_dir: tempfile::TempDir,
 }
 
-/// LMDB バックエンドの `AppState` を作り、`bench` データベースと root ユーザーを揃える。
+/// 選択中のバックエンドで `AppState` を作り、`bench` データベースと root ユーザーを揃える。
 pub fn build_env(rt: &tokio::runtime::Runtime) -> BenchEnv {
     let temp_dir = tempfile::TempDir::new().expect("failed to create temp dir for bench LMDB");
-    let db: Db = kasane::repositories::lmdb::initialize_database(
-        temp_dir
-            .path()
-            .to_str()
-            .expect("temp dir path is not valid UTF-8"),
-    )
-    .expect("failed to initialize LMDB");
-    let app_state = AppState::new(db);
 
     rt.block_on(async {
+        let db: Db = kasane::backend::open(
+            temp_dir
+                .path()
+                .to_str()
+                .expect("temp dir path is not valid UTF-8"),
+        )
+        .await
+        .expect("failed to open the storage backend");
+        let app_state = AppState::new(db);
+
         kasane::services::database::create(&app_state, DB_NAME, None)
             .await
             .expect("failed to create bench database");

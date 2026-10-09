@@ -14,6 +14,7 @@ use crate::repositories::{CatalogRepository, ReadRepository, Storage};
 use crate::services::auth::{
     AuthUser, dummy_verify_password, generate_jwt, verify_jwt, verify_password,
 };
+use crate::services::helpers::run_blocking;
 
 pub struct AuthServiceImpl {
     pub app_state: AppState,
@@ -38,7 +39,7 @@ impl AuthService for AuthServiceImpl {
         // argon2 の検証は CPU バウンドなのでブロッキングタスクへ逃がす。
         let password = payload.password.clone();
         let span = tracing::Span::current();
-        let verified = tokio::task::spawn_blocking(move || -> Result<bool, AppError> {
+        let verified = run_blocking(move || -> Result<bool, AppError> {
             let _guard = span.enter();
             match &stored_hash {
                 Some(hash) => verify_password(&password, hash),
@@ -48,8 +49,7 @@ impl AuthService for AuthServiceImpl {
                 }
             }
         })
-        .await
-        .map_err(|e| AppError::InternalError(e.to_string()))??;
+        .await??;
 
         if !verified {
             return Err(AuthError::InvalidCredentials.into());
