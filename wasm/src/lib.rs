@@ -86,7 +86,6 @@ impl Kasane {
         let query = query::QueryServiceImpl {
             app_state: app_state.clone(),
         };
-        let users = users::UserServiceImpl { app_state };
 
         match path {
             "/kasane.SystemService/GetSystemInfo" => {
@@ -116,23 +115,6 @@ impl Kasane {
 
             "/kasane.QueryService/Execute" => {
                 server_stream(query.execute(self.request(bytes)?).await).await
-            }
-
-            "/kasane.UserService/List" => unary(users.list(self.request(bytes)?).await),
-            "/kasane.UserService/Create" => unary(users.create(self.request(bytes)?).await),
-            "/kasane.UserService/Get" => unary(users.get(self.request(bytes)?).await),
-            "/kasane.UserService/Delete" => unary(users.delete(self.request(bytes)?).await),
-            "/kasane.UserService/UpdatePassword" => {
-                unary(users.update_password(self.request(bytes)?).await)
-            }
-            "/kasane.UserService/GetPrivileges" => {
-                unary(users.get_privileges(self.request(bytes)?).await)
-            }
-            "/kasane.UserService/GrantPrivilege" => {
-                unary(users.grant_privilege(self.request(bytes)?).await)
-            }
-            "/kasane.UserService/RevokePrivilege" => {
-                unary(users.revoke_privilege(self.request(bytes)?).await)
             }
 
             _ => Err(Status::unimplemented(format!(
