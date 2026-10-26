@@ -1,7 +1,7 @@
 use crate::models::users::{Scope, User, UserRole};
 use crate::repositories::{CatalogRepository, ReadRepository, Storage};
 use crate::services::auth::{reaches, visible_database};
-use crate::{AppState, error::AppError, models::database::table::TableSummary};
+use crate::{AppState, error::AppError, models::database::table::TableInfo};
 
 /// テーブル一覧を返す。呼び出したユーザーが Read 以上で到達できるテーブルだけに絞る。
 ///
@@ -15,30 +15,35 @@ pub async fn list(
     app_state: &AppState,
     db_name: &str,
     user: &User,
-) -> Result<Vec<TableSummary>, AppError> {
+) -> Result<Vec<TableInfo>, AppError> {
     let owned = db_name.to_string();
     let user = user.clone();
 
-    let tables = app_state
+    app_state
         .db
         .read(async move |db| {
             let found = db.database_id(&owned).await?.map(|db_id| (db_id, ()));
             let (db_id, ()) = visible_database(db, &user, &owned, found).await?;
 
             // データベース全体に Read 以上で届くなら全件が対象。
-            if reaches(db, &user, Scope::Database(db_id), UserRole::Read).await? {
-                return db.table_list_by_id(db_id).await;
+            let tables = if reaches(db, &user, Scope::Database(db_id), UserRole::Read).await? {
+                db.table_list_by_id(db_id).await?
+            } else {
+                // ここへ来るのはテーブル単位の行しか持たない利用者だけ。
+                let ids: Vec<_> = db
+                    .acl_tables_in(user.id, db_id)
+                    .await?
+                    .into_iter()
+                    .collect();
+                db.tables_by_id(db_id, &ids).await?
+            };
+
+            let mut infos = Vec::with_capacity(tables.len());
+            for table in tables {
+                let count = db.table_count(table.id).await?;
+                infos.push(TableInfo { table, count });
             }
-
-            // ここへ来るのはテーブル単位の行しか持たない利用者だけ。
-            let ids: Vec<_> = db
-                .acl_tables_in(user.id, db_id)
-                .await?
-                .into_iter()
-                .collect();
-            db.tables_by_id(db_id, &ids).await
+            Ok(infos)
         })
-        .await?;
-
-    Ok(tables.into_iter().map(Into::into).collect())
+        .await
 }

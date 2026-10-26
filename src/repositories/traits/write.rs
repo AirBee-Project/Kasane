@@ -1,12 +1,10 @@
 //! 書き込みトランザクション上で行える操作。
 
-use kasane_logic::SpatialIdSet;
+use spatial_id::collection::SpatialIdSet;
 
 use crate::error::{AppError, Resource};
 use crate::models::database::DatabaseInfoResponse;
-use crate::models::database::table::{
-    Table, TableConstraints, TableDataType, UpdateTableConstraints,
-};
+use crate::models::database::table::{Table, TableConstraints, TableDataType};
 use crate::models::id::{DataTarget, PrincipalId, TableId};
 use crate::models::users::{
     AclEntry, MAX_PRIVILEGES_PER_USER, PrivilegeRule, PrivilegeTarget, ResolvedPrivilege,
@@ -37,12 +35,6 @@ pub trait WriteRepository: CatalogRepository {
         name: &str,
         new_name: Option<String>,
         description: Option<Option<String>>,
-    ) -> Result<(), AppError>;
-
-    async fn database_copy(
-        &mut self,
-        src_db_name: &str,
-        copy_name: &str,
     ) -> Result<DatabaseInfoResponse, AppError>;
 
     /// `value_index`: 値インデックスを維持するか。作成後は変更できない。
@@ -67,20 +59,12 @@ pub trait WriteRepository: CatalogRepository {
         db_name: &str,
         table_name: &str,
         new_name: Option<&str>,
-        new_constraints: Option<Option<UpdateTableConstraints>>,
+        new_constraints: Option<Option<TableConstraints>>,
         description: Option<Option<String>>,
         is_temporal: Option<bool>,
     ) -> Result<Table, AppError>;
 
     async fn table_remove(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError>;
-
-    async fn table_copy(
-        &mut self,
-        src_db_name: &str,
-        src_table_name: &str,
-        copy_db_name: &str,
-        copy_table_name: &str,
-    ) -> Result<Table, AppError>;
 
     /// `index` は値インデックスへ反映する型。`None` なら索引を維持しない。
     ///
@@ -247,13 +231,23 @@ pub trait WriteRepository: CatalogRepository {
     ) -> Result<(), AppError> {
         self.lock_user(username).await?;
 
-        let target = self.resolve_target(target).await?;
+        let not_found = || {
+            Resource::Privilege.not_found(match target {
+                PrivilegeTarget::Global => "global".to_string(),
+                PrivilegeTarget::Database { db_name } => db_name.clone(),
+                PrivilegeTarget::Table {
+                    db_name,
+                    table_name,
+                } => format!("{db_name}.{table_name}"),
+            })
+        };
+        let resolved = self.resolve_target(target).await?;
         let mut record = self.require_user_record(username).await?;
 
-        match target {
+        match resolved {
             ResolvedTarget::Global => {
                 if record.global_role.take().is_none() {
-                    return Err(AppError::PrivilegeNotFound);
+                    return Err(not_found());
                 }
                 self.put_user_record(username, &record).await
             }
@@ -261,7 +255,7 @@ pub trait WriteRepository: CatalogRepository {
                 if self.acl_remove(record.id, target).await? {
                     Ok(())
                 } else {
-                    Err(AppError::PrivilegeNotFound)
+                    Err(not_found())
                 }
             }
         }

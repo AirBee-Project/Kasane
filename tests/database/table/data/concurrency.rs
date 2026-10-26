@@ -23,7 +23,7 @@ async fn test_table_data_concurrent_group_commit() {
         let mut client = test_app.data();
         tasks.push(tokio::spawn(async move {
             let response = client
-                .insert(pb::InsertDataRequest {
+                .insert(pb::WriteDataRequest {
                     db_name: "test_db".to_string(),
                     table_name: "test_table".to_string(),
                     value: Some(num(i as f64)),
@@ -92,7 +92,7 @@ async fn test_invalid_request_does_not_abort_valid_batch() {
         let mut client = test_app.data();
         // 正常リクエスト（Int）と、その合間に不正リクエスト（Int テーブルへ文字列）を混ぜる。
         tasks.push(tokio::spawn(async move {
-            let make_req = |value: pb::TypedValue, x: u32| pb::InsertDataRequest {
+            let make_req = |value: pb::TypedValue, x: u32| pb::WriteDataRequest {
                 db_name: "test_db".to_string(),
                 table_name: "test_table".to_string(),
                 value: Some(value),

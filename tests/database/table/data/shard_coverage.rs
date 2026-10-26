@@ -4,7 +4,7 @@ use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
 use kasane::repositories::lmdb::initialize_database;
 use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
-use kasane_logic::{SingleId, SpatialIdSet};
+use spatial_id::{SingleId, collection::SpatialIdSet};
 
 // binary covering trie でこのバグ（split 後の空領域への挿入消失）が解消されることの回帰テスト。
 #[test]
@@ -31,7 +31,7 @@ fn insert_into_empty_region_after_split_is_not_lost() {
     {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
         let mut ids = SpatialIdSet::new();
-        ids.insert(target.clone());
+        ids.insert(target);
         w.data_insert_impl(table_id, Some(dt), ids, b"w").unwrap();
         w.commit().unwrap();
     }

@@ -32,30 +32,16 @@ grpcurl -plaintext -H "authorization: Bearer eyJhb..." \
 
 | code | gRPCコード | 意味 |
 | :--- | :--- | :--- |
-| `missing_token` | `UNAUTHENTICATED` | `authorization` メタデータが無い |
-| `malformed_header` | `UNAUTHENTICATED` | ヘッダが `Bearer <token>` 形式でない |
-| `invalid_token` | `UNAUTHENTICATED` | 署名・期限などの検証に失敗 |
-| `token_revoked` | `UNAUTHENTICATED` | トークンが失効済み（パスワード変更、ユーザー削除・再作成など） |
+| `invalid_token` | `UNAUTHENTICATED` | トークンが無い、`Bearer <token>` 形式でない、検証に失敗した、または失効した（パスワード変更、ユーザー削除・再作成など） |
 | `invalid_credentials` | `UNAUTHENTICATED` | ログインのユーザー名/パスワード不一致（存在有無は区別しない） |
-| `requires_global_admin` | `PERMISSION_DENIED` | `global` / `admin` が必要（制御面の操作） |
-| `requires_global_role` | `PERMISSION_DENIED` | `global` スコープで一定以上のロールが必要（`admin` 未満で足りる操作） |
-| `not_self_or_admin` | `PERMISSION_DENIED` | 本人または `global` / `admin` のみ許可される操作 |
-| `insufficient_privilege` | `PERMISSION_DENIED` | 対象データベース・テーブルへの権限不足 |
-| `root_protected` | `PERMISSION_DENIED` | root ユーザーに対して許可されない操作 |
-| `invalid_privilege` | `INVALID_ARGUMENT` | 権限ルールが不正（保持数の上限超過など） |
-| `user_not_found` | `NOT_FOUND` | 指定した利用者が存在しない |
-| `user_already_exists` | `ALREADY_EXISTS` | 同名の利用者が既に存在する |
-| `privilege_not_found` | `NOT_FOUND` | 剥奪しようとした対象の権限を持っていない |
-
-サーバー側の失敗は原因で 3 つに分かれます。混ぜないのは、運用時に「直すべき場所」を
-区別できるようにするためです。
-
-| code | gRPCコード | 意味 |
-| :--- | :--- | :--- |
-| `storage_error` | `INTERNAL` | ストレージエンジン自身が失敗した（I/O・競合・接続） |
-| `corrupt_storage` | `INTERNAL` | 読めたバイト列が、書いたときの形式と違う |
-| `schema_version_mismatch` | `INTERNAL` | ディスク形式の版がこのビルドと合わない |
-| `internal_error` | `INTERNAL` | このプログラムの不変条件が破れた（バグ） |
+| `permission_denied` | `PERMISSION_DENIED` | 権限が足りない（`global` ロール、本人または `global` / `admin`、対象データベース・テーブルへの権限） |
+| `root_protected` | `PERMISSION_DENIED` | root ユーザーに対して許可されない操作（`global` / `admin` でも通らない） |
+| `not_found` | `NOT_FOUND` | 対象が存在しない。`ErrorInfo.metadata` の `resource`（`database` / `table` / `user` / `privilege`）と `name` で対象を示す |
+| `already_exists` | `ALREADY_EXISTS` | 同名の対象が既に存在する。`metadata` は `not_found` と同じ |
+| `invalid_argument` | `INVALID_ARGUMENT` | リクエストの内容が不正（名前、空間ID、ズームレベル、権限ルール、未設定のフィールドなど） |
+| `constraint_violation` | `INVALID_ARGUMENT` | 値がテーブルの型・制約に合わない |
+| `cancelled` | `CANCELLED` | 処理が取り消された |
+| `internal` | `INTERNAL` | サーバー側の失敗（ストレージの I/O、保存データの破損、ディスク形式の版の不一致、不変条件の破れ）。原因はメッセージに載る |
 
 ## 2. スコープとロール (Scopes & Roles)
 
@@ -95,13 +81,13 @@ grpcurl -plaintext -H "authorization: Bearer eyJhb..." \
 
 ### 保持数の上限
 
-1 ユーザーが保持できる `database` / `table` スコープの権限は最大 50,000 件です（`global` はスコープの性質上 1 件なので数えません）。超えると `invalid_privilege`（`INVALID_ARGUMENT`）になります。
+1 ユーザーが保持できる `database` / `table` スコープの権限は最大 50,000 件です（`global` はスコープの性質上 1 件なので数えません）。超えると `invalid_argument`（`INVALID_ARGUMENT`）になります。
 
 ### 操作ごとの必要権限
 
 | 操作 | 必要な権限 |
 | --- | --- |
-| `DatabaseService.Create` / `Delete` / `Copy` | `global` / `manage` |
+| `DatabaseService.Create` / `Delete` | `global` / `manage` |
 | `DatabaseService.Update` | 対象データベースへの `manage` |
 | `DatabaseService.Get` | 配下のどれかに `read`（テーブル単位の権限でも可） |
 | `DatabaseService.List` | 認証のみ（結果が権限で絞られます） |
@@ -109,7 +95,6 @@ grpcurl -plaintext -H "authorization: Bearer eyJhb..." \
 | `TableService.List` | 配下のどれかに `read`（結果が権限で絞られます） |
 | `TableService.Get` | 対象テーブルへの `read` |
 | `TableService.Update` / `Delete` | 対象テーブルへの `manage` |
-| `TableService.Copy` | 複製元テーブルへの `read` と、**複製先データベース**への `manage` |
 | データ書き込み（`DataService.Insert` / `Upsert` / `Remove`） | 対象テーブルへの `write` |
 | データ読み取り（`DataService.Search`, `QueryService.Execute`） | 参照するすべてのテーブルへの `read` |
 | ユーザーの作成・削除・権限の付与剥奪 | `global` / `admin` |
@@ -138,7 +123,6 @@ grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
 
 権限の付与は `UserService.GrantPrivilege`、剥奪は `UserService.RevokePrivilege` で行います。剥奪はロールを問わず対象ごと落とすので、「`manage` を指定したが実際は `read` だったので何も消えなかった」は起きません。
 
-- `UserService.GetPrivileges`: 保持する権限一覧の取得
 - `UserService.GrantPrivilege`: 権限ルールの付与（既存ルールは置換）
 - `UserService.RevokePrivilege`: 対象リソースに対する権限の剥奪
 

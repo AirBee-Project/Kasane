@@ -9,8 +9,9 @@ use crate::models::database::table::data::{
     DataGroup, GetDataResponse, GetDataResponseFlex, GetDataResponseRange, GetDataResponseSingle,
     OutputFormat as DomainOutputFormat, ZoomLevelPolicy as DomainZoomLevelPolicy,
 };
-use kasane_logic::{
-    AllowedIntervals, FlexId, Interval, RangeId, SingleId, SpatialId as _, ZoomLevel,
+use spatial_id::{
+    FlexId, RangeId, SingleId, SpatialId as _, ZoomLevel,
+    time::{AllowedIntervals, Interval},
 };
 
 use crate::models::spatial_id::SpatialId as DomainSpatialId;
@@ -73,7 +74,7 @@ impl From<pb::TypedValue> for ValueLiteral {
 }
 
 fn invalid_spatial_id(reason: impl Into<String>) -> Status {
-    crate::error::AppError::InvalidSpatialId {
+    crate::error::AppError::InvalidArgument {
         reason: reason.into(),
     }
     .into()
@@ -207,7 +208,7 @@ impl From<FlexId> for pb::FlexId {
         let (t_zoomlevel, t_index) = if id.is_whole_time() {
             (None, None)
         } else {
-            (Some(id.t_zoomlevel() as u32), Some(id.t()))
+            (Some(id.t_zoomlevel() as u32), Some(id.t_index()))
         };
         Self {
             f_zoomlevel: id.f_zoomlevel() as u32,
@@ -241,7 +242,7 @@ impl TryFrom<pb::FlexId> for FlexId {
             (Some(tz), Some(ti)) => {
                 let tz_u8 = u8::try_from(tz)
                     .map_err(|_| invalid_spatial_id("t_zoomlevel must fit in u8"))?;
-                flex.with_time(tz_u8, ti)
+                flex.with_time_segment(tz_u8, ti)
                     .map_err(|e| invalid_spatial_id(e.to_string()))
             }
             (Some(_), None) => Err(invalid_spatial_id(

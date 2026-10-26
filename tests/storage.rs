@@ -2,8 +2,6 @@
 //!
 //! クロージャ方式の非同期 API が、実 LMDB に対して読み書き・コミット・
 //! エラー時の破棄まで期待どおりに振る舞うことを確かめる。
-//! TiKV バックエンドのビルドでは対象外（同等の検証は `tikv_backend.rs`）。
-#![cfg(feature = "backend-lmdb")]
 
 use kasane::error::AppError;
 use kasane::repositories::lmdb::initialize_database;
@@ -43,7 +41,7 @@ async fn error_in_closure_discards_the_transaction() {
     // 作成したうえでエラーを返す → コミットされないこと。
     let result: Result<(), AppError> = Storage::write(&db, async |w| {
         WriteRepository::database_create(w, "rolled_back", None).await?;
-        Err(AppError::InternalError("boom".into()))
+        Err(AppError::Internal("boom".into()))
     })
     .await;
     assert!(result.is_err());
@@ -126,7 +124,7 @@ async fn meta_repository_defaults_work_over_async_lookups() {
 #[path = "shared/acl_suite.rs"]
 mod acl_suite;
 
-/// ACL 行の保存が仕様どおりか（TiKV 側は `tikv.rs` が同じスイートを回す）。
+/// ACL 行の保存が仕様どおりか。
 #[tokio::test]
 async fn acl_rows_behave_as_specified() {
     let (_tmp, db) = temp_db();

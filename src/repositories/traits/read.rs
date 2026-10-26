@@ -1,6 +1,6 @@
 //! 読み取りトランザクション上で行える操作。
 
-use kasane_logic::{FlexId, SpatialIdSet};
+use spatial_id::{FlexId, collection::SpatialIdSet};
 
 use crate::error::AppError;
 use crate::models::database::DatabaseInfoResponse;
@@ -67,8 +67,6 @@ pub trait ReadRepository: CatalogRepository {
         db_id: DatabaseId,
         ids: &[TableId],
     ) -> Result<Vec<Table>, AppError>;
-
-    async fn table_count(&self, table_id: TableId) -> Result<u64, AppError>;
 
     async fn data_get(&self, table_id: TableId, ids: SpatialIdSet)
     -> Result<ValueGroups, AppError>;

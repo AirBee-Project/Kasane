@@ -24,9 +24,10 @@ pub async fn resolve_authorized_table<R: ReadRepository>(
     required: UserRole,
 ) -> Result<Table, AppError> {
     let refs = [(db_name.to_string(), table_name.to_string())];
-    let resolved = repo.resolve_tables(&refs).await?.pop().ok_or_else(|| {
-        AppError::InternalError("resolve_tables dropped its only request".to_string())
-    })?;
+    let resolved =
+        repo.resolve_tables(&refs).await?.pop().ok_or_else(|| {
+            AppError::Internal("resolve_tables dropped its only request".to_string())
+        })?;
 
     // 「存在しない」より先に判定する。逆にすると、権限の無い利用者へ 404 で
     // 名前の存在有無を教えることになる。

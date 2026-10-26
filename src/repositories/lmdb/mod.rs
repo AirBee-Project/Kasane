@@ -53,7 +53,7 @@ pub struct AppDb {
 
     /// `principal_id ‖ db_id ‖ table_slot` -> ロール 1 バイト
     ///
-    /// 鍵の並びは `encoding::acl` が決める（TiKV 実装と同一）。固定長なので
+    /// 鍵の並びは `encoding::acl` が決める。固定長なので
     /// `heed` のコーデックを起こさず生バイトで扱う。
     pub acl: Database<Bytes, Bytes>,
 
@@ -72,7 +72,7 @@ pub struct AppDb {
 /// `AppError` をバックエンド非依存に保つため、heed のエラー型を知るのはここだけにする。
 impl From<heed::Error> for AppError {
     fn from(error: heed::Error) -> Self {
-        Self::StorageError(error.to_string())
+        Self::Internal(format!("Storage error: {error}"))
     }
 }
 
@@ -106,7 +106,7 @@ impl<'a> KasaneDbWrite<'a> {
 /// クエリ 1 回分の読み取り断面。読み取りトランザクション自体が MVCC スナップショット。
 ///
 /// [`Env::static_read_txn`] で `'static` にするのは、`'static` を要求する
-/// [`Source`](kasane_logic::Source) へそのまま持ち込むため。[`Mutex`](std::sync::Mutex) は
+/// [`Source`](spatial_id::query::Source) へそのまま持ち込むため。[`Mutex`](std::sync::Mutex) は
 /// [`Sync`] を得るため（[`heed::RoTxn`] は移動はできるが同時使用はできない）。
 pub type LmdbQuerySnapshot = std::sync::Arc<std::sync::Mutex<heed::RoTxn<'static, WithoutTls>>>;
 
@@ -130,16 +130,13 @@ impl Storage for AppDb {
         let handle = tokio::runtime::Handle::current();
         // blocking タスクは呼び出し元のスパンを引き継がないので、明示的に渡す。
         let span = tracing::Span::current();
-        let start = std::time::Instant::now();
-        let result = tokio::task::spawn_blocking(move || {
+        tokio::task::spawn_blocking(move || {
             let _guard = span.enter();
             let r = KasaneDbRead::new(db.env.read_txn()?, &db);
             handle.block_on(f(&r))
         })
         .await
-        .map_err(|e| AppError::InternalError(e.to_string()))?;
-        crate::telemetry::metrics::read_transaction(start.elapsed().as_secs_f64());
-        result
+        .map_err(|e| AppError::Internal(e.to_string()))?
     }
 
     #[tracing::instrument(skip_all)]
@@ -154,8 +151,7 @@ impl Storage for AppDb {
         let db = self.clone();
         let handle = tokio::runtime::Handle::current();
         let span = tracing::Span::current();
-        let start = std::time::Instant::now();
-        let result = tokio::task::spawn_blocking(move || {
+        tokio::task::spawn_blocking(move || {
             let _guard = span.enter();
             let mut w = KasaneDbWrite::new(db.env.write_txn()?, &db);
             // 単一ライタなので競合でのやり直しは起きない。エラー時は drop で abort される。
@@ -164,13 +160,6 @@ impl Storage for AppDb {
             Ok(out)
         })
         .await
-        .map_err(|e| AppError::InternalError(e.to_string()))?;
-
-        crate::telemetry::metrics::write_transaction(start.elapsed().as_secs_f64());
-        crate::telemetry::metrics::write_attempt(match &result {
-            Ok(_) => crate::telemetry::metrics::WriteOutcome::Committed,
-            Err(_) => crate::telemetry::metrics::WriteOutcome::Failed,
-        });
-        result
+        .map_err(|e| AppError::Internal(e.to_string()))?
     }
 }

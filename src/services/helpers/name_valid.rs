@@ -26,14 +26,14 @@ pub fn name_valid(name: &str) -> Result<(), AppError> {
 
     // 空文字
     if name.is_empty() {
-        return Err(AppError::InvalidName {
+        return Err(AppError::InvalidArgument {
             reason: "name is empty".to_string(),
         });
     }
 
     // 長さ
     if name.len() > MAX_LEN {
-        return Err(AppError::InvalidName {
+        return Err(AppError::InvalidArgument {
             reason: format!("name is too long (max: {})", MAX_LEN),
         });
     }
@@ -42,21 +42,21 @@ pub fn name_valid(name: &str) -> Result<(), AppError> {
     let first = name.chars().next().unwrap();
 
     if !first.is_ascii_alphabetic() {
-        return Err(AppError::InvalidName {
+        return Err(AppError::InvalidArgument {
             reason: "name must start with alphabetic character".to_string(),
         });
     }
 
     // 使用可能文字
     if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-        return Err(AppError::InvalidName {
+        return Err(AppError::InvalidArgument {
             reason: "name may only contain [a-zA-Z0-9_]".to_string(),
         });
     }
 
     // 予約語
     if RESERVED.contains(&name.to_lowercase().as_str()) {
-        return Err(AppError::InvalidName {
+        return Err(AppError::InvalidArgument {
             reason: format!("'{}' is reserved", name),
         });
     }

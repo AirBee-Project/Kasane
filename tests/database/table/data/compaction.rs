@@ -13,7 +13,7 @@ use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
 use kasane::repositories::lmdb::initialize_database;
 use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
-use kasane_logic::{RangeId, SpatialIdSet};
+use spatial_id::{RangeId, collection::SpatialIdSet};
 
 const Z: u8 = 20;
 

@@ -44,7 +44,7 @@ pub async fn put_data(
 ) {
     test_app
         .data()
-        .insert(pb::InsertDataRequest {
+        .insert(pb::WriteDataRequest {
             db_name: "test_db".to_string(),
             table_name: table_name.to_string(),
             value: Some(value),
@@ -64,7 +64,7 @@ pub async fn patch_data(
 ) {
     test_app
         .data()
-        .upsert(pb::UpsertDataRequest {
+        .upsert(pb::WriteDataRequest {
             db_name: "test_db".to_string(),
             table_name: table_name.to_string(),
             value: Some(value),

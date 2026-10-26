@@ -90,7 +90,7 @@ impl TryFrom<UserRole> for DataRole {
             UserRole::Read => Ok(Self::Read),
             UserRole::Write => Ok(Self::Write),
             UserRole::Manage => Ok(Self::Manage),
-            UserRole::Admin => Err(AppError::InvalidPrivilege {
+            UserRole::Admin => Err(AppError::InvalidArgument {
                 reason: "the admin role can only be granted on the global scope".to_string(),
             }),
         }

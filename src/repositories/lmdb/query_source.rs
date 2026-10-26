@@ -1,11 +1,13 @@
-//! [`Source::read_range_ids`] は 1 回のクエリ実行で複数回呼ばれるので、そのたびに
+//! [`Source::read_flex_ids`] は 1 回のクエリ実行で複数回呼ばれるので、そのたびに
 //! トランザクションを開き直すと途中で走った書き込みを一部だけ見た結果が混ざる。
 //! クエリ開始時に開いた [`LmdbQuerySnapshot`] を全ソースで共有する。
 
 use heed::Database;
 use heed::types::Bytes;
-use kasane_logic::{
-    CancellationToken, Error as LogicError, FlexId, RangeId, SafeValue, Source, WorkingTree,
+use spatial_id::{
+    Error as LogicError, FlexId, RangeId,
+    collection::SpatialIdMap,
+    query::{CancellationToken, QueryError, QueryIter, SafeValue, Source},
 };
 
 use super::LmdbQuerySnapshot;
@@ -57,47 +59,43 @@ where
 {
     type Value = V;
 
-    fn read_range_ids(
-        &self,
+    fn read_flex_ids<'a>(
+        &'a self,
         bounds: &[RangeId],
         token: &CancellationToken,
-    ) -> Result<WorkingTree<V>, LogicError> {
+    ) -> Result<QueryIter<'a, V>, LogicError> {
         let txn = self.snapshot.lock().map_err(|_| {
-            LogicError::SourceRead("query snapshot was poisoned by a panicking reader".to_string())
+            LogicError::Query(QueryError::SourceRead(
+                "query snapshot was poisoned by a panicking reader".to_string(),
+            ))
         })?;
 
         let mut flex_ids: Vec<(FlexId, V)> = Vec::new();
         for range in bounds {
             let leaves =
                 shard::route_leaves_for_range(&self.tables_data, &txn, self.table_id, range)
-                    .map_err(|e| LogicError::SourceRead(e.to_string()))?;
+                    .map_err(|e| LogicError::Query(QueryError::SourceRead(e.to_string())))?;
 
             for region in leaves {
                 if token.is_cancelled() {
-                    return Err(LogicError::Cancelled);
+                    return Err(LogicError::Query(QueryError::Cancelled));
                 }
 
-                let arch =
-                    shard::load_leaf_archived(&self.tables_data, &txn, self.table_id, &region)
-                        .map_err(|e| LogicError::SourceRead(e.to_string()))?;
-                let Some(arch) = arch else { continue };
+                let leaf = shard::load_leaf_view(&self.tables_data, &txn, self.table_id, &region)
+                    .map_err(|e| LogicError::Query(QueryError::SourceRead(e.to_string())))?;
+                let Some(leaf) = leaf else { continue };
 
-                for (id, raw) in arch.get_range(range) {
+                for &(id, index) in &leaf.entries {
                     // 復元できない値（型に合わない格納値）の FlexId は結果に含めない。
-                    if let Some(value) = (self.decode)(raw) {
+                    if id.intersects_range(range)
+                        && let Some(value) = (self.decode)(leaf.value(index))
+                    {
                         flex_ids.push((id, value));
                     }
                 }
             }
         }
         // 重なり合う bounds が同じ FlexId を複数回返しても、値は同じなので union が吸収する。
-        Ok(flex_ids.into_iter().collect())
-    }
-
-    fn read_all(self: Box<Self>, _token: &CancellationToken) -> Result<WorkingTree<V>, LogicError> {
-        // テーブル全体の materialize は容量的に現実的でない。
-        Err(LogicError::Unsupported(
-            "full scan of a database-backed table; use a bounded (lazy) query instead",
-        ))
+        Ok(flex_ids.into_iter().collect::<SpatialIdMap<V>>().into())
     }
 }

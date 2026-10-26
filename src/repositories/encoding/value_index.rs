@@ -2,7 +2,7 @@
 
 use crate::error::{AppError, Stored};
 use crate::models::{database::table::TableDataType, id::TableId};
-use kasane_logic::FlexId;
+use spatial_id::FlexId;
 
 use super::UUID_LEN;
 

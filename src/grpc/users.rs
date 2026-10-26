@@ -2,10 +2,8 @@ use tonic::{Request, Response, Status};
 
 use super::auth::authenticate;
 use super::pb::{
-    CreateUserRequest, CreateUserResponse, DeleteUserRequest, DeleteUserResponse,
-    GetPrivilegesRequest, GetUserRequest, GrantPrivilegeRequest, GrantPrivilegeResponse,
-    ListUsersRequest, ListUsersResponse, PrivilegesResponse, RevokePrivilegeRequest,
-    RevokePrivilegeResponse, UpdatePasswordRequest, UpdatePasswordResponse, UserInfo, UserSummary,
+    CreateUserRequest, DeleteUserRequest, GetUserRequest, GrantPrivilegeRequest, ListUsersRequest,
+    ListUsersResponse, RevokePrivilegeRequest, UpdatePasswordRequest, UserInfo, UserSummary,
     user_service_server::UserService,
 };
 use crate::AppState;
@@ -17,6 +15,15 @@ use crate::services::auth::{check_global_admin, check_self_or_admin};
 
 pub struct UserServiceImpl {
     pub app_state: AppState,
+}
+
+/// 更新系の RPC が返す、更新後の利用者情報。
+async fn user_info(app_state: &AppState, username: &str) -> Result<UserInfo, Status> {
+    let user = crate::services::users::get_user(app_state, username).await?;
+    Ok(UserInfo {
+        username: user.username,
+        privileges: user.privileges.into_iter().map(Into::into).collect(),
+    })
 }
 
 fn summary_to_pb(summary: crate::models::users::UserSummary) -> UserSummary {
@@ -50,7 +57,7 @@ impl UserService for UserServiceImpl {
     async fn create(
         &self,
         request: Request<CreateUserRequest>,
-    ) -> Result<Response<CreateUserResponse>, Status> {
+    ) -> Result<Response<UserInfo>, Status> {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
@@ -61,12 +68,14 @@ impl UserService for UserServiceImpl {
             .map(TryInto::try_into)
             .collect::<Result<_, _>>()?;
         let domain_req = DomainCreateUserRequest {
-            username: req.username,
+            username: req.username.clone(),
             password: req.password,
             privileges,
         };
         crate::services::users::create_user(&self.app_state, domain_req).await?;
-        Ok(Response::new(CreateUserResponse {}))
+        Ok(Response::new(
+            user_info(&self.app_state, &req.username).await?,
+        ))
     }
 
     async fn get(&self, request: Request<GetUserRequest>) -> Result<Response<UserInfo>, Status> {
@@ -74,29 +83,24 @@ impl UserService for UserServiceImpl {
         let req = request.into_inner();
 
         check_self_or_admin(&auth_user, &req.username)?;
-        let user = crate::services::users::get_user(&self.app_state, &req.username).await?;
-        Ok(Response::new(UserInfo {
-            username: user.username,
-            privileges: user.privileges.into_iter().map(Into::into).collect(),
-        }))
+        Ok(Response::new(
+            user_info(&self.app_state, &req.username).await?,
+        ))
     }
 
-    async fn delete(
-        &self,
-        request: Request<DeleteUserRequest>,
-    ) -> Result<Response<DeleteUserResponse>, Status> {
+    async fn delete(&self, request: Request<DeleteUserRequest>) -> Result<Response<()>, Status> {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
         check_global_admin(&auth_user)?;
         crate::services::users::delete_user(&self.app_state, &req.username).await?;
-        Ok(Response::new(DeleteUserResponse {}))
+        Ok(Response::new(()))
     }
 
     async fn update_password(
         &self,
         request: Request<UpdatePasswordRequest>,
-    ) -> Result<Response<UpdatePasswordResponse>, Status> {
+    ) -> Result<Response<()>, Status> {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
@@ -109,28 +113,13 @@ impl UserService for UserServiceImpl {
             },
         )
         .await?;
-        Ok(Response::new(UpdatePasswordResponse {}))
-    }
-
-    async fn get_privileges(
-        &self,
-        request: Request<GetPrivilegesRequest>,
-    ) -> Result<Response<PrivilegesResponse>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
-        let req = request.into_inner();
-
-        check_self_or_admin(&auth_user, &req.username)?;
-        let privileges =
-            crate::services::users::get_privileges(&self.app_state, &req.username).await?;
-        Ok(Response::new(PrivilegesResponse {
-            privileges: privileges.into_iter().map(Into::into).collect(),
-        }))
+        Ok(Response::new(()))
     }
 
     async fn grant_privilege(
         &self,
         request: Request<GrantPrivilegeRequest>,
-    ) -> Result<Response<GrantPrivilegeResponse>, Status> {
+    ) -> Result<Response<UserInfo>, Status> {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
@@ -138,13 +127,15 @@ impl UserService for UserServiceImpl {
         let privilege = super::convert::required(req.privilege, "privilege")?.try_into()?;
 
         crate::services::users::grant_privilege(&self.app_state, &req.username, privilege).await?;
-        Ok(Response::new(GrantPrivilegeResponse {}))
+        Ok(Response::new(
+            user_info(&self.app_state, &req.username).await?,
+        ))
     }
 
     async fn revoke_privilege(
         &self,
         request: Request<RevokePrivilegeRequest>,
-    ) -> Result<Response<RevokePrivilegeResponse>, Status> {
+    ) -> Result<Response<UserInfo>, Status> {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
@@ -152,6 +143,8 @@ impl UserService for UserServiceImpl {
         let target = super::convert::required(req.target, "target")?.try_into()?;
 
         crate::services::users::revoke_privilege(&self.app_state, &req.username, target).await?;
-        Ok(Response::new(RevokePrivilegeResponse {}))
+        Ok(Response::new(
+            user_info(&self.app_state, &req.username).await?,
+        ))
     }
 }

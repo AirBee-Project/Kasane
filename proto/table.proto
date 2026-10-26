@@ -3,41 +3,32 @@ syntax = "proto3";
 package kasane;
 
 import "common.proto";
+import "google/protobuf/empty.proto";
 
 service TableService {
   // テーブルを新規作成する。
-  rpc Create(CreateTableRequest) returns (TableSummary);
-  // テーブルの詳細情報（空間IDの総数 count を含む）を取得する。
+  rpc Create(CreateTableRequest) returns (TableInfo);
+  // テーブルの詳細情報を取得する。
   rpc Get(GetTableRequest) returns (TableInfo);
   // データベース内のテーブル一覧を取得する。
   rpc List(ListTablesRequest) returns (ListTablesResponse);
-  // テーブルの名前、制約、説明文、または時間ロック設定を更新する。
-  rpc Update(UpdateTableRequest) returns (UpdateTableResponse);
+  // テーブルの名前、制約、説明文、または時間ロック設定を更新し、更新後の情報を返す。
+  rpc Update(UpdateTableRequest) returns (TableInfo);
   // テーブルを削除する。
-  rpc Delete(DeleteTableRequest) returns (DeleteTableResponse);
-  // テーブルを複製する。
-  rpc Copy(CopyTableRequest) returns (TableSummary);
+  rpc Delete(DeleteTableRequest) returns (google.protobuf.Empty);
 }
 
-// 一覧で返す軽量ビュー。件数は含まない。
-message TableSummary {
-  string name = 1;
-  TableDataType data_type = 2;
-  uint32 max_zoom_level = 3;
-  optional TableConstraints constraints = 4;
-  optional string description = 5;
-  bool is_temporal = 6;
-}
-
-// 単一テーブルの詳細情報。保持する空間ID(FlexId)の総数 `count` を含む。
 message TableInfo {
   string name = 1;
   TableDataType data_type = 2;
   uint32 max_zoom_level = 3;
+  // 保持する空間ID(FlexId)の総数。
   uint64 count = 4;
   optional TableConstraints constraints = 5;
   optional string description = 6;
   bool is_temporal = 7;
+  // 値インデックス（値による絞り込み用の二次索引）を維持しているかどうか。
+  bool value_index = 8;
 }
 
 // **必要な権限**: `database` / `manage`
@@ -67,44 +58,7 @@ message ListTablesRequest {
 }
 
 message ListTablesResponse {
-  repeated TableSummary tables = 1;
-}
-
-// 制約の更新パッチ。
-message UpdateTableConstraints {
-  message TextUpdate {
-    oneof min_length_update {
-      bool clear_min_length = 1;
-      uint64 set_min_length = 2;
-    }
-    oneof max_length_update {
-      bool clear_max_length = 3;
-      uint64 set_max_length = 4;
-    }
-  }
-  message IntUpdate {
-    oneof min_update {
-      bool clear_min = 1;
-      int64 set_min = 2;
-    }
-    oneof max_update {
-      bool clear_max = 3;
-      int64 set_max = 4;
-    }
-  }
-  message EnumUpdate {
-    // 選択肢を丸ごと置き換える。
-    repeated string choices = 1;
-    // 既存の選択肢に追加する。
-    repeated string add_choices = 2;
-    // 既存の選択肢から取り除く。
-    repeated string remove_choices = 3;
-  }
-  oneof kind {
-    TextUpdate text = 1;
-    IntUpdate int = 2;
-    EnumUpdate enum_update = 3;
-  }
+  repeated TableInfo tables = 1;
 }
 
 // **必要な権限**: `table` / `manage`
@@ -122,24 +76,13 @@ message UpdateTableRequest {
 
   oneof constraints_update {
     bool clear_constraints = 7;
-    UpdateTableConstraints set_constraints = 8;
+    // 制約を丸ごと置き換える。
+    TableConstraints set_constraints = 8;
   }
 }
-
-message UpdateTableResponse {}
 
 // **必要な権限**: `table` / `manage`
 message DeleteTableRequest {
   string db_name = 1;
   string table_name = 2;
-}
-
-message DeleteTableResponse {}
-
-// **必要な権限**: `database` / `manage`
-message CopyTableRequest {
-  string db_name = 1;
-  string table_name = 2;
-  optional string copy_db_name = 3;
-  string copy_table_name = 4;
 }

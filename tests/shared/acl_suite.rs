@@ -320,7 +320,13 @@ pub async fn run<S: Storage>(db: &S, tag: &str) {
     .await
     .expect_err("持っていない権限の剥奪が成功した");
     assert!(
-        matches!(err, AppError::PrivilegeNotFound),
+        matches!(
+            err,
+            AppError::NotFound {
+                resource: kasane::error::Resource::Privilege,
+                ..
+            }
+        ),
         "想定外の失敗: {err:?}"
     );
 

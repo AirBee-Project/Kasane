@@ -1,5 +1,4 @@
-use crate::models::ValueType;
-use crate::models::users::UserRole;
+use std::collections::HashMap;
 use std::fmt;
 
 /// エラーが指すリソースの種類
@@ -11,6 +10,8 @@ pub enum Resource {
     Table,
     #[error("User")]
     User,
+    #[error("Privilege")]
+    Privilege,
 }
 
 impl Resource {
@@ -28,20 +29,19 @@ impl Resource {
         }
     }
 
-    /// 代表的なリソースに対する `(見つからない, 既にある)` の語句
-    const fn codes(self) -> (&'static str, &'static str) {
+    const fn as_str(self) -> &'static str {
         match self {
-            Self::Database => ("database_not_found", "database_already_exists"),
-            Self::Table => ("table_not_found", "table_already_exists"),
-            Self::User => ("user_not_found", "user_already_exists"),
+            Self::Database => "database",
+            Self::Table => "table",
+            Self::User => "user",
+            Self::Privilege => "privilege",
         }
     }
 }
 
 /// 読み出したバイト列が壊れていた対象。
 ///
-/// **両バックエンドで同じ語彙を使う。** その場で文言を書くと、同じ壊れ方が実装ごとに
-/// 違うメッセージになる。細かい壊れ方は [`AppError::Corrupt`] の `detail` が持つ。
+/// その場で文言を書くと、同じ壊れ方が呼び出し元ごとに違うメッセージになる。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum Stored {
     /// 利用者レコード（鍵・値のどちらも）。
@@ -73,74 +73,34 @@ pub enum Stored {
 /// 認証 (Authentication) や認可 (Authorization) に関する失敗。
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum AuthError {
-    /// `Authorization` ヘッダが存在しない。
-    #[error("Missing Authorization header")]
-    MissingToken,
-    /// `Authorization` ヘッダの形式が不正（`Bearer ` で始まらない、非 ASCII 等）。
-    #[error("Invalid Authorization header format")]
-    MalformedHeader,
-    /// JWT の署名検証・期限などに失敗した。
-    #[error("Invalid or expired token")]
-    InvalidToken,
-    /// ユーザーが存在しないのか `uid`/`ver` 不一致なのかは、外部へ区別を返さない。
-    #[error("Authentication token is no longer valid")]
-    TokenRevoked,
+    /// トークンが無い・形式が不正・検証に失敗した・失効した。クライアントの対応はどれも再ログイン。
+    #[error("Invalid authentication token: {0}")]
+    InvalidToken(&'static str),
     /// ユーザーの存在有無を区別せず同一メッセージを返し、ユーザー列挙を防ぐ。
     #[error("Invalid username or password")]
     InvalidCredentials,
-    /// `global` スコープで一定以上のロールが必要な操作を、満たさない利用者が要求した。
-    ///
-    /// `required` を持つのは、`admin` を求める操作と `manage` で足りる操作を
-    /// クライアントが区別できるようにするため。
-    #[error("{}", match required { UserRole::Admin => "Requires GlobalAdmin privileges".to_string(), req => format!("Requires the global '{req:?}' role or higher") })]
-    RequiresGlobalRole { required: UserRole },
-    /// 本人または GlobalAdmin のみ許可される操作を、第三者が要求した。
-    #[error("You can only modify your own account")]
-    NotSelfOrAdmin,
-    /// 対象データベース（またはその中の特定テーブル）に対する権限が不足している。
-    #[error("{}", match table_name { Some(t) => format!("Insufficient privileges for table '{db_name}.{t}' (requires {required:?})"), None => format!("Insufficient privileges for database '{db_name}' (requires {required:?})") })]
-    InsufficientPrivilege {
-        db_name: String,
-        table_name: Option<String>,
-        required: UserRole,
-    },
-    /// root ユーザーに対して許可されない操作（削除・権限変更など）。
+    #[error("Permission denied: {0}")]
+    PermissionDenied(String),
+    /// root ユーザーに対して許可されない操作（削除・権限変更など）。admin でも通らない。
     #[error("This operation is not allowed on the root user")]
     RootProtected,
 }
 
 impl AuthError {
     /// クライアントが分岐に使える安定した機械可読コード。
-    pub fn code(&self) -> &'static str {
+    fn code(&self) -> &'static str {
         match self {
-            Self::MissingToken => "missing_token",
-            Self::MalformedHeader => "malformed_header",
-            Self::InvalidToken => "invalid_token",
-            Self::TokenRevoked => "token_revoked",
+            Self::InvalidToken(_) => "invalid_token",
             Self::InvalidCredentials => "invalid_credentials",
-            // `admin` を求める場合だけ別のコードにする。制御面の操作かどうかは
-            // クライアントの分岐で意味が違うので、`manage` で足りる操作と混ぜない。
-            Self::RequiresGlobalRole {
-                required: UserRole::Admin,
-            } => "requires_global_admin",
-            Self::RequiresGlobalRole { .. } => "requires_global_role",
-            Self::NotSelfOrAdmin => "not_self_or_admin",
-            Self::InsufficientPrivilege { .. } => "insufficient_privilege",
+            Self::PermissionDenied(_) => "permission_denied",
             Self::RootProtected => "root_protected",
         }
     }
 
     fn grpc_code(&self) -> tonic::Code {
         match self {
-            Self::MissingToken
-            | Self::MalformedHeader
-            | Self::InvalidToken
-            | Self::TokenRevoked
-            | Self::InvalidCredentials => tonic::Code::Unauthenticated,
-            Self::RequiresGlobalRole { .. }
-            | Self::NotSelfOrAdmin
-            | Self::InsufficientPrivilege { .. }
-            | Self::RootProtected => tonic::Code::PermissionDenied,
+            Self::InvalidToken(_) | Self::InvalidCredentials => tonic::Code::Unauthenticated,
+            Self::PermissionDenied(_) | Self::RootProtected => tonic::Code::PermissionDenied,
         }
     }
 }
@@ -150,123 +110,98 @@ pub enum AppError {
     /// 認証・認可に関する失敗（[`AuthError`] を参照）。
     #[error("Authentication error: {0}")]
     Auth(#[from] AuthError),
-
-    // --- 要求が通らない（4xx） ---
     #[error("{resource} '{name}' not found")]
     NotFound { resource: Resource, name: String },
     #[error("{resource} '{name}' already exists")]
     AlreadyExists { resource: Resource, name: String },
-    /// 剥奪しようとした対象の権限を、その利用者が持っていない。
-    ///
-    /// 対象はリクエストのパスにあるので、ここには載せない。
-    #[error("The user holds no privilege for that target")]
-    PrivilegeNotFound,
-    /// 権限ルールの内容が不正（同一対象へのロール矛盾、保持数の上限超過など）。
-    #[error("Invalid privilege rule: {reason}")]
-    InvalidPrivilege { reason: String },
-    #[error("Invalid name: {reason}")]
-    InvalidName { reason: String },
-    #[error("Invalid spatial ID: {reason}")]
-    InvalidSpatialId { reason: String },
-    /// リクエストのフィールドが未設定・範囲外など、gRPC変換層での汎用的な検証失敗。
+    /// リクエストの内容が不正（名前、空間ID、ズームレベル、権限ルール、未設定のフィールドなど）。
     #[error("Invalid argument: {reason}")]
     InvalidArgument { reason: String },
-    #[error("Value type mismatch: expected {expected:?}, got {actual:?}")]
-    ValueTypeMismatch {
-        actual: ValueType,
-        expected: ValueType,
-    },
+    /// 値がテーブルの型・制約に合わない。
     #[error("Constraint violation: {reason}")]
     ConstraintViolation { reason: String },
-    #[error("Zoom level policy violation: expected max {max_zoom_level}, got {input_zoom_level}")]
-    ZoomLevelPolicy {
-        max_zoom_level: u8,
-        input_zoom_level: u8,
-    },
-    #[error("Logic error: {0}")]
-    LogicError(#[from] kasane_logic::Error),
-    /// 同時実行または要求同士の食い違いで通せなかった。
-    #[error("Conflict: {0}")]
-    Conflict(String),
-
-    // --- サーバー側の失敗（5xx）。原因で 3 つに分ける（モジュールの説明を参照） ---
-    /// ディスク形式の版がこのビルドと合わない。`found` が `None` なら版を持たない世代。
-    #[error("{}", match found { Some(found) => format!("On-disk schema version {found} is not supported by this build (it reads version {expected}); point the server at a fresh location"), None => format!("On-disk data predates schema versioning and is not supported by this build (it reads version {expected}); point the server at a fresh location") })]
-    SchemaVersionMismatch { found: Option<u32>, expected: u32 },
-    /// 保存されていたバイト列が読めない。
-    #[error("Corrupt {stored}: {detail}")]
-    Corrupt { stored: Stored, detail: String },
-    /// ストレージエンジン自身が失敗した。
+    #[error("The request was cancelled")]
+    Cancelled,
+    /// サーバー側の失敗（ストレージの I/O、保存データの破損、ディスク形式の版の不一致、不変条件の破れ）。
     ///
-    /// feature で差し替えられるよう、具体的なエラー型は持ち込まずメッセージへ落とす。
-    #[error("Storage error: {0}")]
-    StorageError(String),
-    /// このプログラムの不変条件が破れた（バグ）。
+    /// クライアントには区別する手段がないので 1 つにまとめ、原因はメッセージで伝える。
     #[error("Internal error: {0}")]
-    InternalError(String),
+    Internal(String),
 }
 
 impl AppError {
-    /// 保存されていたものが読めない。両バックエンドはこれだけを使う。
-    pub fn corrupt(stored: Stored, detail: impl fmt::Display) -> Self {
-        Self::Corrupt {
-            stored,
-            detail: detail.to_string(),
+    pub fn invalid_argument(reason: impl Into<String>) -> Self {
+        Self::InvalidArgument {
+            reason: reason.into(),
         }
+    }
+
+    pub fn constraint_violation(reason: impl Into<String>) -> Self {
+        Self::ConstraintViolation {
+            reason: reason.into(),
+        }
+    }
+
+    /// 保存されていたものが読めない。
+    pub fn corrupt(stored: Stored, detail: impl fmt::Display) -> Self {
+        Self::Internal(format!("Corrupt {stored}: {detail}"))
     }
 
     /// 保持できる権限数の上限に達した。付与側と解決側で同じ文言を使う。
     pub fn too_many_privileges() -> Self {
-        Self::InvalidPrivilege {
-            reason: format!(
-                "a user cannot hold more than {} privileges",
-                crate::models::users::MAX_PRIVILEGES_PER_USER
-            ),
-        }
+        Self::invalid_argument(format!(
+            "a user cannot hold more than {} privileges",
+            crate::models::users::MAX_PRIVILEGES_PER_USER
+        ))
     }
 
     /// クライアントが分岐に使える安定した機械可読コード。
     fn code(&self) -> &'static str {
         match self {
             Self::Auth(e) => e.code(),
-            Self::NotFound { resource, .. } => resource.codes().0,
-            Self::AlreadyExists { resource, .. } => resource.codes().1,
-            Self::PrivilegeNotFound => "privilege_not_found",
-            Self::InvalidPrivilege { .. } => "invalid_privilege",
-            Self::InvalidName { .. } => "invalid_name",
-            Self::InvalidSpatialId { .. } => "invalid_spatial_id",
+            Self::NotFound { .. } => "not_found",
+            Self::AlreadyExists { .. } => "already_exists",
             Self::InvalidArgument { .. } => "invalid_argument",
-            Self::ValueTypeMismatch { .. } => "value_type_mismatch",
             Self::ConstraintViolation { .. } => "constraint_violation",
-            Self::ZoomLevelPolicy { .. } => "zoom_level_policy",
-            Self::LogicError(_) => "logic_error",
-            Self::Conflict(_) => "conflict",
-            Self::SchemaVersionMismatch { .. } => "schema_version_mismatch",
-            Self::Corrupt { .. } => "corrupt_storage",
-            Self::StorageError(_) => "storage_error",
-            Self::InternalError(_) => "internal_error",
+            Self::Cancelled => "cancelled",
+            Self::Internal(_) => "internal",
         }
     }
 
     fn grpc_code(&self) -> tonic::Code {
         match self {
             Self::Auth(e) => e.grpc_code(),
-            Self::NotFound { .. } | Self::PrivilegeNotFound => tonic::Code::NotFound,
+            Self::NotFound { .. } => tonic::Code::NotFound,
             Self::AlreadyExists { .. } => tonic::Code::AlreadyExists,
-            // 同時実行の食い違いは、存在確認だけで判定できる `AlreadyExists` とは区別する。
-            Self::Conflict(_) => tonic::Code::Aborted,
-            Self::InvalidPrivilege { .. }
-            | Self::InvalidName { .. }
-            | Self::InvalidSpatialId { .. }
-            | Self::InvalidArgument { .. }
-            | Self::ValueTypeMismatch { .. }
-            | Self::ConstraintViolation { .. }
-            | Self::ZoomLevelPolicy { .. }
-            | Self::LogicError(_) => tonic::Code::InvalidArgument,
-            Self::SchemaVersionMismatch { .. }
-            | Self::Corrupt { .. }
-            | Self::StorageError(_)
-            | Self::InternalError(_) => tonic::Code::Internal,
+            Self::InvalidArgument { .. } | Self::ConstraintViolation { .. } => {
+                tonic::Code::InvalidArgument
+            }
+            Self::Cancelled => tonic::Code::Cancelled,
+            Self::Internal(_) => tonic::Code::Internal,
+        }
+    }
+
+    /// `ErrorInfo.metadata` に載せる値。どのリソースの話かを、メッセージを解析せずに取れるようにする。
+    fn metadata(&self) -> HashMap<String, String> {
+        match self {
+            Self::NotFound { resource, name } | Self::AlreadyExists { resource, name } => {
+                HashMap::from([
+                    ("resource".to_string(), resource.as_str().to_string()),
+                    ("name".to_string(), name.clone()),
+                ])
+            }
+            _ => HashMap::new(),
+        }
+    }
+}
+
+impl From<spatial_id::Error> for AppError {
+    fn from(err: spatial_id::Error) -> Self {
+        use spatial_id::query::QueryError;
+        match err {
+            spatial_id::Error::Query(QueryError::Cancelled) => Self::Cancelled,
+            spatial_id::Error::Query(QueryError::SourceRead(reason)) => Self::Internal(reason),
+            err => Self::invalid_argument(err.to_string()),
         }
     }
 }
@@ -276,7 +211,7 @@ impl From<AppError> for tonic::Status {
         use tonic_types::{ErrorDetails, StatusExt};
 
         let mut details = ErrorDetails::new();
-        details.set_error_info(err.code(), "kasane", std::collections::HashMap::new());
+        details.set_error_info(err.code(), "kasane", err.metadata());
         tonic::Status::with_error_details(err.grpc_code(), err.to_string(), details)
     }
 }

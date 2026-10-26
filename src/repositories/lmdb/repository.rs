@@ -3,13 +3,11 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use kasane_logic::{FlexId, SpatialIdSet};
+use spatial_id::{FlexId, collection::SpatialIdSet};
 
 use crate::error::AppError;
 use crate::models::database::DatabaseInfoResponse;
-use crate::models::database::table::{
-    Table, TableConstraints, TableDataType, UpdateTableConstraints,
-};
+use crate::models::database::table::{Table, TableConstraints, TableDataType};
 use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
 use crate::models::users::{AclEntry, Grant, Scope, UserRecord};
 use crate::repositories::{CatalogRepository, ReadRepository, ValueGroups, WriteRepository};
@@ -60,6 +58,10 @@ macro_rules! impl_catalog_repository {
 
             async fn acl_entries(&self, principal: PrincipalId) -> Result<Vec<AclEntry>, AppError> {
                 self.db.acl_entries(&self.$txn, principal)
+            }
+
+            async fn table_count(&self, table_id: TableId) -> Result<u64, AppError> {
+                catalog::table_count(self.db, &self.$txn, table_id)
             }
 
             async fn acl_databases(
@@ -129,10 +131,6 @@ impl ReadRepository for KasaneDbRead<'_> {
         self.table_list_by_id_impl(db_id)
     }
 
-    async fn table_count(&self, table_id: TableId) -> Result<u64, AppError> {
-        self.table_count_impl(table_id)
-    }
-
     async fn data_get(
         &self,
         table_id: TableId,
@@ -195,16 +193,8 @@ impl WriteRepository for KasaneDbWrite<'_> {
         name: &str,
         new_name: Option<String>,
         description: Option<Option<String>>,
-    ) -> Result<(), AppError> {
-        self.database_update_impl(name, new_name, description)
-    }
-
-    async fn database_copy(
-        &mut self,
-        src_db_name: &str,
-        copy_name: &str,
     ) -> Result<DatabaseInfoResponse, AppError> {
-        self.database_copy_impl(src_db_name, copy_name)
+        self.database_update_impl(name, new_name, description)
     }
 
     async fn table_create(
@@ -235,7 +225,7 @@ impl WriteRepository for KasaneDbWrite<'_> {
         db_name: &str,
         table_name: &str,
         new_name: Option<&str>,
-        new_constraints: Option<Option<UpdateTableConstraints>>,
+        new_constraints: Option<Option<TableConstraints>>,
         description: Option<Option<String>>,
         is_temporal: Option<bool>,
     ) -> Result<Table, AppError> {
@@ -251,16 +241,6 @@ impl WriteRepository for KasaneDbWrite<'_> {
 
     async fn table_remove(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError> {
         self.table_remove_impl(db_name, table_name)
-    }
-
-    async fn table_copy(
-        &mut self,
-        src_db_name: &str,
-        src_table_name: &str,
-        copy_db_name: &str,
-        copy_table_name: &str,
-    ) -> Result<Table, AppError> {
-        self.table_copy_impl(src_db_name, src_table_name, copy_db_name, copy_table_name)
     }
 
     async fn data_insert(

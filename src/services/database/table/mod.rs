@@ -1,4 +1,3 @@
-pub mod copy;
 pub mod create;
 pub mod data;
 pub mod info;

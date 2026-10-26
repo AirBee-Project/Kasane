@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use kasane_logic::SpatialIdSet;
+use spatial_id::collection::SpatialIdSet;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::backend::Db;
@@ -13,13 +13,6 @@ use crate::models::database::table::TableDataType;
 use crate::models::id::TableId;
 use crate::repositories::{Storage, WriteRepository};
 
-/// 1 つのバッチへ載せる要求数の上限。
-///
-/// 1 トランザクションが触るキー数には TiKV 側の上限（既定 30 万キー / 100MB）があり、
-/// 超えると**やり直しても直らない失敗**になる。畳みすぎてそこへ当たると、バッチ全員が
-/// 巻き添えで落ちるうえ、再送でまた同じ大きさに畳まれて抜け出せない。
-///
-/// 上限に対して十分小さく、かつ競合を潰すには十分大きい値にしてある。
 const DEFAULT_MAX_BATCH: usize = 256;
 
 /// 何も届かないままこれだけ経ったワーカーは自分から降りる（[`Lanes`] を参照）。
@@ -98,9 +91,8 @@ impl WriteCoalescer {
             },
         )?;
 
-        wait.await.map_err(|_| {
-            AppError::InternalError("write coalescer dropped the request".to_string())
-        })?
+        wait.await
+            .map_err(|_| AppError::Internal("write coalescer dropped the request".to_string()))?
     }
 
     /// 担当ワーカーへ渡す。居なければ起こす。
@@ -134,7 +126,7 @@ impl WriteCoalescer {
             }
         }
 
-        Err(AppError::InternalError(
+        Err(AppError::Internal(
             "write coalescer is not accepting work".to_string(),
         ))
     }
@@ -190,7 +182,6 @@ fn spawn_worker(
             let (entries, replies): (Vec<_>, Vec<_>) =
                 batch.into_iter().map(|s| (s.entry, s.reply)).unzip();
             let batched = entries.len();
-            crate::telemetry::metrics::write_batch(batched);
 
             // `Storage::write` はやり直しのためにクロージャごと複製するので、手放しておく。
             let result = db

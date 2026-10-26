@@ -22,7 +22,7 @@ pub trait Storage: Clone + Send + Sync + 'static {
 
     /// このクエリが見る断面を確定させる。
     ///
-    /// [`Source`](kasane_logic::Source) は対象領域ごと・参照箇所ごとに何度も読みに来るので、
+    /// [`Source`](spatial_id::query::Source) は対象領域ごと・参照箇所ごとに何度も読みに来るので、
     /// そのたびに断面を取り直すと途中で走った書き込みを一部だけ見た結果が混ざる。
     async fn query_snapshot(&self) -> Result<Self::QuerySnapshot, AppError>;
 

@@ -49,7 +49,7 @@ impl AuthService for AuthServiceImpl {
             }
         })
         .await
-        .map_err(|e| AppError::InternalError(e.to_string()))??;
+        .map_err(|e| AppError::Internal(e.to_string()))??;
 
         if !verified {
             return Err(AuthError::InvalidCredentials.into());
@@ -73,7 +73,7 @@ fn extract_claims(request: &Request<()>) -> Result<Claims, AppError> {
         Some(v) => v,
         None => {
             tracing::warn!("extract_claims: 'authorization' metadata is missing");
-            return Err(AuthError::MissingToken.into());
+            return Err(AuthError::InvalidToken("missing Authorization header").into());
         }
     };
     let value = match value.to_str() {
@@ -82,7 +82,7 @@ fn extract_claims(request: &Request<()>) -> Result<Claims, AppError> {
             tracing::warn!(
                 "extract_claims: 'authorization' metadata is not valid ASCII/UTF-8: {e}"
             );
-            return Err(AuthError::MalformedHeader.into());
+            return Err(AuthError::InvalidToken("malformed Authorization header").into());
         }
     };
     let token = match value.strip_prefix("Bearer ") {
@@ -91,7 +91,7 @@ fn extract_claims(request: &Request<()>) -> Result<Claims, AppError> {
             tracing::warn!(
                 "extract_claims: 'authorization' metadata does not start with 'Bearer ': {value:?}"
             );
-            return Err(AuthError::MalformedHeader.into());
+            return Err(AuthError::InvalidToken("malformed Authorization header").into());
         }
     };
     verify_jwt(token)
@@ -106,6 +106,9 @@ pub async fn authenticate<T>(
     load_auth_user(app_state, &claims).await
 }
 
+/// ユーザーの存在有無と `uid`/`ver` の不一致を外部へ区別しないため、同じ理由を返す。
+const REVOKED: &str = "token is no longer valid";
+
 /// [`require_auth`] が検証した `Claims` から、現在の利用者レコードを
 /// 読み直して [`AuthUser`] を組み立てる。`uid`/`ver` が最新のレコードと一致しない場合（パスワード変更などでトークンが失効した場合）は拒否する。
 pub async fn load_auth_user(app_state: &AppState, claims: &Claims) -> Result<AuthUser, Status> {
@@ -114,10 +117,10 @@ pub async fn load_auth_user(app_state: &AppState, claims: &Claims) -> Result<Aut
         .db
         .read(async move |repo| repo.get_user(&sub).await)
         .await?
-        .ok_or(AppError::Auth(AuthError::TokenRevoked))?;
+        .ok_or(AppError::Auth(AuthError::InvalidToken(REVOKED)))?;
 
     if claims.uid != user.id.to_string() || claims.ver != user.token_version {
-        return Err(AppError::Auth(AuthError::TokenRevoked).into());
+        return Err(AppError::Auth(AuthError::InvalidToken(REVOKED)).into());
     }
 
     Ok(AuthUser { user })

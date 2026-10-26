@@ -8,7 +8,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
-    let _telemetry = kasane::telemetry::init_telemetry();
+    kasane::logging::init();
     let database_path = backend::default_target();
     let port = std::env::var("PORT")
         .ok()
@@ -62,5 +62,5 @@ async fn shutdown_signal() {
         _ = ctrl_c => {},
         _ = terminate => {},
     }
-    tracing::info!("Shutting down gracefuly, flushing traces...");
+    tracing::info!("Shutting down gracefully...");
 }

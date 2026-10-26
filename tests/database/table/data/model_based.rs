@@ -17,7 +17,7 @@ use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
 use kasane::repositories::lmdb::initialize_database;
 use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
-use kasane_logic::{RangeId, SingleId, SpatialIdSet};
+use spatial_id::{RangeId, SingleId, collection::SpatialIdSet};
 
 /// 依存を増やさないための決定的 RNG（xorshift64）。
 struct XorShift(u64);

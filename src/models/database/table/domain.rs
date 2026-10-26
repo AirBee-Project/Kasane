@@ -1,6 +1,5 @@
 use crate::models::database::table::TableDataType;
 use crate::models::database::table::data_type::TableConstraints;
-use crate::models::database::table::response::TableSummary;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -15,6 +14,13 @@ pub struct Table {
     pub value_index: bool,
     /// 時間データ（時系列データ）として扱うかどうか。
     pub is_temporal: bool,
+}
+
+/// テーブルと、保持する空間ID(FlexId)の総数。テーブル情報を返す RPC はすべてこれを返す。
+#[derive(Debug, Clone, PartialEq)]
+pub struct TableInfo {
+    pub table: Table,
+    pub count: u64,
 }
 
 impl Table {
@@ -35,19 +41,6 @@ impl Table {
             description: meta.description,
             value_index: meta.value_index,
             is_temporal: meta.is_temporal,
-        }
-    }
-}
-
-impl From<Table> for TableSummary {
-    fn from(table: Table) -> Self {
-        Self {
-            name: table.name,
-            data_type: table.data_type,
-            max_zoom_level: table.max_zoom_level,
-            constraints: table.constraints,
-            description: table.description,
-            is_temporal: table.is_temporal,
         }
     }
 }

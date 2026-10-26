@@ -14,7 +14,7 @@ use kasane::models::id::TableId;
 use kasane::repositories::encoding::shard_entry::{MAX_FLEX_ID_PER_SHARD, MAX_SHARD_BYTES};
 use kasane::repositories::lmdb::initialize_database;
 use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
-use kasane_logic::{RangeId, SingleId, SpatialIdSet};
+use spatial_id::{RangeId, SingleId, collection::SpatialIdSet};
 
 #[test]
 fn shard_splits_on_byte_size_even_with_few_entries() {

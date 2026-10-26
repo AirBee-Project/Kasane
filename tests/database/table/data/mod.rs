@@ -9,7 +9,6 @@ pub mod shard_merge;
 pub mod shard_split;
 pub mod shard_split_bytes;
 pub mod streaming;
-pub mod time_coalescing;
 pub mod time_edge_cases;
 pub mod upsert;
 pub mod value_filter;

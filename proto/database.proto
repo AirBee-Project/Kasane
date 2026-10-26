@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package kasane;
 
+import "google/protobuf/empty.proto";
+
 service DatabaseService {
   // データベースを新規作成する。
   rpc Create(CreateDatabaseRequest) returns (DatabaseInfo);
@@ -9,12 +11,10 @@ service DatabaseService {
   rpc Get(GetDatabaseRequest) returns (DatabaseInfo);
   // アクセス可能なデータベースの一覧を取得する。
   rpc List(ListDatabasesRequest) returns (ListDatabasesResponse);
-  // データベースの名前または説明文を更新する。
-  rpc Update(UpdateDatabaseRequest) returns (UpdateDatabaseResponse);
+  // データベースの名前または説明文を更新し、更新後の情報を返す。
+  rpc Update(UpdateDatabaseRequest) returns (DatabaseInfo);
   // データベースと配下のテーブルを削除する。
-  rpc Delete(DeleteDatabaseRequest) returns (DeleteDatabaseResponse);
-  // データベースを丸ごと複製する。
-  rpc Copy(CopyDatabaseRequest) returns (DatabaseInfo);
+  rpc Delete(DeleteDatabaseRequest) returns (google.protobuf.Empty);
 }
 
 message DatabaseInfo {
@@ -50,17 +50,7 @@ message UpdateDatabaseRequest {
   }
 }
 
-message UpdateDatabaseResponse {}
-
 // **必要な権限**: `global` / `manage`
 message DeleteDatabaseRequest {
   string db_name = 1;
-}
-
-message DeleteDatabaseResponse {}
-
-// **必要な権限**: `global` / `manage`
-message CopyDatabaseRequest {
-  string db_name = 1;
-  string copy_name = 2;
 }

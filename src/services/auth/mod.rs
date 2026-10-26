@@ -43,7 +43,7 @@ pub fn hash_password(password: &str) -> Result<String, AppError> {
     let argon2 = Argon2::default();
     let password_hash = argon2
         .hash_password(password.as_bytes(), &salt)
-        .map_err(|_| AppError::InternalError("Failed to hash password".to_string()))?
+        .map_err(|_| AppError::Internal("Failed to hash password".to_string()))?
         .to_string();
     Ok(password_hash)
 }
@@ -51,7 +51,7 @@ pub fn hash_password(password: &str) -> Result<String, AppError> {
 #[tracing::instrument(skip_all)]
 pub fn verify_password(password: &str, password_hash: &str) -> Result<bool, AppError> {
     let parsed_hash = PasswordHash::new(password_hash)
-        .map_err(|_| AppError::InternalError("Invalid password hash format".to_string()))?;
+        .map_err(|_| AppError::Internal("Invalid password hash format".to_string()))?;
 
     let is_valid = Argon2::default()
         .verify_password(password.as_bytes(), &parsed_hash)
@@ -101,7 +101,7 @@ pub async fn generate_jwt(app_state: &AppState, username: &str) -> Result<String
         &claims,
         &EncodingKey::from_secret(jwt_secret()),
     )
-    .map_err(|_| AppError::InternalError("Failed to generate token".to_string()))
+    .map_err(|_| AppError::Internal("Failed to generate token".to_string()))
 }
 
 #[tracing::instrument(skip_all)]
@@ -110,7 +110,7 @@ pub fn verify_jwt(token: &str) -> Result<Claims, AppError> {
     let token_data = decode::<Claims>(token, &DecodingKey::from_secret(jwt_secret()), &validation)
         .map_err(|e| {
             tracing::warn!("verify_jwt failed: {e}");
-            AppError::Auth(AuthError::InvalidToken)
+            AppError::Auth(AuthError::InvalidToken("invalid or expired token"))
         })?;
 
     Ok(token_data.claims)

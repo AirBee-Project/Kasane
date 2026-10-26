@@ -97,7 +97,7 @@ pub async fn update(
     name: &str,
     new_name: Option<String>,
     description: Option<Option<String>>,
-) -> Result<(), AppError> {
+) -> Result<DatabaseInfoResponse, AppError> {
     if let Some(new_n) = &new_name {
         crate::services::helpers::name_valid::name_valid(new_n)?;
     }
@@ -117,25 +117,10 @@ pub async fn update(
         .await
 }
 
-/// `global` の Manage 以上を要求する。そのロールは複製先にも届くので権限の付け直しは不要。
-#[tracing::instrument(skip_all, fields(db_name = %name, copy_name = %copy_name))]
-pub async fn copy(
-    app_state: &AppState,
-    name: &str,
-    copy_name: &str,
-) -> Result<DatabaseInfoResponse, AppError> {
-    let name = name.to_string();
-    let copy_name = copy_name.to_string();
-    app_state
-        .db
-        .write(async move |w| w.database_copy(&name, &copy_name).await)
-        .await
-}
-
 fn check_description(description: Option<&str>) -> Result<(), AppError> {
     let limit = crate::models::database::MAX_DESCRIPTION_LENGTH;
     match description {
-        Some(desc) if desc.chars().count() > limit => Err(AppError::InvalidName {
+        Some(desc) if desc.chars().count() > limit => Err(AppError::InvalidArgument {
             reason: format!("Description cannot exceed {limit} characters"),
         }),
         _ => Ok(()),

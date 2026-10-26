@@ -4,7 +4,10 @@ pub mod value;
 
 use std::collections::{BTreeMap, HashMap};
 
-use kasane_logic::{Query, RangeId, Source};
+use spatial_id::{
+    RangeId,
+    query::{Query, Source},
+};
 
 use crate::{
     AppState,
@@ -394,7 +397,7 @@ fn build_map_values<U: Value, V: Value>(
 }
 
 /// `spawn_blocking` は `JoinHandle` を drop しても中の処理を止めないため、`execute` の async フレームが drop されたら（＝上流でキャンセル）これで `token` を代わりにキャンセルする。
-struct CancelOnDrop(kasane_logic::CancellationToken);
+struct CancelOnDrop(spatial_id::query::CancellationToken);
 
 impl Drop for CancelOnDrop {
     fn drop(&mut self) {
@@ -425,9 +428,9 @@ pub async fn execute(
         .clone()
         .acquire_owned()
         .await
-        .map_err(|e| AppError::InternalError(e.to_string()))?;
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    let token = kasane_logic::CancellationToken::new();
+    let token = spatial_id::query::CancellationToken::new();
     let _cancel_on_drop = CancelOnDrop(token.clone());
 
     // クエリ演算は同期ブロッキング処理のため、async ワーカーを塞がない。
@@ -446,7 +449,7 @@ pub async fn execute(
         })
     })
     .await
-    .map_err(|e| AppError::InternalError(e.to_string()))?
+    .map_err(|e| AppError::Internal(e.to_string()))?
 }
 
 fn run<V: Value>(
@@ -455,7 +458,7 @@ fn run<V: Value>(
     tables: &ResolvedTables,
     snapshot: &QuerySnapshot,
     format: OutputFormat,
-    token: &kasane_logic::CancellationToken,
+    token: &spatial_id::query::CancellationToken,
 ) -> Result<GetDataResponse, AppError> {
     let targets = to_spatial_id_set(&request.spatial_ids)?;
 
@@ -463,26 +466,23 @@ fn run<V: Value>(
     let bounds: Vec<RangeId> = targets.iter().map(|id| RangeId::from(&id)).collect();
     if bounds.is_empty() {
         // 対象領域が空。クエリを走らせるまでもない。
-        let empty: Vec<(V, Vec<kasane_logic::FlexId>)> = Vec::new();
+        let empty: Vec<(V, Vec<spatial_id::FlexId>)> = Vec::new();
         return data_response::build(empty, format, |v| Ok(v.to_value()));
     }
 
-    // --- フェーズ 1: DSL → kasane-logic AST の翻訳 ---
-    let ast = tracing::info_span!("query.translate", source_tables = tables.len())
+    // DSL → spatial-id のクエリへ翻訳する。
+    let query = tracing::info_span!("query.translate", source_tables = tables.len())
         .in_scope(|| request.query.translate::<V>(app_state, tables, snapshot))?;
-
-    // --- フェーズ 2: クエリ最適化 ---
-    let optimized = tracing::info_span!("query.optimize").in_scope(|| ast.optimize());
 
     // まとめて 1 回だけ評価する。空間 ID 1 件ずつだとクエリが件数分再実行される。
     let flex_ids = tracing::info_span!("query.run_within", target_regions = bounds.len())
         .in_scope(|| {
-            optimized
-                .run_within(bounds, token)
-                .map_err(AppError::LogicError)
+            query
+                .get_overlapping_cancellable(targets.iter().collect::<Vec<_>>(), token)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(AppError::from)
         })?
-        .into_iter()
-        .filter(|(flex_id, _)| targets.get(flex_id).next().is_some());
+        .into_iter();
 
     let by_value = group_by_value(flex_ids);
     data_response::build(by_value, format, |v| Ok(v.to_value()))
@@ -490,9 +490,9 @@ fn run<V: Value>(
 
 /// FlexId 列を値ごとにグループ化する。
 fn group_by_value<V: Value>(
-    flex_ids: impl Iterator<Item = (kasane_logic::FlexId, V)>,
-) -> BTreeMap<V, Vec<kasane_logic::FlexId>> {
-    let mut by_value: BTreeMap<V, Vec<kasane_logic::FlexId>> = BTreeMap::new();
+    flex_ids: impl Iterator<Item = (spatial_id::FlexId, V)>,
+) -> BTreeMap<V, Vec<spatial_id::FlexId>> {
+    let mut by_value: BTreeMap<V, Vec<spatial_id::FlexId>> = BTreeMap::new();
 
     for (flex_id, value) in flex_ids {
         by_value.entry(value).or_default().push(flex_id);

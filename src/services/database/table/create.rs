@@ -1,7 +1,7 @@
 use crate::{
     AppState,
     error::AppError,
-    models::database::table::{CreateTableRequest, Table},
+    models::database::table::{CreateTableRequest, TableInfo},
     models::users::{User, UserRole},
     repositories::{Storage, WriteRepository},
     services::auth::authorize_path,
@@ -14,12 +14,12 @@ pub async fn create(
     db_name: &str,
     table_name: &str,
     req: CreateTableRequest,
-) -> Result<Table, AppError> {
+) -> Result<TableInfo, AppError> {
     crate::services::helpers::name_valid::name_valid(table_name)?;
     if let Some(desc) = &req.description
         && desc.chars().count() > crate::models::database::MAX_DESCRIPTION_LENGTH
     {
-        return Err(AppError::InvalidName {
+        return Err(AppError::InvalidArgument {
             reason: format!(
                 "Description cannot exceed {} characters",
                 crate::models::database::MAX_DESCRIPTION_LENGTH
@@ -28,13 +28,13 @@ pub async fn create(
     }
 
     // max_zoom_levelの検証
-    kasane_logic::ZoomLevel::new(req.max_zoom_level)?;
+    spatial_id::ZoomLevel::new(req.max_zoom_level)?;
 
     let db_name = db_name.to_string();
     let table_name = table_name.to_string();
     let user = user.clone();
 
-    app_state
+    let table = app_state
         .db
         .write(async move |db| {
             // 作るのは新しいテーブルなので、判定はデータベーススコープで行う。
@@ -51,5 +51,6 @@ pub async fn create(
             )
             .await
         })
-        .await
+        .await?;
+    Ok(TableInfo { table, count: 0 })
 }

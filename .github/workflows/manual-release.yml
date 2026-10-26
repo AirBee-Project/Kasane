@@ -79,7 +79,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        backend: [lmdb, tikv]
+        backend: [lmdb]
         platform:
           - name: amd64
             os: linux/amd64
@@ -127,8 +127,6 @@ jobs:
         with:
           context: .
           platforms: ${{ matrix.platform.os }}
-          build-args: |
-            BACKEND=backend-${{ matrix.backend }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ matrix.backend }}-${{ matrix.platform.name }}
@@ -158,7 +156,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        backend: [lmdb, tikv]
+        backend: [lmdb]
     steps:
       - name: Resolve image name
         run: echo "REGISTRY_IMAGE=${REGISTRY}/${IMAGE_NAME,,}" >> "$GITHUB_ENV"
@@ -223,4 +221,3 @@ jobs:
             | バックエンド | イメージ |
             | --- | --- |
             | LMDB | `ghcr.io/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}-lmdb` |
-            | TiKV | `ghcr.io/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}-tikv` |

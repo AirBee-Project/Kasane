@@ -35,7 +35,7 @@ pub async fn get(
             // 認可のためだけに別の読み取りを開くと、同じ名前をもう一度引くことになる。
             let refs = [(db_name.clone(), table_name.clone())];
             let resolved = db.resolve_tables(&refs).await?.pop().ok_or_else(|| {
-                AppError::InternalError("resolve_tables dropped its only request".to_string())
+                AppError::Internal("resolve_tables dropped its only request".to_string())
             })?;
 
             // 「存在しない」より先に判定する（`authorize_resolved` の注記を参照）。
@@ -75,5 +75,5 @@ pub async fn get(
         })
     })
     .await
-    .map_err(|e| AppError::InternalError(e.to_string()))?
+    .map_err(|e| AppError::Internal(e.to_string()))?
 }

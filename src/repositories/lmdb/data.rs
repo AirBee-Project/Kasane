@@ -1,15 +1,17 @@
-//! ツリーの形と分割・統合の規則は TiKV 実装と同一で、違うのは取得手段だけ。
-
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use kasane_logic::{FlexId, SpatialIdMap, SpatialIdSet};
+use spatial_id::{
+    FlexId,
+    collection::{SpatialIdMap, SpatialIdSet},
+};
 
 use crate::error::AppError;
 use crate::models::database::table::TableDataType;
 use crate::models::id::TableId;
 use crate::repositories::ValueGroups;
 use crate::repositories::encoding::shard_entry::{
-    MAX_FLEX_ID_PER_SHARD, MAX_SHARD_BYTES, MERGE_FLEX_ID_THRESHOLD, ShardEntry, shard_needs_split,
+    MAX_FLEX_ID_PER_SHARD, MAX_SHARD_BYTES, MERGE_FLEX_ID_THRESHOLD, ShardEntry, encode_map,
+    shard_needs_split,
 };
 use crate::repositories::encoding::value_index;
 
@@ -34,7 +36,7 @@ impl<'a> KasaneDbRead<'a> {
         table_id: crate::models::id::TableId,
         ids: SpatialIdSet,
     ) -> Result<ValueGroups, AppError> {
-        let mut flex_ids_iter = ids.flex_ids();
+        let mut flex_ids_iter = ids.iter();
         let mut global_by_value = ValueMap::default();
 
         // 数百万件を一度にルーティングへ渡すとその分のメモリを一度に確保するので、区切る。
@@ -88,7 +90,7 @@ impl<'a> KasaneDbRead<'a> {
                     .map(|chunk| -> Result<ValueMap, AppError> {
                         let txn = env
                             .read_txn()
-                            .map_err(|e| AppError::InternalError(e.to_string()))?;
+                            .map_err(|e| AppError::Internal(e.to_string()))?;
                         let mut local = ValueMap::default();
                         for (region, queries) in chunk {
                             Self::resolve_leaf(
@@ -131,20 +133,22 @@ impl<'a> KasaneDbRead<'a> {
         queries: &[FlexId],
         by_value: &mut ValueMap,
     ) -> Result<(), AppError> {
-        let Some(arch) = shard::load_leaf_archived(tables_data, txn, table_id, region)? else {
+        let Some(leaf) = shard::load_leaf_view(tables_data, txn, table_id, region)? else {
             return Ok(());
         };
 
         let mut local: FxHashMap<u32, Vec<FlexId>> = FxHashMap::default();
         for query_flex in queries {
-            arch.get_indexed(query_flex, |got_flex, packed| {
-                local.entry(packed).or_default().push(got_flex);
-            });
+            for &(id, index) in &leaf.entries {
+                if let Some(got_flex) = id.intersection(query_flex) {
+                    local.entry(index).or_default().push(got_flex);
+                }
+            }
         }
 
         // 葉に現れた distinct 値の数だけ実バイト列へ復元する。
-        for (packed, mut flex_ids) in local {
-            let value = arch.value_bytes(packed);
+        for (index, mut flex_ids) in local {
+            let value = leaf.value(index);
             if let Some(existing) = by_value.get_mut(value) {
                 existing.append(&mut flex_ids);
             } else {
@@ -156,7 +160,6 @@ impl<'a> KasaneDbRead<'a> {
 }
 
 impl<'a> KasaneDbRead<'a> {
-    /// 結果を `Vec` で返すのは、遅延イテレータを外へ持ち出せない TiKV と署名を揃えるため。
     #[tracing::instrument(skip_all)]
     pub fn data_filter_eq_impl(
         &self,
@@ -250,7 +253,7 @@ impl<'a> KasaneDbWrite<'a> {
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
-        let by_leaf = self.group_by_leaf(table_id, ids.flex_ids())?;
+        let by_leaf = self.group_by_leaf(table_id, ids.iter())?;
         for (region, flex_ids) in by_leaf {
             let map =
                 shard::load_leaf_map(&self.db.tables_data, &self.write_txn, table_id, &region)?;
@@ -272,7 +275,7 @@ impl<'a> KasaneDbWrite<'a> {
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
-        let by_leaf = self.group_by_leaf(table_id, ids.flex_ids())?;
+        let by_leaf = self.group_by_leaf(table_id, ids.iter())?;
         let data_vec = data.to_vec();
         for (region, flex_ids) in by_leaf {
             let map =
@@ -280,11 +283,11 @@ impl<'a> KasaneDbWrite<'a> {
             self.apply_leaf(table_id, index, region, map, &flex_ids, |m| {
                 let mut target_set = SpatialIdSet::new();
                 for flex_id in &flex_ids {
-                    let occupied_set: SpatialIdSet = m.get(flex_id).map(|(f, _)| f).collect();
+                    let occupied_set: SpatialIdSet = m.get(*flex_id).map(|(f, _)| f).collect();
                     target_set.clear();
                     target_set.insert(*flex_id);
 
-                    for f in (&target_set - &occupied_set).flex_ids() {
+                    for f in (&target_set - &occupied_set).iter() {
                         m.insert(f, data_vec.clone());
                     }
                 }
@@ -300,14 +303,14 @@ impl<'a> KasaneDbWrite<'a> {
         index: Option<TableDataType>,
         ids: SpatialIdSet,
     ) -> Result<(), AppError> {
-        let by_leaf = self.group_by_leaf(table_id, ids.flex_ids())?;
+        let by_leaf = self.group_by_leaf(table_id, ids.iter())?;
         let mut affected: Vec<FlexId> = Vec::new();
         for (region, flex_ids) in by_leaf {
             let map =
                 shard::load_leaf_map(&self.db.tables_data, &self.write_txn, table_id, &region)?;
             self.apply_leaf(table_id, index, region, map, &flex_ids, |m| {
                 for flex_id in &flex_ids {
-                    m.remove(flex_id);
+                    m.remove(*flex_id);
                 }
             })?;
             affected.push(region);
@@ -385,7 +388,7 @@ impl<'a> KasaneDbWrite<'a> {
                 keys
             });
 
-            let merged = SpatialIdMap::merge_shards(parent_region, child_maps)?;
+            let merged: SpatialIdMap<Vec<u8>> = child_maps.into_iter().flatten().collect();
 
             if let (Some(data_type), Some(old_keys)) = (index, old_keys) {
                 let mut new_keys = FxHashSet::default();
@@ -442,7 +445,7 @@ impl<'a> KasaneDbWrite<'a> {
         let mut old_keys = FxHashSet::default();
         let mut pre_modify_scan = scan.clone();
         for f_scan in scan.iter() {
-            for (f, v) in map.get_overlapping(&f_scan) {
+            for (f, v) in map.get_overlapping(f_scan) {
                 old_keys.insert(value_index::make_key(
                     table_id,
                     &value_index::order_preserving(data_type, v),
@@ -456,7 +459,7 @@ impl<'a> KasaneDbWrite<'a> {
 
         let mut new_keys = FxHashSet::default();
         for f_scan in pre_modify_scan.iter() {
-            for (f, v) in map.get_overlapping(&f_scan) {
+            for (f, v) in map.get_overlapping(f_scan) {
                 new_keys.insert(value_index::make_key(
                     table_id,
                     &value_index::order_preserving(data_type, v),
@@ -517,9 +520,7 @@ impl<'a> KasaneDbWrite<'a> {
 
         let count = map.count();
         if count <= MAX_FLEX_ID_PER_SHARD {
-            let bytes = map
-                .to_bytes()
-                .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
+            let bytes = encode_map(&map);
             if !shard_needs_split(count, bytes.len()) {
                 self.put_leaf_bytes(table_id, &region, count as u32, &bytes)?;
                 return Ok(());
@@ -528,7 +529,7 @@ impl<'a> KasaneDbWrite<'a> {
 
         // 分割が必要 → パス圧縮した被覆子領域を構築し、親をポインタノードにする。
         let mut children = Vec::new();
-        self.cover_split(table_id, &map, &mut children)?;
+        self.cover_split(table_id, region, &map, &mut children)?;
         self.db.tables_data.put(
             &mut self.write_txn,
             &key,
@@ -540,12 +541,13 @@ impl<'a> KasaneDbWrite<'a> {
     fn cover_split(
         &mut self,
         table_id: TableId,
+        region: FlexId,
         map: &SpatialIdMap<Vec<u8>>,
         out: &mut Vec<FlexId>,
     ) -> Result<(), AppError> {
-        let ((lo_r, lo), (hi_r, hi)) = map
-            .split_shard()
-            .ok_or_else(|| AppError::InternalError("split on shardless map".to_string()))?;
+        let ((lo_r, lo), (hi_r, hi)) = map.split_shard(region).ok_or_else(|| {
+            AppError::Internal("shard region cannot be split further".to_string())
+        })?;
         self.emit_child(table_id, lo_r, lo, out)?;
         self.emit_child(table_id, hi_r, hi, out)?;
         Ok(())
@@ -570,9 +572,7 @@ impl<'a> KasaneDbWrite<'a> {
         }
         let count = cm.count();
         if count <= MAX_FLEX_ID_PER_SHARD {
-            let bytes = cm
-                .to_bytes()
-                .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
+            let bytes = encode_map(&cm);
             if !shard_needs_split(count, bytes.len()) {
                 self.put_leaf_bytes(table_id, &cr, count as u32, &bytes)?;
                 out.push(cr);
@@ -580,9 +580,9 @@ impl<'a> KasaneDbWrite<'a> {
             }
         }
         // 1 段だけ覗いて、退化分割か実分割かを決める。
-        let ((clo_r, clo), (chi_r, chi)) = cm
-            .split_shard()
-            .ok_or_else(|| AppError::InternalError("split on shardless map".to_string()))?;
+        let ((clo_r, clo), (chi_r, chi)) = cm.split_shard(cr).ok_or_else(|| {
+            AppError::Internal("shard region cannot be split further".to_string())
+        })?;
         if clo.is_empty() || chi.is_empty() {
             // 退化分割：中間ポインタを作らず孫を巻き上げる。
             self.emit_child(table_id, clo_r, clo, out)?;
@@ -608,9 +608,7 @@ impl<'a> KasaneDbWrite<'a> {
         region: &FlexId,
         map: &SpatialIdMap<Vec<u8>>,
     ) -> Result<(), AppError> {
-        let bytes = map
-            .to_bytes()
-            .map_err(|e| AppError::InternalError(format!("rkyv serialize: {e}")))?;
+        let bytes = encode_map(map);
         self.put_leaf_bytes(table_id, region, map.count() as u32, &bytes)
     }
 

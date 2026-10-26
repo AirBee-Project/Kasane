@@ -18,7 +18,7 @@ async fn get_table_count(test_app: &TestApp, table_name: &str) -> u64 {
 }
 
 #[tokio::test]
-/// データの挿入・更新・削除に伴い、テーブルの count が正しく増減するかを検証する。
+/// データの挿入・更新・削除に伴い、テーブルの count が正しく増減し、Get・List・Update が同じ count を返すかを検証する。
 async fn test_table_count_dynamic() {
     let test_app = TestApp::new().await;
     test_app.create_database("test_db").await;
@@ -74,4 +74,30 @@ async fn test_table_count_dynamic() {
 
     let count = get_table_count(&test_app, "count_test_table").await;
     assert_eq!(count, 2, "Count should be 2 after deleting 1 item");
+    // List と Update も Get と同じ count を返すこと
+    let listed = test_app
+        .table()
+        .list(pb::ListTablesRequest {
+            db_name: "test_db".to_string(),
+        })
+        .await
+        .unwrap()
+        .into_inner()
+        .tables;
+    assert_eq!(listed[0].count, 2);
+
+    let updated = test_app
+        .table()
+        .update(pb::UpdateTableRequest {
+            db_name: "test_db".to_string(),
+            table_name: "count_test_table".to_string(),
+            new_name: None,
+            is_temporal: None,
+            description_update: None,
+            constraints_update: None,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(updated.count, 2);
 }

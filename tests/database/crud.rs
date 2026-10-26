@@ -121,38 +121,6 @@ async fn test_database_rename_success() {
 }
 
 #[tokio::test]
-/// データベースのコピーが正常に行えるかを検証する。
-async fn test_database_copy_success() {
-    let test_app = TestApp::new().await;
-
-    test_app
-        .database()
-        .create(pb::CreateDatabaseRequest {
-            name: "src_db".to_string(),
-            description: None,
-        })
-        .await
-        .unwrap();
-
-    test_app
-        .database()
-        .copy(pb::CopyDatabaseRequest {
-            db_name: "src_db".to_string(),
-            copy_name: "copied_db".to_string(),
-        })
-        .await
-        .unwrap();
-
-    test_app
-        .database()
-        .get(pb::GetDatabaseRequest {
-            db_name: "copied_db".to_string(),
-        })
-        .await
-        .unwrap();
-}
-
-#[tokio::test]
 /// データベースのdescription付与と更新が正常に行えるかを検証する。
 async fn test_database_description() {
     let test_app = TestApp::new().await;

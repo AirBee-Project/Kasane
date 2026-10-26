@@ -1,6 +1,3 @@
-//! LMDB バックエンド向けの結合テスト。TiKV バックエンドのビルドでは対象外。
-#![cfg(feature = "backend-lmdb")]
-
 mod common;
 
 use common::TestApp;
@@ -68,11 +65,11 @@ async fn fetch_privileges(
 ) -> Vec<pb::PrivilegeRule> {
     test_app
         .user_as(Some(&bearer(token)))
-        .get_privileges(pb::GetPrivilegesRequest {
+        .get(pb::GetUserRequest {
             username: username.to_string(),
         })
         .await
-        .expect("get_privileges failed")
+        .expect("get user failed")
         .into_inner()
         .privileges
 }
@@ -280,7 +277,7 @@ async fn test_auth_error_codes_are_structured() {
         .await
         .unwrap_err();
     assert_eq!(err.code(), Code::Unauthenticated);
-    assert_eq!(error_reason(&err), "missing_token");
+    assert_eq!(error_reason(&err), "invalid_token");
 
     // 2. Bearer でない → malformed_header
     let err = test_app
@@ -289,7 +286,7 @@ async fn test_auth_error_codes_are_structured() {
         .await
         .unwrap_err();
     assert_eq!(err.code(), Code::Unauthenticated);
-    assert_eq!(error_reason(&err), "malformed_header");
+    assert_eq!(error_reason(&err), "invalid_token");
 
     // 3. 不正なトークン → invalid_token
     let err = test_app
@@ -322,7 +319,7 @@ async fn test_auth_error_codes_are_structured() {
         .await
         .unwrap_err();
     assert_eq!(err.code(), Code::PermissionDenied);
-    assert_eq!(error_reason(&err), "requires_global_admin");
+    assert_eq!(error_reason(&err), "permission_denied");
 
     // 6. DB 権限不足 → insufficient_privilege
     let err = test_app
@@ -333,7 +330,7 @@ async fn test_auth_error_codes_are_structured() {
         .await
         .unwrap_err();
     assert_eq!(err.code(), Code::PermissionDenied);
-    assert_eq!(error_reason(&err), "insufficient_privilege");
+    assert_eq!(error_reason(&err), "permission_denied");
 
     // 7. root の削除 → root_protected
     let err = test_app
@@ -413,7 +410,7 @@ async fn test_write_privileges() {
     // Write user CAN insert data
     test_app
         .data_as(Some(&bearer(&user_token)))
-        .insert(pb::InsertDataRequest {
+        .insert(pb::WriteDataRequest {
             db_name: "test_db".to_string(),
             table_name: "t1".to_string(),
             value: Some(num(10.0)),
@@ -434,7 +431,7 @@ async fn test_read_privileges() {
     create_table(&test_app, &root_token, "test_db", "t1").await;
     test_app
         .data_as(Some(&bearer(&root_token)))
-        .insert(pb::InsertDataRequest {
+        .insert(pb::WriteDataRequest {
             db_name: "test_db".to_string(),
             table_name: "t1".to_string(),
             value: Some(num(10.0)),
@@ -450,7 +447,7 @@ async fn test_read_privileges() {
     // Read user CANNOT insert data
     let err = test_app
         .data_as(Some(&bearer(&user_token)))
-        .insert(pb::InsertDataRequest {
+        .insert(pb::WriteDataRequest {
             db_name: "test_db".to_string(),
             table_name: "t1".to_string(),
             value: Some(num(20.0)),
@@ -611,7 +608,7 @@ async fn test_query_authorization() {
         create_table(&test_app, &root_token, db, table).await;
         test_app
             .data_as(Some(&bearer(&root_token)))
-            .insert(pb::InsertDataRequest {
+            .insert(pb::WriteDataRequest {
                 db_name: db.to_string(),
                 table_name: table.to_string(),
                 value: Some(num(10.0)),
@@ -786,7 +783,7 @@ async fn test_get_system_info() {
         .await
         .unwrap_err();
     assert_eq!(err.code(), Code::Unauthenticated);
-    assert_eq!(error_reason(&err), "missing_token");
+    assert_eq!(error_reason(&err), "invalid_token");
 
     // 2. ログイン済み（rootユーザー）→ 成功
     let info = test_app
@@ -855,8 +852,8 @@ async fn test_get_user_info_authorization() {
 }
 
 #[tokio::test]
-/// データベースのリネーム、コピー、およびテーブルコピーにおける権限検証をテストする。
-async fn test_copy_and_rename_permissions() {
+/// データベースのリネームにおける権限検証をテストする。
+async fn test_rename_permissions() {
     let test_app = TestApp::new().await;
     let root_token = test_app.root_token().to_string();
 
@@ -895,51 +892,6 @@ async fn test_copy_and_rename_permissions() {
         })
         .await
         .expect("user_b (manage) should be able to rename");
-
-    // renamed_db に名前が変更されたので、以降は renamed_db を対象とする。
-    // user_a (Read) の権限が renamed_db に引き継がれていることを確認
-    // user_a が renamed_db/copy を叩くと、Global Admin ではないので Forbidden になる。
-    let err = test_app
-        .database_as(Some(&bearer(&user_a_token)))
-        .copy(pb::CopyDatabaseRequest {
-            db_name: "renamed_db".to_string(),
-            copy_name: "copied_db".to_string(),
-        })
-        .await
-        .unwrap_err();
-    assert_eq!(err.code(), Code::PermissionDenied);
-
-    // root が renamed_db/copy を叩いて成功させる。
-    test_app
-        .database_as(Some(&bearer(&root_token)))
-        .copy(pb::CopyDatabaseRequest {
-            db_name: "renamed_db".to_string(),
-            copy_name: "copied_db".to_string(),
-        })
-        .await
-        .expect("root should be able to copy");
-
-    // テスト継続のため root (Global Admin) が user_a に copied_db の Manage 権限を付与する。
-    grant_privilege(&test_app, &root_token, "user_a", "copied_db", "manage").await;
-
-    // 3. コピー先データベース (copied_db) に対する user_a の Manage 権限を検証
-    // 手動で付与した Manage 権限により、user_a は copied_db にテーブルを作成できるはず。
-    create_table(&test_app, &user_a_token, "copied_db", "new_table").await;
-
-    // 4. テーブルコピーの権限テスト
-    // user_b (元src_dbのManageだったがリネームされてrenamed_dbのManage) は copied_db に対する権限を持たないため、
-    // renamed_db から copied_db へのテーブルコピーは失敗するはず（copied_db の Manage 権限がないため）。
-    let err = test_app
-        .table_as(Some(&bearer(&user_b_token)))
-        .copy(pb::CopyTableRequest {
-            db_name: "renamed_db".to_string(),
-            table_name: "new_table".to_string(),
-            copy_db_name: Some("copied_db".to_string()),
-            copy_table_name: "copied_table".to_string(),
-        })
-        .await
-        .unwrap_err();
-    assert_eq!(err.code(), Code::PermissionDenied);
 }
 
 #[tokio::test]
@@ -1109,7 +1061,7 @@ async fn test_privileges_on_unknown_targets_are_rejected() {
     .await
     .unwrap_err();
     assert_eq!(err.code(), Code::NotFound);
-    assert_eq!(error_reason(&err), "database_not_found");
+    assert_eq!(error_reason(&err), "not_found");
 
     let err = put_privilege(
         &test_app,
@@ -1122,7 +1074,7 @@ async fn test_privileges_on_unknown_targets_are_rejected() {
     .await
     .unwrap_err();
     assert_eq!(err.code(), Code::NotFound);
-    assert_eq!(error_reason(&err), "table_not_found");
+    assert_eq!(error_reason(&err), "not_found");
 
     // 何も保存されていない
     assert!(
@@ -1272,19 +1224,6 @@ async fn test_table_scope_manage_cannot_create_other_tables() {
 
     // 直接の新規テーブル作成はデータベースレベルの Manage が要るので拒否される
     let err = post_table(&test_app, &token, "box_db", "sneaked")
-        .await
-        .unwrap_err();
-    assert_eq!(err.code(), Code::PermissionDenied);
-
-    // コピー経由でも同じ。コピー先の権限判定にコピー元テーブル名を使ってはならない。
-    let err = test_app
-        .table_as(Some(&bearer(&token)))
-        .copy(pb::CopyTableRequest {
-            db_name: "box_db".to_string(),
-            table_name: "scratch".to_string(),
-            copy_db_name: None,
-            copy_table_name: "sneaked".to_string(),
-        })
         .await
         .unwrap_err();
     assert_eq!(err.code(), Code::PermissionDenied);
@@ -1603,7 +1542,7 @@ async fn test_global_read_can_read_everything_but_write_nothing() {
     // 書き込みはすべて拒否される
     let err = test_app
         .data_as(Some(&bearer(&token)))
-        .insert(pb::InsertDataRequest {
+        .insert(pb::WriteDataRequest {
             db_name: "alpha_db".to_string(),
             table_name: "t_one".to_string(),
             value: Some(num(1.0)),
@@ -1731,7 +1670,7 @@ async fn test_privilege_rules_are_capped_before_resolution() {
         .expect_err("上限超えが受理された");
 
     assert!(
-        matches!(err, kasane::error::AppError::InvalidPrivilege { .. }),
+        matches!(err, kasane::error::AppError::InvalidArgument { .. }),
         "件数ではなく名前解決で落ちている: {err:?}"
     );
 }

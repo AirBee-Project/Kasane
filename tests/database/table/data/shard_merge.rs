@@ -10,7 +10,7 @@ use kasane::models::id::TableId;
 use kasane::repositories::lmdb::initialize_database;
 use kasane::repositories::lmdb::shard::{MAX_FLEX_ID_PER_SHARD, MERGE_FLEX_ID_THRESHOLD};
 use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
-use kasane_logic::{RangeId, SingleId, SpatialIdSet};
+use spatial_id::{RangeId, SingleId, collection::SpatialIdSet};
 
 /// このテーブルのシャードキー数と、ポインタノードの有無を返す。
 fn shard_stats(db: &kasane::repositories::lmdb::AppDb, table_id: TableId) -> (usize, bool) {

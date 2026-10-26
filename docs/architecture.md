@@ -11,7 +11,7 @@ flowchart TD
     Main[main.rs / lib.rs] --> Grpc[grpc]
     Grpc --> Service[services]
     Service --> Repository[repositories]
-    Repository --> Storage[(LMDB / TiKV)]
+    Repository --> Storage[(LMDB)]
 
     Grpc --> Convert[grpc::convert*]
     Convert --> Model[models]
@@ -47,7 +47,7 @@ flowchart TD
 
 ### `repositories`
 
-- ストレージバックエンド（LMDB / TiKV）へのアクセスを隠蔽する。
+- ストレージ（LMDB）へのアクセスを隠蔽する。
 - テーブルの open / get / insert / remove などの低レベル操作を担当する。
 - 業務ルールは持たない。
 - バックエンド固有の型や詳細を上位層に公開しない。
@@ -67,7 +67,7 @@ flowchart TD
 
 ### `backend`
 
-- LMDB（`heed`）または TiKV の接続初期化と基盤構築を担当する。
+- LMDB（`heed`）の初期化と基盤構築を担当する。
 - 業務ロジックは持たない。
 
 ## 依存ルール
@@ -92,7 +92,7 @@ flowchart TD
 1. `grpc::auth` が JWT を検証し、最新の利用者レコードから `AuthUser` を構築する。
 2. `grpc::table` が proto のメッセージをドメイン型へ変換し、service を呼ぶ。
 3. `services` がバリデーションとトランザクション管理を行う。
-4. `repositories` がストレージエンジン（LMDB または TiKV）を使って実データを読み書きする。
+4. `repositories` がストレージエンジン（LMDB）を使って実データを読み書きする。
 5. `error` が失敗を `tonic::Status` に変換する。
 
 ## 補足

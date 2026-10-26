@@ -2,12 +2,11 @@ use tonic::{Request, Response, Status};
 
 use super::auth::authenticate;
 use super::pb::{
-    CopyDatabaseRequest, CreateDatabaseRequest, DatabaseInfo, DeleteDatabaseRequest,
-    DeleteDatabaseResponse, GetDatabaseRequest, ListDatabasesRequest, ListDatabasesResponse,
-    UpdateDatabaseRequest, UpdateDatabaseResponse, database_service_server::DatabaseService,
+    CreateDatabaseRequest, DatabaseInfo, DeleteDatabaseRequest, GetDatabaseRequest,
+    ListDatabasesRequest, ListDatabasesResponse, UpdateDatabaseRequest,
+    database_service_server::DatabaseService,
 };
 use crate::AppState;
-use crate::error::AppError;
 use crate::models::database::DatabaseInfoResponse;
 use crate::models::users::UserRole;
 use crate::services::auth::check_global_role;
@@ -67,13 +66,13 @@ impl DatabaseService for DatabaseServiceImpl {
     async fn update(
         &self,
         request: Request<UpdateDatabaseRequest>,
-    ) -> Result<Response<UpdateDatabaseResponse>, Status> {
+    ) -> Result<Response<DatabaseInfo>, Status> {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
         let description = req.description_update.map(Into::into);
 
-        crate::services::database::update(
+        let res = crate::services::database::update(
             &self.app_state,
             &auth_user,
             &req.db_name,
@@ -81,38 +80,18 @@ impl DatabaseService for DatabaseServiceImpl {
             description,
         )
         .await?;
-        Ok(Response::new(UpdateDatabaseResponse {}))
+        Ok(Response::new(res.into()))
     }
 
     async fn delete(
         &self,
         request: Request<DeleteDatabaseRequest>,
-    ) -> Result<Response<DeleteDatabaseResponse>, Status> {
+    ) -> Result<Response<()>, Status> {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
         check_global_role(&auth_user, UserRole::Manage)?;
         crate::services::database::remove(&self.app_state, &req.db_name).await?;
-        Ok(Response::new(DeleteDatabaseResponse {}))
-    }
-
-    async fn copy(
-        &self,
-        request: Request<CopyDatabaseRequest>,
-    ) -> Result<Response<DatabaseInfo>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
-        let req = request.into_inner();
-
-        check_global_role(&auth_user, UserRole::Manage)?;
-        if req.db_name == req.copy_name {
-            return Err(AppError::Conflict(
-                "Source and destination database names must be different".to_string(),
-            )
-            .into());
-        }
-
-        let res =
-            crate::services::database::copy(&self.app_state, &req.db_name, &req.copy_name).await?;
-        Ok(Response::new(res.into()))
+        Ok(Response::new(()))
     }
 }

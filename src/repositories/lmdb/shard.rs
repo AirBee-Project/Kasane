@@ -2,14 +2,14 @@
 
 use heed::types::Bytes;
 use heed::{Database, RoTxn, WithoutTls};
-use kasane_logic::{ArchivedSpatialIdMap, FlexId, SpatialIdMap};
+use spatial_id::{FlexId, collection::SpatialIdMap};
 
 use super::keys::TableIdAndFlexId;
-use crate::error::{AppError, Stored};
+use crate::error::AppError;
 use crate::models::id::TableId;
 
 pub use crate::repositories::encoding::shard_entry::{
-    MAX_FLEX_ID_PER_SHARD, MERGE_FLEX_ID_THRESHOLD, ShardEntry,
+    LeafView, MAX_FLEX_ID_PER_SHARD, MERGE_FLEX_ID_THRESHOLD, ShardEntry,
 };
 
 /// 複数の `flex_id` を一度の木降下で `担当リーフ領域 -> 到達した flex_id 群` へ振り分ける。
@@ -55,7 +55,7 @@ pub fn route_leaves_for_range(
     tables_data: &Database<TableIdAndFlexId, Bytes>,
     txn: &RoTxn<WithoutTls>,
     table_id: TableId,
-    range: &kasane_logic::RangeId,
+    range: &spatial_id::RangeId,
 ) -> Result<Vec<FlexId>, AppError> {
     let mut out = Vec::new();
     for root in [FlexId::LOWER_MAX, FlexId::UPPER_MAX] {
@@ -71,7 +71,7 @@ fn descend_range(
     txn: &RoTxn<WithoutTls>,
     table_id: TableId,
     region: FlexId,
-    range: &kasane_logic::RangeId,
+    range: &spatial_id::RangeId,
     out: &mut Vec<FlexId>,
 ) -> Result<(), AppError> {
     let Some(bytes) = tables_data.get(txn, &(table_id, region))? else {
@@ -104,16 +104,17 @@ fn descend_batched<'a>(
     }
     match tables_data.get(txn, &(table_id, region))? {
         // 未作成領域と実データリーフのどちらも、到達した全 flex_id がここの担当。
+        // リーフの外へはみ出した部分を書かないよう、領域で切り取って渡す。
         None => {
             out.entry(region)
                 .or_default()
-                .extend(ids.into_iter().cloned());
+                .extend(ids.into_iter().filter_map(|f| f.intersection(&region)));
         }
         Some(bytes) => match ShardEntry::child_pointers(bytes)? {
             None => {
                 out.entry(region)
                     .or_default()
-                    .extend(ids.into_iter().cloned());
+                    .extend(ids.into_iter().filter_map(|f| f.intersection(&region)));
             }
             Some(children) => {
                 for child in children {
@@ -171,29 +172,23 @@ pub fn find_parent_pointer(
     }
 }
 
-/// リーフをゼロコピーで開く（`Arc` の作業木を組み直さない）。読み取り専用。
-pub fn load_leaf_archived<'txn>(
+/// リーフを、値を mmap から複製せずに開く（木を組み直さない）。読み取り専用。
+pub fn load_leaf_view<'txn>(
     tables_data: &Database<TableIdAndFlexId, Bytes>,
     txn: &'txn RoTxn<WithoutTls>,
     table_id: TableId,
     region: &FlexId,
-) -> Result<Option<ArchivedSpatialIdMap<'txn>>, AppError> {
+) -> Result<Option<LeafView<'txn>>, AppError> {
     match tables_data.get(txn, &(table_id, *region))? {
         Some(entry) => match ShardEntry::leaf_payload(entry)? {
-            // SAFETY: 自分の `to_bytes` が書いた mmap 上のバイト列。形式は access が検証する。
-            Some(map_bytes) => Ok(Some(
-                unsafe { ArchivedSpatialIdMap::access(map_bytes) }
-                    .map_err(|e| AppError::corrupt(Stored::Shard, e))?,
-            )),
-            None => Err(AppError::InternalError(
-                "routed to a pointer node".to_string(),
-            )),
+            Some(map_bytes) => Ok(Some(LeafView::parse(map_bytes)?)),
+            None => Err(AppError::Internal("routed to a pointer node".to_string())),
         },
         None => Ok(None),
     }
 }
 
-/// 書き換え用に [`SpatialIdMap`] を復元する。読むだけなら [`load_leaf_archived`]。
+/// 書き換え用に [`SpatialIdMap`] を復元する。読むだけなら [`load_leaf_view`]。
 pub fn load_leaf_map(
     tables_data: &Database<TableIdAndFlexId, Bytes>,
     txn: &RoTxn<WithoutTls>,
@@ -202,14 +197,11 @@ pub fn load_leaf_map(
 ) -> Result<SpatialIdMap<Vec<u8>>, AppError> {
     match tables_data.get(txn, &(table_id, *region))? {
         Some(bytes) => match ShardEntry::decode(bytes)? {
-            ShardEntry::Leaf(map_bytes) => {
-                unsafe { SpatialIdMap::<Vec<u8>>::from_bytes(&map_bytes) }
-                    .map_err(|e| AppError::corrupt(Stored::Shard, e))
+            ShardEntry::Leaf(map_bytes) => Ok(LeafView::parse(&map_bytes)?.to_map()),
+            ShardEntry::Pointers(_) => {
+                Err(AppError::Internal("routed to a pointer node".to_string()))
             }
-            ShardEntry::Pointers(_) => Err(AppError::InternalError(
-                "routed to a pointer node".to_string(),
-            )),
         },
-        None => Ok(SpatialIdMap::new_in_shard(*region)),
+        None => Ok(SpatialIdMap::new()),
     }
 }

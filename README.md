@@ -9,8 +9,7 @@ Kasaneは空間IDとそこに紐づいた値を管理するためのデータベ
 cargo run -- --database-path default_kasane_db --port 3000
 ```
 
-`--database-path` が何を指すかはビルド時に選ばれたバックエンドによります（LMDB はデータ
-ディレクトリ、TiKV は PD エンドポイントのカンマ区切り）。省略時は `.env` の値が使われます。
+`--database-path` には LMDB のデータディレクトリを指定します。省略時は `.env` の値が使われます。
 
 `.env` を使う場合は、`.env.example` をコピーしてください。**環境変数の一覧と既定値は
 `.env.example` に集約してあります。**

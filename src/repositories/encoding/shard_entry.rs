@@ -1,6 +1,6 @@
 //! バックエンドを問わず同じ形式を使う。
 
-use kasane_logic::FlexId;
+use spatial_id::{FlexId, collection::SpatialIdMap};
 
 use crate::error::{AppError, Stored};
 
@@ -38,7 +38,7 @@ const TAG_POINTERS: u8 = 1;
 const LEAF_HEADER_LEN: usize = 1 + 4;
 
 pub enum ShardEntry {
-    /// `SpatialIdMap` の rkyv バイト列。
+    /// [`encode_map`] が書いたバイト列。
     Leaf(Vec<u8>),
     Pointers(Vec<FlexId>),
 }
@@ -133,5 +133,106 @@ impl ShardEntry {
             Some(&TAG_POINTERS) => Ok(None),
             _ => Err(AppError::corrupt(Stored::Shard, "entry is empty")),
         }
+    }
+}
+
+/// リーフの中身を、値の辞書と `(FlexId, 辞書番号)` の列として書く。
+///
+/// 値を辞書へ寄せるのは、隣り合わない領域が同じ値を持つことが多く、値ごとに書くと重複するため。
+///
+/// 形式: `辞書の件数 u32` → `(値の長さ u32, 値)` × 辞書の件数 → `(FlexId, 辞書番号 u32)` × 残り。
+pub fn encode_map(map: &SpatialIdMap<Vec<u8>>) -> Vec<u8> {
+    let mut dictionary: Vec<&[u8]> = Vec::new();
+    let mut index_of: rustc_hash::FxHashMap<&[u8], u32> = rustc_hash::FxHashMap::default();
+    let entries: Vec<(FlexId, u32)> = map
+        .iter()
+        .map(|(id, value)| {
+            let index = *index_of.entry(value.as_slice()).or_insert_with(|| {
+                dictionary.push(value.as_slice());
+                (dictionary.len() - 1) as u32
+            });
+            (id, index)
+        })
+        .collect();
+
+    let mut out = Vec::new();
+    out.extend_from_slice(&(dictionary.len() as u32).to_le_bytes());
+    for value in &dictionary {
+        out.extend_from_slice(&(value.len() as u32).to_le_bytes());
+        out.extend_from_slice(value);
+    }
+    for (id, index) in entries {
+        out.extend_from_slice(&id.encode());
+        out.extend_from_slice(&index.to_le_bytes());
+    }
+    out
+}
+
+/// [`encode_map`] が書いたバイト列を、値を複製せずに読む。
+pub struct LeafView<'a> {
+    dictionary: Vec<&'a [u8]>,
+    pub entries: Vec<(FlexId, u32)>,
+}
+
+impl<'a> LeafView<'a> {
+    pub fn parse(mut bytes: &'a [u8]) -> Result<Self, AppError> {
+        let truncated = || AppError::corrupt(Stored::Shard, "leaf body is truncated");
+        let read_u32 = |bytes: &mut &'a [u8]| -> Result<u32, AppError> {
+            let (head, rest) = bytes.split_first_chunk::<4>().ok_or_else(truncated)?;
+            *bytes = rest;
+            Ok(u32::from_le_bytes(*head))
+        };
+
+        let dictionary_len = read_u32(&mut bytes)? as usize;
+        let mut dictionary = Vec::with_capacity(dictionary_len);
+        for _ in 0..dictionary_len {
+            let len = read_u32(&mut bytes)? as usize;
+            let (value, rest) = bytes.split_at_checked(len).ok_or_else(truncated)?;
+            dictionary.push(value);
+            bytes = rest;
+        }
+
+        const ENTRY_LEN: usize = FlexId::ENCODED_LEN + 4;
+        let (chunks, rest) = bytes.as_chunks::<ENTRY_LEN>();
+        if !rest.is_empty() {
+            return Err(truncated());
+        }
+        let entries = chunks
+            .iter()
+            .map(|chunk| {
+                let (id, index) = chunk
+                    .split_first_chunk::<{ FlexId::ENCODED_LEN }>()
+                    .unwrap();
+                let id = FlexId::decode(id).map_err(|e| AppError::corrupt(Stored::Shard, e))?;
+                let index = u32::from_le_bytes(index.try_into().unwrap());
+                if index as usize >= dictionary.len() {
+                    return Err(AppError::corrupt(
+                        Stored::Shard,
+                        "value index is out of range",
+                    ));
+                }
+                Ok((id, index))
+            })
+            .collect::<Result<_, _>>()?;
+
+        Ok(Self {
+            dictionary,
+            entries,
+        })
+    }
+
+    pub fn value(&self, index: u32) -> &'a [u8] {
+        self.dictionary[index as usize]
+    }
+
+    pub fn values(&self) -> &[&'a [u8]] {
+        &self.dictionary
+    }
+
+    pub fn to_map(&self) -> SpatialIdMap<Vec<u8>> {
+        self.entries
+            .iter()
+            .map(|&(id, index)| (id, self.value(index).to_vec()))
+            .collect()
     }
 }

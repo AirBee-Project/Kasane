@@ -113,103 +113,38 @@ impl TableConstraints {
         }
     }
 
-    /// 既存値を残したまま指定されたフィールドだけを差し替える。
+    /// 制約を `new` に置き換える。
     ///
-    /// `Enum` は選択肢の増減を反映したうえで [`with_enum_ids`](Self::with_enum_ids) と同じ
-    /// 規則で ID を振る。
-    pub fn merged_with(
+    /// `Enum` は既存の選択肢の ID を引き継ぐ。保存済みの値は ID で持っているので、振り直すと
+    /// 値の意味が変わる。
+    pub fn replaced_with(
         data_type: TableDataType,
         current: Option<&Self>,
-        update: super::UpdateTableConstraints,
+        new: Self,
     ) -> Result<Option<Self>, String> {
-        use super::UpdateTableConstraints as Update;
-
-        match (data_type, update) {
+        let new = match (new, current) {
             (
-                TableDataType::Text,
-                Update::Text {
-                    min_length,
-                    max_length,
-                },
-            ) => {
-                let (mut cur_min, mut cur_max) = match current {
-                    Some(Self::Text {
-                        min_length,
-                        max_length,
-                    }) => (*min_length, *max_length),
-                    _ => (None, None),
-                };
-                if let Some(v) = min_length {
-                    cur_min = v;
-                }
-                if let Some(v) = max_length {
-                    cur_max = v;
-                }
-                Ok(Some(Self::Text {
-                    min_length: cur_min,
-                    max_length: cur_max,
-                }))
-            }
-            (TableDataType::Int, Update::Int { min, max }) => {
-                let (mut cur_min, mut cur_max) = match current {
-                    Some(Self::Int { min, max }) => (*min, *max),
-                    _ => (None, None),
-                };
-                if let Some(v) = min {
-                    cur_min = v;
-                }
-                if let Some(v) = max {
-                    cur_max = v;
-                }
-                Ok(Some(Self::Int {
-                    min: cur_min,
-                    max: cur_max,
-                }))
-            }
-            (
-                TableDataType::Enum,
-                Update::Enum {
-                    choices,
-                    add_choices,
-                    remove_choices,
-                },
-            ) => {
-                let (mut cur_choices, mapping, next_id) = match current {
-                    Some(Self::Enum {
-                        choices,
-                        mapping,
-                        next_id,
-                    }) => (choices.clone(), mapping.clone(), *next_id),
-                    _ => (Vec::new(), std::collections::HashMap::new(), 1),
-                };
-                if let Some(new_choices) = choices {
-                    cur_choices = new_choices;
-                }
-                if let Some(adds) = add_choices {
-                    for add in adds {
-                        if !cur_choices.contains(&add) {
-                            cur_choices.push(add);
-                        }
-                    }
-                }
-                if let Some(removes) = remove_choices {
-                    cur_choices.retain(|c| !removes.contains(c));
-                }
-                // ID の割り当ては新規作成時と同じ規則を通す。
-                Self::with_enum_ids(
-                    TableDataType::Enum,
-                    Some(Self::Enum {
-                        choices: cur_choices,
-                        mapping,
-                        next_id,
-                    }),
-                )
-            }
+                Self::Enum { choices, .. },
+                Some(Self::Enum {
+                    mapping, next_id, ..
+                }),
+            ) => Self::Enum {
+                choices,
+                mapping: mapping.clone(),
+                next_id: *next_id,
+            },
+            (new, _) => new,
+        };
+        match (data_type, &new) {
+            (TableDataType::Text, Self::Text { .. })
+            | (TableDataType::Int, Self::Int { .. })
+            | (TableDataType::Enum, Self::Enum { .. }) => {}
             (TableDataType::Presence, _) => {
-                Err("Presence type cannot have constraints".to_string())
+                return Err("Presence type cannot have constraints".to_string());
             }
-            (_, _) => Err("Constraint type does not match data type".to_string()),
+            _ => return Err("Constraint type does not match data type".to_string()),
         }
+        Self::with_enum_ids(data_type, Some(new))
     }
 
     pub fn validate(&self) -> Result<(), String> {

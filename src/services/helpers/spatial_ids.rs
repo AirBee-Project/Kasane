@@ -1,4 +1,4 @@
-use kasane_logic::{FlexId, SpatialId as _, SpatialIdSet};
+use spatial_id::{FlexId, SpatialId as _, collection::SpatialIdSet};
 
 use crate::{
     error::AppError,
@@ -6,7 +6,7 @@ use crate::{
 };
 
 fn invalid_time_reason(reason: impl Into<String>) -> AppError {
-    AppError::InvalidSpatialId {
+    AppError::InvalidArgument {
         reason: reason.into(),
     }
 }
@@ -21,10 +21,9 @@ pub fn resolve_zoom(
     }
 
     match policy {
-        ZoomLevelPolicy::Error => Err(AppError::ZoomLevelPolicy {
-            max_zoom_level,
-            input_zoom_level: zoom,
-        }),
+        ZoomLevelPolicy::Error => Err(AppError::invalid_argument(format!(
+            "zoom level {zoom} exceeds the table's max zoom level {max_zoom_level}"
+        ))),
         ZoomLevelPolicy::Ignore => Ok(None),
         ZoomLevelPolicy::Normalize => Ok(Some(max_zoom_level)),
     }
@@ -36,10 +35,10 @@ pub fn to_spatial_id_set(ids: &[SpatialId]) -> Result<SpatialIdSet, AppError> {
     for spatial_id in ids {
         match spatial_id {
             SpatialId::SingleId(s) => {
-                result.insert(s.clone());
+                result.insert(*s);
             }
             SpatialId::RangeId(r) => {
-                result.insert(r.clone());
+                result.insert(*r);
             }
             SpatialId::FlexId(f) => {
                 result.insert(*f);
@@ -71,7 +70,7 @@ pub fn process_spatial_ids(
                 };
 
                 if zoom == single_id.z() {
-                    result.insert(single_id.clone());
+                    result.insert(*single_id);
                 } else {
                     result.insert(single_id.spatial_parent_at_zoom(zoom)?);
                 }
@@ -87,7 +86,7 @@ pub fn process_spatial_ids(
                 };
 
                 if zoom == range_id.z() {
-                    result.insert(range_id.clone());
+                    result.insert(*range_id);
                 } else {
                     result.insert(range_id.spatial_parent_at_zoom(zoom)?);
                 }
@@ -136,7 +135,7 @@ pub fn process_spatial_ids(
                 if flex_id.is_whole_time() {
                     result.insert(id);
                 } else {
-                    result.insert(id.with_time(flex_id.t_zoomlevel(), flex_id.t())?);
+                    result.insert(id.with_time_segment(flex_id.t_zoomlevel(), flex_id.t_index())?);
                 }
             }
         }
@@ -148,7 +147,7 @@ pub fn process_spatial_ids(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kasane_logic::{FlexId, Interval, RangeId, SingleId};
+    use spatial_id::{FlexId, RangeId, SingleId, time::Interval};
 
     #[test]
     fn test_process_spatial_ids_enforce_no_time() {
@@ -168,7 +167,7 @@ mod tests {
         let flex_with_time = SpatialId::FlexId(
             FlexId::new(0, 0, 0, 0, 0, 0)
                 .unwrap()
-                .with_time(1, 0)
+                .with_time_segment(1, 0)
                 .unwrap(),
         );
 

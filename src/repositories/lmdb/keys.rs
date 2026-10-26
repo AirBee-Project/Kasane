@@ -1,9 +1,8 @@
 //! 複合キーの [`BytesEncode`](heed::BytesEncode) / [`BytesDecode`](heed::BytesDecode) 実装。
-//! バイトの並べ方は TiKV 実装と揃えてあり、どちらでも同じ順序でキーが並ぶ。
 
 use std::borrow::Cow;
 
-use kasane_logic::FlexId;
+use spatial_id::FlexId;
 
 pub struct DbIdAndName;
 

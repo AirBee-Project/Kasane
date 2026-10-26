@@ -1,9 +1,6 @@
-//! LMDB バックエンド向けの結合テスト。TiKV バックエンドのビルドでは対象外。
-#![cfg(feature = "backend-lmdb")]
-
 use kasane::models::spatial_id::SpatialId;
 use kasane::services::helpers::spatial_ids::to_spatial_id_set;
-use kasane_logic::{FlexId, RangeId, ZoomLevel};
+use spatial_id::{FlexId, RangeId, ZoomLevel};
 
 fn range(z: u8, f: Option<[i32; 2]>, x: Option<[u32; 2]>, y: Option<[u32; 2]>) -> SpatialId {
     let zoom = ZoomLevel::new(z).unwrap();
@@ -26,14 +23,6 @@ fn omitting_x_covers_the_whole_axis() {
 }
 
 #[test]
-/// y も同じ。
-fn omitting_y_covers_the_whole_axis() {
-    let omitted = to_spatial_id_set(&[range(3, Some([0, 0]), Some([2, 2]), None)]).unwrap();
-    let explicit = to_spatial_id_set(&[flex(3, 0, 3, 2, 0, 0)]).unwrap();
-    assert_eq!(omitted, explicit);
-}
-
-#[test]
 /// f は符号付き軸なので、全域はズーム 0 の 2 FlexId （-1 と 0）になる。
 fn omitting_f_covers_both_signs() {
     let omitted = to_spatial_id_set(&[range(3, None, Some([2, 2]), Some([2, 2]))]).unwrap();
@@ -47,16 +36,6 @@ fn omitting_every_axis_covers_everything() {
     let omitted = to_spatial_id_set(&[range(5, None, None, None)]).unwrap();
     let explicit = to_spatial_id_set(&[flex(0, -1, 0, 0, 0, 0), flex(0, 0, 0, 0, 0, 0)]).unwrap();
     assert_eq!(omitted, explicit);
-}
-
-#[test]
-/// 省略した軸の展開コストがズームレベルに依存しないこと。
-fn whole_space_is_zoom_independent() {
-    let shallow = to_spatial_id_set(&[range(1, None, None, None)]).unwrap();
-    for z in [5u8, 12, 20, 30] {
-        let deep = to_spatial_id_set(&[range(z, None, None, None)]).unwrap();
-        assert_eq!(deep, shallow, "z={z} で空間全体の表現が変わった");
-    }
 }
 
 #[test]

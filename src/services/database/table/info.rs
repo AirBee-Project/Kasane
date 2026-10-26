@@ -1,9 +1,9 @@
 use crate::{
     AppState,
     error::AppError,
-    models::database::table::TableInfoResponse,
+    models::database::table::TableInfo,
     models::users::{User, UserRole},
-    repositories::{ReadRepository, Storage},
+    repositories::{CatalogRepository, Storage},
     services::helpers::authorize::resolve_authorized_table,
 };
 
@@ -14,7 +14,7 @@ pub async fn info(
     user: &User,
     db_name: &str,
     table_name: &str,
-) -> Result<TableInfoResponse, AppError> {
+) -> Result<TableInfo, AppError> {
     let db_name = db_name.to_string();
     let table_name = table_name.to_string();
     let user = user.clone();
@@ -24,15 +24,8 @@ pub async fn info(
         .read(async move |db| {
             let table =
                 resolve_authorized_table(db, &user, &db_name, &table_name, UserRole::Read).await?;
-            Ok(TableInfoResponse {
-                count: db.table_count(table.id).await?,
-                name: table.name,
-                data_type: table.data_type,
-                max_zoom_level: table.max_zoom_level,
-                constraints: table.constraints,
-                description: table.description,
-                is_temporal: table.is_temporal,
-            })
+            let count = db.table_count(table.id).await?;
+            Ok(TableInfo { table, count })
         })
         .await
 }

@@ -1,4 +1,4 @@
-use kasane_logic::{FlexId, RangeId, SingleId};
+use spatial_id::{FlexId, RangeId, SingleId};
 
 use crate::models::ValueLiteral;
 

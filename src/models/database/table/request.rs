@@ -22,29 +22,3 @@ pub struct CreateTableRequest {
     #[serde(default = "crate::models::helpers::default_true")]
     pub is_temporal: bool,
 }
-
-// 書き込みクロージャはやり直しで複数回呼ばれうるので、`Clone` が要る。
-#[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "type")]
-pub enum UpdateTableConstraints {
-    Text {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        min_length: Option<Option<usize>>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        max_length: Option<Option<usize>>,
-    },
-    Int {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        min: Option<Option<i64>>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        max: Option<Option<i64>>,
-    },
-    Enum {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        choices: Option<Vec<String>>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        add_choices: Option<Vec<String>>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        remove_choices: Option<Vec<String>>,
-    },
-}

@@ -38,7 +38,10 @@ pub fn check_global_role(user: &User, required: UserRole) -> Result<(), AppError
     if user.has_global_role(required) {
         Ok(())
     } else {
-        Err(AuthError::RequiresGlobalRole { required }.into())
+        Err(AuthError::PermissionDenied(format!(
+            "requires the global '{required:?}' role or higher"
+        ))
+        .into())
     }
 }
 
@@ -54,7 +57,7 @@ pub fn check_self_or_admin(user: &User, username: &str) -> Result<(), AppError> 
     if user.is_global_admin() || user.username == username {
         Ok(())
     } else {
-        Err(AuthError::NotSelfOrAdmin.into())
+        Err(AuthError::PermissionDenied("you can only modify your own account".to_string()).into())
     }
 }
 
@@ -162,10 +165,12 @@ pub async fn visible_database<R: CatalogRepository, T>(
 }
 
 fn denied(db_name: &str, table_name: Option<&str>, required: UserRole) -> AppError {
-    AuthError::InsufficientPrivilege {
-        db_name: db_name.to_string(),
-        table_name: table_name.map(str::to_string),
-        required,
-    }
+    let target = match table_name {
+        Some(t) => format!("table '{db_name}.{t}'"),
+        None => format!("database '{db_name}'"),
+    };
+    AuthError::PermissionDenied(format!(
+        "insufficient privileges for {target} (requires {required:?})"
+    ))
     .into()
 }

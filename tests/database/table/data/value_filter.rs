@@ -9,7 +9,7 @@ use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
 use kasane::repositories::lmdb::initialize_database;
 use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
-use kasane_logic::{SingleId, SpatialIdSet};
+use spatial_id::{SingleId, collection::SpatialIdSet};
 
 /// i32 を `interpret_value` と同じ格納形式（ビッグエンディアン）へ。
 fn enc(v: i32) -> Vec<u8> {
@@ -17,7 +17,7 @@ fn enc(v: i32) -> Vec<u8> {
 }
 
 /// FlexId 群を、含まれる SingleId の x 集合へ展開する。
-fn xs(flex_ids: &[kasane_logic::FlexId]) -> HashSet<u32> {
+fn xs(flex_ids: &[spatial_id::FlexId]) -> HashSet<u32> {
     flex_ids
         .iter()
         .flat_map(|f| (*f).single_ids().map(|s| s.x()))
@@ -70,7 +70,7 @@ fn value_filter_reflects_overwrite_and_remove() {
     let insert = |value: i32| {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
         let mut set = SpatialIdSet::new();
-        set.insert(id.clone());
+        set.insert(id);
         w.data_insert_impl(table_id, Some(dt), set, &enc(value))
             .unwrap();
         w.commit().unwrap();
@@ -101,7 +101,7 @@ fn value_filter_reflects_overwrite_and_remove() {
     {
         let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
         let mut set = SpatialIdSet::new();
-        set.insert(id.clone());
+        set.insert(id);
         w.data_remove_impl(table_id, Some(dt), set).unwrap();
         w.commit().unwrap();
     }

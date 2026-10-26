@@ -48,26 +48,19 @@ pub async fn list_users(
 
 #[tracing::instrument(skip_all, fields(username = %username))]
 pub async fn get_user(app_state: &AppState, username: &str) -> Result<UserInfoResponse, AppError> {
-    Ok(UserInfoResponse {
-        privileges: get_privileges(app_state, username).await?,
-        username: username.to_string(),
-    })
-}
-
-#[tracing::instrument(skip_all, fields(username = %username))]
-pub async fn get_privileges(
-    app_state: &AppState,
-    username: &str,
-) -> Result<Vec<PrivilegeRule>, AppError> {
-    let username = username.to_string();
-    app_state
+    let owned = username.to_string();
+    let privileges = app_state
         .db
         .read(async move |r| {
-            let record = r.require_user_record(&username).await?;
+            let record = r.require_user_record(&owned).await?;
             let entries = r.acl_entries(record.id).await?;
             r.render_privileges(record.global_role, &entries).await
         })
-        .await
+        .await?;
+    Ok(UserInfoResponse {
+        privileges,
+        username: username.to_string(),
+    })
 }
 
 /// パスワードをハッシュ化する。
@@ -78,7 +71,7 @@ pub async fn get_privileges(
 async fn hash_password_off_thread(password: String) -> Result<String, AppError> {
     tokio::task::spawn_blocking(move || hash_password(&password))
         .await
-        .map_err(|e| AppError::InternalError(e.to_string()))?
+        .map_err(|e| AppError::Internal(e.to_string()))?
 }
 
 /// root は削除・権限変更の対象にできない。

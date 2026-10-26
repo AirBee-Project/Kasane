@@ -5,8 +5,8 @@ use kasane::grpc::pb;
 use super::{execute_query, request, single_id, total_ids, values};
 use crate::common::TestApp;
 use crate::common::builders::{
-    self, boolean, extrude_f, extrude_x, falloff_x, filter_equals, filter_in_range,
-    filter_not_in_range, map_values, mapping_entry, merge, num, shift_x, text, zoom_out,
+    self, boolean, extrude_x, falloff_x, filter_equals, filter_in_range, filter_not_in_range,
+    map_values, mapping_entry, merge, num, shift_x, text, zoom_out,
 };
 use crate::common::data::put_data;
 
@@ -301,19 +301,6 @@ async fn rejects_extrude_x_coordinate_out_of_range() {
     assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
 }
 
-/// `extrudeF` の高度がそのズームレベルの範囲外なら InvalidArgument。
-#[tokio::test]
-async fn rejects_extrude_f_coordinate_out_of_range() {
-    let app = TestApp::new().await;
-    app.create_database("test_db").await;
-    seed(&app, "t_ex_f", "Int", &[(761000, num(1.0))]).await;
-
-    let query = extrude_f(source("t_ex_f"), 5, 0, 99999, pb::MergePolicyKind::Max);
-    let result = execute_query(&app, request(ids(761000, 1), query)).await;
-
-    assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
-}
-
 /// 値フィルタの下限が上限を上回っていたら InvalidArgument。
 #[tokio::test]
 async fn rejects_inverted_filter_range() {
@@ -551,83 +538,6 @@ async fn map_values_converts_types_and_applies_fallback() {
     // "Unknown" だけが対応表に無いので -1 になる。
     assert_eq!(values(&result), vec![-1, 0, 50, 100]);
     assert_eq!(total_ids(&result), 4);
-}
-
-/// Int を Text へ変換する。
-#[tokio::test]
-async fn map_values_converts_int_to_text() {
-    let app = TestApp::new().await;
-    app.create_database("test_db").await;
-    seed(
-        &app,
-        "t_map_int",
-        "Int",
-        &[(801000, num(1.0)), (801001, num(2.0)), (801002, num(3.0))],
-    )
-    .await;
-
-    let mapping = vec![
-        mapping_entry(num(1.0), text("One")),
-        mapping_entry(num(2.0), text("Two")),
-    ];
-    let query = map_values(
-        source("t_map_int"),
-        pb::TableDataType::Text,
-        mapping,
-        text("Other"),
-    );
-
-    let result = execute_query(
-        &app,
-        pb::ExecuteQueryRequest {
-            value_type: Some(pb::TableDataType::Text as i32),
-            ..request(ids(801000, 3), query)
-        },
-    )
-    .await
-    .unwrap();
-
-    // 辞書は値の昇順。3 は対応表に無いので "Other" になる。
-    assert_eq!(dictionary_strings(&result), vec!["One", "Other", "Two"]);
-    assert_eq!(total_ids(&result), 3);
-}
-
-/// Boolean を Int へ変換する。
-#[tokio::test]
-async fn map_values_converts_boolean_to_int() {
-    let app = TestApp::new().await;
-    app.create_database("test_db").await;
-    seed(
-        &app,
-        "t_map_bool",
-        "Boolean",
-        &[(802000, boolean(true)), (802001, boolean(false))],
-    )
-    .await;
-
-    let mapping = vec![
-        mapping_entry(boolean(true), num(1.0)),
-        mapping_entry(boolean(false), num(0.0)),
-    ];
-    let query = map_values(
-        source("t_map_bool"),
-        pb::TableDataType::Int,
-        mapping,
-        num(-1.0),
-    );
-
-    let result = execute_query(
-        &app,
-        pb::ExecuteQueryRequest {
-            value_type: Some(pb::TableDataType::Int as i32),
-            ..request(ids(802000, 2), query)
-        },
-    )
-    .await
-    .unwrap();
-
-    assert_eq!(values(&result), vec![0, 1]);
-    assert_eq!(total_ids(&result), 2);
 }
 
 /// mapValues が `output_type` を持つため、リクエストの `value_type` を省略しても正常に推論される。

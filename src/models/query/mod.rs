@@ -70,9 +70,7 @@ pub enum FalloffPattern {
     QuadraticOut,
 }
 
-impl From<FalloffPattern>
-    for kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern
-{
+impl From<FalloffPattern> for spatial_id::query::FalloffPattern {
     fn from(val: FalloffPattern) -> Self {
         match val {
             FalloffPattern::Linear => Self::Linear,
@@ -88,7 +86,7 @@ pub enum Direction {
     Lower,
 }
 
-impl From<Direction> for kasane_logic::spatial_id::helpers::Side {
+impl From<Direction> for spatial_id::Side {
     fn from(val: Direction) -> Self {
         match val {
             Direction::Upper => Self::Upper,

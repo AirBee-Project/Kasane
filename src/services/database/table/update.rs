@@ -1,9 +1,9 @@
 use crate::{
     AppState,
     error::AppError,
-    models::database::table::TableSummary,
+    models::database::table::{TableConstraints, TableInfo},
     models::users::{User, UserRole},
-    repositories::{Storage, WriteRepository},
+    repositories::{CatalogRepository, Storage, WriteRepository},
     services::auth::authorize_path,
 };
 
@@ -15,14 +15,14 @@ pub async fn table_update(
     db_name: &str,
     table_name: &str,
     new_name: Option<&str>,
-    new_constraints: Option<Option<crate::models::database::table::UpdateTableConstraints>>,
+    new_constraints: Option<Option<TableConstraints>>,
     description: Option<Option<String>>,
     is_temporal: Option<bool>,
-) -> Result<TableSummary, AppError> {
+) -> Result<TableInfo, AppError> {
     if let Some(Some(desc)) = &description
         && desc.chars().count() > crate::models::database::MAX_DESCRIPTION_LENGTH
     {
-        return Err(AppError::InvalidName {
+        return Err(AppError::InvalidArgument {
             reason: format!(
                 "Description cannot exceed {} characters",
                 crate::models::database::MAX_DESCRIPTION_LENGTH
@@ -44,29 +44,23 @@ pub async fn table_update(
     let new_name = new_name.map(str::to_string);
     let user = user.clone();
 
-    let table = state
+    state
         .db
         .write(async move |txn| {
             // 権限はテーブル ID に紐づくので、改名しても権限はそのテーブルに追従する。
             authorize_path(txn, &user, &db_name, Some(&table_name), UserRole::Manage).await?;
-            txn.table_update(
-                &db_name,
-                &table_name,
-                new_name.as_deref(),
-                new_constraints.clone(),
-                description.clone(),
-                is_temporal,
-            )
-            .await
+            let table = txn
+                .table_update(
+                    &db_name,
+                    &table_name,
+                    new_name.as_deref(),
+                    new_constraints.clone(),
+                    description.clone(),
+                    is_temporal,
+                )
+                .await?;
+            let count = txn.table_count(table.id).await?;
+            Ok(TableInfo { table, count })
         })
-        .await?;
-
-    Ok(TableSummary {
-        name: table.name,
-        data_type: table.data_type,
-        max_zoom_level: table.max_zoom_level,
-        constraints: table.constraints,
-        description: table.description,
-        is_temporal: table.is_temporal,
-    })
+        .await
 }

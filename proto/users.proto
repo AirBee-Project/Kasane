@@ -3,24 +3,23 @@ syntax = "proto3";
 package kasane;
 
 import "common.proto";
+import "google/protobuf/empty.proto";
 
 service UserService {
   // 登録されている利用者の一覧をページネーションで取得する。
   rpc List(ListUsersRequest) returns (ListUsersResponse);
   // 新しい利用者を登録する（作成時の権限付与も可能）。
-  rpc Create(CreateUserRequest) returns (CreateUserResponse);
+  rpc Create(CreateUserRequest) returns (UserInfo);
   // 利用者の詳細情報と保持する権限一覧を取得する。
   rpc Get(GetUserRequest) returns (UserInfo);
   // 利用者を削除する（root は削除不可）。
-  rpc Delete(DeleteUserRequest) returns (DeleteUserResponse);
+  rpc Delete(DeleteUserRequest) returns (google.protobuf.Empty);
   // 利用者のパスワードを変更し、既存トークンを失効させる。
-  rpc UpdatePassword(UpdatePasswordRequest) returns (UpdatePasswordResponse);
-  // 利用者が保持する有効な権限ルール一覧を取得する。
-  rpc GetPrivileges(GetPrivilegesRequest) returns (PrivilegesResponse);
-  // 利用者に権限ルールを付与する（既存ルールは置換）。
-  rpc GrantPrivilege(GrantPrivilegeRequest) returns (GrantPrivilegeResponse);
-  // 利用者から対象リソースに対する権限を剥奪する。
-  rpc RevokePrivilege(RevokePrivilegeRequest) returns (RevokePrivilegeResponse);
+  rpc UpdatePassword(UpdatePasswordRequest) returns (google.protobuf.Empty);
+  // 利用者に権限ルールを付与し（既存ルールは置換）、更新後の利用者情報を返す。
+  rpc GrantPrivilege(GrantPrivilegeRequest) returns (UserInfo);
+  // 利用者から対象リソースに対する権限を剥奪し、更新後の利用者情報を返す。
+  rpc RevokePrivilege(RevokePrivilegeRequest) returns (UserInfo);
 }
 
 // API 上の権限ルール表現。保存形式は UUID ベースだが、外部には
@@ -86,8 +85,6 @@ message CreateUserRequest {
   repeated PrivilegeRule privileges = 3;
 }
 
-message CreateUserResponse {}
-
 // **必要な権限**: 本人 または `global` / `admin`
 message GetUserRequest {
   string username = 1;
@@ -97,8 +94,6 @@ message GetUserRequest {
 message DeleteUserRequest {
   string username = 1;
 }
-
-message DeleteUserResponse {}
 
 // **必要な権限**: `global` / `admin`
 message ListUsersRequest {
@@ -120,29 +115,14 @@ message UpdatePasswordRequest {
   string password = 2;
 }
 
-message UpdatePasswordResponse {}
-
-// **必要な権限**: 本人 または `global` / `admin`
-message GetPrivilegesRequest {
-  string username = 1;
-}
-
-message PrivilegesResponse {
-  repeated PrivilegeRule privileges = 1;
-}
-
 // **必要な権限**: `global` / `admin`
 message GrantPrivilegeRequest {
   string username = 1;
   PrivilegeRule privilege = 2;
 }
 
-message GrantPrivilegeResponse {}
-
 // **必要な権限**: `global` / `admin`
 message RevokePrivilegeRequest {
   string username = 1;
   PrivilegeTarget target = 2;
 }
-
-message RevokePrivilegeResponse {}

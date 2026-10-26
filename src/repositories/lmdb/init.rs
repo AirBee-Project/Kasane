@@ -69,9 +69,6 @@ fn open_env(path: &str) -> Env<heed::WithoutTls> {
 }
 
 /// **版が合わなければ [`AppError::SchemaVersionMismatch`] を返す。**
-///
-/// TiKV 側と同じ失敗をここでも同じ型で表す。片方が panic、もう片方が `Result` だと、
-/// 同じ状況の扱いが呼び出し側で揃わない。
 #[tracing::instrument]
 pub fn initialize_database(path: &str) -> Result<AppDb, AppError> {
     tracing::info!("Initializing database at: {}", path);
@@ -142,10 +139,14 @@ pub fn initialize_database(path: &str) -> Result<AppDb, AppError> {
 }
 
 fn mismatch(found: Option<u32>) -> AppError {
-    AppError::SchemaVersionMismatch {
-        found,
-        expected: SCHEMA_VERSION,
-    }
+    let found = match found {
+        Some(found) => format!("schema version {found}"),
+        None => "data without a schema version".to_string(),
+    };
+    AppError::Internal(format!(
+        "On-disk {found} is not supported by this build (it reads version {SCHEMA_VERSION}); \
+         point the server at a fresh location"
+    ))
 }
 
 /// root は `global` / `admin` だけを持つ。ACL 行は 1 つも要らない。

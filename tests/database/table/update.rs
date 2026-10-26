@@ -61,15 +61,11 @@ async fn test_update_table_constraints_success() {
             table_name: "constrained_table".to_string(),
             new_name: None,
             constraints_update: Some(pb::update_table_request::ConstraintsUpdate::SetConstraints(
-                pb::UpdateTableConstraints {
-                    kind: Some(pb::update_table_constraints::Kind::Int(
-                        pb::update_table_constraints::IntUpdate {
-                            min_update: Some(
-                                pb::update_table_constraints::int_update::MinUpdate::SetMin(10),
-                            ),
-                            max_update: Some(
-                                pb::update_table_constraints::int_update::MaxUpdate::SetMax(100),
-                            ),
+                pb::TableConstraints {
+                    kind: Some(pb::table_constraints::Kind::Int(
+                        pb::table_constraints::Int {
+                            min: Some(10),
+                            max: Some(100),
                         },
                     )),
                 },
@@ -123,13 +119,11 @@ async fn test_update_table_constraints_with_existing_data_violation() {
             table_name: "my_table".to_string(),
             new_name: None,
             constraints_update: Some(pb::update_table_request::ConstraintsUpdate::SetConstraints(
-                pb::UpdateTableConstraints {
-                    kind: Some(pb::update_table_constraints::Kind::Int(
-                        pb::update_table_constraints::IntUpdate {
-                            min_update: Some(
-                                pb::update_table_constraints::int_update::MinUpdate::SetMin(10),
-                            ),
-                            max_update: None,
+                pb::TableConstraints {
+                    kind: Some(pb::table_constraints::Kind::Int(
+                        pb::table_constraints::Int {
+                            min: Some(10),
+                            max: None,
                         },
                     )),
                 },
@@ -157,20 +151,16 @@ async fn test_update_table_constraints_type_mismatch() {
             db_name: "test_db".to_string(),
             table_name: "my_table".to_string(),
             new_name: None,
-            constraints_update: Some(
-                pb::update_table_request::ConstraintsUpdate::SetConstraints(
-                    pb::UpdateTableConstraints {
-                        kind: Some(pb::update_table_constraints::Kind::Text(
-                            pb::update_table_constraints::TextUpdate {
-                                min_length_update: Some(
-                                    pb::update_table_constraints::text_update::MinLengthUpdate::SetMinLength(5),
-                                ),
-                                max_length_update: None,
-                            },
-                        )),
-                    },
-                ),
-            ),
+            constraints_update: Some(pb::update_table_request::ConstraintsUpdate::SetConstraints(
+                pb::TableConstraints {
+                    kind: Some(pb::table_constraints::Kind::Text(
+                        pb::table_constraints::Text {
+                            min_length: Some(5),
+                            max_length: None,
+                        },
+                    )),
+                },
+            )),
             description_update: None,
             is_temporal: None,
         })
@@ -366,7 +356,7 @@ async fn test_update_table_is_temporal_unlock_allows_temporal_write() {
 
     // 時間成分付きの書き込みは拒否される。
     let temporal_id = single_id_with_time(20, 0, 0, 0, 3600, 0);
-    let insert = || pb::InsertDataRequest {
+    let insert = || pb::WriteDataRequest {
         db_name: "test_db".to_string(),
         table_name: "locked_table".to_string(),
         value: Some(num(1.0)),

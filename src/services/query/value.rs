@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use kasane_logic::{
-    Query, SafeValue,
-    merge_policy::{Average, Difference, KeepExisting, Max, Min, Overwrite, Sum},
+use spatial_id::{
+    query::merge_policy::{Average, KeepExisting, Max, Min, Overwrite, SaturatingSub, Sum},
+    query::{Query, SafeValue},
 };
 
 use crate::repositories::traits::DecodeFn;
@@ -56,10 +56,10 @@ pub fn incompatible_source(
 }
 
 fn type_mismatch(value: &ValueLiteral, expected: ValueType) -> AppError {
-    AppError::ValueTypeMismatch {
-        actual: value.value_type(),
-        expected,
-    }
+    AppError::constraint_violation(format!(
+        "value type mismatch: expected {expected:?}, got {:?}",
+        value.value_type()
+    ))
 }
 
 /// `min`/`max` 範囲の検証（境界を含む）。
@@ -146,8 +146,8 @@ pub trait Value: SafeValue + Ord + 'static {
         _q: Query<Self>,
         _z: u8,
         _r: u32,
-        _direction: Option<kasane_logic::spatial_id::helpers::Side>,
-        _pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
+        _direction: Option<spatial_id::Side>,
+        _pattern: spatial_id::query::FalloffPattern,
         _p: MergePolicyKind,
     ) -> Result<Query<Self>, AppError> {
         Err(unsupported_op("falloffX", Self::type_name()))
@@ -156,8 +156,8 @@ pub trait Value: SafeValue + Ord + 'static {
         _q: Query<Self>,
         _z: u8,
         _r: u32,
-        _direction: Option<kasane_logic::spatial_id::helpers::Side>,
-        _pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
+        _direction: Option<spatial_id::Side>,
+        _pattern: spatial_id::query::FalloffPattern,
         _p: MergePolicyKind,
     ) -> Result<Query<Self>, AppError> {
         Err(unsupported_op("falloffY", Self::type_name()))
@@ -166,8 +166,8 @@ pub trait Value: SafeValue + Ord + 'static {
         _q: Query<Self>,
         _z: u8,
         _r: u32,
-        _direction: Option<kasane_logic::spatial_id::helpers::Side>,
-        _pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
+        _direction: Option<spatial_id::Side>,
+        _pattern: spatial_id::query::FalloffPattern,
         _p: MergePolicyKind,
     ) -> Result<Query<Self>, AppError> {
         Err(unsupported_op("falloffF", Self::type_name()))
@@ -207,7 +207,7 @@ macro_rules! dispatch_full {
             MergePolicyKind::Max => Ok($q.$method($($args,)* Max)),
             MergePolicyKind::Min => Ok($q.$method($($args,)* Min)),
             MergePolicyKind::Sum => Ok($q.$method($($args,)* Sum)),
-            MergePolicyKind::Difference => Ok($q.$method($($args,)* Difference)),
+            MergePolicyKind::Difference => Ok($q.$method($($args,)* SaturatingSub)),
             MergePolicyKind::Average => Ok($q.$method($($args,)* Average)),
         }
     };
@@ -254,7 +254,7 @@ macro_rules! impl_ops {
             default: Self,
             p: MergePolicyKind,
         ) -> Result<Query<Self>, AppError> {
-            $dispatch!($ty, lhs, merge(rhs, default), p)
+            $dispatch!($ty, lhs, merge_with_default(rhs, default), p)
         }
     };
 }
@@ -266,8 +266,8 @@ macro_rules! impl_falloff {
             q: Query<Self>,
             z: u8,
             r: u32,
-            direction: Option<kasane_logic::spatial_id::helpers::Side>,
-            pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
+            direction: Option<spatial_id::Side>,
+            pattern: spatial_id::query::FalloffPattern,
             p: MergePolicyKind,
         ) -> Result<Query<Self>, AppError> {
             $dispatch!($ty, q, falloff_x(z, r, direction, pattern), p)
@@ -276,8 +276,8 @@ macro_rules! impl_falloff {
             q: Query<Self>,
             z: u8,
             r: u32,
-            direction: Option<kasane_logic::spatial_id::helpers::Side>,
-            pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
+            direction: Option<spatial_id::Side>,
+            pattern: spatial_id::query::FalloffPattern,
             p: MergePolicyKind,
         ) -> Result<Query<Self>, AppError> {
             $dispatch!($ty, q, falloff_y(z, r, direction, pattern), p)
@@ -286,8 +286,8 @@ macro_rules! impl_falloff {
             q: Query<Self>,
             z: u8,
             r: u32,
-            direction: Option<kasane_logic::spatial_id::helpers::Side>,
-            pattern: kasane_logic::spatial_id::collection::query::ops::unary::falloff::FalloffPattern,
+            direction: Option<spatial_id::Side>,
+            pattern: spatial_id::query::FalloffPattern,
             p: MergePolicyKind,
         ) -> Result<Query<Self>, AppError> {
             $dispatch!($ty, q, falloff_f(z, r, direction, pattern), p)
@@ -431,7 +431,7 @@ impl Value for String {
                     .get(self)
                     .map(|id| id.to_be_bytes().to_vec())
                     .ok_or_else(|| {
-                        AppError::InternalError(format!(
+                        AppError::Internal(format!(
                             "enum value '{self}' has no id in the constraint mapping"
                         ))
                     })

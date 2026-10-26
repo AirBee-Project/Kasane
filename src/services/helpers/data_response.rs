@@ -2,7 +2,7 @@
 //!
 //! `search` と `query` は値の作り方こそ違うが出力形は同一なので、整形を一本化する。
 
-use kasane_logic::{AllowedIntervals, FlexId, SpatialIdSet};
+use spatial_id::{FlexId, collection::SpatialIdSet, time::AllowedIntervals};
 
 use crate::{
     error::AppError,
@@ -26,9 +26,9 @@ where
     Ok(match format {
         OutputFormat::SingleId => {
             let (dictionary, data) = build_groups(groups, to_value, |flex_ids| {
-                // `flat_single_ids_in` は空間側も最大ズームへ均す（917 件 → 4242 件）。
+                // `flat_single_ids` は空間側も最大ズームへ均す（917 件 → 4242 件）。
                 let set: SpatialIdSet = flex_ids.into_iter().collect();
-                set.range_ids_in(AllowedIntervals::calendar())
+                set.reconstructed_time_ranges(Some(AllowedIntervals::calendar()))
                     .flat_map(|range_id| range_id.single_ids())
                     .collect()
             })?;
@@ -37,7 +37,8 @@ where
         OutputFormat::RangeId => {
             let (dictionary, data) = build_groups(groups, to_value, |flex_ids| {
                 let set: SpatialIdSet = flex_ids.into_iter().collect();
-                set.range_ids_in(AllowedIntervals::calendar()).collect()
+                set.reconstructed_time_ranges(Some(AllowedIntervals::calendar()))
+                    .collect()
             })?;
             GetDataResponse::Range(GetDataResponseRange { dictionary, data })
         }

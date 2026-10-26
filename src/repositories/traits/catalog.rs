@@ -59,6 +59,9 @@ pub trait CatalogRepository {
     /// この主体が持つ全行。権限一覧の描画に使う。
     async fn acl_entries(&self, principal: PrincipalId) -> Result<Vec<AclEntry>, AppError>;
 
+    /// テーブルが保持する空間ID(FlexId)の総数。テーブル情報を返す読み書き両方の経路で使う。
+    async fn table_count(&self, table_id: TableId) -> Result<u64, AppError>;
+
     /// この主体が何らかの権限を持つデータベース。
     ///
     /// データベース一覧を**権限の側から**引くために使う。全データベースを走査してから
@@ -159,7 +162,7 @@ pub trait CatalogRepository {
                 if resolved.contains(&entry) {
                     continue;
                 }
-                return Err(AppError::InvalidPrivilege {
+                return Err(AppError::InvalidArgument {
                     reason: "conflicting roles were given for the same target".to_string(),
                 });
             }

@@ -5,8 +5,7 @@ use tonic::Status;
 use super::pb;
 use crate::error::AppError;
 use crate::models::database::table::{
-    Table, TableConstraints as DomainTableConstraints, TableDataType as DomainTableDataType,
-    TableInfoResponse, TableSummary, UpdateTableConstraints as DomainUpdateTableConstraints,
+    TableConstraints as DomainTableConstraints, TableDataType as DomainTableDataType, TableInfo,
 };
 
 /// proto の `enumeration` フィールド（生の `i32`）を、範囲外の値なら `unspecified` にフォールバックした上で対応する enum 値へ変換する。
@@ -122,59 +121,12 @@ impl From<DomainTableConstraints> for pb::TableConstraints {
     }
 }
 
-impl TryFrom<pb::UpdateTableConstraints> for DomainUpdateTableConstraints {
-    type Error = Status;
-
-    fn try_from(update: pb::UpdateTableConstraints) -> Result<Self, Self::Error> {
-        let kind = required(update.kind, "constraints.value.kind")?;
-        Ok(match kind {
-            pb::update_table_constraints::Kind::Text(t) => {
-                use pb::update_table_constraints::text_update::{MaxLengthUpdate, MinLengthUpdate};
-                let min_length = match t.min_length_update {
-                    Some(MinLengthUpdate::ClearMinLength(true)) => Some(None),
-                    Some(MinLengthUpdate::SetMinLength(v)) => Some(Some(v as usize)),
-                    _ => None,
-                };
-                let max_length = match t.max_length_update {
-                    Some(MaxLengthUpdate::ClearMaxLength(true)) => Some(None),
-                    Some(MaxLengthUpdate::SetMaxLength(v)) => Some(Some(v as usize)),
-                    _ => None,
-                };
-                Self::Text {
-                    min_length,
-                    max_length,
-                }
-            }
-            pb::update_table_constraints::Kind::Int(i) => {
-                use pb::update_table_constraints::int_update::{MaxUpdate, MinUpdate};
-                let min = match i.min_update {
-                    Some(MinUpdate::ClearMin(true)) => Some(None),
-                    Some(MinUpdate::SetMin(v)) => Some(Some(v)),
-                    _ => None,
-                };
-                let max = match i.max_update {
-                    Some(MaxUpdate::ClearMax(true)) => Some(None),
-                    Some(MaxUpdate::SetMax(v)) => Some(Some(v)),
-                    _ => None,
-                };
-                Self::Int { min, max }
-            }
-            pb::update_table_constraints::Kind::EnumUpdate(e) => Self::Enum {
-                choices: (!e.choices.is_empty()).then_some(e.choices),
-                add_choices: (!e.add_choices.is_empty()).then_some(e.add_choices),
-                remove_choices: (!e.remove_choices.is_empty()).then_some(e.remove_choices),
-            },
-        })
-    }
-}
-
-impl TryFrom<pb::update_table_request::ConstraintsUpdate> for Option<DomainUpdateTableConstraints> {
+impl TryFrom<pb::update_table_request::ConstraintsUpdate> for Option<DomainTableConstraints> {
     type Error = Status;
 
     fn try_from(update: pb::update_table_request::ConstraintsUpdate) -> Result<Self, Self::Error> {
         match update {
-            pb::update_table_request::ConstraintsUpdate::ClearConstraints(true) => Ok(None),
-            pb::update_table_request::ConstraintsUpdate::ClearConstraints(false) => Ok(None),
+            pb::update_table_request::ConstraintsUpdate::ClearConstraints(_) => Ok(None),
             pb::update_table_request::ConstraintsUpdate::SetConstraints(c) => {
                 Ok(Some(c.try_into()?))
             }
@@ -202,35 +154,17 @@ impl From<pb::update_table_request::DescriptionUpdate> for Option<String> {
     }
 }
 
-impl From<TableSummary> for pb::TableSummary {
-    fn from(table: TableSummary) -> Self {
+impl From<TableInfo> for pb::TableInfo {
+    fn from(TableInfo { table, count }: TableInfo) -> Self {
         Self {
             name: table.name,
             data_type: table.data_type.into(),
             max_zoom_level: table.max_zoom_level as u32,
+            count,
             constraints: table.constraints.map(Into::into),
             description: table.description,
             is_temporal: table.is_temporal,
-        }
-    }
-}
-
-impl From<Table> for pb::TableSummary {
-    fn from(table: Table) -> Self {
-        TableSummary::from(table).into()
-    }
-}
-
-impl From<TableInfoResponse> for pb::TableInfo {
-    fn from(table: TableInfoResponse) -> Self {
-        Self {
-            name: table.name,
-            data_type: table.data_type.into(),
-            max_zoom_level: table.max_zoom_level as u32,
-            count: table.count,
-            constraints: table.constraints.map(Into::into),
-            description: table.description,
-            is_temporal: table.is_temporal,
+            value_index: table.value_index,
         }
     }
 }

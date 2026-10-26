@@ -119,7 +119,7 @@ async fn query_merge_across_two_databases() {
 
     test_app
         .data()
-        .insert(pb::InsertDataRequest {
+        .insert(pb::WriteDataRequest {
             db_name: "other_db".to_string(),
             table_name: "other_table".to_string(),
             value: Some(num(5.0)),
@@ -169,7 +169,7 @@ async fn query_uses_finest_table_resolution() {
     let coarse_id = builders::single_id(20, 0, 19375, 15625);
     test_app
         .data()
-        .insert(pb::InsertDataRequest {
+        .insert(pb::WriteDataRequest {
             db_name: "coarse_db".to_string(),
             table_name: "coarse_table".to_string(),
             value: Some(num(5.0)),

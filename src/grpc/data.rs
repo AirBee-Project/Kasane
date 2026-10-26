@@ -6,8 +6,7 @@ use super::auth::authenticate;
 use super::convert::required;
 use super::convert_data::{DEFAULT_CHUNK_SIZE, data_response_to_chunks};
 use super::pb::{
-    InsertDataRequest, InsertDataResponse, RemoveDataRequest, RemoveDataResponse,
-    SearchDataRequest, SearchDataResponse, UpsertDataRequest, UpsertDataResponse,
+    RemoveDataRequest, SearchDataRequest, SearchDataResponse, WriteDataRequest,
     data_service_server::DataService,
 };
 use crate::AppState;
@@ -54,10 +53,7 @@ impl DataService for DataServiceImpl {
         Ok(Response::new(Box::pin(stream)))
     }
 
-    async fn insert(
-        &self,
-        request: Request<InsertDataRequest>,
-    ) -> Result<Response<InsertDataResponse>, Status> {
+    async fn insert(&self, request: Request<WriteDataRequest>) -> Result<Response<()>, Status> {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
@@ -79,13 +75,10 @@ impl DataService for DataServiceImpl {
             &zoom_level_policy,
         )
         .await?;
-        Ok(Response::new(InsertDataResponse {}))
+        Ok(Response::new(()))
     }
 
-    async fn upsert(
-        &self,
-        request: Request<UpsertDataRequest>,
-    ) -> Result<Response<UpsertDataResponse>, Status> {
+    async fn upsert(&self, request: Request<WriteDataRequest>) -> Result<Response<()>, Status> {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
@@ -107,13 +100,10 @@ impl DataService for DataServiceImpl {
             &zoom_level_policy,
         )
         .await?;
-        Ok(Response::new(UpsertDataResponse {}))
+        Ok(Response::new(()))
     }
 
-    async fn remove(
-        &self,
-        request: Request<RemoveDataRequest>,
-    ) -> Result<Response<RemoveDataResponse>, Status> {
+    async fn remove(&self, request: Request<RemoveDataRequest>) -> Result<Response<()>, Status> {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
@@ -133,6 +123,6 @@ impl DataService for DataServiceImpl {
             &zoom_level_policy,
         )
         .await?;
-        Ok(Response::new(RemoveDataResponse {}))
+        Ok(Response::new(()))
     }
 }

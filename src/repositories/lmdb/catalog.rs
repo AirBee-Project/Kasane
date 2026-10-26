@@ -1,10 +1,9 @@
 //! `_impl` を付けるのは、trait メソッドと同名にすると inherent 側が常に優先されて
-//! trait メソッドを呼べなくなるため（TiKV 実装も同じ規約）。
+//! trait メソッドを呼べなくなるため。
 
 use std::collections::HashMap;
 
 use heed::BytesDecode;
-use kasane_logic::FlexId;
 use uuid::Uuid;
 
 use crate::error::{AppError, Resource, Stored};
@@ -63,7 +62,6 @@ pub(super) fn table_entry(
         .map(|(db_id, name)| (db_id, name.to_string())))
 }
 
-/// すべて mmap 上の点参照なので束ねる意味はなく、TiKV 実装と入口を揃えるためだけにある。
 pub(super) fn database_names(
     db: &AppDb,
     txn: &heed::RoTxn<heed::WithoutTls>,
@@ -90,6 +88,27 @@ pub(super) fn table_entries(
         }
     }
     Ok(out)
+}
+
+/// リーフの件数ヘッダを合算する（リーフ本体は読まない）。
+#[tracing::instrument(skip_all)]
+pub(super) fn table_count(
+    db: &AppDb,
+    txn: &heed::RoTxn<heed::WithoutTls>,
+    table_id: TableId,
+) -> Result<u64, AppError> {
+    let mut total = 0u64;
+    for item in db
+        .tables_data
+        .remap_key_type::<heed::types::Bytes>()
+        .prefix_iter(txn, table_id.0.as_bytes())?
+    {
+        let (_, bytes) = item?;
+        if let Some(count) = super::shard::ShardEntry::leaf_count(bytes)? {
+            total += count as u64;
+        }
+    }
+    Ok(total)
 }
 
 /// 全走査に依存する逆引きは持たず、`tables` のプレフィックススキャンで済ませる。
@@ -278,7 +297,7 @@ impl<'a> KasaneDbWrite<'a> {
         name: &str,
         new_name: Option<String>,
         description: Option<Option<String>>,
-    ) -> Result<(), AppError> {
+    ) -> Result<DatabaseInfoResponse, AppError> {
         let final_new_name = new_name.as_deref().unwrap_or(name);
 
         if name != final_new_name {
@@ -313,49 +332,9 @@ impl<'a> KasaneDbWrite<'a> {
                 .put(&mut self.write_txn, &meta.id, final_new_name)?;
         }
         db.put(&mut self.write_txn, final_new_name, &meta)?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub fn database_copy_impl(
-        &mut self,
-        src_db_name: &str,
-        copy_name: &str,
-    ) -> Result<DatabaseInfoResponse, AppError> {
-        crate::services::helpers::name_valid::name_valid(copy_name)?;
-
-        let src_db_meta = {
-            let db = self.db.databases;
-            db.get(&self.write_txn, src_db_name)?
-                .ok_or_else(|| Resource::Database.not_found(src_db_name.to_string()))?
-        };
-
-        if self.database_info_impl(copy_name)?.is_some() {
-            return Err(Resource::Database.already_exists(copy_name.to_string()));
-        }
-
-        let copy_db_id = crate::models::id::DatabaseId(Uuid::now_v7());
-        let copy_meta = DatabaseMetadata {
-            id: copy_db_id,
-            description: src_db_meta.description.clone(),
-        };
-
-        self.db
-            .databases
-            .put(&mut self.write_txn, copy_name, &copy_meta)?;
-        self.db
-            .database_id_index
-            .put(&mut self.write_txn, &copy_db_id, copy_name)?;
-
-        let table_names = table_names(self.db, &self.write_txn, src_db_meta.id)?;
-
-        for table_name in table_names {
-            self.table_copy_impl(src_db_name, &table_name, copy_name, &table_name)?;
-        }
-
         Ok(DatabaseInfoResponse {
-            name: copy_name.to_string(),
-            description: src_db_meta.description,
+            name: final_new_name.to_string(),
+            description: meta.description,
         })
     }
 }
@@ -460,23 +439,8 @@ impl<'a> KasaneDbRead<'a> {
         Ok(tables)
     }
 
-    #[tracing::instrument(skip_all)]
-    pub fn table_count_impl(&self, table_id: crate::models::id::TableId) -> Result<u64, AppError> {
-        use super::shard::ShardEntry;
-
-        let mut total = 0u64;
-        for item in self
-            .db
-            .tables_data
-            .remap_key_type::<heed::types::Bytes>()
-            .prefix_iter(&self.read_txn, table_id.0.as_bytes())?
-        {
-            let (_, bytes) = item?;
-            if let Some(count) = ShardEntry::leaf_count(bytes)? {
-                total += count as u64;
-            }
-        }
-        Ok(total)
+    pub fn table_count_impl(&self, table_id: TableId) -> Result<u64, AppError> {
+        table_count(self.db, &self.read_txn, table_id)
     }
 }
 
@@ -524,7 +488,7 @@ impl<'a> KasaneDbWrite<'a> {
             return Err(Resource::Database.not_found(db_name.to_string()));
         }
         if table_name.is_empty() {
-            return Err(AppError::InvalidName {
+            return Err(AppError::InvalidArgument {
                 reason: "table name cannot be empty".to_string(),
             });
         }
@@ -594,7 +558,7 @@ impl<'a> KasaneDbWrite<'a> {
         db_name: &str,
         table_name: &str,
         new_name: Option<&str>,
-        new_constraints: Option<Option<crate::models::database::table::UpdateTableConstraints>>,
+        new_constraints: Option<Option<TableConstraints>>,
         description: Option<Option<String>>,
         is_temporal: Option<bool>,
     ) -> Result<Table, AppError> {
@@ -627,7 +591,7 @@ impl<'a> KasaneDbWrite<'a> {
             let new_c = match nc_opt {
                 None => None,
                 Some(nc) => {
-                    TableConstraints::merged_with(table.data_type, table.constraints.as_ref(), nc)
+                    TableConstraints::replaced_with(table.data_type, table.constraints.as_ref(), nc)
                         .map_err(|reason| AppError::ConstraintViolation { reason })?
                 }
             };
@@ -697,11 +661,7 @@ impl<'a> KasaneDbWrite<'a> {
             use super::shard::ShardEntry;
             match ShardEntry::decode(v_bytes)? {
                 ShardEntry::Leaf(map_bytes) => {
-                    let map =
-                        unsafe { kasane_logic::SpatialIdMap::<Vec<u8>>::from_bytes(&map_bytes) }
-                            .map_err(|e| AppError::corrupt(Stored::Shard, e))?;
-                    for (_, stored_val) in map.iter() {
-                        let bytes = stored_val.as_slice();
+                    for &bytes in super::shard::LeafView::parse(&map_bytes)?.values() {
                         let restored_json = crate::services::helpers::value::restore_value(
                             data_type,
                             constraints,
@@ -777,122 +737,5 @@ impl<'a> KasaneDbWrite<'a> {
             .delete(&mut self.write_txn, &table.id)?;
 
         Ok(())
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub fn table_copy_impl(
-        &mut self,
-        src_db_name: &str,
-        src_table_name: &str,
-        copy_db_name: &str,
-        copy_table_name: &str,
-    ) -> Result<Table, AppError> {
-        let src_db_meta = {
-            let db = self.db.databases;
-            db.get(&self.write_txn, src_db_name)?
-                .ok_or_else(|| Resource::Database.not_found(src_db_name.to_string()))?
-        };
-
-        let src_table_meta = {
-            let db = self.db.tables;
-            db.get(&self.write_txn, &(src_db_meta.id, src_table_name))?
-                .ok_or_else(|| Resource::Table.not_found(src_table_name.to_string()))?
-        };
-
-        let copy_db_meta = {
-            let db = self.db.databases;
-            db.get(&self.write_txn, copy_db_name)?
-                .ok_or_else(|| Resource::Database.not_found(copy_db_name.to_string()))?
-        };
-
-        let db_tables = self.db.tables;
-        if db_tables
-            .get(&self.write_txn, &(copy_db_meta.id, copy_table_name))?
-            .is_some()
-        {
-            return Err(Resource::Table.already_exists(copy_table_name.to_string()));
-        }
-
-        crate::services::helpers::name_valid::name_valid(copy_table_name)?;
-
-        let db_index = self.db.table_id_index;
-        let mut copy_table_id = crate::models::id::TableId(uuid::Uuid::now_v7());
-        loop {
-            if db_index.get(&self.write_txn, &copy_table_id)?.is_none() {
-                break;
-            }
-            copy_table_id = crate::models::id::TableId(uuid::Uuid::now_v7());
-        }
-
-        let copy_table_meta = TableMetadata {
-            id: copy_table_id,
-            data_type: src_table_meta.data_type,
-            max_zoom_level: src_table_meta.max_zoom_level,
-            constraints: src_table_meta.constraints.clone(),
-            description: src_table_meta.description.clone(),
-            value_index: src_table_meta.value_index,
-            is_temporal: src_table_meta.is_temporal,
-        };
-
-        db_tables.put(
-            &mut self.write_txn,
-            &(copy_db_meta.id, copy_table_name),
-            &copy_table_meta,
-        )?;
-        db_index.put(
-            &mut self.write_txn,
-            &copy_table_id,
-            &(copy_db_meta.id, copy_table_name),
-        )?;
-
-        let tables_data = self
-            .db
-            .tables_data
-            .remap_types::<heed::types::Bytes, heed::types::Bytes>();
-        let src_prefix = src_table_meta.id.into_bytes();
-
-        let mut data_to_insert = Vec::new();
-        for iter in tables_data.prefix_iter(&self.write_txn, src_prefix.as_slice())? {
-            let (k_bytes, v_bytes) = iter?;
-            // シャード本体のキーは `table_id(16) ‖ FlexId` の固定長。ルーティングノードも
-            // リーフも同じ長さなので、これで両方拾える（`ShardEntry` 側のタグで区別する）。
-            //
-            // 以前は `FlexId::ENCODED_LEN` を 14 決め打ちしていたため、`temporal_id`
-            // feature（23 バイト）を有効にしたビルドでは 1 件も一致せず、コピーが常に
-            // 空になっていた。
-            if k_bytes.len() == 16 + FlexId::ENCODED_LEN {
-                let mut dest_k_bytes = k_bytes.to_vec();
-                dest_k_bytes[0..16].copy_from_slice(&copy_table_id.into_bytes());
-                data_to_insert.push((dest_k_bytes, v_bytes.to_vec()));
-            }
-        }
-        for (k, v) in data_to_insert {
-            tables_data.put(&mut self.write_txn, &k, &v)?;
-        }
-
-        let value_index = self.db.value_index;
-        let mut index_to_insert = Vec::new();
-        for iter in value_index.prefix_iter(&self.write_txn, src_prefix.as_slice())? {
-            let (k_bytes, _) = iter?;
-            if k_bytes.len() >= 16 {
-                let mut dest_k_bytes = k_bytes.to_vec();
-                dest_k_bytes[0..16].copy_from_slice(&copy_table_id.into_bytes());
-                index_to_insert.push(dest_k_bytes);
-            }
-        }
-        for k in index_to_insert {
-            value_index.put(&mut self.write_txn, &k, &())?;
-        }
-
-        Ok(Table {
-            id: copy_table_id,
-            name: copy_table_name.to_string(),
-            data_type: src_table_meta.data_type,
-            max_zoom_level: src_table_meta.max_zoom_level,
-            constraints: src_table_meta.constraints,
-            description: src_table_meta.description,
-            value_index: src_table_meta.value_index,
-            is_temporal: src_table_meta.is_temporal,
-        })
     }
 }
