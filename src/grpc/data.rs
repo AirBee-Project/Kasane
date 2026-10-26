@@ -38,7 +38,7 @@ impl DataService for DataServiceImpl {
             format: req.format.into(),
         };
 
-        let result = crate::services::database::table::data::get::get(
+        let result = crate::services::database::data::get(
             &self.app_state,
             &auth_user,
             &req.db_name,
@@ -65,7 +65,7 @@ impl DataService for DataServiceImpl {
         let zoom_level_policy = req.zoom_level_policy.into();
         let value = required(req.value, "value")?.into();
 
-        crate::services::database::table::data::insert::insert(
+        crate::services::database::data::insert(
             &self.app_state,
             &auth_user,
             &req.db_name,
@@ -90,7 +90,7 @@ impl DataService for DataServiceImpl {
         let zoom_level_policy = req.zoom_level_policy.into();
         let value = required(req.value, "value")?.into();
 
-        crate::services::database::table::data::upsert::upsert(
+        crate::services::database::data::upsert(
             &self.app_state,
             &auth_user,
             &req.db_name,
@@ -114,7 +114,7 @@ impl DataService for DataServiceImpl {
             .collect::<Result<_, _>>()?;
         let zoom_level_policy = req.zoom_level_policy.into();
 
-        crate::services::database::table::data::remove::remove(
+        crate::services::database::data::remove(
             &self.app_state,
             &auth_user,
             &req.db_name,

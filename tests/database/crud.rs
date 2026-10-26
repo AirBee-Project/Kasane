@@ -56,7 +56,6 @@ async fn test_remove_database() {
             max_zoom_level: 25,
             constraints: None,
             description: None,
-            value_index: false,
             is_temporal: true,
         })
         .await

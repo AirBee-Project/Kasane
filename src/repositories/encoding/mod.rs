@@ -2,7 +2,6 @@
 
 pub mod acl;
 pub mod shard_entry;
-pub mod value_index;
 
 use crate::error::{AppError, Stored};
 use crate::models::id::DatabaseId;

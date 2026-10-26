@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use spatial_id::{FlexId, collection::SpatialIdSet};
+use spatial_id::collection::SpatialIdSet;
 
 use crate::error::AppError;
 use crate::models::database::DatabaseInfoResponse;
@@ -12,7 +12,7 @@ use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
 use crate::models::users::{AclEntry, Grant, Scope, UserRecord};
 use crate::repositories::{CatalogRepository, ReadRepository, ValueGroups, WriteRepository};
 
-use super::{KasaneDbRead, KasaneDbWrite, catalog};
+use super::{KasaneDbRead, KasaneDbWrite, catalog, data, users};
 
 /// `RwTxn` は `RoTxn` へ Deref するので、読み書きで同じ自由関数を呼べる。
 macro_rules! impl_catalog_repository {
@@ -90,18 +90,18 @@ impl ReadRepository for KasaneDbRead<'_> {
         &self,
         name: &str,
     ) -> Result<Option<(DatabaseId, DatabaseInfoResponse)>, AppError> {
-        self.database_info_impl(name)
+        catalog::database_info(self, name)
     }
 
     async fn database_list(&self) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
-        self.database_list_impl()
+        catalog::database_list(self)
     }
 
     async fn databases_by_id(
         &self,
         ids: &[DatabaseId],
     ) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
-        self.databases_by_id_impl(ids)
+        catalog::databases_by_id(self, ids)
     }
 
     async fn tables_by_id(
@@ -109,26 +109,18 @@ impl ReadRepository for KasaneDbRead<'_> {
         db_id: DatabaseId,
         ids: &[TableId],
     ) -> Result<Vec<Table>, AppError> {
-        self.tables_by_id_impl(db_id, ids)
-    }
-
-    async fn table_info(&self, db_name: &str, table_name: &str) -> Result<Option<Table>, AppError> {
-        self.table_info_impl(db_name, table_name)
+        catalog::tables_by_id(self, db_id, ids)
     }
 
     async fn resolve_tables(
         &self,
         refs: &[(String, String)],
     ) -> Result<Vec<crate::repositories::ResolvedTable>, AppError> {
-        self.resolve_tables_impl(refs)
-    }
-
-    async fn table_list(&self, db_name: &str) -> Result<Vec<Table>, AppError> {
-        self.table_list_impl(db_name)
+        catalog::resolve_tables(self, refs)
     }
 
     async fn table_list_by_id(&self, db_id: DatabaseId) -> Result<Vec<Table>, AppError> {
-        self.table_list_by_id_impl(db_id)
+        catalog::table_list_by_id(self, db_id)
     }
 
     async fn data_get(
@@ -136,26 +128,7 @@ impl ReadRepository for KasaneDbRead<'_> {
         table_id: TableId,
         ids: SpatialIdSet,
     ) -> Result<ValueGroups, AppError> {
-        self.data_get_impl(table_id, ids)
-    }
-
-    async fn data_filter_eq(
-        &self,
-        table_id: TableId,
-        data_type: TableDataType,
-        value: &[u8],
-    ) -> Result<Vec<FlexId>, AppError> {
-        self.data_filter_eq_impl(table_id, data_type, value)
-    }
-
-    async fn data_filter_range(
-        &self,
-        table_id: TableId,
-        data_type: TableDataType,
-        lo: &[u8],
-        hi: &[u8],
-    ) -> Result<Vec<FlexId>, AppError> {
-        self.data_filter_range_impl(table_id, data_type, lo, hi)
+        data::data_get(self, table_id, ids)
     }
 
     async fn list_users(
@@ -163,29 +136,21 @@ impl ReadRepository for KasaneDbRead<'_> {
         after: Option<&str>,
         limit: usize,
     ) -> Result<Vec<(String, UserRecord)>, AppError> {
-        self.list_users_impl(after, limit)
+        users::list_users(self, after, limit)
     }
 }
 
 impl WriteRepository for KasaneDbWrite<'_> {
-    async fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError> {
-        self.database_info_impl(name)
-    }
-
-    async fn table_info(&self, db_name: &str, table_name: &str) -> Result<Option<Table>, AppError> {
-        self.table_info_impl(db_name, table_name)
-    }
-
     async fn database_create(
         &mut self,
         name: &str,
         description: Option<String>,
     ) -> Result<DatabaseInfoResponse, AppError> {
-        self.database_create_impl(name, description)
+        catalog::database_create(self, name, description)
     }
 
     async fn database_remove(&mut self, name: &str) -> Result<(), AppError> {
-        self.database_remove_impl(name)
+        catalog::database_remove(self, name)
     }
 
     async fn database_update(
@@ -194,7 +159,7 @@ impl WriteRepository for KasaneDbWrite<'_> {
         new_name: Option<String>,
         description: Option<Option<String>>,
     ) -> Result<DatabaseInfoResponse, AppError> {
-        self.database_update_impl(name, new_name, description)
+        catalog::database_update(self, name, new_name, description)
     }
 
     async fn table_create(
@@ -205,17 +170,16 @@ impl WriteRepository for KasaneDbWrite<'_> {
         max_zoom_level: u8,
         constraints: Option<TableConstraints>,
         description: Option<String>,
-        value_index: bool,
         is_temporal: bool,
     ) -> Result<Table, AppError> {
-        self.table_create_impl(
+        catalog::table_create(
+            self,
             db_name,
             table_name,
             data_type,
             max_zoom_level,
             constraints,
             description,
-            value_index,
             is_temporal,
         )
     }
@@ -229,7 +193,8 @@ impl WriteRepository for KasaneDbWrite<'_> {
         description: Option<Option<String>>,
         is_temporal: Option<bool>,
     ) -> Result<Table, AppError> {
-        self.table_update_impl(
+        catalog::table_update(
+            self,
             db_name,
             table_name,
             new_name,
@@ -240,54 +205,29 @@ impl WriteRepository for KasaneDbWrite<'_> {
     }
 
     async fn table_remove(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError> {
-        self.table_remove_impl(db_name, table_name)
+        catalog::table_remove(self, db_name, table_name)
     }
 
     async fn data_insert(
         &mut self,
         table_id: TableId,
-        index: Option<TableDataType>,
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
-        self.data_insert_impl(table_id, index, ids, data)
-    }
-
-    async fn data_insert_many(
-        &mut self,
-        table_id: TableId,
-        index: Option<TableDataType>,
-        entries: Vec<(SpatialIdSet, Vec<u8>)>,
-    ) -> Result<(), AppError> {
-        // 同じリーフへ N 件入れると復号・再直列化を N 回払う（畳み込みは未実装）。
-        for (ids, value) in entries {
-            self.data_insert_impl(table_id, index, ids, &value)?;
-        }
-        Ok(())
+        data::data_insert(self, table_id, ids, data)
     }
 
     async fn data_upsert(
         &mut self,
         table_id: TableId,
-        index: Option<TableDataType>,
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError> {
-        self.data_upsert_impl(table_id, index, ids, data)
+        data::data_upsert(self, table_id, ids, data)
     }
 
-    async fn data_remove(
-        &mut self,
-        table_id: TableId,
-        index: Option<TableDataType>,
-        ids: SpatialIdSet,
-    ) -> Result<(), AppError> {
-        self.data_remove_impl(table_id, index, ids)
-    }
-
-    /// 単一ライタなので排他は要らない。書き込みトランザクション自体が唯一の書き手。
-    async fn lock_user(&mut self, _username: &str) -> Result<(), AppError> {
-        Ok(())
+    async fn data_remove(&mut self, table_id: TableId, ids: SpatialIdSet) -> Result<(), AppError> {
+        data::data_remove(self, table_id, ids)
     }
 
     async fn put_user_record(
@@ -295,15 +235,15 @@ impl WriteRepository for KasaneDbWrite<'_> {
         username: &str,
         record: &UserRecord,
     ) -> Result<(), AppError> {
-        self.put_user_record_impl(username, record)
+        users::put_user_record(self, username, record)
     }
 
     async fn remove_user_record(&mut self, username: &str) -> Result<(), AppError> {
-        self.remove_user_record_impl(username)
+        users::remove_user_record(self, username)
     }
 
     async fn acl_put(&mut self, entry: AclEntry, principal: PrincipalId) -> Result<(), AppError> {
-        self.acl_put_impl(entry, principal)
+        users::acl_put(self, entry, principal)
     }
 
     async fn acl_remove(
@@ -311,11 +251,11 @@ impl WriteRepository for KasaneDbWrite<'_> {
         principal: PrincipalId,
         target: DataTarget,
     ) -> Result<bool, AppError> {
-        self.acl_remove_impl(principal, target)
+        users::acl_remove(self, principal, target)
     }
 
     async fn acl_remove_principal(&mut self, principal: PrincipalId) -> Result<(), AppError> {
-        self.acl_remove_principal_impl(principal)
+        users::acl_remove_principal(self, principal)
     }
 
     async fn acl_count(&self, principal: PrincipalId) -> Result<u32, AppError> {

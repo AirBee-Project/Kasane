@@ -5,7 +5,7 @@
 
 use kasane::error::AppError;
 use kasane::repositories::lmdb::initialize_database;
-use kasane::repositories::{ReadRepository, Storage, WriteRepository};
+use kasane::repositories::{CatalogRepository, ReadRepository, Storage, WriteRepository};
 
 fn temp_db() -> (tempfile::TempDir, kasane::repositories::lmdb::AppDb) {
     let tmp = tempfile::TempDir::new().unwrap();
@@ -65,7 +65,7 @@ async fn write_closure_sees_its_own_writes() {
     // （既存の重複チェックなどがこの性質に依存している）。
     let seen = Storage::write(&db, async |w| {
         WriteRepository::database_create(w, "ryw", None).await?;
-        WriteRepository::database_info(w, "ryw").await
+        CatalogRepository::database_id(w, "ryw").await
     })
     .await
     .unwrap();

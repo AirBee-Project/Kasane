@@ -164,7 +164,6 @@ impl From<TableInfo> for pb::TableInfo {
             constraints: table.constraints.map(Into::into),
             description: table.description,
             is_temporal: table.is_temporal,
-            value_index: table.value_index,
         }
     }
 }

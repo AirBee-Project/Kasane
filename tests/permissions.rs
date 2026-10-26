@@ -224,7 +224,6 @@ async fn post_table(
             max_zoom_level: 5,
             constraints: None,
             description: None,
-            value_index: false,
             is_temporal: true,
         })
         .await
@@ -1014,10 +1013,9 @@ async fn test_global_manage_is_not_server_admin() {
 /// `admin` ロールは global スコープ以外では受け付けられないことを検証する。
 ///
 /// データベース・テーブルスコープのリクエストは `DataRole`（`admin` を持たない）
-/// しか表現できないため、gRPC 化後はこの制約が実行時の検証ではなく型で保証される
+/// しか表現できないため、この制約は実行時の検証ではなく型で保証される
 /// （`pb::DataRole` に `Admin` バリアントが無いので、そもそも該当リクエストを構築できない）。
-/// そのため以前あった「データ/テーブルスコープへの `admin` 指定は 422」という検証対象は
-/// 消滅し、global スコープでだけ通ることの確認だけが残る。
+/// ここでは global スコープでだけ通ることを確かめる。
 async fn test_admin_role_is_rejected_outside_global_scope() {
     let test_app = TestApp::new().await;
     let root_token = test_app.root_token().to_string();

@@ -167,7 +167,6 @@ impl TestApp {
                 max_zoom_level: max_zoom_level as u32,
                 constraints: None,
                 description: None,
-                value_index: false,
                 is_temporal: true,
             })
             .await

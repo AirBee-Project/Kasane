@@ -1,44 +1,38 @@
-use std::sync::Arc;
-use tokio::sync::Semaphore;
+//! Kasane - 階層型空間IDデータベース
+//!
+//! ## 実行モード
+//! 本クレートは feature フラグにより 2 つの実行モードを提供します。
+//!
+//! - **サーバーモード** (`feature = "server"` / デフォルト):
+//!   LMDB バックエンドと認証・ネットワーク gRPC サーバー機能を含むスタンドアロン実行構成。
+//! - **組み込みモード** (`default-features = false`):
+//!   インメモリバックエンド（[`repositories::memory::MemDb`]）を用い、
+//!   プロセス内で直接 gRPC リクエストを処理する [`Embedded`] アダプタを提供する Wasm・埋め込み向け構成。
 
-pub mod backend;
 pub mod error;
 pub mod grpc;
-pub mod logging;
 pub mod models;
 pub mod repositories;
 pub mod services;
 
+#[cfg(feature = "server")]
+pub mod logging;
+
+#[cfg(not(feature = "server"))]
+pub mod embedded;
+#[cfg(not(feature = "server"))]
+pub use embedded::Embedded;
+
+pub use repositories::Db;
+
 /// リクエスト間で共有する状態。
 #[derive(Clone)]
 pub struct AppState {
-    pub db: backend::Db,
-    pub writes: services::database::table::data::coalesce::WriteCoalescer,
-    /// クエリの同時実行数を絞る
-    pub query_concurrency: Arc<Semaphore>,
+    pub db: Db,
 }
 
 impl AppState {
-    pub fn new(db: backend::Db) -> Self {
-        let writes = services::database::table::data::coalesce::WriteCoalescer::new(db.clone());
-        let query_concurrency = Arc::new(Semaphore::new(query_concurrency_limit()));
-        Self {
-            db,
-            writes,
-            query_concurrency,
-        }
+    pub fn new(db: Db) -> Self {
+        Self { db }
     }
-}
-
-/// `KASANE_QUERY_CONCURRENCY` で上書き可能。既定は論理コア数。
-fn query_concurrency_limit() -> usize {
-    std::env::var("KASANE_QUERY_CONCURRENCY")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .filter(|&n| n > 0)
-        .unwrap_or_else(|| {
-            std::thread::available_parallelism()
-                .map(std::num::NonZeroUsize::get)
-                .unwrap_or(4)
-        })
 }

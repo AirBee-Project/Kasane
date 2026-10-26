@@ -11,4 +11,3 @@ pub mod shard_split_bytes;
 pub mod streaming;
 pub mod time_edge_cases;
 pub mod upsert;
-pub mod value_filter;

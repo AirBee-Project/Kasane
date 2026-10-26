@@ -27,11 +27,10 @@ impl TableService for TableServiceImpl {
             max_zoom_level: super::convert::u8_from_u32(req.max_zoom_level, "max_zoom_level")?,
             constraints: req.constraints.map(TryInto::try_into).transpose()?,
             description: req.description,
-            value_index: req.value_index,
             is_temporal: req.is_temporal,
         };
 
-        let table = crate::services::database::table::create::create(
+        let table = crate::services::database::table::create(
             &self.app_state,
             &auth_user,
             &req.db_name,
@@ -46,7 +45,7 @@ impl TableService for TableServiceImpl {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
-        let info = crate::services::database::table::info::info(
+        let info = crate::services::database::table::info(
             &self.app_state,
             &auth_user,
             &req.db_name,
@@ -64,7 +63,7 @@ impl TableService for TableServiceImpl {
         let req = request.into_inner();
 
         let tables =
-            crate::services::database::table::list::list(&self.app_state, &req.db_name, &auth_user)
+            crate::services::database::table::list(&self.app_state, &req.db_name, &auth_user)
                 .await?;
         Ok(Response::new(ListTablesResponse {
             tables: tables.into_iter().map(Into::into).collect(),
@@ -81,7 +80,7 @@ impl TableService for TableServiceImpl {
         let constraints = req.constraints_update.map(TryInto::try_into).transpose()?;
         let description = req.description_update.map(Into::into);
 
-        let table = crate::services::database::table::update::table_update(
+        let table = crate::services::database::table::update(
             self.app_state.clone(),
             &auth_user,
             &req.db_name,
@@ -99,7 +98,7 @@ impl TableService for TableServiceImpl {
         let auth_user = authenticate(&self.app_state, &request).await?;
         let req = request.into_inner();
 
-        crate::services::database::table::remove::remove(
+        crate::services::database::table::remove(
             &self.app_state,
             &auth_user,
             &req.db_name,

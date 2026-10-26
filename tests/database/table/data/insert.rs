@@ -46,7 +46,6 @@ async fn create_table_with_constraints(
             max_zoom_level,
             constraints,
             description: None,
-            value_index: false,
             is_temporal: true,
         })
         .await

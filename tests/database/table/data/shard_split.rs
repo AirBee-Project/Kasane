@@ -7,15 +7,15 @@
 
 use std::collections::HashSet;
 
-use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
 use kasane::repositories::lmdb::initialize_database;
 use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
+use kasane::repositories::{CatalogRepository, ReadRepository, WriteRepository};
 use spatial_id::{RangeId, SingleId, collection::SpatialIdSet};
 
-#[test]
+#[tokio::test]
 #[ignore]
-fn dynamic_shard_splits_and_reads_back() {
+async fn dynamic_shard_splits_and_reads_back() {
     let tmp = tempfile::TempDir::new().unwrap();
     let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     let table_id = TableId(uuid::Uuid::now_v7());
@@ -30,8 +30,7 @@ fn dynamic_shard_splits_and_reads_back() {
         for i in 0..n {
             ids.insert(SingleId::new(20, 0, i * 4, 0).unwrap());
         }
-        w.data_insert_impl(table_id, Some(TableDataType::Text), ids, b"v")
-            .unwrap();
+        w.data_insert(table_id, ids, b"v").await.unwrap();
         w.commit().unwrap();
     }
 
@@ -61,12 +60,12 @@ fn dynamic_shard_splits_and_reads_back() {
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
 
     // 2. table_count が全件と一致（ポインタノードは 0 扱い、子リーフ合算）。
-    assert_eq!(r.table_count_impl(table_id).unwrap(), n as u64);
+    assert_eq!(r.table_count(table_id).await.unwrap(), n as u64);
 
     // 3. 全域を range クエリして、分割後も全 5000 FlexId が読めることを検証。
     let mut query = SpatialIdSet::new();
     query.insert(RangeId::new(20, [0, 0], [0, (n - 1) * 4], [0, 0]).unwrap());
-    let got = r.data_get_impl(table_id, query).unwrap();
+    let got = r.data_get(table_id, query).await.unwrap();
 
     let mut xs: HashSet<u32> = HashSet::new();
     for (value, flex_ids) in got {

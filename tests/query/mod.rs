@@ -1,6 +1,6 @@
 //! `QueryService::Execute` の統合テスト。
 //!
-//! クエリはシャードされた FlexTree を Kasane-Logic の入力源として読み、
+//! クエリはシャードされた FlexTree を spatial-id の入力源として読み、
 //! 対象領域だけを遅延評価する。ここではその end-to-end の挙動を検証する。
 
 mod routing;
@@ -145,8 +145,7 @@ async fn query_merge_across_two_databases() {
 
 /// ズームレベルの異なるテーブルを混在させても、上限は「最も細かいテーブル」に合わせる。
 ///
-/// 細かいテーブル(zoom25)のズームレベルで問い合わせても弾かれず（旧実装は最も粗いテーブルに
-/// 合わせていたため、デフォルトの `Error` policy で 400 になっていた）、
+/// 細かいテーブル(zoom25)のズームレベルで問い合わせても既定の `Error` policy で弾かれず、
 /// 粗いテーブル(zoom20)はその領域を内包する FlexId の値として正しく寄与する。
 #[tokio::test]
 async fn query_uses_finest_table_resolution() {

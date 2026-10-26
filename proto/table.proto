@@ -27,8 +27,6 @@ message TableInfo {
   optional TableConstraints constraints = 5;
   optional string description = 6;
   bool is_temporal = 7;
-  // 値インデックス（値による絞り込み用の二次索引）を維持しているかどうか。
-  bool value_index = 8;
 }
 
 // **必要な権限**: `database` / `manage`
@@ -40,8 +38,6 @@ message CreateTableRequest {
   // 指定しない場合は制約なし。
   optional TableConstraints constraints = 5;
   optional string description = 6;
-  // 値インデックス（値による絞り込み用の二次索引）を維持するかどうか。作成後は変更不可。
-  bool value_index = 7;
   // テーブルが時間IDを扱うかどうか。
   bool is_temporal = 8;
 }

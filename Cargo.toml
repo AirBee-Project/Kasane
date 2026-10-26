@@ -1,39 +1,75 @@
 [package]
 name = "kasane"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2024"
 default-run = "kasane"
 
+[[bin]]
+name = "kasane"
+path = "src/main.rs"
+required-features = ["server"]
+
 [dependencies]
-dotenvy = "0.15"
-spatial-id = { path = "../Kasane-Logic", features = ["unstable"] }
-tokio = { version = "1.52", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
-tokio-stream = "0.1"
+spatial-id = { git = "https://github.com/AirBee-Project/Kasane-Logic.git", rev = "85d7c6f02076c160f2f362f9dda7af10664043f6", default-features = false, features = ["std", "temporal_id", "unstable"] }
+tokio = { version = "1.52", features = ["sync"] }
+tokio-stream = { version = "0.1", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-uuid = { version = "1.23.4", features = ["v7", "fast-rng", "serde"] }
+uuid = { version = "1.23.4", features = ["serde"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-argon2 = "0.5.3"
-jsonwebtoken = { version = "10.4.0", features = ["rust_crypto"] }
-rand_core = { version = "0.6.4", features = ["getrandom"] }
-heed = "0.22.1"
-rayon = "1.12"
 rustc-hash = "2.1.2"
-mimalloc = { version = "0.1", optional = true }
 thiserror = "2.0.20"
-tower-http = { version = "0.7.0", features = ["cors", "trace"] }
-tonic = "0.14.6"
+tonic = { version = "0.14.6", default-features = false, features = ["codegen"] }
 prost = "0.14.4"
-tonic-web = "0.14.6"
-tonic-reflection = "0.14.6"
-tonic-health = "0.14.6"
 tonic-types = "0.14.6"
 tonic-prost = "0.14.6"
-http = "1.5.0"
+
+# サーバー（gRPC の待ち受け、LMDB、認証）だけが使う
+dotenvy = { version = "0.15", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+argon2 = { version = "0.5.3", optional = true }
+hmac = { version = "0.12", optional = true }
+sha2 = { version = "0.10", optional = true }
+base64ct = { version = "1.8", features = ["alloc"], optional = true }
+rand_core = { version = "0.6.4", features = ["getrandom"], optional = true }
+heed = { version = "0.22.1", optional = true }
+mimalloc = { version = "0.1", optional = true }
+tower-http = { version = "0.7.0", features = ["cors", "trace"], optional = true }
+tonic-web = { version = "0.14.6", optional = true }
+tonic-reflection = { version = "0.14.6", optional = true }
+tonic-health = { version = "0.14.6", optional = true }
+http = { version = "1.5.0", optional = true }
 
 [features]
-production = ["dep:mimalloc"]
+default = ["server"]
+# 無効にすると、ストレージはインメモリになり、認証は root 固定になる（プロセス内組み込み向け）。
+server = [
+    "tokio/rt-multi-thread",
+    "tokio/macros",
+    "tokio/net",
+    "tokio/signal",
+    "tokio/time",
+    "tokio-stream/net",
+    "uuid/v7",
+    "uuid/fast-rng",
+    "tonic/transport",
+    "tonic/router",
+    "tonic/server",
+    "dep:dotenvy",
+    "dep:tracing-subscriber",
+    "dep:argon2",
+    "dep:hmac",
+    "dep:sha2",
+    "dep:base64ct",
+    "dep:rand_core",
+    "dep:heed",
+    "dep:tower-http",
+    "dep:tonic-web",
+    "dep:tonic-reflection",
+    "dep:tonic-health",
+    "dep:http",
+]
+production = ["server", "dep:mimalloc"]
 
 [dev-dependencies]
 tempfile = "3.27.0"
@@ -59,3 +95,20 @@ debug = false
 
 [build-dependencies]
 tonic-prost-build = "0.14.6"
+
+# 結合テストは gRPC サーバーと LMDB を立てて行う
+[[test]]
+name = "api"
+required-features = ["server"]
+
+[[test]]
+name = "permissions"
+required-features = ["server"]
+
+[[test]]
+name = "spatial_id_omission"
+required-features = ["server"]
+
+[[test]]
+name = "storage"
+required-features = ["server"]

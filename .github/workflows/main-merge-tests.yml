@@ -27,11 +27,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install mold
-        uses: rui314/setup-mold@v1
-
-      - name: Remove local-only nightly settings
-        run: rm -f .cargo/config.toml rust-toolchain.toml
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -77,3 +72,40 @@ jobs:
             --tests \
             --features production \
             --run-ignored all
+
+  memory:
+    name: Verify (in-memory, Wasm)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          profile: minimal
+          components: clippy
+          targets: wasm32-unknown-unknown
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "kasane"
+          key: memory
+
+      - name: Clippy
+        run: cargo clippy --locked --lib --tests --no-default-features -- -D warnings
+
+      - name: Test
+        run: cargo nextest run --locked --lib --no-default-features
+
+      - name: Check Wasm target
+        run: cargo check --locked --lib --no-default-features --target wasm32-unknown-unknown

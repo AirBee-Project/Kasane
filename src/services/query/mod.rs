@@ -1,4 +1,4 @@
-//! `/query` の実行。翻訳だけを担い、最適化と実行は Kasane-Logic に委ねる。
+//! `/query` の実行。翻訳だけを担い、実行は spatial-id に委ねる。
 
 pub mod value;
 
@@ -33,7 +33,7 @@ use value::Value;
 type ResolvedTables = HashMap<(String, String), Table>;
 
 /// このクエリが読む断面。全ソースで共有する（[`Storage::query_snapshot`] を参照）。
-type QuerySnapshot = <crate::backend::Db as Storage>::QuerySnapshot;
+type QuerySnapshot = <crate::repositories::Db as Storage>::QuerySnapshot;
 
 /// AST が参照する全テーブルを解決し、同時に読み取り権限を検査する。
 ///
@@ -152,7 +152,6 @@ impl QueryNode {
         })
     }
 
-    /// Kasane の DSL を Kasane-Logic の AST へ翻訳する。
     fn translate<V: Value>(
         &self,
         app_state: &AppState,
@@ -396,16 +395,6 @@ fn build_map_values<U: Value, V: Value>(
     Ok(input.map_values(move |value| lookup.get(&value).unwrap_or(&default).clone()))
 }
 
-/// `spawn_blocking` は `JoinHandle` を drop しても中の処理を止めないため、`execute` の async フレームが drop されたら（＝上流でキャンセル）これで `token` を代わりにキャンセルする。
-struct CancelOnDrop(spatial_id::query::CancellationToken);
-
-impl Drop for CancelOnDrop {
-    fn drop(&mut self) {
-        self.0.cancel();
-    }
-}
-
-/// クエリを実行し、対象空間IDの値を返す。
 #[tracing::instrument(skip_all)]
 pub async fn execute(
     app_state: &AppState,
@@ -413,43 +402,20 @@ pub async fn execute(
     request: ExecuteQueryRequest,
     query_params: &GetDataQuery,
 ) -> Result<GetDataResponse, AppError> {
-    // 解決はトランザクション境界を跨ぐのでここで済ませ、評価だけを blocking へ渡す。
     let tables = resolve_tables(app_state, user, &request.query).await?;
 
     // 領域ごとに取り直すと、途中の書き込みを一部だけ見た結果が混ざる。
     let snapshot = app_state.db.query_snapshot().await?;
-
-    let app_state = app_state.clone();
     let format = query_params.format;
 
-    // Queryの同時実行を制限する
-    let _permit = app_state
-        .query_concurrency
-        .clone()
-        .acquire_owned()
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let value_type = request
+        .query
+        .resolve_value_type(&tables, request.value_type)?;
 
-    let token = spatial_id::query::CancellationToken::new();
-    let _cancel_on_drop = CancelOnDrop(token.clone());
-
-    // クエリ演算は同期ブロッキング処理のため、async ワーカーを塞がない。
-    let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || -> Result<GetDataResponse, AppError> {
-        let _permit = _permit;
-        span.in_scope(|| {
-            let value_type = request
-                .query
-                .resolve_value_type(&tables, request.value_type)?;
-
-            // 作業木は単一の値型で組まれるため、ここで値型ごとに単型化する。
-            for_value_type!(
-                value_type, run, &app_state, &request, &tables, &snapshot, format, &token
-            )
-        })
-    })
-    .await
-    .map_err(|e| AppError::Internal(e.to_string()))?
+    // 作業木は単一の値型で組まれるため、ここで値型ごとに単型化する。
+    for_value_type!(
+        value_type, run, app_state, &request, &tables, &snapshot, format
+    )
 }
 
 fn run<V: Value>(
@@ -458,19 +424,16 @@ fn run<V: Value>(
     tables: &ResolvedTables,
     snapshot: &QuerySnapshot,
     format: OutputFormat,
-    token: &spatial_id::query::CancellationToken,
 ) -> Result<GetDataResponse, AppError> {
     let targets = to_spatial_id_set(&request.spatial_ids)?;
 
     // 外接矩形 1 つにまとめると `bounding_box()` が全 FlexId を覆わず取りこぼす。
     let bounds: Vec<RangeId> = targets.iter().map(|id| RangeId::from(&id)).collect();
     if bounds.is_empty() {
-        // 対象領域が空。クエリを走らせるまでもない。
         let empty: Vec<(V, Vec<spatial_id::FlexId>)> = Vec::new();
         return data_response::build(empty, format, |v| Ok(v.to_value()));
     }
 
-    // DSL → spatial-id のクエリへ翻訳する。
     let query = tracing::info_span!("query.translate", source_tables = tables.len())
         .in_scope(|| request.query.translate::<V>(app_state, tables, snapshot))?;
 
@@ -478,7 +441,7 @@ fn run<V: Value>(
     let flex_ids = tracing::info_span!("query.run_within", target_regions = bounds.len())
         .in_scope(|| {
             query
-                .get_overlapping_cancellable(targets.iter().collect::<Vec<_>>(), token)
+                .get_overlapping(targets.iter().collect::<Vec<_>>())
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(AppError::from)
         })?
@@ -488,7 +451,6 @@ fn run<V: Value>(
     data_response::build(by_value, format, |v| Ok(v.to_value()))
 }
 
-/// FlexId 列を値ごとにグループ化する。
 fn group_by_value<V: Value>(
     flex_ids: impl Iterator<Item = (spatial_id::FlexId, V)>,
 ) -> BTreeMap<V, Vec<spatial_id::FlexId>> {

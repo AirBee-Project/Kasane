@@ -16,12 +16,6 @@ use super::CatalogRepository;
 // `async fn` の Future に `Send` を課さない理由は [`Storage`](super::Storage) を参照。
 #[allow(async_fn_in_trait)]
 pub trait WriteRepository: CatalogRepository {
-    // 作成前の重複確認のため「同じトランザクション内で読んでから書く」経路も要る。
-
-    async fn database_info(&self, name: &str) -> Result<Option<DatabaseInfoResponse>, AppError>;
-
-    async fn table_info(&self, db_name: &str, table_name: &str) -> Result<Option<Table>, AppError>;
-
     async fn database_create(
         &mut self,
         name: &str,
@@ -37,7 +31,6 @@ pub trait WriteRepository: CatalogRepository {
         description: Option<Option<String>>,
     ) -> Result<DatabaseInfoResponse, AppError>;
 
-    /// `value_index`: 値インデックスを維持するか。作成後は変更できない。
     #[allow(clippy::too_many_arguments)]
     async fn table_create(
         &mut self,
@@ -47,7 +40,6 @@ pub trait WriteRepository: CatalogRepository {
         max_zoom_level: u8,
         constraints: Option<TableConstraints>,
         description: Option<String>,
-        value_index: bool,
         is_temporal: bool,
     ) -> Result<Table, AppError>;
 
@@ -66,54 +58,25 @@ pub trait WriteRepository: CatalogRepository {
 
     async fn table_remove(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError>;
 
-    /// `index` は値インデックスへ反映する型。`None` なら索引を維持しない。
-    ///
-    /// 「索引するか」と「どう索引するか」を 1 引数にまとめてあるのは、書き込み経路が型を
-    /// 必要とするのが索引キーの順序保存エンコードだけだから。
     async fn data_insert(
         &mut self,
         table_id: TableId,
-        index: Option<TableDataType>,
         ids: SpatialIdSet,
         data: &[u8],
-    ) -> Result<(), AppError>;
-
-    /// `entries` は `(空間 ID, 値)` の並び。同じ空間 ID が複数回現れたら後勝ち。
-    ///
-    /// 1 件ずつ [`data_insert`](Self::data_insert) を呼ぶのと結果は同じだが、シャードを
-    /// 1 度しか読み書きしない。このツリーは 1 件の変更でもリーフを丸ごと書き直すので、
-    /// 別々に書くと「リーフのサイズ × 件数」を書くことになる。
-    async fn data_insert_many(
-        &mut self,
-        table_id: TableId,
-        index: Option<TableDataType>,
-        entries: Vec<(SpatialIdSet, Vec<u8>)>,
     ) -> Result<(), AppError>;
 
     async fn data_upsert(
         &mut self,
         table_id: TableId,
-        index: Option<TableDataType>,
         ids: SpatialIdSet,
         data: &[u8],
     ) -> Result<(), AppError>;
 
-    async fn data_remove(
-        &mut self,
-        table_id: TableId,
-        index: Option<TableDataType>,
-        ids: SpatialIdSet,
-    ) -> Result<(), AppError>;
+    async fn data_remove(&mut self, table_id: TableId, ids: SpatialIdSet) -> Result<(), AppError>;
 
     // --- 利用者と ACL の素の操作 ---
     //
     // 実装が用意するのはここまで。付与・剥奪の意味論は下の既定実装が持つ。
-
-    /// この利用者を触ることを宣言する。
-    ///
-    /// 単一ライタのバックエンドでは何もしない。分散バックエンドでは
-    /// 「存在しないことを確認してから作る」「読んでから書き戻す」を守るための排他になる。
-    async fn lock_user(&mut self, username: &str) -> Result<(), AppError>;
 
     async fn put_user_record(
         &mut self,
@@ -150,8 +113,6 @@ pub trait WriteRepository: CatalogRepository {
         password_hash: String,
         privileges: &[PrivilegeRule],
     ) -> Result<(), AppError> {
-        self.lock_user(username).await?;
-
         if self.user_record(username).await?.is_some() {
             return Err(Resource::User.already_exists(username));
         }
@@ -181,8 +142,6 @@ pub trait WriteRepository: CatalogRepository {
         username: &str,
         password_hash: String,
     ) -> Result<(), AppError> {
-        self.lock_user(username).await?;
-
         let mut record = self.require_user_record(username).await?;
         record.password_hash = password_hash;
         record.token_version = record.token_version.wrapping_add(1);
@@ -197,8 +156,6 @@ pub trait WriteRepository: CatalogRepository {
         username: &str,
         rule: &PrivilegeRule,
     ) -> Result<(), AppError> {
-        self.lock_user(username).await?;
-
         let resolved = self.resolve_rule(rule).await?;
         let record = self.require_user_record(username).await?;
 
@@ -229,8 +186,6 @@ pub trait WriteRepository: CatalogRepository {
         username: &str,
         target: &PrivilegeTarget,
     ) -> Result<(), AppError> {
-        self.lock_user(username).await?;
-
         let not_found = || {
             Resource::Privilege.not_found(match target {
                 PrivilegeTarget::Global => "global".to_string(),
@@ -262,8 +217,6 @@ pub trait WriteRepository: CatalogRepository {
     }
 
     async fn delete_user(&mut self, username: &str) -> Result<(), AppError> {
-        self.lock_user(username).await?;
-
         let record = self.require_user_record(username).await?;
         self.acl_remove_principal(record.id).await?;
         self.remove_user_record(username).await

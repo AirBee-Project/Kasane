@@ -183,7 +183,6 @@ async fn test_update_table_description_success() {
             max_zoom_level: 25,
             constraints: None,
             description: Some("Initial description.".to_string()),
-            value_index: false,
             is_temporal: true,
         })
         .await
@@ -326,7 +325,6 @@ async fn test_update_table_is_temporal_unlock_allows_temporal_write() {
             max_zoom_level: 25,
             constraints: None,
             description: None,
-            value_index: false,
             is_temporal: false,
         })
         .await

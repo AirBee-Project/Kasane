@@ -1,4 +1,4 @@
-//! ACL 行の鍵と値。両バックエンドで同じ並びにする。
+//! ACL 行の鍵と値。
 //!
 //! ```text
 //!   forward : principal_id(16) ‖ db_id(16) ‖ table_slot(16)  -> role(1)

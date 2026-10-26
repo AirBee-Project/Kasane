@@ -91,7 +91,6 @@ async fn test_delete_table_cache_bug() {
             max_zoom_level: 25,
             constraints: None,
             description: None,
-            value_index: false,
             is_temporal: true,
         })
         .await

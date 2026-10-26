@@ -14,6 +14,7 @@ pub const SCHEMA_VERSION: u32 = 2;
 pub const ROOT_USERNAME: &str = "root";
 
 /// `ROOT_PASSWORD` 未設定時の既定パスワード。
+#[cfg(feature = "server")]
 fn root_password() -> String {
     std::env::var("ROOT_PASSWORD")
         .ok()
@@ -21,4 +22,12 @@ fn root_password() -> String {
         .unwrap_or_else(|| "password".to_string())
 }
 
+#[cfg(feature = "server")]
 pub mod lmdb;
+pub mod memory;
+
+/// 現在の feature 設定で有効なストレージ型。
+#[cfg(feature = "server")]
+pub type Db = lmdb::AppDb;
+#[cfg(not(feature = "server"))]
+pub type Db = memory::MemDb;

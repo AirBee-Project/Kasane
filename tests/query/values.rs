@@ -62,7 +62,6 @@ async fn create_enum_table(app: &TestApp, table: &str, choices: &[&str]) {
                 )),
             }),
             description: None,
-            value_index: false,
             is_temporal: true,
         })
         .await
@@ -314,7 +313,7 @@ async fn rejects_inverted_filter_range() {
     assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
 }
 
-/// 範囲内のパラメータなら従来どおり通ること（上の3件の裏取り）。
+/// 範囲内のパラメータなら通ること（上の3件の裏取り）。
 #[tokio::test]
 async fn accepts_in_range_operator_parameters() {
     let app = TestApp::new().await;
@@ -456,7 +455,7 @@ async fn accepts_targets_finer_than_source_max_zoom_level() {
     assert!(total_ids(&result) > 0, "FlexId が返っていない");
 }
 
-/// 粗い側（`max_zoom_level` 未満）の要求は従来どおり通る。
+/// 粗い側（`max_zoom_level` 未満）の要求は通る。
 #[tokio::test]
 async fn accepts_targets_coarser_than_source_max_zoom_level() {
     let app = TestApp::new().await;
@@ -484,7 +483,7 @@ async fn accepts_targets_coarser_than_source_max_zoom_level() {
     assert_eq!(values(&result), vec![3]);
 }
 
-/// ズームレベルの絶対上限（35）は従来どおり検証される。
+/// ズームレベルの絶対上限（35）は検証される。
 #[tokio::test]
 async fn rejects_zoom_level_beyond_absolute_maximum() {
     let app = TestApp::new().await;

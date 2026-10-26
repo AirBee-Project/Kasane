@@ -1,4 +1,4 @@
-use kasane::{AppState, backend};
+use kasane::AppState;
 use std::net::SocketAddr;
 
 #[cfg(feature = "production")]
@@ -9,13 +9,13 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 async fn main() {
     dotenvy::dotenv().ok();
     kasane::logging::init();
-    let database_path = backend::default_target();
+    let database_path =
+        std::env::var("DATABASE_DIR").unwrap_or_else(|_| "default_kasane_db".to_string());
     let port = std::env::var("PORT")
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(5172);
-    let db = backend::open(&database_path)
-        .await
+    let db = kasane::repositories::lmdb::initialize_database(&database_path)
         .expect("failed to open the storage backend");
 
     let app_state = AppState::new(db);
@@ -29,9 +29,8 @@ async fn main() {
     };
 
     tracing::info!(
-        "Kasane is running on grpc://{} (backend: {}, target: {})",
+        "Kasane is running on grpc://{} (target: {})",
         bound.local_addr(),
-        backend::NAME,
         database_path,
     );
 

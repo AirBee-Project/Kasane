@@ -1,12 +1,12 @@
-use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
+use kasane::repositories::WriteRepository;
 use kasane::repositories::lmdb::KasaneDbWrite;
 use kasane::repositories::lmdb::initialize_database;
 use spatial_id::{RangeId, SingleId, collection::SpatialIdSet, query::CancellationToken};
 
 /// `TableSource::read_flex_ids` が範囲内の全 FlexId を返すこと。
-#[test]
-fn table_source_read_flex_ids_returns_all_flex_ids() {
+#[tokio::test]
+async fn table_source_read_flex_ids_returns_all_flex_ids() {
     use kasane::repositories::lmdb::query_source::TableSource;
     use spatial_id::query::Source;
     use std::sync::Arc;
@@ -20,13 +20,9 @@ fn table_source_read_flex_ids_returns_all_flex_ids() {
         let mut w = KasaneDbWrite::new(wtxn, &db);
         let mut set = SpatialIdSet::new();
         set.insert(SingleId::new(20, 0, 790000 + i, 500000).unwrap());
-        w.data_insert_impl(
-            table_id,
-            Some(TableDataType::Int),
-            set,
-            &(i as i32).to_be_bytes(),
-        )
-        .unwrap();
+        w.data_insert(table_id, set, &(i as i32).to_be_bytes())
+            .await
+            .unwrap();
         w.commit().unwrap();
     }
 

@@ -2,7 +2,6 @@ use crate::models::ValueLiteral;
 use crate::models::spatial_id::SpatialId;
 
 #[derive(Debug, Clone)]
-/// 空間IDの配列を指定して値を取得する
 pub struct GetDataRequest {
     pub spatial_ids: Vec<SpatialId>,
     pub zoom_level_policy: ZoomLevelPolicy,

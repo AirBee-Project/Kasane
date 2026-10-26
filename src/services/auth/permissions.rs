@@ -45,13 +45,11 @@ pub fn check_global_role(user: &User, required: UserRole) -> Result<(), AppError
     }
 }
 
-/// サーバー管理者（`global` スコープの `admin`）を要求する。
 #[tracing::instrument(skip_all)]
 pub fn check_global_admin(user: &User) -> Result<(), AppError> {
     check_global_role(user, UserRole::Admin)
 }
 
-/// 本人、またはサーバー管理者であることを要求する。
 #[tracing::instrument(skip_all, fields(target_username = %username))]
 pub fn check_self_or_admin(user: &User, username: &str) -> Result<(), AppError> {
     if user.is_global_admin() || user.username == username {

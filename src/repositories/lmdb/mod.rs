@@ -64,9 +64,6 @@ pub struct AppDb {
 
     /// `(TableId, FlexId)` -> シャードエントリ（`encoding::shard_entry`）
     pub tables_data: Database<TableIdAndFlexId, Bytes>,
-
-    /// `table_id ‖ 順序保存エンコード値 ‖ flexid` -> 値なし
-    pub value_index: Database<Bytes, Unit>,
 }
 
 /// `AppError` をバックエンド非依存に保つため、heed のエラー型を知るのはここだけにする。

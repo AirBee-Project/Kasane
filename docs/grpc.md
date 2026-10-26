@@ -50,9 +50,8 @@ grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
 や [`grpc-web`](https://github.com/grpc/grpc-web) のクライアントで直接呼び出せます
 （別途プロキシは不要です）。
 
-許可オリジンは `KASANE_CORS_ALLOWED_ORIGINS`（カンマ区切り）で絞れます。未設定時は全オリジンを
-許可します（Bearer トークン方式で Cookie を使わないため、絞らなくてもただちに悪用できるわけ
-ではありません）。
+CORS はすべてのオリジンを許可します（Bearer トークン方式で Cookie を使わないため、絞らなくても
+ただちに悪用できるわけではありません）。
 
 `DataService.Search` および `QueryService.Execute` の Server Streaming は gRPC-Web でも完全にサポートされており、ブラウザ側で `for await (const chunk of client.search(req))` のようにストリーミング受信が可能です（大量データ取得時もブラウザ側のメモリ消費を抑えられます）。
 

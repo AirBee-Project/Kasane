@@ -5,11 +5,11 @@
 
 use std::collections::HashSet;
 
-use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
 use kasane::repositories::lmdb::initialize_database;
 use kasane::repositories::lmdb::shard::{MAX_FLEX_ID_PER_SHARD, MERGE_FLEX_ID_THRESHOLD};
 use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
+use kasane::repositories::{CatalogRepository, ReadRepository, WriteRepository};
 use spatial_id::{RangeId, SingleId, collection::SpatialIdSet};
 
 /// このテーブルのシャードキー数と、ポインタノードの有無を返す。
@@ -30,12 +30,11 @@ fn shard_stats(db: &kasane::repositories::lmdb::AppDb, table_id: TableId) -> (us
     (key_count, has_pointer)
 }
 
-#[test]
-fn siblings_merge_after_mass_remove() {
+#[tokio::test]
+async fn siblings_merge_after_mass_remove() {
     let tmp = tempfile::TempDir::new().unwrap();
     let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     let table_id = TableId(uuid::Uuid::now_v7());
-    let dt = TableDataType::Text;
 
     // 1. 分割が必ず起きる数を挿入する（閾値の2倍）。
     let n: u32 = (MAX_FLEX_ID_PER_SHARD * 2) as u32;
@@ -45,7 +44,7 @@ fn siblings_merge_after_mass_remove() {
         for i in 0..n {
             ids.insert(SingleId::new(20, 0, i * 4, 0).unwrap());
         }
-        w.data_insert_impl(table_id, Some(dt), ids, b"v").unwrap();
+        w.data_insert(table_id, ids, b"v").await.unwrap();
         w.commit().unwrap();
     }
     let (key_count, has_pointer) = shard_stats(&db, table_id);
@@ -63,7 +62,7 @@ fn siblings_merge_after_mass_remove() {
         for i in 0..keep_from {
             ids.insert(SingleId::new(20, 0, i * 4, 0).unwrap());
         }
-        w.data_remove_impl(table_id, Some(dt), ids).unwrap();
+        w.data_remove(table_id, ids).await.unwrap();
         w.commit().unwrap();
     }
 
@@ -78,11 +77,11 @@ fn siblings_merge_after_mass_remove() {
     // 4. table_count が残数と一致、かつ残りの全 FlexId が読めること。
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
     let remaining = (n - keep_from) as u64;
-    assert_eq!(r.table_count_impl(table_id).unwrap(), remaining);
+    assert_eq!(r.table_count(table_id).await.unwrap(), remaining);
 
     let mut query = SpatialIdSet::new();
     query.insert(RangeId::new(20, [0, 0], [keep_from * 4, (n - 1) * 4], [0, 0]).unwrap());
-    let got = r.data_get_impl(table_id, query).unwrap();
+    let got = r.data_get(table_id, query).await.unwrap();
     let mut xs: HashSet<u32> = HashSet::new();
     for (value, flex_ids) in got {
         assert_eq!(value, b"v".to_vec());

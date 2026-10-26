@@ -136,121 +136,111 @@ impl AppDb {
     }
 }
 
-impl KasaneDbRead<'_> {
-    #[tracing::instrument(skip_all)]
-    pub fn list_users_impl(
-        &self,
-        after: Option<&str>,
-        limit: usize,
-    ) -> Result<Vec<(String, UserRecord)>, AppError> {
-        use std::ops::Bound;
+#[tracing::instrument(skip_all)]
+pub(super) fn list_users(
+    r: &KasaneDbRead<'_>,
+    after: Option<&str>,
+    limit: usize,
+) -> Result<Vec<(String, UserRecord)>, AppError> {
+    use std::ops::Bound;
 
-        // 名前の辞書順で進む。`Excluded` なので `after` 自身は含まれない。
-        let lower = after.map_or(Bound::Unbounded, Bound::Excluded);
+    // 名前の辞書順で進む。`Excluded` なので `after` 自身は含まれない。
+    let lower = after.map_or(Bound::Unbounded, Bound::Excluded);
 
-        self.db
-            .users
-            .range(&self.read_txn, &(lower, Bound::Unbounded))?
-            .take(limit)
-            .map(|item| {
-                let (username, json) = item?;
-                let record = serde_json::from_str(json)
-                    .map_err(|e| AppError::corrupt(Stored::UserRecord, e))?;
-                Ok((username.to_string(), record))
-            })
-            .collect()
-    }
+    r.db.users
+        .range(&r.read_txn, &(lower, Bound::Unbounded))?
+        .take(limit)
+        .map(|item| {
+            let (username, json) = item?;
+            let record =
+                serde_json::from_str(json).map_err(|e| AppError::corrupt(Stored::UserRecord, e))?;
+            Ok((username.to_string(), record))
+        })
+        .collect()
 }
 
-impl KasaneDbWrite<'_> {
-    #[tracing::instrument(skip_all, fields(username = %username))]
-    pub(super) fn put_user_record_impl(
-        &mut self,
-        username: &str,
-        record: &UserRecord,
-    ) -> Result<(), AppError> {
-        let json =
-            serde_json::to_string(record).map_err(|e| AppError::corrupt(Stored::UserRecord, e))?;
-        self.db
-            .users
-            .put(&mut self.write_txn, username, json.as_str())?;
-        Ok(())
-    }
+#[tracing::instrument(skip_all, fields(username = %username))]
+pub(super) fn put_user_record(
+    w: &mut KasaneDbWrite<'_>,
+    username: &str,
+    record: &UserRecord,
+) -> Result<(), AppError> {
+    let json =
+        serde_json::to_string(record).map_err(|e| AppError::corrupt(Stored::UserRecord, e))?;
+    w.db.users.put(&mut w.write_txn, username, json.as_str())?;
+    Ok(())
+}
 
-    #[tracing::instrument(skip_all, fields(username = %username))]
-    pub(super) fn remove_user_record_impl(&mut self, username: &str) -> Result<(), AppError> {
-        self.db.users.delete(&mut self.write_txn, username)?;
-        Ok(())
-    }
+#[tracing::instrument(skip_all, fields(username = %username))]
+pub(super) fn remove_user_record(
+    w: &mut KasaneDbWrite<'_>,
+    username: &str,
+) -> Result<(), AppError> {
+    w.db.users.delete(&mut w.write_txn, username)?;
+    Ok(())
+}
 
-    #[tracing::instrument(skip_all, fields(principal = %principal))]
-    pub(super) fn acl_put_impl(
-        &mut self,
-        entry: AclEntry,
-        principal: PrincipalId,
-    ) -> Result<(), AppError> {
-        let row = AclKey::new(principal, entry.target).rows();
-        self.db
-            .acl
-            .put(&mut self.write_txn, &row.forward, &[entry.role.into()])?;
-        self.db
-            .acl_by_object
-            .put(&mut self.write_txn, &row.reverse, &())?;
-        Ok(())
-    }
+#[tracing::instrument(skip_all, fields(principal = %principal))]
+pub(super) fn acl_put(
+    w: &mut KasaneDbWrite<'_>,
+    entry: AclEntry,
+    principal: PrincipalId,
+) -> Result<(), AppError> {
+    let row = AclKey::new(principal, entry.target).rows();
+    w.db.acl
+        .put(&mut w.write_txn, &row.forward, &[entry.role.into()])?;
+    w.db.acl_by_object
+        .put(&mut w.write_txn, &row.reverse, &())?;
+    Ok(())
+}
 
-    #[tracing::instrument(skip_all, fields(principal = %principal))]
-    pub(super) fn acl_remove_impl(
-        &mut self,
-        principal: PrincipalId,
-        target: DataTarget,
-    ) -> Result<bool, AppError> {
-        let key = AclKey::new(principal, target);
-        let existed = self.db.acl.get(&self.write_txn, &key.forward())?.is_some();
-        self.delete_acl_rows(&[key])?;
-        Ok(existed)
-    }
+#[tracing::instrument(skip_all, fields(principal = %principal))]
+pub(super) fn acl_remove(
+    w: &mut KasaneDbWrite<'_>,
+    principal: PrincipalId,
+    target: DataTarget,
+) -> Result<bool, AppError> {
+    let key = AclKey::new(principal, target);
+    let existed = w.db.acl.get(&w.write_txn, &key.forward())?.is_some();
+    delete_acl_rows(w, &[key])?;
+    Ok(existed)
+}
 
-    /// この対象を指す行を、保持者を問わず落とす。
-    ///
-    /// 逆引きがデータベース前置なので、`target` がデータベースを指すときは
-    /// **データベーススコープの行と配下テーブルの行が同じ 1 プレフィックスに入る**。
-    #[tracing::instrument(skip_all, fields(db_id = %db_id, table_id = ?table_id))]
-    pub(super) fn acl_remove_object_impl(
-        &mut self,
-        db_id: DatabaseId,
-        table_id: Option<TableId>,
-    ) -> Result<(), AppError> {
-        let prefix = match table_id {
-            Some(table_id) => AclKey::holders_of(DataTarget::table(db_id, table_id)),
-            None => AclKey::holders_in(db_id),
-        };
-        // 反復中に削除できないので、まず鍵を集める。
-        let victims = self.db.acl_holders(&self.write_txn, &prefix)?;
-        self.delete_acl_rows(&victims)
-    }
+/// この対象を指す行を、保持者を問わず落とす。
+///
+/// 逆引きがデータベース前置なので、`target` がデータベースを指すときは
+/// **データベーススコープの行と配下テーブルの行が同じ 1 プレフィックスに入る**。
+#[tracing::instrument(skip_all, fields(db_id = %db_id, table_id = ?table_id))]
+pub(super) fn acl_remove_object(
+    w: &mut KasaneDbWrite<'_>,
+    db_id: DatabaseId,
+    table_id: Option<TableId>,
+) -> Result<(), AppError> {
+    let prefix = match table_id {
+        Some(table_id) => AclKey::holders_of(DataTarget::table(db_id, table_id)),
+        None => AclKey::holders_in(db_id),
+    };
+    // 反復中に削除できないので、まず鍵を集める。
+    let victims = w.db.acl_holders(&w.write_txn, &prefix)?;
+    delete_acl_rows(w, &victims)
+}
 
-    #[tracing::instrument(skip_all, fields(principal = %principal))]
-    pub(super) fn acl_remove_principal_impl(
-        &mut self,
-        principal: PrincipalId,
-    ) -> Result<(), AppError> {
-        let victims = self
-            .db
-            .acl_owned(&self.write_txn, &AclKey::owned_by(principal))?;
-        self.delete_acl_rows(&victims)
-    }
+#[tracing::instrument(skip_all, fields(principal = %principal))]
+pub(super) fn acl_remove_principal(
+    w: &mut KasaneDbWrite<'_>,
+    principal: PrincipalId,
+) -> Result<(), AppError> {
+    let victims = w.db.acl_owned(&w.write_txn, &AclKey::owned_by(principal))?;
+    delete_acl_rows(w, &victims)
+}
 
-    /// 前向きと逆引きは必ず一組で落とす。片方だけ残ると、前向きにしか見えない行や、
-    /// 対象を消しても消えない行ができる。
-    fn delete_acl_rows(&mut self, keys: &[AclKey]) -> Result<(), AppError> {
-        for key in keys {
-            let row = key.rows();
-            self.db.acl.delete(&mut self.write_txn, &row.forward)?;
-            self.db
-                .acl_by_object
-                .delete(&mut self.write_txn, &row.reverse)?;
-        }
-        Ok(())
+/// 前向きと逆引きは必ず一組で落とす。片方だけ残ると、前向きにしか見えない行や、
+/// 対象を消しても消えない行ができる。
+fn delete_acl_rows(w: &mut KasaneDbWrite<'_>, keys: &[AclKey]) -> Result<(), AppError> {
+    for key in keys {
+        let row = key.rows();
+        w.db.acl.delete(&mut w.write_txn, &row.forward)?;
+        w.db.acl_by_object.delete(&mut w.write_txn, &row.reverse)?;
     }
+    Ok(())
 }
