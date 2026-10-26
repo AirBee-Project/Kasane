@@ -4,19 +4,15 @@ use super::auth::authenticate;
 use super::pb::{
     GetSystemInfoRequest, GetSystemInfoResponse, system_service_server::SystemService,
 };
-use crate::AppState;
-
-pub struct SystemServiceImpl {
-    pub app_state: AppState,
-}
+use crate::Kasane;
 
 #[tonic::async_trait]
-impl SystemService for SystemServiceImpl {
+impl SystemService for Kasane {
     async fn get_system_info(
         &self,
         request: Request<GetSystemInfoRequest>,
     ) -> Result<Response<GetSystemInfoResponse>, Status> {
-        authenticate(&self.app_state, &request).await?;
+        authenticate(self, &request).await?;
 
         Ok(Response::new(GetSystemInfoResponse {
             status: "ok".to_string(),

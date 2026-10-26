@@ -23,12 +23,12 @@ cp .env.example .env
 
 ## 組み込み利用（インメモリ・root 固定）
 
-`default-features = false` でビルドすると、ネットワーク待受や LMDB を使わず、プロセス内でインメモリデータベース（`Embedded`）として動かせます。利用者は root 固定となり、`AuthService` と `UserService` は提供されません。
+`default-features = false` でビルドすると、ネットワーク待受や LMDB を使わず、プロセス内でインメモリデータベースとして動かせます。入口の型はどちらのモードでも `Kasane` で、使えるメソッドが変わります。利用者は root 固定となり、`AuthService` と `UserService` は提供されません。
 
 ```rust
-use kasane::Embedded;
+use kasane::Kasane;
 
-let db = Embedded::new();
+let mut db = Kasane::new();
 // gRPC メソッド名と protobuf リクエストのバイト列を渡して実行
 let responses = db.handle("/kasane.DatabaseService/List", &req_bytes)?;
 ```

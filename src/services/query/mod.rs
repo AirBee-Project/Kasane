@@ -6,11 +6,11 @@ use std::collections::{BTreeMap, HashMap};
 
 use spatial_id::{
     RangeId,
-    query::{Query, Source},
+    query::{CancellationToken, Query, Source},
 };
 
 use crate::{
-    AppState,
+    Kasane,
     error::{AppError, Resource},
     for_value_type,
     models::{
@@ -40,7 +40,7 @@ type QuerySnapshot = <crate::repositories::Db as Storage>::QuerySnapshot;
 /// 1 回の読み取りにまとめるのは、認可とメタデータ取得が同じキーを引く二重取得をなくすため。
 /// 名前の解決が 1 件ずつ往復になるバックエンドでは、参照テーブル数ぶんの往復が丸ごと消える。
 async fn resolve_tables(
-    app_state: &AppState,
+    kasane: &Kasane,
     user: &User,
     node: &QueryNode,
 ) -> Result<ResolvedTables, AppError> {
@@ -63,11 +63,11 @@ async fn resolve_tables(
     let user = user.clone();
     let for_auth = requested.clone();
     // 解決と認可を同じ断面で行う。分けると、認可を通した対象と読む対象がずれうる。
-    let resolved = app_state
+    let resolved = kasane
         .db
         .read(async move |r| {
             let resolved = r.resolve_tables(&refs).await?;
-            // 逆順にすると、権限の無い利用者へ 404 で名前の存在有無を教えることになる。
+            // 逆順にすると、権限の無い利用者へ `NotFound` で名前の存在有無を教えることになる。
             for ((db_name, table_name), entry) in for_auth.iter().zip(&resolved) {
                 crate::services::auth::authorize_resolved(
                     r,
@@ -154,7 +154,7 @@ impl QueryNode {
 
     fn translate<V: Value>(
         &self,
-        app_state: &AppState,
+        kasane: &Kasane,
         tables: &ResolvedTables,
         snapshot: &QuerySnapshot,
     ) -> Result<Query<V>, AppError> {
@@ -162,27 +162,25 @@ impl QueryNode {
             Self::Source { database, table } => {
                 let meta = &tables[&(database.clone(), table.clone())];
                 let decode = build_decoder::<V>(meta)?;
-                Ok(app_state
+                Ok(kasane
                     .db
                     .table_source::<V>(meta.id, decode, snapshot.clone())
                     .query())
             }
 
             Self::ShiftX { input, z, index } => Ok(input
-                .translate::<V>(app_state, tables, snapshot)?
+                .translate::<V>(kasane, tables, snapshot)?
                 .shift_x(*z, *index)),
             Self::ShiftY { input, z, index } => Ok(input
-                .translate::<V>(app_state, tables, snapshot)?
+                .translate::<V>(kasane, tables, snapshot)?
                 .shift_y(*z, *index)),
             Self::ShiftF { input, z, index } => Ok(input
-                .translate::<V>(app_state, tables, snapshot)?
+                .translate::<V>(kasane, tables, snapshot)?
                 .shift_f(*z, *index)),
 
-            Self::ZoomOut { input, z, policy } => V::zoom_out(
-                input.translate::<V>(app_state, tables, snapshot)?,
-                *z,
-                *policy,
-            ),
+            Self::ZoomOut { input, z, policy } => {
+                V::zoom_out(input.translate::<V>(kasane, tables, snapshot)?, *z, *policy)
+            }
 
             Self::ExtrudeX {
                 input,
@@ -191,7 +189,7 @@ impl QueryNode {
                 end,
                 policy,
             } => V::extrude_x(
-                input.translate::<V>(app_state, tables, snapshot)?,
+                input.translate::<V>(kasane, tables, snapshot)?,
                 *z,
                 *start,
                 *end,
@@ -204,7 +202,7 @@ impl QueryNode {
                 end,
                 policy,
             } => V::extrude_y(
-                input.translate::<V>(app_state, tables, snapshot)?,
+                input.translate::<V>(kasane, tables, snapshot)?,
                 *z,
                 *start,
                 *end,
@@ -217,7 +215,7 @@ impl QueryNode {
                 end,
                 policy,
             } => V::extrude_f(
-                input.translate::<V>(app_state, tables, snapshot)?,
+                input.translate::<V>(kasane, tables, snapshot)?,
                 *z,
                 *start,
                 *end,
@@ -232,7 +230,7 @@ impl QueryNode {
                 direction,
                 policy,
             } => V::falloff_x(
-                input.translate::<V>(app_state, tables, snapshot)?,
+                input.translate::<V>(kasane, tables, snapshot)?,
                 *z,
                 *radius,
                 direction.map(Into::into),
@@ -247,7 +245,7 @@ impl QueryNode {
                 direction,
                 policy,
             } => V::falloff_y(
-                input.translate::<V>(app_state, tables, snapshot)?,
+                input.translate::<V>(kasane, tables, snapshot)?,
                 *z,
                 *radius,
                 direction.map(Into::into),
@@ -262,7 +260,7 @@ impl QueryNode {
                 direction,
                 policy,
             } => V::falloff_f(
-                input.translate::<V>(app_state, tables, snapshot)?,
+                input.translate::<V>(kasane, tables, snapshot)?,
                 *z,
                 *radius,
                 direction.map(Into::into),
@@ -276,22 +274,22 @@ impl QueryNode {
                 default,
                 policy,
             } => V::merge(
-                left.translate::<V>(app_state, tables, snapshot)?,
-                right.translate::<V>(app_state, tables, snapshot)?,
+                left.translate::<V>(kasane, tables, snapshot)?,
+                right.translate::<V>(kasane, tables, snapshot)?,
                 V::from_value(default)?,
                 *policy,
             ),
 
             Self::Difference { left, right } => Ok(left
-                .translate::<V>(app_state, tables, snapshot)?
-                .difference(right.translate::<V>(app_state, tables, snapshot)?)),
+                .translate::<V>(kasane, tables, snapshot)?
+                .difference(right.translate::<V>(kasane, tables, snapshot)?)),
 
             Self::Intersection { left, right } => Ok(left
-                .translate::<V>(app_state, tables, snapshot)?
-                .intersection(right.translate::<V>(app_state, tables, snapshot)?)),
+                .translate::<V>(kasane, tables, snapshot)?
+                .intersection(right.translate::<V>(kasane, tables, snapshot)?)),
 
             Self::FilterValues { input, condition } => {
-                let q = input.translate::<V>(app_state, tables, snapshot)?;
+                let q = input.translate::<V>(kasane, tables, snapshot)?;
                 let parse = |v: &Option<ValueLiteral>| -> Result<Option<V>, AppError> {
                     v.as_ref().map(V::from_value).transpose()
                 };
@@ -319,7 +317,7 @@ impl QueryNode {
                 operator,
                 operand,
             } => {
-                let q = input.translate::<V>(app_state, tables, snapshot)?;
+                let q = input.translate::<V>(kasane, tables, snapshot)?;
                 V::apply_math(q, *operator, *operand)
             }
 
@@ -345,7 +343,7 @@ impl QueryNode {
                     input_type,
                     build_map_values[V],
                     input.as_ref(),
-                    app_state,
+                    kasane,
                     tables,
                     snapshot,
                     mapping,
@@ -359,13 +357,13 @@ impl QueryNode {
 /// 対応表を一度だけ `U`/`V` へ解釈しておき、FlexId ごとの評価では引き当てるだけにする。
 fn build_map_values<U: Value, V: Value>(
     input: &QueryNode,
-    app_state: &AppState,
+    kasane: &Kasane,
     tables: &ResolvedTables,
     snapshot: &QuerySnapshot,
     mapping: &[MappingEntry],
     default: &ValueLiteral,
 ) -> Result<Query<V>, AppError> {
-    let input = input.translate::<U>(app_state, tables, snapshot)?;
+    let input = input.translate::<U>(kasane, tables, snapshot)?;
 
     let mut lookup: BTreeMap<U, V> = BTreeMap::new();
     for entry in mapping {
@@ -395,35 +393,65 @@ fn build_map_values<U: Value, V: Value>(
     Ok(input.map_values(move |value| lookup.get(&value).unwrap_or(&default).clone()))
 }
 
+/// `spawn_blocking` は `JoinHandle` を drop しても中の処理を止めないため、`execute` の async フレームが drop されたら（＝上流でキャンセル）これで `token` を代わりにキャンセルする。
+#[cfg(feature = "server")]
+struct CancelOnDrop(CancellationToken);
+
+#[cfg(feature = "server")]
+impl Drop for CancelOnDrop {
+    fn drop(&mut self) {
+        self.0.cancel();
+    }
+}
+
 #[tracing::instrument(skip_all)]
 pub async fn execute(
-    app_state: &AppState,
+    kasane: &Kasane,
     user: &User,
     request: ExecuteQueryRequest,
     query_params: &GetDataQuery,
 ) -> Result<GetDataResponse, AppError> {
-    let tables = resolve_tables(app_state, user, &request.query).await?;
+    let tables = resolve_tables(kasane, user, &request.query).await?;
 
     // 領域ごとに取り直すと、途中の書き込みを一部だけ見た結果が混ざる。
-    let snapshot = app_state.db.query_snapshot().await?;
+    let snapshot = kasane.db.query_snapshot().await?;
     let format = query_params.format;
 
     let value_type = request
         .query
         .resolve_value_type(&tables, request.value_type)?;
 
+    // blocking へ渡すクロージャは `'static` が要るので、server ではハンドルを複製して持たせる。
+    #[cfg(feature = "server")]
+    let kasane = kasane.clone();
     // 作業木は単一の値型で組まれるため、ここで値型ごとに単型化する。
-    for_value_type!(
-        value_type, run, app_state, &request, &tables, &snapshot, format
-    )
+    let evaluate = move |token: &CancellationToken| {
+        for_value_type!(
+            value_type, run, &kasane, &request, &tables, &snapshot, format, token
+        )
+    };
+
+    // クエリ演算は同期処理なので、サーバーでは async ワーカーを塞がないよう blocking へ逃がす。
+    #[cfg(feature = "server")]
+    {
+        let token = CancellationToken::new();
+        let _cancel_on_drop = CancelOnDrop(token.clone());
+        let span = tracing::Span::current();
+        tokio::task::spawn_blocking(move || span.in_scope(|| evaluate(&token)))
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?
+    }
+    #[cfg(not(feature = "server"))]
+    evaluate(&CancellationToken::new())
 }
 
 fn run<V: Value>(
-    app_state: &AppState,
+    kasane: &Kasane,
     request: &ExecuteQueryRequest,
     tables: &ResolvedTables,
     snapshot: &QuerySnapshot,
     format: OutputFormat,
+    token: &CancellationToken,
 ) -> Result<GetDataResponse, AppError> {
     let targets = to_spatial_id_set(&request.spatial_ids)?;
 
@@ -435,13 +463,13 @@ fn run<V: Value>(
     }
 
     let query = tracing::info_span!("query.translate", source_tables = tables.len())
-        .in_scope(|| request.query.translate::<V>(app_state, tables, snapshot))?;
+        .in_scope(|| request.query.translate::<V>(kasane, tables, snapshot))?;
 
     // まとめて 1 回だけ評価する。空間 ID 1 件ずつだとクエリが件数分再実行される。
     let flex_ids = tracing::info_span!("query.run_within", target_regions = bounds.len())
         .in_scope(|| {
             query
-                .get_overlapping(targets.iter().collect::<Vec<_>>())
+                .get_overlapping_cancellable(targets.iter().collect::<Vec<_>>(), token)
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(AppError::from)
         })?

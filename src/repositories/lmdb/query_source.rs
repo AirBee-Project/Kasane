@@ -41,7 +41,7 @@ impl<V> TableSource<V> {
     }
 }
 
-impl super::AppDb {
+impl super::Lmdb {
     /// ストレージのハンドル（`Env` / `Database`）をサービス層へ露出させないための入口。
     pub fn table_source<V>(
         &self,

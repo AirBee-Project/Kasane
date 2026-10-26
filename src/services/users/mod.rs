@@ -1,13 +1,13 @@
 use crate::{
-    AppState,
+    Kasane,
     error::{AppError, AuthError},
     models::id::PrincipalId,
     models::users::{
         CreateUserRequest, ListUsersQuery, PrivilegeRule, PrivilegeTarget, UpdatePasswordRequest,
-        UserInfoResponse, UserListResponse, UserSummary,
+        User, UserDetail, UserPage, UserSummary,
     },
     repositories::{CatalogRepository, ReadRepository, Storage, WriteRepository},
-    services::auth::hash_password,
+    services::auth::{check_global_admin, check_self_or_admin, hash_password},
 };
 use uuid::Uuid;
 
@@ -17,14 +17,16 @@ use uuid::Uuid;
 /// 利用者レコードを読むだけで済み、ページの大きさにしか比例しない。
 #[tracing::instrument(skip_all)]
 pub async fn list_users(
-    app_state: &AppState,
+    kasane: &Kasane,
+    user: &User,
     query: &ListUsersQuery,
-) -> Result<UserListResponse, AppError> {
+) -> Result<UserPage, AppError> {
+    check_global_admin(user)?;
     let limit = query.page_size();
     let after = query.after.clone();
 
     // 続きがあるかを知るために 1 件多く引く。
-    let mut page = app_state
+    let mut page = kasane
         .db
         .read(async move |r| r.list_users(after.as_deref(), limit + 1).await)
         .await?;
@@ -34,7 +36,7 @@ pub async fn list_users(
         .flatten()
         .and(page.last().map(|(username, _)| username.clone()));
 
-    Ok(UserListResponse {
+    Ok(UserPage {
         users: page
             .into_iter()
             .map(|(username, record)| UserSummary {
@@ -47,9 +49,14 @@ pub async fn list_users(
 }
 
 #[tracing::instrument(skip_all, fields(username = %username))]
-pub async fn get_user(app_state: &AppState, username: &str) -> Result<UserInfoResponse, AppError> {
+pub async fn get_user(
+    kasane: &Kasane,
+    user: &User,
+    username: &str,
+) -> Result<UserDetail, AppError> {
+    check_self_or_admin(user, username)?;
     let owned = username.to_string();
-    let privileges = app_state
+    let privileges = kasane
         .db
         .read(async move |r| {
             let record = r.require_user_record(&owned).await?;
@@ -57,7 +64,7 @@ pub async fn get_user(app_state: &AppState, username: &str) -> Result<UserInfoRe
             r.render_privileges(record.global_role, &entries).await
         })
         .await?;
-    Ok(UserInfoResponse {
+    Ok(UserDetail {
         privileges,
         username: username.to_string(),
     })
@@ -83,13 +90,18 @@ fn require_not_root(username: &str) -> Result<(), AppError> {
 }
 
 #[tracing::instrument(skip_all, fields(username = %req.username))]
-pub async fn create_user(app_state: &AppState, req: CreateUserRequest) -> Result<(), AppError> {
+pub async fn create_user(
+    kasane: &Kasane,
+    user: &User,
+    req: CreateUserRequest,
+) -> Result<(), AppError> {
+    check_global_admin(user)?;
     crate::services::helpers::name_valid::name_valid(&req.username)?;
 
     let hash = hash_password_off_thread(req.password.clone()).await?;
     let id = PrincipalId(Uuid::now_v7());
 
-    app_state
+    kasane
         .db
         .write(async move |w| {
             w.create_user(&req.username, id, hash.clone(), &req.privileges)
@@ -99,10 +111,11 @@ pub async fn create_user(app_state: &AppState, req: CreateUserRequest) -> Result
 }
 
 #[tracing::instrument(skip_all, fields(username = %username))]
-pub async fn delete_user(app_state: &AppState, username: &str) -> Result<(), AppError> {
+pub async fn delete_user(kasane: &Kasane, user: &User, username: &str) -> Result<(), AppError> {
+    check_global_admin(user)?;
     require_not_root(username)?;
     let username = username.to_string();
-    app_state
+    kasane
         .db
         .write(async move |w| w.delete_user(&username).await)
         .await
@@ -110,14 +123,16 @@ pub async fn delete_user(app_state: &AppState, username: &str) -> Result<(), App
 
 #[tracing::instrument(skip_all, fields(username = %username))]
 pub async fn update_password(
-    app_state: &AppState,
+    kasane: &Kasane,
+    user: &User,
     username: &str,
     req: UpdatePasswordRequest,
 ) -> Result<(), AppError> {
+    check_self_or_admin(user, username)?;
     let username = username.to_string();
     let hash = hash_password_off_thread(req.password).await?;
 
-    app_state
+    kasane
         .db
         .write(async move |w| w.set_password(&username, hash.clone()).await)
         .await
@@ -126,13 +141,15 @@ pub async fn update_password(
 /// 1 つの対象に対する権限を設定する（無ければ追加、あれば置き換え）。
 #[tracing::instrument(skip_all, fields(username = %username))]
 pub async fn grant_privilege(
-    app_state: &AppState,
+    kasane: &Kasane,
+    user: &User,
     username: &str,
     rule: PrivilegeRule,
 ) -> Result<(), AppError> {
+    check_global_admin(user)?;
     require_not_root(username)?;
     let username = username.to_string();
-    app_state
+    kasane
         .db
         .write(async move |w| w.grant_privilege(&username, &rule).await)
         .await
@@ -141,13 +158,15 @@ pub async fn grant_privilege(
 /// 1 つの対象に対する権限を剥奪する。
 #[tracing::instrument(skip_all, fields(username = %username))]
 pub async fn revoke_privilege(
-    app_state: &AppState,
+    kasane: &Kasane,
+    user: &User,
     username: &str,
     target: PrivilegeTarget,
 ) -> Result<(), AppError> {
+    check_global_admin(user)?;
     require_not_root(username)?;
     let username = username.to_string();
-    app_state
+    kasane
         .db
         .write(async move |w| w.revoke_privilege(&username, &target).await)
         .await

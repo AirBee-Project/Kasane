@@ -5,20 +5,16 @@ use super::pb::{
     CreateTableRequest, DeleteTableRequest, GetTableRequest, ListTablesRequest, ListTablesResponse,
     TableInfo, UpdateTableRequest, table_service_server::TableService,
 };
-use crate::AppState;
+use crate::Kasane;
 use crate::models::database::table::CreateTableRequest as DomainCreateTableRequest;
 
-pub struct TableServiceImpl {
-    pub app_state: AppState,
-}
-
 #[tonic::async_trait]
-impl TableService for TableServiceImpl {
+impl TableService for Kasane {
     async fn create(
         &self,
         request: Request<CreateTableRequest>,
     ) -> Result<Response<TableInfo>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+        let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
         let domain_req = DomainCreateTableRequest {
@@ -31,8 +27,8 @@ impl TableService for TableServiceImpl {
         };
 
         let table = crate::services::database::table::create(
-            &self.app_state,
-            &auth_user,
+            self,
+            &user,
             &req.db_name,
             &req.name,
             domain_req,
@@ -42,16 +38,12 @@ impl TableService for TableServiceImpl {
     }
 
     async fn get(&self, request: Request<GetTableRequest>) -> Result<Response<TableInfo>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+        let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
-        let info = crate::services::database::table::info(
-            &self.app_state,
-            &auth_user,
-            &req.db_name,
-            &req.table_name,
-        )
-        .await?;
+        let info =
+            crate::services::database::table::info(self, &user, &req.db_name, &req.table_name)
+                .await?;
         Ok(Response::new(info.into()))
     }
 
@@ -59,12 +51,10 @@ impl TableService for TableServiceImpl {
         &self,
         request: Request<ListTablesRequest>,
     ) -> Result<Response<ListTablesResponse>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+        let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
-        let tables =
-            crate::services::database::table::list(&self.app_state, &req.db_name, &auth_user)
-                .await?;
+        let tables = crate::services::database::table::list(self, &user, &req.db_name).await?;
         Ok(Response::new(ListTablesResponse {
             tables: tables.into_iter().map(Into::into).collect(),
         }))
@@ -74,15 +64,15 @@ impl TableService for TableServiceImpl {
         &self,
         request: Request<UpdateTableRequest>,
     ) -> Result<Response<TableInfo>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+        let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
         let constraints = req.constraints_update.map(TryInto::try_into).transpose()?;
         let description = req.description_update.map(Into::into);
 
         let table = crate::services::database::table::update(
-            self.app_state.clone(),
-            &auth_user,
+            self,
+            &user,
             &req.db_name,
             &req.table_name,
             req.new_name.as_deref(),
@@ -95,16 +85,11 @@ impl TableService for TableServiceImpl {
     }
 
     async fn delete(&self, request: Request<DeleteTableRequest>) -> Result<Response<()>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+        let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
-        crate::services::database::table::remove(
-            &self.app_state,
-            &auth_user,
-            &req.db_name,
-            &req.table_name,
-        )
-        .await?;
+        crate::services::database::table::remove(self, &user, &req.db_name, &req.table_name)
+            .await?;
         Ok(Response::new(()))
     }
 }

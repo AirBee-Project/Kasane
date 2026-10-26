@@ -6,7 +6,7 @@ use std::collections::{BTreeSet, HashMap};
 use spatial_id::collection::SpatialIdSet;
 
 use crate::error::AppError;
-use crate::models::database::DatabaseInfoResponse;
+use crate::models::database::DatabaseDetail;
 use crate::models::database::table::{Table, TableConstraints, TableDataType};
 use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
 use crate::models::users::{AclEntry, Grant, Scope, UserRecord};
@@ -89,18 +89,18 @@ impl ReadRepository for KasaneDbRead<'_> {
     async fn database_info(
         &self,
         name: &str,
-    ) -> Result<Option<(DatabaseId, DatabaseInfoResponse)>, AppError> {
+    ) -> Result<Option<(DatabaseId, DatabaseDetail)>, AppError> {
         catalog::database_info(self, name)
     }
 
-    async fn database_list(&self) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
+    async fn database_list(&self) -> Result<Vec<(DatabaseId, DatabaseDetail)>, AppError> {
         catalog::database_list(self)
     }
 
     async fn databases_by_id(
         &self,
         ids: &[DatabaseId],
-    ) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
+    ) -> Result<Vec<(DatabaseId, DatabaseDetail)>, AppError> {
         catalog::databases_by_id(self, ids)
     }
 
@@ -145,7 +145,7 @@ impl WriteRepository for KasaneDbWrite<'_> {
         &mut self,
         name: &str,
         description: Option<String>,
-    ) -> Result<DatabaseInfoResponse, AppError> {
+    ) -> Result<DatabaseDetail, AppError> {
         catalog::database_create(self, name, description)
     }
 
@@ -158,7 +158,7 @@ impl WriteRepository for KasaneDbWrite<'_> {
         name: &str,
         new_name: Option<String>,
         description: Option<Option<String>>,
-    ) -> Result<DatabaseInfoResponse, AppError> {
+    ) -> Result<DatabaseDetail, AppError> {
         catalog::database_update(self, name, new_name, description)
     }
 

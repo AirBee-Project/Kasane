@@ -3,7 +3,7 @@
 use spatial_id::collection::SpatialIdSet;
 
 use crate::error::AppError;
-use crate::models::database::DatabaseInfoResponse;
+use crate::models::database::DatabaseDetail;
 use crate::models::database::table::Table;
 use crate::models::id::{DatabaseId, TableId};
 use crate::models::users::{User, UserRecord};
@@ -27,13 +27,13 @@ pub trait ReadRepository: CatalogRepository {
     async fn database_info(
         &self,
         name: &str,
-    ) -> Result<Option<(DatabaseId, DatabaseInfoResponse)>, AppError>;
+    ) -> Result<Option<(DatabaseId, DatabaseDetail)>, AppError>;
 
     /// 全データベース。**全体権限を持つ利用者にしか使わない。**
     ///
     /// 権限で絞る側は [`databases_by_id`](Self::databases_by_id) を使う。全件取ってから
     /// 捨てる形だと、権限を持たない対象のコストまで払うことになる。
-    async fn database_list(&self) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError>;
+    async fn database_list(&self) -> Result<Vec<(DatabaseId, DatabaseDetail)>, AppError>;
 
     /// ID を指定して引く。ACL 側から辿った一覧の組み立てに使う。
     ///
@@ -41,7 +41,7 @@ pub trait ReadRepository: CatalogRepository {
     async fn databases_by_id(
         &self,
         ids: &[DatabaseId],
-    ) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError>;
+    ) -> Result<Vec<(DatabaseId, DatabaseDetail)>, AppError>;
 
     /// `(データベース名, テーブル名)` をまとめて解決する。返りは入力と同じ並び。
     async fn resolve_tables(

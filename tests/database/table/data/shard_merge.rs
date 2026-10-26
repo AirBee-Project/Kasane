@@ -13,7 +13,7 @@ use kasane::repositories::{CatalogRepository, ReadRepository, WriteRepository};
 use spatial_id::{RangeId, SingleId, collection::SpatialIdSet};
 
 /// このテーブルのシャードキー数と、ポインタノードの有無を返す。
-fn shard_stats(db: &kasane::repositories::lmdb::AppDb, table_id: TableId) -> (usize, bool) {
+fn shard_stats(db: &kasane::repositories::lmdb::Lmdb, table_id: TableId) -> (usize, bool) {
     let rtxn = db.env.read_txn().unwrap();
     let mut key_count = 0usize;
     let mut has_pointer = false;

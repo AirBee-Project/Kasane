@@ -1417,11 +1417,11 @@ async fn test_missing_table_reports_not_found_consistently() {
 ///
 /// `GetPrivileges` は解決できない行を隠すため、残留の有無は API からは観測できない。
 /// ここでは行を直接数える。
-async fn stored_privilege_count(app_state: &kasane::AppState, username: &str) -> usize {
+async fn stored_privilege_count(instance: &kasane::Kasane, username: &str) -> usize {
     use kasane::repositories::{CatalogRepository, Storage};
     let username = username.to_string();
-    app_state
-        .db
+    instance
+        .storage()
         .read(async move |repo| {
             let record = repo.require_user_record(&username).await?;
             Ok(repo.acl_entries(record.id).await?.len())
@@ -1459,7 +1459,7 @@ async fn test_stale_privileges_do_not_accumulate_over_cycles() {
 
         // テーブルの削除がその行を落とすので、残留は 0 件。
         assert_eq!(
-            stored_privilege_count(test_app.app_state(), "churner").await,
+            stored_privilege_count(test_app.instance(), "churner").await,
             0,
             "サイクル {} で削除済みテーブルを指す行が残った",
             i
@@ -1592,9 +1592,10 @@ async fn test_global_read_can_read_everything_but_write_nothing() {
 /// `table_id_index` に残っているテーブルの総数。到達不能になったテーブルの検出に使う。
 ///
 /// ストレージ内部の索引を直接数えるため、抽象 API ではなく LMDB のハンドルを直接使う。
-fn indexed_table_count(app_state: &kasane::AppState) -> usize {
-    let rtxn = app_state.db.env.read_txn().unwrap();
-    app_state.db.table_id_index.len(&rtxn).unwrap() as usize
+fn indexed_table_count(instance: &kasane::Kasane) -> usize {
+    let db = instance.storage();
+    let rtxn = db.env.read_txn().unwrap();
+    db.table_id_index.len(&rtxn).unwrap() as usize
 }
 
 #[tokio::test]
@@ -1612,7 +1613,7 @@ async fn test_database_remove_leaves_no_orphan_tables() {
         create_table(&test_app, &root_token, "doomed_db", &format!("t_{}", i)).await;
     }
     create_table(&test_app, &root_token, "kept_db", "survivor").await;
-    assert_eq!(indexed_table_count(test_app.app_state()), 4);
+    assert_eq!(indexed_table_count(test_app.instance()), 4);
 
     test_app
         .database_as(Some(&bearer(&root_token)))
@@ -1623,7 +1624,7 @@ async fn test_database_remove_leaves_no_orphan_tables() {
         .expect("delete_database failed");
 
     // 残るのは kept_db の 1 件だけ。doomed_db 配下は索引ごと消えている。
-    assert_eq!(indexed_table_count(test_app.app_state()), 1);
+    assert_eq!(indexed_table_count(test_app.instance()), 1);
 
     // 同名で作り直しても、以前のテーブルは見えない。
     create_db(&test_app, &root_token, "doomed_db").await;
@@ -1661,8 +1662,8 @@ async fn test_privilege_rules_are_capped_before_resolution() {
         .collect();
 
     let err = test_app
-        .app_state()
-        .db
+        .instance()
+        .storage()
         .read(async move |r| CatalogRepository::resolve_rules(r, &rules).await)
         .await
         .expect_err("上限超えが受理された");

@@ -1,5 +1,7 @@
 //! 起動時に一度だけ行う設定をここに集める。
 
+use std::path::Path;
+
 use heed::{Env, EnvOpenOptions};
 use uuid::Uuid;
 
@@ -9,16 +11,16 @@ use crate::models::users::{UserRecord, UserRole};
 use crate::repositories::{ROOT_USERNAME, SCHEMA_VERSION, root_password};
 use crate::services::auth::hash_password;
 
-use super::AppDb;
+use super::Lmdb;
 
 const SCHEMA_VERSION_KEY: &str = "schema_version";
 
 const MAP_SIZE: usize = 10 * 1024 * 1024 * 1024;
 const MAX_READERS: u32 = 1024;
-/// 開くサブデータベース数の上限。`AppDb` のフィールド数より十分大きく取る。
+/// 開くサブデータベース数の上限。`Lmdb` のフィールド数より十分大きく取る。
 const MAX_DBS: u32 = 24;
 
-fn open_env(path: &str) -> Env<heed::WithoutTls> {
+fn open_env(path: &Path) -> Env<heed::WithoutTls> {
     unsafe {
         EnvOpenOptions::new()
             .read_txn_without_tls()
@@ -27,16 +29,17 @@ fn open_env(path: &str) -> Env<heed::WithoutTls> {
             .max_readers(MAX_READERS)
             .open(path)
             .unwrap_or_else(|e| {
-                tracing::error!("Failed to open heed Env at {}: {}", path, e);
+                tracing::error!("Failed to open heed Env at {}: {}", path.display(), e);
                 panic!("Failed to open heed Env: {}", e);
             })
     }
 }
 
 /// 版が合わなければエラーを返す。
-#[tracing::instrument]
-pub fn initialize_database(path: &str) -> Result<AppDb, AppError> {
-    tracing::info!("Initializing database at: {}", path);
+#[tracing::instrument(skip_all)]
+pub fn initialize_database(path: impl AsRef<Path>) -> Result<Lmdb, AppError> {
+    let path = path.as_ref();
+    tracing::info!("Initializing database at: {}", path.display());
     std::fs::create_dir_all(path).unwrap();
 
     let env = open_env(path);
@@ -85,7 +88,7 @@ pub fn initialize_database(path: &str) -> Result<AppDb, AppError> {
     write_txn.commit()?;
     tracing::info!("Database initialized successfully (schema v{SCHEMA_VERSION})");
 
-    Ok(AppDb {
+    Ok(Lmdb {
         env,
         meta,
         databases,

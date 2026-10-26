@@ -1,4 +1,4 @@
-use crate::AppState;
+use crate::Kasane;
 use crate::error::AppError;
 use crate::models::database::table::{CreateTableRequest, TableConstraints, TableInfo};
 use crate::models::users::{Scope, User, UserRole};
@@ -8,7 +8,7 @@ use crate::services::helpers::authorize::resolve_authorized_table;
 
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn create(
-    app_state: &AppState,
+    kasane: &Kasane,
     user: &User,
     db_name: &str,
     table_name: &str,
@@ -32,7 +32,7 @@ pub async fn create(
     let table_name = table_name.to_string();
     let user = user.clone();
 
-    let table = app_state
+    let table = kasane
         .db
         .write(async move |db| {
             authorize_path(db, &user, &db_name, None, UserRole::Manage).await?;
@@ -54,7 +54,7 @@ pub async fn create(
 /// 認可・解決・件数取得を 1 回の読み取りで済ませる。
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn info(
-    app_state: &AppState,
+    kasane: &Kasane,
     user: &User,
     db_name: &str,
     table_name: &str,
@@ -63,7 +63,7 @@ pub async fn info(
     let table_name = table_name.to_string();
     let user = user.clone();
 
-    app_state
+    kasane
         .db
         .read(async move |db| {
             let table =
@@ -76,15 +76,11 @@ pub async fn info(
 
 /// テーブル一覧を返す。呼び出したユーザーが Read 以上で到達できるテーブルだけに絞る。
 #[tracing::instrument(skip_all, fields(db_name = %db_name))]
-pub async fn list(
-    app_state: &AppState,
-    db_name: &str,
-    user: &User,
-) -> Result<Vec<TableInfo>, AppError> {
+pub async fn list(kasane: &Kasane, user: &User, db_name: &str) -> Result<Vec<TableInfo>, AppError> {
     let owned = db_name.to_string();
     let user = user.clone();
 
-    app_state
+    kasane
         .db
         .read(async move |db| {
             let found = db.database_id(&owned).await?.map(|db_id| (db_id, ()));
@@ -114,7 +110,7 @@ pub async fn list(
 #[allow(clippy::too_many_arguments)]
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn update(
-    state: AppState,
+    kasane: &Kasane,
     user: &User,
     db_name: &str,
     table_name: &str,
@@ -147,7 +143,7 @@ pub async fn update(
     let new_name = new_name.map(str::to_string);
     let user = user.clone();
 
-    state
+    kasane
         .db
         .write(async move |txn| {
             // 権限はテーブル ID に紐づくので、改名しても権限はそのテーブルに追従する。
@@ -171,7 +167,7 @@ pub async fn update(
 /// 認可を書き込みトランザクションの中で行う。
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn remove(
-    app_state: &AppState,
+    kasane: &Kasane,
     user: &User,
     db_name: &str,
     table_name: &str,
@@ -180,7 +176,7 @@ pub async fn remove(
     let table_name = table_name.to_string();
     let user = user.clone();
 
-    app_state
+    kasane
         .db
         .write(async move |db| {
             authorize_path(db, &user, &db_name, Some(&table_name), UserRole::Manage).await?;

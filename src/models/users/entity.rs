@@ -124,8 +124,8 @@ impl From<DataRole> for UserRole {
 /// 一覧で 1 利用者について返す概要。
 ///
 /// 権限そのものを含めないのは、一覧のページあたりの読み取りを利用者数に比例させない
-/// ため。詳細は `GET /users/{username}/privileges` で引く。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// ため。詳細は `UserService.Get` で引く。
+#[derive(Debug, Clone)]
 pub struct UserSummary {
     pub username: String,
     /// サーバー全体のロール。持たなければ `null`。

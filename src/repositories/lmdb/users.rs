@@ -5,7 +5,7 @@
 //! [`WriteRepository`](crate::repositories::WriteRepository) の既定実装が持つ。
 //! ここにあるのは行を読み書きする手段だけ。
 //!
-//! 読み取りは [`AppDb`] のメソッドにしてある。`RwTxn` は `RoTxn` へ Deref するので、
+//! 読み取りは [`Lmdb`] のメソッドにしてある。`RwTxn` は `RoTxn` へ Deref するので、
 //! 読み書きどちらのトランザクションからも同じ実装を通せる。
 
 use std::collections::BTreeSet;
@@ -17,11 +17,11 @@ use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
 use crate::models::users::{AclEntry, Grant, Scope, UserRecord};
 use crate::repositories::encoding::acl::{AclKey, decode_role};
 
-use super::{AppDb, KasaneDbRead, KasaneDbWrite};
+use super::{KasaneDbRead, KasaneDbWrite, Lmdb};
 
 type Txn<'t> = RoTxn<'t, heed::WithoutTls>;
 
-impl AppDb {
+impl Lmdb {
     pub(super) fn user_record(
         &self,
         txn: &Txn<'_>,

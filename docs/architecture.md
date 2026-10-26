@@ -11,7 +11,7 @@ flowchart TD
     Main[main.rs / lib.rs] --> Grpc[grpc]
     Grpc --> Service[services]
     Service --> Repository[repositories]
-    Repository --> Storage[(LMDB)]
+    Repository --> Storage[(LMDB / インメモリ)]
 
     Grpc --> Convert[grpc::convert*]
     Convert --> Model[models]
@@ -20,7 +20,7 @@ flowchart TD
     Service --> Error[error]
     Grpc --> Error
     Repository --> Error
-    Grpc --> AppState[AppState]
+    Grpc --> Kasane[Kasane]
 ```
 
 ## レイヤーの責務
@@ -28,14 +28,16 @@ flowchart TD
 ### `main.rs` / `lib.rs`
 
 - アプリケーション全体の起点。
-- `AppState` を組み立てて gRPC サーバーに渡す。
+- 公開する入口の型 `Kasane` を定義する。中身はストレージのハンドルだけで、feature によってストレージと使えるメソッドが変わる。
+  - `server`: `Kasane::open` で LMDB を開き、`Kasane::bind` で gRPC サーバーとして待ち受ける。
+  - `default-features = false`: `Kasane::new` でインメモリのインスタンスを作り、`Kasane::handle` でプロセス内から gRPC リクエストを処理する（`embedded.rs`）。
 - サーバーの起動以外の業務ロジックは持たない。
 
 ### `grpc`
 
-- proto（`proto/*.proto`）から生成された gRPC サービス・メッセージ型（`grpc::pb`）と、各サービスの実装（`grpc::database`, `grpc::table` 等）を置く。
+- proto（`proto/*.proto`）から生成された gRPC サービス・メッセージ型（`grpc::pb`）と、各サービストレイトの `Kasane` への実装（`grpc::database`, `grpc::table` 等）を置く。
 - `grpc::convert*` が proto のメッセージ型とドメイン型（`models`）の相互変換を担う。
-- 認証は `grpc::auth`（JWT の検証、利用者レコードの読み直しと `AuthUser` の組み立て、Login RPC）が集約して担う。
+- 認証は `grpc::auth`（JWT の検証、利用者レコードの読み直し、Login RPC）が集約して担う。
 - ドメインロジックや DB 操作は持たない。
 
 ### `services`
@@ -47,7 +49,7 @@ flowchart TD
 
 ### `repositories`
 
-- ストレージ（LMDB）へのアクセスを隠蔽する。
+- ストレージへのアクセスを隠蔽する。server では LMDB（`repositories::lmdb`）、組み込みではインメモリ（`repositories::memory`）を使い、`repositories::Db` が feature で片方を指す。
 - テーブルの open / get / insert / remove などの低レベル操作を担当する。
 - 業務ルールは持たない。
 - バックエンド固有の型や詳細を上位層に公開しない。
@@ -65,11 +67,6 @@ flowchart TD
 - gRPC の `tonic::Status` および `google.rpc.ErrorInfo`（機械可読コード）への変換責務もここで持つ。
 - 各層は `AppError` に寄せてエラーを返す。
 
-### `backend`
-
-- LMDB（`heed`）の初期化と基盤構築を担当する。
-- 業務ロジックは持たない。
-
 ## 依存ルール
 
 ### 許可される依存
@@ -77,7 +74,7 @@ flowchart TD
 - `grpc` -> `services`, `models`, `error`
 - `services` -> `repositories`, `models`, `error`, `helpers`
 - `repositories` -> `models`, `error`, ストレージエンジン
-- `main.rs` / `lib.rs` -> `grpc`, `backend`, `AppState`
+- `main.rs` / `lib.rs` -> `grpc`, `repositories`
 
 ### 禁止したい依存
 
@@ -89,10 +86,10 @@ flowchart TD
 
 `TableService` 系の RPC は次の順序で処理されます。
 
-1. `grpc::auth` が JWT を検証し、最新の利用者レコードから `AuthUser` を構築する。
+1. `grpc::auth` が JWT を検証し、最新の利用者レコード（`User`）を読み直す。
 2. `grpc::table` が proto のメッセージをドメイン型へ変換し、service を呼ぶ。
 3. `services` がバリデーションとトランザクション管理を行う。
-4. `repositories` がストレージエンジン（LMDB）を使って実データを読み書きする。
+4. `repositories` がストレージ（LMDB またはインメモリ）を使って実データを読み書きする。
 5. `error` が失敗を `tonic::Status` に変換する。
 
 ## 補足

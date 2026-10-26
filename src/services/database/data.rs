@@ -1,10 +1,9 @@
-use crate::AppState;
+use crate::Kasane;
 use crate::error::{AppError, Resource};
 use crate::models::database::table::data::{GetDataQuery, GetDataResponse, ZoomLevelPolicy};
 use crate::models::spatial_id::SpatialId;
 use crate::models::users::{User, UserRole};
 use crate::repositories::{ReadRepository, Storage, WriteRepository};
-use crate::services::auth::AuthUser;
 use crate::services::helpers::authorize::authorized_table;
 use crate::services::helpers::data_response;
 use crate::services::helpers::spatial_ids::process_spatial_ids;
@@ -12,8 +11,8 @@ use crate::services::helpers::value::{enforce_max_stored_size, interpret_value, 
 
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn get(
-    app_state: &AppState,
-    auth_user: &AuthUser,
+    kasane: &Kasane,
+    user: &User,
     db_name: &str,
     table_name: &str,
     spatial_ids: &[SpatialId],
@@ -25,9 +24,9 @@ pub async fn get(
     let spatial_ids = spatial_ids.to_vec();
     let zoom_level_policy = *zoom_level_policy;
     let query_format = query.format;
-    let user = auth_user.user.clone();
+    let user = user.clone();
 
-    let (table, groups) = app_state
+    let (table, groups) = kasane
         .db
         .read(async move |db| {
             let refs = [(db_name.clone(), table_name.clone())];
@@ -69,7 +68,7 @@ pub async fn get(
 
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn insert(
-    app_state: &AppState,
+    kasane: &Kasane,
     user: &User,
     db_name: &str,
     table_name: &str,
@@ -77,7 +76,7 @@ pub async fn insert(
     value: crate::models::ValueLiteral,
     zoom_level_policy: &ZoomLevelPolicy,
 ) -> Result<(), AppError> {
-    let table = authorized_table(app_state, user, db_name, table_name, UserRole::Write).await?;
+    let table = authorized_table(kasane, user, db_name, table_name, UserRole::Write).await?;
 
     let value = interpret_value(table.data_type, table.constraints.as_ref(), value)?;
     enforce_max_stored_size(&value)?;
@@ -88,7 +87,7 @@ pub async fn insert(
         !table.is_temporal,
     )?;
 
-    app_state
+    kasane
         .db
         .write(async move |w| w.data_insert(table.id, ids.clone(), &value).await)
         .await
@@ -97,7 +96,7 @@ pub async fn insert(
 /// 値が存在しないIDにのみ書き込む（Upsert）
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn upsert(
-    app_state: &AppState,
+    kasane: &Kasane,
     user: &User,
     db_name: &str,
     table_name: &str,
@@ -105,7 +104,7 @@ pub async fn upsert(
     value: crate::models::ValueLiteral,
     zoom_level_policy: &ZoomLevelPolicy,
 ) -> Result<(), AppError> {
-    let table = authorized_table(app_state, user, db_name, table_name, UserRole::Write).await?;
+    let table = authorized_table(kasane, user, db_name, table_name, UserRole::Write).await?;
 
     let value = interpret_value(table.data_type, table.constraints.as_ref(), value)?;
     enforce_max_stored_size(&value)?;
@@ -116,7 +115,7 @@ pub async fn upsert(
         !table.is_temporal,
     )?;
 
-    app_state
+    kasane
         .db
         .write(async move |w| w.data_upsert(table.id, ids.clone(), &value).await)
         .await
@@ -124,14 +123,14 @@ pub async fn upsert(
 
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn remove(
-    app_state: &AppState,
+    kasane: &Kasane,
     user: &User,
     db_name: &str,
     table_name: &str,
     spatial_ids: &[SpatialId],
     zoom_level_policy: &ZoomLevelPolicy,
 ) -> Result<(), AppError> {
-    let table = authorized_table(app_state, user, db_name, table_name, UserRole::Write).await?;
+    let table = authorized_table(kasane, user, db_name, table_name, UserRole::Write).await?;
 
     let ids = process_spatial_ids(
         spatial_ids,
@@ -140,7 +139,7 @@ pub async fn remove(
         !table.is_temporal,
     )?;
 
-    app_state
+    kasane
         .db
         .write(async move |w| w.data_remove(table.id, ids.clone()).await)
         .await

@@ -12,7 +12,7 @@ use sha2::Sha256;
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::AppState;
+use crate::Kasane;
 use crate::error::{AppError, AuthError, Resource};
 use crate::models::auth::Claims;
 
@@ -76,9 +76,9 @@ pub fn dummy_verify_password(password: &str) {
 
 /// 指定ユーザーの最新メタデータ（UUID・トークン世代）を読み込み、JWT を発行する。
 #[tracing::instrument(skip_all, fields(username = %username))]
-pub async fn generate_jwt(app_state: &AppState, username: &str) -> Result<String, AppError> {
+pub async fn generate_jwt(kasane: &Kasane, username: &str) -> Result<String, AppError> {
     let owned = username.to_string();
-    let meta = app_state
+    let meta = kasane
         .db
         .read(async move |repo| repo.user_record(&owned).await)
         .await?

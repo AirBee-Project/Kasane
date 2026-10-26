@@ -27,7 +27,7 @@ use crate::repositories::Storage;
 use keys::{DbIdAndName, TableIdAndFlexId};
 
 #[derive(Clone)]
-pub struct AppDb {
+pub struct Lmdb {
     pub env: Env<heed::WithoutTls>,
 
     /// `"schema_version"` -> ディスク形式の版。開く前にここを確認する。
@@ -75,22 +75,22 @@ impl From<heed::Error> for AppError {
 
 pub struct KasaneDbRead<'a> {
     pub read_txn: heed::RoTxn<'a, heed::WithoutTls>,
-    pub db: &'a AppDb,
+    pub db: &'a Lmdb,
 }
 
 impl<'a> KasaneDbRead<'a> {
-    pub fn new(read_txn: heed::RoTxn<'a, heed::WithoutTls>, db: &'a AppDb) -> Self {
+    pub fn new(read_txn: heed::RoTxn<'a, heed::WithoutTls>, db: &'a Lmdb) -> Self {
         Self { read_txn, db }
     }
 }
 
 pub struct KasaneDbWrite<'a> {
     pub write_txn: heed::RwTxn<'a>,
-    pub db: &'a AppDb,
+    pub db: &'a Lmdb,
 }
 
 impl<'a> KasaneDbWrite<'a> {
-    pub fn new(write_txn: heed::RwTxn<'a>, db: &'a AppDb) -> Self {
+    pub fn new(write_txn: heed::RwTxn<'a>, db: &'a Lmdb) -> Self {
         Self { write_txn, db }
     }
 
@@ -107,7 +107,7 @@ impl<'a> KasaneDbWrite<'a> {
 /// [`Sync`] を得るため（[`heed::RoTxn`] は移動はできるが同時使用はできない）。
 pub type LmdbQuerySnapshot = std::sync::Arc<std::sync::Mutex<heed::RoTxn<'static, WithoutTls>>>;
 
-impl Storage for AppDb {
+impl Storage for Lmdb {
     type Read<'a> = KasaneDbRead<'a>;
     type Write<'a> = KasaneDbWrite<'a>;
     type QuerySnapshot = LmdbQuerySnapshot;

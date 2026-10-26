@@ -1,22 +1,18 @@
 use crate::{
-    AppState,
+    Kasane,
     error::AppError,
-    models::database::DatabaseInfoResponse,
+    models::database::DatabaseDetail,
     models::users::{User, UserRole},
     repositories::{CatalogRepository, ReadRepository, Storage, WriteRepository},
-    services::auth::{authorize_path, visible_database},
+    services::auth::{authorize_path, check_global_role, visible_database},
 };
 
 /// 認可と取得を 1 回の読み取りにまとめる。本体は 1 度しか引かない。
 #[tracing::instrument(skip_all, fields(db_name = %name))]
-pub async fn info(
-    app_state: &AppState,
-    user: &User,
-    name: &str,
-) -> Result<DatabaseInfoResponse, AppError> {
+pub async fn info(kasane: &Kasane, user: &User, name: &str) -> Result<DatabaseDetail, AppError> {
     let owned = name.to_string();
     let user = user.clone();
-    app_state
+    kasane
         .db
         .read(async move |r| {
             let found = r.database_info(&owned).await?;
@@ -34,12 +30,9 @@ pub async fn info(
 /// 1 つも持たない対象の読み取りとフィルタ計算まで払うことになり、データベース数に
 /// 比例して重くなる。全体ロールを持つ利用者だけは全件が対象なので、そちらは列挙する。
 #[tracing::instrument(skip_all)]
-pub async fn list(
-    app_state: &AppState,
-    user: &User,
-) -> Result<Vec<DatabaseInfoResponse>, AppError> {
+pub async fn list(kasane: &Kasane, user: &User) -> Result<Vec<DatabaseDetail>, AppError> {
     let user = user.clone();
-    app_state
+    kasane
         .db
         .read(async move |r| {
             if user.has_global_role(UserRole::Read) {
@@ -63,15 +56,17 @@ pub async fn list(
 
 #[tracing::instrument(skip_all, fields(db_name = %name))]
 pub async fn create(
-    app_state: &AppState,
+    kasane: &Kasane,
+    user: &User,
     name: &str,
     description: Option<String>,
-) -> Result<DatabaseInfoResponse, AppError> {
+) -> Result<DatabaseDetail, AppError> {
+    check_global_role(user, UserRole::Manage)?;
     crate::services::helpers::name_valid::name_valid(name)?;
     check_description(description.as_deref())?;
 
     let name = name.to_string();
-    app_state
+    kasane
         .db
         .write(async move |w| w.database_create(&name, description.clone()).await)
         .await
@@ -79,9 +74,10 @@ pub async fn create(
 
 /// 列挙と削除は [`WriteRepository::database_remove`] 側で 1 トランザクションに閉じてある。
 #[tracing::instrument(skip_all, fields(db_name = %name))]
-pub async fn remove(app_state: &AppState, name: &str) -> Result<(), AppError> {
+pub async fn remove(kasane: &Kasane, user: &User, name: &str) -> Result<(), AppError> {
+    check_global_role(user, UserRole::Manage)?;
     let name = name.to_string();
-    app_state
+    kasane
         .db
         .write(async move |w| w.database_remove(&name).await)
         .await
@@ -92,12 +88,12 @@ pub async fn remove(app_state: &AppState, name: &str) -> Result<(), AppError> {
 /// 判定した対象と書き換える対象が同じであることが、断面が 1 つであることから従う。
 #[tracing::instrument(skip_all, fields(db_name = %name))]
 pub async fn update(
-    app_state: &AppState,
+    kasane: &Kasane,
     user: &User,
     name: &str,
     new_name: Option<String>,
     description: Option<Option<String>>,
-) -> Result<DatabaseInfoResponse, AppError> {
+) -> Result<DatabaseDetail, AppError> {
     if let Some(new_n) = &new_name {
         crate::services::helpers::name_valid::name_valid(new_n)?;
     }
@@ -107,7 +103,7 @@ pub async fn update(
 
     let name = name.to_string();
     let user = user.clone();
-    app_state
+    kasane
         .db
         .write(async move |w| {
             authorize_path(w, &user, &name, None, UserRole::Manage).await?;

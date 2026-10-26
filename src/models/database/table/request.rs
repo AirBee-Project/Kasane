@@ -1,8 +1,7 @@
 use super::TableDataType;
 use crate::models::database::table::data_type::TableConstraints;
-use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 pub struct CreateTableRequest {
     pub name: String,
     pub data_type: TableDataType,
@@ -11,6 +10,5 @@ pub struct CreateTableRequest {
     pub constraints: Option<TableConstraints>,
     pub description: Option<String>,
     /// テーブルが時間IDを扱うかどうか。
-    #[serde(default = "crate::models::helpers::default_true")]
     pub is_temporal: bool,
 }

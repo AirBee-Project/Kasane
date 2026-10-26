@@ -3,7 +3,7 @@
 use spatial_id::collection::SpatialIdSet;
 
 use crate::error::{AppError, Resource};
-use crate::models::database::DatabaseInfoResponse;
+use crate::models::database::DatabaseDetail;
 use crate::models::database::table::{Table, TableConstraints, TableDataType};
 use crate::models::id::{DataTarget, PrincipalId, TableId};
 use crate::models::users::{
@@ -20,7 +20,7 @@ pub trait WriteRepository: CatalogRepository {
         &mut self,
         name: &str,
         description: Option<String>,
-    ) -> Result<DatabaseInfoResponse, AppError>;
+    ) -> Result<DatabaseDetail, AppError>;
 
     async fn database_remove(&mut self, name: &str) -> Result<(), AppError>;
 
@@ -29,7 +29,7 @@ pub trait WriteRepository: CatalogRepository {
         name: &str,
         new_name: Option<String>,
         description: Option<Option<String>>,
-    ) -> Result<DatabaseInfoResponse, AppError>;
+    ) -> Result<DatabaseDetail, AppError>;
 
     #[allow(clippy::too_many_arguments)]
     async fn table_create(
@@ -89,7 +89,7 @@ pub trait WriteRepository: CatalogRepository {
     /// 1 行を書く（既にあれば置き換え）。
     async fn acl_put(&mut self, entry: AclEntry, principal: PrincipalId) -> Result<(), AppError>;
 
-    /// 1 行を消す。戻り値は**あったか**（剥奪が 404 を返すかの判断に要る）。
+    /// 1 行を消す。戻り値は**あったか**（剥奪が `NotFound` を返すかの判断に要る）。
     async fn acl_remove(
         &mut self,
         principal: PrincipalId,

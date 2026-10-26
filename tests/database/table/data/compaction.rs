@@ -26,7 +26,7 @@ fn rect(x0: u32, x1: u32, y0: u32, y1: u32) -> SpatialIdSet {
 
 /// `data_get` で矩形全域を読み、`(x,y) -> value` を復元する。
 async fn read_rect(
-    db: &kasane::repositories::lmdb::AppDb,
+    db: &kasane::repositories::lmdb::Lmdb,
     table_id: TableId,
     x0: u32,
     x1: u32,

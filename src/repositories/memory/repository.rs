@@ -4,7 +4,7 @@ use spatial_id::collection::SpatialIdSet;
 
 use super::{MemRead, MemWrite, users};
 use crate::error::AppError;
-use crate::models::database::DatabaseInfoResponse;
+use crate::models::database::DatabaseDetail;
 use crate::models::database::table::{Table, TableConstraints, TableDataType};
 use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
 use crate::models::users::{AclEntry, Grant, Scope, UserRecord};
@@ -99,18 +99,18 @@ impl ReadRepository for MemRead {
     async fn database_info(
         &self,
         name: &str,
-    ) -> Result<Option<(DatabaseId, DatabaseInfoResponse)>, AppError> {
+    ) -> Result<Option<(DatabaseId, DatabaseDetail)>, AppError> {
         Ok(self.0.database_info(name))
     }
 
-    async fn database_list(&self) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
+    async fn database_list(&self) -> Result<Vec<(DatabaseId, DatabaseDetail)>, AppError> {
         Ok(self.0.databases().collect())
     }
 
     async fn databases_by_id(
         &self,
         ids: &[DatabaseId],
-    ) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
+    ) -> Result<Vec<(DatabaseId, DatabaseDetail)>, AppError> {
         Ok(self
             .0
             .databases()
@@ -166,7 +166,7 @@ impl WriteRepository for MemWrite {
         &mut self,
         name: &str,
         description: Option<String>,
-    ) -> Result<DatabaseInfoResponse, AppError> {
+    ) -> Result<DatabaseDetail, AppError> {
         self.0.database_create(name, description)
     }
 
@@ -179,7 +179,7 @@ impl WriteRepository for MemWrite {
         name: &str,
         new_name: Option<String>,
         description: Option<Option<String>>,
-    ) -> Result<DatabaseInfoResponse, AppError> {
+    ) -> Result<DatabaseDetail, AppError> {
         self.0.database_update(name, new_name, description)
     }
 

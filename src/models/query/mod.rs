@@ -192,7 +192,7 @@ pub enum QueryNode {
         input: Box<Self>,
         /// この MapValues が出力する型。対応表の `to` や `default` はこの型として解釈される。
         output_type: crate::models::database::table::TableDataType,
-        /// 変換前後の対応表。`from` の重複は 400 で拒否される。
+        /// 変換前後の対応表。`from` の重複は `InvalidArgument` で拒否される。
         mapping: Vec<MappingEntry>,
         /// 対応表に存在しない値に使う既定値
         default: ValueLiteral,

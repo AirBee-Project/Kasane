@@ -6,22 +6,24 @@ use tonic::transport::Server;
 use tonic::transport::server::TcpIncoming;
 use tonic_web::GrpcWebLayer;
 
-use super::{auth, data, database, pb, query, system, table, users};
-use crate::AppState;
+use super::{auth, pb};
+use crate::Kasane;
 
-/// 指定アドレスへバインドする。`serve` と分けてあるのは、テストがポート `0` （OS 割り当て）で実際に選ばれたポートを、サーブ開始前に知る必要があるため。
-pub fn bind(app_state: AppState, addr: SocketAddr) -> std::io::Result<BoundServer> {
-    let incoming = TcpIncoming::bind(addr)?;
-    let local_addr = incoming.local_addr()?;
-    Ok(BoundServer {
-        app_state,
-        incoming,
-        local_addr,
-    })
+impl Kasane {
+    /// 指定アドレスへバインドする。`serve` と分けてあるのは、テストがポート `0` （OS 割り当て）で実際に選ばれたポートを、サーブ開始前に知る必要があるため。
+    pub fn bind(self, addr: SocketAddr) -> std::io::Result<BoundServer> {
+        let incoming = TcpIncoming::bind(addr)?;
+        let local_addr = incoming.local_addr()?;
+        Ok(BoundServer {
+            kasane: self,
+            incoming,
+            local_addr,
+        })
+    }
 }
 
 pub struct BoundServer {
-    app_state: AppState,
+    kasane: Kasane,
     incoming: TcpIncoming,
     local_addr: SocketAddr,
 }
@@ -36,23 +38,17 @@ impl BoundServer {
         self,
         shutdown: impl Future<Output = ()>,
     ) -> Result<(), tonic::transport::Error> {
-        let app_state = self.app_state;
+        let kasane = self.kasane;
         let (health_reporter, health_service) = tonic_health::server::health_reporter();
         tokio::join!(
+            health_reporter.set_serving::<pb::system_service_server::SystemServiceServer<Kasane>>(),
+            health_reporter.set_serving::<pb::auth_service_server::AuthServiceServer<Kasane>>(),
             health_reporter
-                .set_serving::<pb::system_service_server::SystemServiceServer<system::SystemServiceImpl>>(),
-            health_reporter
-                .set_serving::<pb::auth_service_server::AuthServiceServer<auth::AuthServiceImpl>>(),
-            health_reporter
-                .set_serving::<pb::database_service_server::DatabaseServiceServer<database::DatabaseServiceImpl>>(),
-            health_reporter
-                .set_serving::<pb::table_service_server::TableServiceServer<table::TableServiceImpl>>(),
-            health_reporter
-                .set_serving::<pb::data_service_server::DataServiceServer<data::DataServiceImpl>>(),
-            health_reporter
-                .set_serving::<pb::query_service_server::QueryServiceServer<query::QueryServiceImpl>>(),
-            health_reporter
-                .set_serving::<pb::user_service_server::UserServiceServer<users::UserServiceImpl>>(),
+                .set_serving::<pb::database_service_server::DatabaseServiceServer<Kasane>>(),
+            health_reporter.set_serving::<pb::table_service_server::TableServiceServer<Kasane>>(),
+            health_reporter.set_serving::<pb::data_service_server::DataServiceServer<Kasane>>(),
+            health_reporter.set_serving::<pb::query_service_server::QueryServiceServer<Kasane>>(),
+            health_reporter.set_serving::<pb::user_service_server::UserServiceServer<Kasane>>(),
         );
 
         let reflection_service = tonic_reflection::server::Builder::configure()
@@ -62,42 +58,28 @@ impl BoundServer {
             .expect("gRPC reflection descriptor is malformed");
 
         let system_service = pb::system_service_server::SystemServiceServer::with_interceptor(
-            system::SystemServiceImpl {
-                app_state: app_state.clone(),
-            },
+            kasane.clone(),
             auth::require_auth,
         );
-        let auth_service = pb::auth_service_server::AuthServiceServer::new(auth::AuthServiceImpl {
-            app_state: app_state.clone(),
-        });
+        let auth_service = pb::auth_service_server::AuthServiceServer::new(kasane.clone());
         let database_service = pb::database_service_server::DatabaseServiceServer::with_interceptor(
-            database::DatabaseServiceImpl {
-                app_state: app_state.clone(),
-            },
+            kasane.clone(),
             auth::require_auth,
         );
         let table_service = pb::table_service_server::TableServiceServer::with_interceptor(
-            table::TableServiceImpl {
-                app_state: app_state.clone(),
-            },
+            kasane.clone(),
             auth::require_auth,
         );
         let data_service = pb::data_service_server::DataServiceServer::with_interceptor(
-            data::DataServiceImpl {
-                app_state: app_state.clone(),
-            },
+            kasane.clone(),
             auth::require_auth,
         );
         let query_service = pb::query_service_server::QueryServiceServer::with_interceptor(
-            query::QueryServiceImpl {
-                app_state: app_state.clone(),
-            },
+            kasane.clone(),
             auth::require_auth,
         );
         let user_service = pb::user_service_server::UserServiceServer::with_interceptor(
-            users::UserServiceImpl {
-                app_state: app_state.clone(),
-            },
+            kasane.clone(),
             auth::require_auth,
         );
 

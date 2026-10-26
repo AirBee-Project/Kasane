@@ -5,30 +5,13 @@
 //! ネットワーク往復になるバックエンドではその往復が丸ごと二重になる。断面が分かれる
 //! ぶん、判定した対象と操作した対象がずれる隙も生まれる。
 //!
-//! そのため、ここにある関数は `AppState` ではなく**開いているリポジトリ**を受け取り、
+//! そのため、ここにある関数は `Kasane` ではなく**開いているリポジトリ**を受け取り、
 //! 解決した ID を呼び出し側へ返す。
 
 use crate::error::{AppError, AuthError, Resource};
 use crate::models::id::{DatabaseId, TableId};
 use crate::models::users::{Scope, User, UserRole};
 use crate::repositories::CatalogRepository;
-
-/// 認証済みユーザーを運ぶための包み。
-///
-/// 権限判定は [`User`] 側にあり `Deref` 越しに使う。認可のドメインロジックを gRPC 層へ
-/// 漏らさないため。JWT の検証とこの型の組み立ては [`crate::grpc::auth`] が行う。
-#[derive(Clone)]
-pub struct AuthUser {
-    pub user: User,
-}
-
-impl std::ops::Deref for AuthUser {
-    type Target = User;
-
-    fn deref(&self) -> &Self::Target {
-        &self.user
-    }
-}
 
 /// 特定のデータベースに紐づかない操作（データベースの作成・削除など）で使う。
 ///
@@ -61,12 +44,12 @@ pub fn check_self_or_admin(user: &User, username: &str) -> Result<(), AppError> 
 
 /// 名前を解決し、その結果で認可する。
 ///
-/// **「存在しない」を返すより先に呼ぶこと。** 逆にすると、権限の無い利用者へ 404 で
-/// 名前の存在有無を教えることになる。データベースが解決できないときに 403 を返すのも
+/// **「存在しない」を返すより先に呼ぶこと。** 逆にすると、権限の無い利用者へ `NotFound` で
+/// 名前の存在有無を教えることになる。データベースが解決できないときに `PermissionDenied` を返すのも
 /// 同じ理由。
 ///
 /// テーブル名が解決できなければデータベーススコープで判定する。そのデータベースに
-/// 十分な権限を持つ利用者は通過して下位の層が 404 を返せるし、権限のない利用者は
+/// 十分な権限を持つ利用者は通過して下位の層が `NotFound` を返せるし、権限のない利用者は
 /// そこでも落ちるので存在有無の手がかりにならない。
 #[tracing::instrument(skip_all, fields(db_name = %db_name))]
 pub async fn authorize_path<R: CatalogRepository>(
@@ -101,7 +84,7 @@ pub async fn authorize_resolved<R: CatalogRepository>(
     table_name: Option<&str>,
     required: UserRole,
 ) -> Result<(), AppError> {
-    // 解決できなければ ACL を引くまでもなく拒否（下位の層に 404 を出させない）。
+    // 解決できなければ ACL を引くまでもなく拒否（下位の層に `NotFound` を出させない）。
     let scope = db_id.map(|db_id| match table_id {
         Some(table_id) => Scope::Table(db_id, table_id),
         None => Scope::Database(db_id),
@@ -135,7 +118,7 @@ pub async fn reaches<R: CatalogRepository>(
 /// テーブル単位の権限しか持たない利用者も、自分のテーブルへ辿り着けるように通す。
 /// 代わりに [`UserRole::Read`] より上は決して満たさない。
 ///
-/// 権限が無ければ 403、権限はあるが存在しなければ 404。この順序が
+/// 権限が無ければ `PermissionDenied`、権限はあるが存在しなければ `NotFound`。この順序が
 /// 「権限の無い利用者へ名前の存在有無を教えない」を保つ。
 ///
 /// 引いた結果をそのまま渡す形にしてあるので、呼び出し側は同じキーを 2 度読まない。

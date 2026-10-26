@@ -28,6 +28,6 @@ pub mod memory;
 
 /// 現在の feature 設定で有効なストレージ型。
 #[cfg(feature = "server")]
-pub type Db = lmdb::AppDb;
+pub type Db = lmdb::Lmdb;
 #[cfg(not(feature = "server"))]
-pub type Db = memory::MemDb;
+pub type Db = memory::Memory;

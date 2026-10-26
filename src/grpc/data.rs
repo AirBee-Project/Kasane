@@ -9,15 +9,11 @@ use super::pb::{
     RemoveDataRequest, SearchDataRequest, SearchDataResponse, WriteDataRequest,
     data_service_server::DataService,
 };
-use crate::AppState;
+use crate::Kasane;
 use crate::models::database::table::data::GetDataQuery;
 
-pub struct DataServiceImpl {
-    pub app_state: AppState,
-}
-
 #[tonic::async_trait]
-impl DataService for DataServiceImpl {
+impl DataService for Kasane {
     type SearchStream =
         Pin<Box<dyn Stream<Item = Result<SearchDataResponse, Status>> + Send + 'static>>;
 
@@ -25,7 +21,7 @@ impl DataService for DataServiceImpl {
         &self,
         request: Request<SearchDataRequest>,
     ) -> Result<Response<Self::SearchStream>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+        let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
         let spatial_ids: Vec<_> = req
@@ -39,8 +35,8 @@ impl DataService for DataServiceImpl {
         };
 
         let result = crate::services::database::data::get(
-            &self.app_state,
-            &auth_user,
+            self,
+            &user,
             &req.db_name,
             &req.table_name,
             &spatial_ids,
@@ -54,7 +50,7 @@ impl DataService for DataServiceImpl {
     }
 
     async fn insert(&self, request: Request<WriteDataRequest>) -> Result<Response<()>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+        let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
         let spatial_ids: Vec<_> = req
@@ -66,8 +62,8 @@ impl DataService for DataServiceImpl {
         let value = required(req.value, "value")?.into();
 
         crate::services::database::data::insert(
-            &self.app_state,
-            &auth_user,
+            self,
+            &user,
             &req.db_name,
             &req.table_name,
             &spatial_ids,
@@ -79,7 +75,7 @@ impl DataService for DataServiceImpl {
     }
 
     async fn upsert(&self, request: Request<WriteDataRequest>) -> Result<Response<()>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+        let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
         let spatial_ids: Vec<_> = req
@@ -91,8 +87,8 @@ impl DataService for DataServiceImpl {
         let value = required(req.value, "value")?.into();
 
         crate::services::database::data::upsert(
-            &self.app_state,
-            &auth_user,
+            self,
+            &user,
             &req.db_name,
             &req.table_name,
             &spatial_ids,
@@ -104,7 +100,7 @@ impl DataService for DataServiceImpl {
     }
 
     async fn remove(&self, request: Request<RemoveDataRequest>) -> Result<Response<()>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+        let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
         let spatial_ids: Vec<_> = req
@@ -115,8 +111,8 @@ impl DataService for DataServiceImpl {
         let zoom_level_policy = req.zoom_level_policy.into();
 
         crate::services::database::data::remove(
-            &self.app_state,
-            &auth_user,
+            self,
+            &user,
             &req.db_name,
             &req.table_name,
             &spatial_ids,

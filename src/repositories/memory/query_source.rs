@@ -4,7 +4,7 @@ use spatial_id::RangeId;
 use spatial_id::collection::SpatialIdMap;
 use spatial_id::query::{CancellationToken, QueryIter, SafeValue, Source};
 
-use super::{MemDb, State};
+use super::{Memory, State};
 use crate::models::id::TableId;
 use crate::repositories::traits::DecodeFn;
 
@@ -13,7 +13,7 @@ pub struct MemSource<V> {
     decode: DecodeFn<V>,
 }
 
-impl MemDb {
+impl Memory {
     pub fn table_source<V>(
         &self,
         table_id: TableId,

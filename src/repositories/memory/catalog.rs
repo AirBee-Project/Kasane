@@ -1,17 +1,18 @@
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use uuid::Uuid;
 
 use super::State;
 use crate::error::{AppError, Resource};
 use crate::models::database::table::{Table, TableConstraints, TableDataType, TableMetadata};
-use crate::models::database::{DatabaseInfoResponse, DatabaseMetadata};
+use crate::models::database::{DatabaseDetail, DatabaseMetadata};
 use crate::models::id::{DatabaseId, TableId};
 use crate::repositories::ResolvedTable;
 use crate::services::helpers::value::{interpret_value, restore_value};
 
-fn info(name: &str, meta: &DatabaseMetadata) -> DatabaseInfoResponse {
-    DatabaseInfoResponse {
+fn info(name: &str, meta: &DatabaseMetadata) -> DatabaseDetail {
+    DatabaseDetail {
         name: name.to_string(),
         description: meta.description.clone(),
     }
@@ -38,13 +39,13 @@ impl State {
             .map(|meta| meta.id)
     }
 
-    pub(super) fn database_info(&self, name: &str) -> Option<(DatabaseId, DatabaseInfoResponse)> {
+    pub(super) fn database_info(&self, name: &str) -> Option<(DatabaseId, DatabaseDetail)> {
         self.databases
             .get(name)
             .map(|meta| (meta.id, info(name, meta)))
     }
 
-    pub(super) fn databases(&self) -> impl Iterator<Item = (DatabaseId, DatabaseInfoResponse)> {
+    pub(super) fn databases(&self) -> impl Iterator<Item = (DatabaseId, DatabaseDetail)> {
         self.databases
             .iter()
             .map(|(name, meta)| (meta.id, info(name, meta)))
@@ -77,7 +78,7 @@ impl State {
         &mut self,
         name: &str,
         description: Option<String>,
-    ) -> Result<DatabaseInfoResponse, AppError> {
+    ) -> Result<DatabaseDetail, AppError> {
         if self.databases.contains_key(name) {
             return Err(Resource::Database.already_exists(name));
         }
@@ -86,13 +87,12 @@ impl State {
             description,
         };
         let created = info(name, &meta);
-        self.databases.insert(name.to_string(), meta);
+        Arc::make_mut(&mut self.databases).insert(name.to_string(), meta);
         Ok(created)
     }
 
     pub(super) fn database_remove(&mut self, name: &str) -> Result<(), AppError> {
-        let meta = self
-            .databases
+        let meta = Arc::make_mut(&mut self.databases)
             .remove(name)
             .ok_or_else(|| Resource::Database.not_found(name))?;
         let removed: Vec<TableId> = self
@@ -101,9 +101,9 @@ impl State {
             .filter(|((db_id, _), _)| *db_id == meta.id)
             .map(|(_, table)| table.id)
             .collect();
-        self.tables.retain(|(db_id, _), _| *db_id != meta.id);
+        Arc::make_mut(&mut self.tables).retain(|(db_id, _), _| *db_id != meta.id);
         for table_id in removed {
-            self.data.remove(&table_id);
+            Arc::make_mut(&mut self.data).remove(&table_id);
         }
         Ok(())
     }
@@ -113,20 +113,19 @@ impl State {
         name: &str,
         new_name: Option<String>,
         description: Option<Option<String>>,
-    ) -> Result<DatabaseInfoResponse, AppError> {
+    ) -> Result<DatabaseDetail, AppError> {
         let final_name = new_name.unwrap_or_else(|| name.to_string());
         if final_name != name && self.databases.contains_key(&final_name) {
             return Err(Resource::Database.already_exists(final_name));
         }
-        let mut meta = self
-            .databases
+        let mut meta = Arc::make_mut(&mut self.databases)
             .remove(name)
             .ok_or_else(|| Resource::Database.not_found(name))?;
         if let Some(description) = description {
             meta.description = description;
         }
         let updated = info(&final_name, &meta);
-        self.databases.insert(final_name, meta);
+        Arc::make_mut(&mut self.databases).insert(final_name, meta);
         Ok(updated)
     }
 
@@ -163,7 +162,7 @@ impl State {
             description,
             is_temporal,
         };
-        self.tables.insert(key, meta.clone());
+        Arc::make_mut(&mut self.tables).insert(key, meta.clone());
         Ok(Table::from_meta(table_name, meta))
     }
 
@@ -217,19 +216,18 @@ impl State {
             meta.is_temporal = is_temporal;
         }
 
-        self.tables.remove(&(db_id, table_name.to_string()));
-        self.tables
-            .insert((db_id, final_name.to_string()), meta.clone());
+        let tables = Arc::make_mut(&mut self.tables);
+        tables.remove(&(db_id, table_name.to_string()));
+        tables.insert((db_id, final_name.to_string()), meta.clone());
         Ok(Table::from_meta(final_name, meta))
     }
 
     pub(super) fn table_remove(&mut self, db_name: &str, table_name: &str) -> Result<(), AppError> {
         let db_id = self.require_database_id(db_name)?;
-        let meta = self
-            .tables
+        let meta = Arc::make_mut(&mut self.tables)
             .remove(&(db_id, table_name.to_string()))
             .ok_or_else(|| Resource::Table.not_found(table_name))?;
-        self.data.remove(&meta.id);
+        Arc::make_mut(&mut self.data).remove(&meta.id);
         Ok(())
     }
 }

@@ -52,7 +52,7 @@ fn dec(b: &[u8]) -> i32 {
 }
 
 /// このテーブルのシャードキー数とポインタノードの有無。
-fn shard_stats(db: &kasane::repositories::lmdb::AppDb, table_id: TableId) -> (usize, bool) {
+fn shard_stats(db: &kasane::repositories::lmdb::Lmdb, table_id: TableId) -> (usize, bool) {
     let rtxn = db.env.read_txn().unwrap();
     let mut keys = 0usize;
     let mut has_pointer = false;
@@ -71,7 +71,7 @@ fn shard_stats(db: &kasane::repositories::lmdb::AppDb, table_id: TableId) -> (us
 
 /// `data_get`（全域）を `(x,y) -> value` のマップへ復元する。
 async fn read_all(
-    db: &kasane::repositories::lmdb::AppDb,
+    db: &kasane::repositories::lmdb::Lmdb,
     table_id: TableId,
 ) -> HashMap<(u32, u32), i32> {
     let r = KasaneDbRead::new(db.env.read_txn().unwrap(), db);
@@ -100,7 +100,7 @@ async fn read_all(
 
 /// 正解の値と DB の全状態を突き合わせる。
 async fn verify(
-    db: &kasane::repositories::lmdb::AppDb,
+    db: &kasane::repositories::lmdb::Lmdb,
     table_id: TableId,
     oracle: &HashMap<(u32, u32), i32>,
 ) {

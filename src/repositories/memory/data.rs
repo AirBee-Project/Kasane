@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use spatial_id::FlexId;
 use spatial_id::collection::{SpatialIdMap, SpatialIdSet};
@@ -13,7 +14,7 @@ impl State {
     }
 
     fn map_mut(&mut self, table_id: TableId) -> &mut SpatialIdMap<Vec<u8>> {
-        self.data.entry(table_id).or_default()
+        Arc::make_mut(&mut self.data).entry(table_id).or_default()
     }
 
     pub(super) fn data_get(&self, table_id: TableId, ids: SpatialIdSet) -> ValueGroups {
@@ -47,7 +48,7 @@ impl State {
     }
 
     pub(super) fn data_remove(&mut self, table_id: TableId, ids: SpatialIdSet) {
-        if let Some(map) = self.data.get_mut(&table_id) {
+        if let Some(map) = Arc::make_mut(&mut self.data).get_mut(&table_id) {
             for id in ids.iter() {
                 map.remove(id);
             }

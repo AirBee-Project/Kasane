@@ -1,4 +1,4 @@
-use kasane::AppState;
+use kasane::Kasane;
 use std::net::SocketAddr;
 
 #[cfg(feature = "production")]
@@ -15,12 +15,10 @@ async fn main() {
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(5172);
-    let db = kasane::repositories::lmdb::initialize_database(&database_path)
-        .expect("failed to open the storage backend");
+    let kasane = Kasane::open(&database_path).expect("failed to open the storage backend");
 
-    let app_state = AppState::new(db);
     let address = SocketAddr::from(([0, 0, 0, 0], port));
-    let bound = match kasane::grpc::bind(app_state, address) {
+    let bound = match kasane.bind(address) {
         Ok(bound) => bound,
         Err(e) => {
             tracing::error!("cannot listen on {address}: {e}");

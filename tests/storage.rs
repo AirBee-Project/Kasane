@@ -7,7 +7,7 @@ use kasane::error::AppError;
 use kasane::repositories::lmdb::initialize_database;
 use kasane::repositories::{CatalogRepository, ReadRepository, Storage, WriteRepository};
 
-fn temp_db() -> (tempfile::TempDir, kasane::repositories::lmdb::AppDb) {
+fn temp_db() -> (tempfile::TempDir, kasane::repositories::lmdb::Lmdb) {
     let tmp = tempfile::TempDir::new().unwrap();
     let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     (tmp, db)

@@ -5,15 +5,15 @@ use uuid::Uuid;
 
 use crate::error::{AppError, Resource, Stored};
 use crate::models::database::table::{Table, TableConstraints, TableDataType, TableMetadata};
-use crate::models::database::{DatabaseInfoResponse, DatabaseMetadata};
+use crate::models::database::{DatabaseDetail, DatabaseMetadata};
 use crate::models::id::{DatabaseId, TableId};
 
 use super::keys::DbIdAndName;
-use super::{AppDb, KasaneDbRead, KasaneDbWrite};
+use super::{KasaneDbRead, KasaneDbWrite, Lmdb};
 
 /// `RwTxn` は `RoTxn` へ Deref するので、読み書きどちらからも同じ関数を呼べる。
 pub(super) fn database_id(
-    db: &AppDb,
+    db: &Lmdb,
     txn: &heed::RoTxn<heed::WithoutTls>,
     name: &str,
 ) -> Result<Option<DatabaseId>, AppError> {
@@ -24,7 +24,7 @@ pub(super) fn database_id(
 }
 
 pub(super) fn table_id(
-    db: &AppDb,
+    db: &Lmdb,
     txn: &heed::RoTxn<heed::WithoutTls>,
     db_id: DatabaseId,
     table_name: &str,
@@ -39,7 +39,7 @@ pub(super) fn table_id(
 }
 
 pub(super) fn database_name(
-    db: &AppDb,
+    db: &Lmdb,
     txn: &heed::RoTxn<heed::WithoutTls>,
     db_id: DatabaseId,
 ) -> Result<Option<String>, AppError> {
@@ -49,7 +49,7 @@ pub(super) fn database_name(
 /// 所属データベースも返すのは、権限の描画で「本当にそのデータベースの配下か」を
 /// 確かめられるようにするため。
 pub(super) fn table_entry(
-    db: &AppDb,
+    db: &Lmdb,
     txn: &heed::RoTxn<heed::WithoutTls>,
     table_id: TableId,
 ) -> Result<Option<(DatabaseId, String)>, AppError> {
@@ -60,7 +60,7 @@ pub(super) fn table_entry(
 }
 
 pub(super) fn database_names(
-    db: &AppDb,
+    db: &Lmdb,
     txn: &heed::RoTxn<heed::WithoutTls>,
     ids: &[DatabaseId],
 ) -> Result<HashMap<DatabaseId, String>, AppError> {
@@ -74,7 +74,7 @@ pub(super) fn database_names(
 }
 
 pub(super) fn table_entries(
-    db: &AppDb,
+    db: &Lmdb,
     txn: &heed::RoTxn<heed::WithoutTls>,
     ids: &[TableId],
 ) -> Result<HashMap<TableId, (DatabaseId, String)>, AppError> {
@@ -90,7 +90,7 @@ pub(super) fn table_entries(
 /// リーフの件数ヘッダを合算する（リーフ本体は読まない）。
 #[tracing::instrument(skip_all)]
 pub(super) fn table_count(
-    db: &AppDb,
+    db: &Lmdb,
     txn: &heed::RoTxn<heed::WithoutTls>,
     table_id: TableId,
 ) -> Result<u64, AppError> {
@@ -110,7 +110,7 @@ pub(super) fn table_count(
 
 /// 全走査に依存する逆引きは持たず、`tables` のプレフィックススキャンで済ませる。
 pub(super) fn table_names(
-    db: &AppDb,
+    db: &Lmdb,
     txn: &heed::RoTxn<heed::WithoutTls>,
     db_id: DatabaseId,
 ) -> Result<Vec<String>, AppError> {
@@ -133,14 +133,14 @@ pub(super) fn table_names(
 pub(super) fn database_info(
     r: &KasaneDbRead<'_>,
     name: &str,
-) -> Result<Option<(DatabaseId, DatabaseInfoResponse)>, AppError> {
+) -> Result<Option<(DatabaseId, DatabaseDetail)>, AppError> {
     if name.is_empty() {
         return Ok(None);
     }
     Ok(r.db.databases.get(&r.read_txn, name)?.map(|meta| {
         (
             meta.id,
-            DatabaseInfoResponse {
+            DatabaseDetail {
                 name: name.to_string(),
                 description: meta.description,
             },
@@ -153,7 +153,7 @@ pub(super) fn database_info(
 pub(super) fn databases_by_id(
     r: &KasaneDbRead<'_>,
     ids: &[DatabaseId],
-) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
+) -> Result<Vec<(DatabaseId, DatabaseDetail)>, AppError> {
     let mut out = Vec::with_capacity(ids.len());
     for &db_id in ids {
         // 逆引きで名前を得てから本体を引く。名前が本体の鍵なので 2 段になる。
@@ -163,7 +163,7 @@ pub(super) fn databases_by_id(
         if let Some(meta) = r.db.databases.get(&r.read_txn, name.as_str())? {
             out.push((
                 db_id,
-                DatabaseInfoResponse {
+                DatabaseDetail {
                     name,
                     description: meta.description,
                 },
@@ -199,14 +199,14 @@ pub(super) fn tables_by_id(
 #[tracing::instrument(skip_all)]
 pub(super) fn database_list(
     r: &KasaneDbRead<'_>,
-) -> Result<Vec<(DatabaseId, DatabaseInfoResponse)>, AppError> {
+) -> Result<Vec<(DatabaseId, DatabaseDetail)>, AppError> {
     let db = r.db.databases;
     let mut list = Vec::new();
     for res in db.iter(&r.read_txn)? {
         let (k, meta) = res.map_err(AppError::from)?;
         list.push((
             meta.id,
-            DatabaseInfoResponse {
+            DatabaseDetail {
                 name: k.to_string(),
                 description: meta.description,
             },
@@ -220,7 +220,7 @@ pub(super) fn database_create(
     w: &mut KasaneDbWrite<'_>,
     name: &str,
     description: Option<String>,
-) -> Result<DatabaseInfoResponse, AppError> {
+) -> Result<DatabaseDetail, AppError> {
     if database_id(w.db, &w.write_txn, name)?.is_some() {
         return Err(Resource::Database.already_exists(name.to_string()));
     }
@@ -235,7 +235,7 @@ pub(super) fn database_create(
     w.db.databases.put(&mut w.write_txn, name, &meta)?;
     w.db.database_id_index.put(&mut w.write_txn, &db_id, name)?;
 
-    Ok(DatabaseInfoResponse {
+    Ok(DatabaseDetail {
         name: name.to_string(),
         description,
     })
@@ -272,7 +272,7 @@ pub(super) fn database_update(
     name: &str,
     new_name: Option<String>,
     description: Option<Option<String>>,
-) -> Result<DatabaseInfoResponse, AppError> {
+) -> Result<DatabaseDetail, AppError> {
     let final_new_name = new_name.as_deref().unwrap_or(name);
 
     if name != final_new_name {
@@ -306,7 +306,7 @@ pub(super) fn database_update(
             .put(&mut w.write_txn, &meta.id, final_new_name)?;
     }
     db.put(&mut w.write_txn, final_new_name, &meta)?;
-    Ok(DatabaseInfoResponse {
+    Ok(DatabaseDetail {
         name: final_new_name.to_string(),
         description: meta.description,
     })
@@ -382,7 +382,7 @@ pub(super) fn table_list_by_id(
 
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub(super) fn table_info(
-    db: &AppDb,
+    db: &Lmdb,
     txn: &heed::RoTxn<'_, heed::WithoutTls>,
     db_name: &str,
     table_name: &str,

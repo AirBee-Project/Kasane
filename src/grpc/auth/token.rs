@@ -1,26 +1,21 @@
 //! JWT による認証（サーバー）。
 //!
-//! - [`AuthServiceImpl`] - ログインエンドポイント。
+//! - `AuthService` の [`Kasane`] への実装 - ログインエンドポイント。
 //! - [`require_auth`] - 保護された RPC の前段で動作する同期インターセプター（署名・有効期限の検証）。
 //! - [`authenticate`] - 各 RPC ハンドラー内で最新の利用者レコードを復元するヘルパー。
 
 use tonic::{Request, Response, Status};
 
-use crate::AppState;
+use crate::Kasane;
 use crate::error::{AppError, AuthError};
 use crate::grpc::pb::{LoginRequest, LoginResponse, auth_service_server::AuthService};
 use crate::models::auth::Claims;
+use crate::models::users::User;
 use crate::repositories::{CatalogRepository, ReadRepository, Storage};
-use crate::services::auth::{
-    AuthUser, dummy_verify_password, generate_jwt, verify_jwt, verify_password,
-};
-
-pub struct AuthServiceImpl {
-    pub app_state: AppState,
-}
+use crate::services::auth::{dummy_verify_password, generate_jwt, verify_jwt, verify_password};
 
 #[tonic::async_trait]
-impl AuthService for AuthServiceImpl {
+impl AuthService for Kasane {
     async fn login(
         &self,
         request: Request<LoginRequest>,
@@ -29,7 +24,6 @@ impl AuthService for AuthServiceImpl {
 
         let username = payload.username.clone();
         let stored_hash = self
-            .app_state
             .db
             .read(async move |repo| repo.user_record(&username).await)
             .await?
@@ -55,13 +49,13 @@ impl AuthService for AuthServiceImpl {
             return Err(AuthError::InvalidCredentials.into());
         }
 
-        let token = generate_jwt(&self.app_state, &payload.username).await?;
+        let token = generate_jwt(self, &payload.username).await?;
 
         Ok(Response::new(LoginResponse { token }))
     }
 }
 
-/// `tonic::service::Interceptor` は同期処理しかできないため、JWT の署名検証まではここで行い、ユーザーレコードとの突き合わせ（DB 読み取りが要る）は各 RPC ハンドラが [`authenticate`] / [`load_auth_user`] で行う。
+/// `tonic::service::Interceptor` は同期処理しかできないため、JWT の署名検証まではここで行い、ユーザーレコードとの突き合わせ（DB 読み取りが要る）は各 RPC ハンドラが [`authenticate`] / [`load_user`] で行う。
 pub fn require_auth(mut request: Request<()>) -> Result<Request<()>, Status> {
     let claims = extract_claims(&request)?;
     request.extensions_mut().insert(claims);
@@ -97,23 +91,20 @@ fn extract_claims(request: &Request<()>) -> Result<Claims, AppError> {
     verify_jwt(token)
 }
 
-/// [`claims_from`] と [`load_auth_user`] を続けて行う。認証必須の RPC の入口で使う。
-pub async fn authenticate<T>(
-    app_state: &AppState,
-    request: &tonic::Request<T>,
-) -> Result<AuthUser, Status> {
+/// [`claims_from`] と [`load_user`] を続けて行う。認証必須の RPC の入口で使う。
+pub async fn authenticate<T>(kasane: &Kasane, request: &tonic::Request<T>) -> Result<User, Status> {
     let claims = claims_from(request)?;
-    load_auth_user(app_state, &claims).await
+    load_user(kasane, &claims).await
 }
 
 /// ユーザーの存在有無と `uid`/`ver` の不一致を外部へ区別しないため、同じ理由を返す。
 const REVOKED: &str = "token is no longer valid";
 
 /// [`require_auth`] が検証した `Claims` から、現在の利用者レコードを
-/// 読み直して [`AuthUser`] を組み立てる。`uid`/`ver` が最新のレコードと一致しない場合（パスワード変更などでトークンが失効した場合）は拒否する。
-pub async fn load_auth_user(app_state: &AppState, claims: &Claims) -> Result<AuthUser, Status> {
+/// 読み直して返す。`uid`/`ver` が最新のレコードと一致しない場合（パスワード変更などでトークンが失効した場合）は拒否する。
+pub async fn load_user(kasane: &Kasane, claims: &Claims) -> Result<User, Status> {
     let sub = claims.sub.clone();
-    let user = app_state
+    let user = kasane
         .db
         .read(async move |repo| repo.get_user(&sub).await)
         .await?
@@ -123,7 +114,7 @@ pub async fn load_auth_user(app_state: &AppState, claims: &Claims) -> Result<Aut
         return Err(AppError::Auth(AuthError::InvalidToken(REVOKED)).into());
     }
 
-    Ok(AuthUser { user })
+    Ok(user)
 }
 
 pub fn claims_from<T>(request: &tonic::Request<T>) -> Result<Claims, Status> {

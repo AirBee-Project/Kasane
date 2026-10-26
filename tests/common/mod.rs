@@ -35,7 +35,7 @@ impl Interceptor for TokenInterceptor {
 pub struct TestApp {
     channel: Channel,
     root_token: String,
-    app_state: kasane::AppState,
+    instance: kasane::Kasane,
     _temp_dir: tempfile::TempDir,
     shutdown: Option<tokio::sync::oneshot::Sender<()>>,
 }
@@ -71,15 +71,14 @@ macro_rules! client_pair {
 impl TestApp {
     pub async fn new() -> Self {
         let temp_dir = tempfile::TempDir::new().unwrap();
-        let db = kasane::repositories::lmdb::initialize_database(temp_dir.path().to_str().unwrap())
-            .unwrap();
-
-        let app_state = kasane::AppState::new(db);
-        let root_token = kasane::services::auth::generate_jwt(&app_state, "root")
+        let instance = kasane::Kasane::open(temp_dir.path()).unwrap();
+        let root_token = kasane::services::auth::generate_jwt(&instance, "root")
             .await
             .unwrap();
 
-        let bound = kasane::grpc::bind(app_state.clone(), "127.0.0.1:0".parse().unwrap())
+        let bound = instance
+            .clone()
+            .bind("127.0.0.1:0".parse().unwrap())
             .expect("failed to bind an ephemeral port for the test gRPC server");
         let addr = bound.local_addr();
 
@@ -101,7 +100,7 @@ impl TestApp {
         Self {
             channel,
             root_token,
-            app_state,
+            instance,
             _temp_dir: temp_dir,
             shutdown: Some(shutdown_tx),
         }
@@ -115,8 +114,8 @@ impl TestApp {
         &self.root_token
     }
 
-    pub fn app_state(&self) -> &kasane::AppState {
-        &self.app_state
+    pub fn instance(&self) -> &kasane::Kasane {
+        &self.instance
     }
 
     pub fn auth(&self) -> pb::auth_service_client::AuthServiceClient<Channel> {

@@ -6,17 +6,11 @@ use super::pb::{
     ListDatabasesRequest, ListDatabasesResponse, UpdateDatabaseRequest,
     database_service_server::DatabaseService,
 };
-use crate::AppState;
-use crate::models::database::DatabaseInfoResponse;
-use crate::models::users::UserRole;
-use crate::services::auth::check_global_role;
+use crate::Kasane;
+use crate::models::database::DatabaseDetail;
 
-pub struct DatabaseServiceImpl {
-    pub app_state: AppState,
-}
-
-impl From<DatabaseInfoResponse> for DatabaseInfo {
-    fn from(info: DatabaseInfoResponse) -> Self {
+impl From<DatabaseDetail> for DatabaseInfo {
+    fn from(info: DatabaseDetail) -> Self {
         Self {
             name: info.name,
             description: info.description,
@@ -25,17 +19,16 @@ impl From<DatabaseInfoResponse> for DatabaseInfo {
 }
 
 #[tonic::async_trait]
-impl DatabaseService for DatabaseServiceImpl {
+impl DatabaseService for Kasane {
     async fn create(
         &self,
         request: Request<CreateDatabaseRequest>,
     ) -> Result<Response<DatabaseInfo>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+        let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
-        check_global_role(&auth_user, UserRole::Manage)?;
         let res =
-            crate::services::database::create(&self.app_state, &req.name, req.description).await?;
+            crate::services::database::create(self, &user, &req.name, req.description).await?;
         Ok(Response::new(res.into()))
     }
 
@@ -43,11 +36,10 @@ impl DatabaseService for DatabaseServiceImpl {
         &self,
         request: Request<GetDatabaseRequest>,
     ) -> Result<Response<DatabaseInfo>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+        let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
-        let res =
-            crate::services::database::info(&self.app_state, &auth_user, &req.db_name).await?;
+        let res = crate::services::database::info(self, &user, &req.db_name).await?;
         Ok(Response::new(res.into()))
     }
 
@@ -55,9 +47,9 @@ impl DatabaseService for DatabaseServiceImpl {
         &self,
         request: Request<ListDatabasesRequest>,
     ) -> Result<Response<ListDatabasesResponse>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+        let user = authenticate(self, &request).await?;
 
-        let res = crate::services::database::list(&self.app_state, &auth_user).await?;
+        let res = crate::services::database::list(self, &user).await?;
         Ok(Response::new(ListDatabasesResponse {
             databases: res.into_iter().map(Into::into).collect(),
         }))
@@ -67,19 +59,14 @@ impl DatabaseService for DatabaseServiceImpl {
         &self,
         request: Request<UpdateDatabaseRequest>,
     ) -> Result<Response<DatabaseInfo>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+        let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
         let description = req.description_update.map(Into::into);
 
-        let res = crate::services::database::update(
-            &self.app_state,
-            &auth_user,
-            &req.db_name,
-            req.new_name,
-            description,
-        )
-        .await?;
+        let res =
+            crate::services::database::update(self, &user, &req.db_name, req.new_name, description)
+                .await?;
         Ok(Response::new(res.into()))
     }
 
@@ -87,11 +74,10 @@ impl DatabaseService for DatabaseServiceImpl {
         &self,
         request: Request<DeleteDatabaseRequest>,
     ) -> Result<Response<()>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+        let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
-        check_global_role(&auth_user, UserRole::Manage)?;
-        crate::services::database::remove(&self.app_state, &req.db_name).await?;
+        crate::services::database::remove(self, &user, &req.db_name).await?;
         Ok(Response::new(()))
     }
 }
