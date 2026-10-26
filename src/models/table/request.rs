@@ -1,5 +1,5 @@
 use super::TableDataType;
-use crate::models::database::table::data_type::TableConstraints;
+use crate::models::table::data_type::TableConstraints;
 
 #[derive(Debug)]
 pub struct CreateTableRequest {

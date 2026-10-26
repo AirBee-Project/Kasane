@@ -37,6 +37,7 @@ flowchart TD
 
 - proto（`proto/*.proto`）から生成された gRPC サービス・メッセージ型（`grpc::pb`）と、各サービストレイトの `Kasane` への実装（`grpc::database`, `grpc::table` 等）を置く。
 - `grpc::convert*` が proto のメッセージ型とドメイン型（`models`）の相互変換を担う。
+- proto とドメインには同じ名前の型が多い（`TableDataType`、`UserRole` など）。grpc 層では proto の型を常に `pb::` で修飾し、ドメインの型は修飾せずに使う。
 - 認証は `grpc::auth`（JWT の検証、利用者レコードの読み直し、Login RPC）が集約して担う。
 - ドメインロジックや DB 操作は持たない。
 
@@ -50,6 +51,7 @@ flowchart TD
 ### `repositories`
 
 - ストレージへのアクセスを隠蔽する。server では LMDB（`repositories::lmdb`）、組み込みではインメモリ（`repositories::memory`）を使い、`repositories::Db` が feature で片方を指す。
+- 利用者と ACL の書き込みは `UserRepository` に分けてあり、server のストレージだけが実装する。
 - テーブルの open / get / insert / remove などの低レベル操作を担当する。
 - 業務ルールは持たない。
 - バックエンド固有の型や詳細を上位層に公開しない。

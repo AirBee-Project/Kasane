@@ -1,6 +1,8 @@
 pub mod encoding;
 pub mod traits;
 
+#[cfg(feature = "server")]
+pub use traits::UserRepository;
 pub use traits::{
     CatalogRepository, ReadRepository, ResolvedTable, Storage, ValueGroups, WriteRepository,
 };
@@ -24,6 +26,7 @@ fn root_password() -> String {
 
 #[cfg(feature = "server")]
 pub mod lmdb;
+#[cfg(not(feature = "server"))]
 pub mod memory;
 
 /// 現在の feature 設定で有効なストレージ型。

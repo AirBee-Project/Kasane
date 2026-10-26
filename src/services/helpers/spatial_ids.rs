@@ -2,7 +2,7 @@ use spatial_id::{FlexId, SpatialId as _, collection::SpatialIdSet};
 
 use crate::{
     error::AppError,
-    models::{database::table::data::ZoomLevelPolicy, spatial_id::SpatialId},
+    models::{data::ZoomLevelPolicy, spatial_id::SpatialId},
 };
 
 fn invalid_time_reason(reason: impl Into<String>) -> AppError {

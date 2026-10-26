@@ -2,11 +2,11 @@ use std::collections::{BTreeSet, HashMap};
 
 use spatial_id::collection::SpatialIdSet;
 
-use super::{MemRead, MemWrite, users};
+use super::{MemoryRead, MemoryWrite, users};
 use crate::error::AppError;
 use crate::models::database::DatabaseDetail;
-use crate::models::database::table::{Table, TableConstraints, TableDataType};
-use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
+use crate::models::id::{DatabaseId, PrincipalId, TableId};
+use crate::models::table::{Table, TableConstraints, TableDataType};
 use crate::models::users::{AclEntry, Grant, Scope, UserRecord};
 use crate::repositories::{
     CatalogRepository, ReadRepository, ResolvedTable, ValueGroups, WriteRepository,
@@ -92,10 +92,10 @@ macro_rules! impl_catalog_repository {
     };
 }
 
-impl_catalog_repository!(MemRead);
-impl_catalog_repository!(MemWrite);
+impl_catalog_repository!(MemoryRead);
+impl_catalog_repository!(MemoryWrite);
 
-impl ReadRepository for MemRead {
+impl ReadRepository for MemoryRead {
     async fn database_info(
         &self,
         name: &str,
@@ -161,7 +161,7 @@ impl ReadRepository for MemRead {
     }
 }
 
-impl WriteRepository for MemWrite {
+impl WriteRepository for MemoryWrite {
     async fn database_create(
         &mut self,
         name: &str,
@@ -250,29 +250,5 @@ impl WriteRepository for MemWrite {
     async fn data_remove(&mut self, table_id: TableId, ids: SpatialIdSet) -> Result<(), AppError> {
         self.0.data_remove(table_id, ids);
         Ok(())
-    }
-
-    async fn put_user_record(&mut self, _: &str, _: &UserRecord) -> Result<(), AppError> {
-        Err(users::unsupported())
-    }
-
-    async fn remove_user_record(&mut self, _: &str) -> Result<(), AppError> {
-        Err(users::unsupported())
-    }
-
-    async fn acl_put(&mut self, _: AclEntry, _: PrincipalId) -> Result<(), AppError> {
-        Err(users::unsupported())
-    }
-
-    async fn acl_remove(&mut self, _: PrincipalId, _: DataTarget) -> Result<bool, AppError> {
-        Err(users::unsupported())
-    }
-
-    async fn acl_remove_principal(&mut self, _: PrincipalId) -> Result<(), AppError> {
-        Err(users::unsupported())
-    }
-
-    async fn acl_count(&self, _: PrincipalId) -> Result<u32, AppError> {
-        Ok(0)
     }
 }

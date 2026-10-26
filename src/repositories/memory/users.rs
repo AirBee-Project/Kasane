@@ -1,6 +1,5 @@
 use uuid::Uuid;
 
-use crate::error::AppError;
 use crate::models::id::PrincipalId;
 use crate::models::users::{UserRecord, UserRole};
 use crate::repositories::ROOT_USERNAME;
@@ -24,9 +23,4 @@ pub(super) fn list_users(after: Option<&str>, limit: usize) -> Vec<(String, User
     })
     .into_iter()
     .collect()
-}
-
-/// 利用者を変更する操作は UserService からしか呼ばれず、インメモリでは UserService を提供しない。
-pub(super) fn unsupported() -> AppError {
-    AppError::Internal("the in-memory storage only has the root user".to_string())
 }

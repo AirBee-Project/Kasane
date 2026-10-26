@@ -17,7 +17,7 @@ use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
 use crate::models::users::{AclEntry, Grant, Scope, UserRecord};
 use crate::repositories::encoding::acl::{AclKey, decode_role};
 
-use super::{KasaneDbRead, KasaneDbWrite, Lmdb};
+use super::{Lmdb, LmdbRead, LmdbWrite};
 
 type Txn<'t> = RoTxn<'t, heed::WithoutTls>;
 
@@ -138,7 +138,7 @@ impl Lmdb {
 
 #[tracing::instrument(skip_all)]
 pub(super) fn list_users(
-    r: &KasaneDbRead<'_>,
+    r: &LmdbRead<'_>,
     after: Option<&str>,
     limit: usize,
 ) -> Result<Vec<(String, UserRecord)>, AppError> {
@@ -161,7 +161,7 @@ pub(super) fn list_users(
 
 #[tracing::instrument(skip_all, fields(username = %username))]
 pub(super) fn put_user_record(
-    w: &mut KasaneDbWrite<'_>,
+    w: &mut LmdbWrite<'_>,
     username: &str,
     record: &UserRecord,
 ) -> Result<(), AppError> {
@@ -172,17 +172,14 @@ pub(super) fn put_user_record(
 }
 
 #[tracing::instrument(skip_all, fields(username = %username))]
-pub(super) fn remove_user_record(
-    w: &mut KasaneDbWrite<'_>,
-    username: &str,
-) -> Result<(), AppError> {
+pub(super) fn remove_user_record(w: &mut LmdbWrite<'_>, username: &str) -> Result<(), AppError> {
     w.db.users.delete(&mut w.write_txn, username)?;
     Ok(())
 }
 
 #[tracing::instrument(skip_all, fields(principal = %principal))]
 pub(super) fn acl_put(
-    w: &mut KasaneDbWrite<'_>,
+    w: &mut LmdbWrite<'_>,
     entry: AclEntry,
     principal: PrincipalId,
 ) -> Result<(), AppError> {
@@ -196,7 +193,7 @@ pub(super) fn acl_put(
 
 #[tracing::instrument(skip_all, fields(principal = %principal))]
 pub(super) fn acl_remove(
-    w: &mut KasaneDbWrite<'_>,
+    w: &mut LmdbWrite<'_>,
     principal: PrincipalId,
     target: DataTarget,
 ) -> Result<bool, AppError> {
@@ -212,7 +209,7 @@ pub(super) fn acl_remove(
 /// **データベーススコープの行と配下テーブルの行が同じ 1 プレフィックスに入る**。
 #[tracing::instrument(skip_all, fields(db_id = %db_id, table_id = ?table_id))]
 pub(super) fn acl_remove_object(
-    w: &mut KasaneDbWrite<'_>,
+    w: &mut LmdbWrite<'_>,
     db_id: DatabaseId,
     table_id: Option<TableId>,
 ) -> Result<(), AppError> {
@@ -227,7 +224,7 @@ pub(super) fn acl_remove_object(
 
 #[tracing::instrument(skip_all, fields(principal = %principal))]
 pub(super) fn acl_remove_principal(
-    w: &mut KasaneDbWrite<'_>,
+    w: &mut LmdbWrite<'_>,
     principal: PrincipalId,
 ) -> Result<(), AppError> {
     let victims = w.db.acl_owned(&w.write_txn, &AclKey::owned_by(principal))?;
@@ -236,7 +233,7 @@ pub(super) fn acl_remove_principal(
 
 /// 前向きと逆引きは必ず一組で落とす。片方だけ残ると、前向きにしか見えない行や、
 /// 対象を消しても消えない行ができる。
-fn delete_acl_rows(w: &mut KasaneDbWrite<'_>, keys: &[AclKey]) -> Result<(), AppError> {
+fn delete_acl_rows(w: &mut LmdbWrite<'_>, keys: &[AclKey]) -> Result<(), AppError> {
     for key in keys {
         let row = key.rows();
         w.db.acl.delete(&mut w.write_txn, &row.forward)?;

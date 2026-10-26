@@ -11,15 +11,15 @@ use crate::{
     error::AppError,
     models::{
         ValueLiteral, ValueType,
-        database::table::{TableConstraints, TableDataType},
         query::MergePolicyKind,
+        table::{TableConstraints, TableDataType},
     },
 };
 
 #[macro_export]
 macro_rules! for_value_type {
     ($dt:expr, $func:ident $([$($rest:ty),* $(,)?])? $(, $arg:expr)* $(,)?) => {{
-        use $crate::models::database::table::TableDataType;
+        use $crate::models::table::TableDataType;
         match $dt {
             TableDataType::Int => $func::<i64 $($(, $rest)*)?>($($arg),*),
             TableDataType::Text | TableDataType::Enum => $func::<String $($(, $rest)*)?>($($arg),*),
@@ -43,10 +43,7 @@ fn unsupported_policy(policy: MergePolicyKind, value_type: &str) -> AppError {
 
 /// ソースの `data_type` がクエリ値型として読めないときのエラー。
 #[tracing::instrument(skip_all)]
-pub fn incompatible_source(
-    table: &crate::models::database::table::Table,
-    value_type: &str,
-) -> AppError {
+pub fn incompatible_source(table: &crate::models::table::Table, value_type: &str) -> AppError {
     AppError::ConstraintViolation {
         reason: format!(
             "table '{}' is {:?}, which cannot be read as the query value type {value_type}",

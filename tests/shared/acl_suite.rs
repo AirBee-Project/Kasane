@@ -9,9 +9,11 @@
 #![allow(dead_code)]
 
 use kasane::error::AppError;
-use kasane::models::database::table::TableDataType;
+use kasane::models::table::TableDataType;
 use kasane::models::users::{DataRole, Grant, PrivilegeRule, PrivilegeTarget, Scope, UserRole};
-use kasane::repositories::{CatalogRepository, ReadRepository, Storage, WriteRepository};
+use kasane::repositories::{
+    CatalogRepository, ReadRepository, Storage, UserRepository, WriteRepository,
+};
 
 /// このスイートが作る名前。`tag` はテストごとに一意にすること。
 struct Names {

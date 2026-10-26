@@ -7,7 +7,7 @@
 use crate::{
     Kasane,
     error::{AppError, Resource},
-    models::database::table::Table,
+    models::table::Table,
     models::users::{User, UserRole},
     repositories::{ReadRepository, Storage},
     services::auth::authorize_resolved,

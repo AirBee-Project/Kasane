@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use super::database::table::TableDataType;
+use super::table::TableDataType;
 
 /// Kasane が扱うプリミティブな値リテラル。
 ///

@@ -5,9 +5,9 @@ use uuid::Uuid;
 
 use super::State;
 use crate::error::{AppError, Resource};
-use crate::models::database::table::{Table, TableConstraints, TableDataType, TableMetadata};
 use crate::models::database::{DatabaseDetail, DatabaseMetadata};
 use crate::models::id::{DatabaseId, TableId};
+use crate::models::table::{Table, TableConstraints, TableDataType, TableMetadata};
 use crate::repositories::ResolvedTable;
 use crate::services::helpers::value::{interpret_value, restore_value};
 

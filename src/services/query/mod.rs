@@ -15,11 +15,9 @@ use crate::{
     for_value_type,
     models::{
         ValueLiteral,
-        database::table::{
-            Table, TableDataType,
-            data::{GetDataQuery, GetDataResponse, OutputFormat},
-        },
+        data::{GetDataQuery, GetDataResponse, OutputFormat},
         query::{ExecuteQueryRequest, FilterCondition, MappingEntry, QueryNode},
+        table::{Table, TableDataType},
         users::{User, UserRole},
     },
     repositories::{ReadRepository, Storage},

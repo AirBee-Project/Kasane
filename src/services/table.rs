@@ -1,6 +1,6 @@
 use crate::Kasane;
 use crate::error::AppError;
-use crate::models::database::table::{CreateTableRequest, TableConstraints, TableInfo};
+use crate::models::table::{CreateTableRequest, TableConstraints, TableInfo};
 use crate::models::users::{Scope, User, UserRole};
 use crate::repositories::{CatalogRepository, ReadRepository, Storage, WriteRepository};
 use crate::services::auth::{authorize_path, reaches, visible_database};

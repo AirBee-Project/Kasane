@@ -14,13 +14,13 @@ use crate::repositories::encoding::shard_entry::{
 };
 
 use super::shard;
-use super::{KasaneDbRead, KasaneDbWrite};
+use super::{LmdbRead, LmdbWrite};
 
 type ValueMap = FxHashMap<Vec<u8>, Vec<FlexId>>;
 
 #[tracing::instrument(skip_all)]
 pub(super) fn data_get(
-    r: &KasaneDbRead<'_>,
+    r: &LmdbRead<'_>,
     table_id: crate::models::id::TableId,
     ids: SpatialIdSet,
 ) -> Result<ValueGroups, AppError> {
@@ -99,7 +99,7 @@ fn resolve_leaf(
 
 #[tracing::instrument(skip_all)]
 pub(super) fn data_insert(
-    w: &mut KasaneDbWrite<'_>,
+    w: &mut LmdbWrite<'_>,
     table_id: TableId,
     ids: SpatialIdSet,
     data: &[u8],
@@ -119,7 +119,7 @@ pub(super) fn data_insert(
 /// まだ値が無い空間 ID にだけ書く（既存値は保持）。
 #[tracing::instrument(skip_all)]
 pub(super) fn data_upsert(
-    w: &mut KasaneDbWrite<'_>,
+    w: &mut LmdbWrite<'_>,
     table_id: TableId,
     ids: SpatialIdSet,
     data: &[u8],
@@ -146,7 +146,7 @@ pub(super) fn data_upsert(
 
 #[tracing::instrument(skip_all)]
 pub(super) fn data_remove(
-    w: &mut KasaneDbWrite<'_>,
+    w: &mut LmdbWrite<'_>,
     table_id: TableId,
     ids: SpatialIdSet,
 ) -> Result<(), AppError> {
@@ -167,7 +167,7 @@ pub(super) fn data_remove(
     Ok(())
 }
 
-impl<'a> KasaneDbWrite<'a> {
+impl<'a> LmdbWrite<'a> {
     /// 削除でデータ量が減ったリーフを親へ統合し、可能な限り木を圧縮する。
     fn try_merge_up(&mut self, table_id: TableId, region: FlexId) -> Result<(), AppError> {
         let mut region = region;

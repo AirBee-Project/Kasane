@@ -1,29 +1,15 @@
 use tonic::{Request, Response, Status};
 
 use super::auth::authenticate;
-use super::pb::{
-    CreateDatabaseRequest, DatabaseInfo, DeleteDatabaseRequest, GetDatabaseRequest,
-    ListDatabasesRequest, ListDatabasesResponse, UpdateDatabaseRequest,
-    database_service_server::DatabaseService,
-};
+use super::pb::{self, database_service_server::DatabaseService};
 use crate::Kasane;
-use crate::models::database::DatabaseDetail;
-
-impl From<DatabaseDetail> for DatabaseInfo {
-    fn from(info: DatabaseDetail) -> Self {
-        Self {
-            name: info.name,
-            description: info.description,
-        }
-    }
-}
 
 #[tonic::async_trait]
 impl DatabaseService for Kasane {
     async fn create(
         &self,
-        request: Request<CreateDatabaseRequest>,
-    ) -> Result<Response<DatabaseInfo>, Status> {
+        request: Request<pb::CreateDatabaseRequest>,
+    ) -> Result<Response<pb::DatabaseInfo>, Status> {
         let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
@@ -34,8 +20,8 @@ impl DatabaseService for Kasane {
 
     async fn get(
         &self,
-        request: Request<GetDatabaseRequest>,
-    ) -> Result<Response<DatabaseInfo>, Status> {
+        request: Request<pb::GetDatabaseRequest>,
+    ) -> Result<Response<pb::DatabaseInfo>, Status> {
         let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
@@ -45,20 +31,20 @@ impl DatabaseService for Kasane {
 
     async fn list(
         &self,
-        request: Request<ListDatabasesRequest>,
-    ) -> Result<Response<ListDatabasesResponse>, Status> {
+        request: Request<pb::ListDatabasesRequest>,
+    ) -> Result<Response<pb::ListDatabasesResponse>, Status> {
         let user = authenticate(self, &request).await?;
 
         let res = crate::services::database::list(self, &user).await?;
-        Ok(Response::new(ListDatabasesResponse {
+        Ok(Response::new(pb::ListDatabasesResponse {
             databases: res.into_iter().map(Into::into).collect(),
         }))
     }
 
     async fn update(
         &self,
-        request: Request<UpdateDatabaseRequest>,
-    ) -> Result<Response<DatabaseInfo>, Status> {
+        request: Request<pb::UpdateDatabaseRequest>,
+    ) -> Result<Response<pb::DatabaseInfo>, Status> {
         let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
@@ -72,7 +58,7 @@ impl DatabaseService for Kasane {
 
     async fn delete(
         &self,
-        request: Request<DeleteDatabaseRequest>,
+        request: Request<pb::DeleteDatabaseRequest>,
     ) -> Result<Response<()>, Status> {
         let user = authenticate(self, &request).await?;
         let req = request.into_inner();

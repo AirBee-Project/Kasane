@@ -21,8 +21,8 @@ pub use query_source::MemSource;
 use super::Storage;
 use crate::error::AppError;
 use crate::models::database::DatabaseMetadata;
-use crate::models::database::table::TableMetadata;
 use crate::models::id::{DatabaseId, TableId};
+use crate::models::table::TableMetadata;
 
 #[derive(Clone, Default)]
 pub struct State {
@@ -40,9 +40,9 @@ pub struct Memory {
     writer: Arc<tokio::sync::Mutex<()>>,
 }
 
-pub struct MemRead(Arc<State>);
+pub struct MemoryRead(Arc<State>);
 
-pub struct MemWrite(State);
+pub struct MemoryWrite(State);
 
 impl Memory {
     pub fn new() -> Self {
@@ -59,8 +59,8 @@ fn poisoned<T>(_: std::sync::PoisonError<T>) -> AppError {
 }
 
 impl Storage for Memory {
-    type Read<'a> = MemRead;
-    type Write<'a> = MemWrite;
+    type Read<'a> = MemoryRead;
+    type Write<'a> = MemoryWrite;
     type QuerySnapshot = Arc<State>;
 
     async fn query_snapshot(&self) -> Result<Self::QuerySnapshot, AppError> {
@@ -72,7 +72,7 @@ impl Storage for Memory {
         F: for<'a, 'b> AsyncFnOnce(&'a Self::Read<'b>) -> Result<T, AppError> + Send + 'static,
         T: Send + 'static,
     {
-        f(&MemRead(self.current()?)).await
+        f(&MemoryRead(self.current()?)).await
     }
 
     async fn write<T, F>(&self, f: F) -> Result<T, AppError>
@@ -84,7 +84,7 @@ impl Storage for Memory {
         T: Send + 'static,
     {
         let _writer = self.writer.lock().await;
-        let mut txn = MemWrite(State::clone(&*self.current()?));
+        let mut txn = MemoryWrite(State::clone(&*self.current()?));
         let out = f(&mut txn).await?;
         let mut state = self.state.write().map_err(poisoned)?;
         *state = Arc::new(txn.0);

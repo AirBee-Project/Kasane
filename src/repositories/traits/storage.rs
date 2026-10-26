@@ -13,6 +13,12 @@ pub trait Storage: Clone + Send + Sync + 'static {
     type Read<'a>: ReadRepository
     where
         Self: 'a;
+    // 利用者を書き換えるのは server だけなので、組み込みでは [`UserRepository`](super::UserRepository) を要求しない。
+    #[cfg(feature = "server")]
+    type Write<'a>: WriteRepository + super::UserRepository
+    where
+        Self: 'a;
+    #[cfg(not(feature = "server"))]
     type Write<'a>: WriteRepository
     where
         Self: 'a;

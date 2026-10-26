@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use kasane::models::id::TableId;
 use kasane::repositories::lmdb::initialize_database;
-use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
+use kasane::repositories::lmdb::{LmdbRead, LmdbWrite};
 use kasane::repositories::{CatalogRepository, ReadRepository, WriteRepository};
 use spatial_id::{RangeId, SingleId, collection::SpatialIdSet};
 
@@ -74,7 +74,7 @@ async fn read_all(
     db: &kasane::repositories::lmdb::Lmdb,
     table_id: TableId,
 ) -> HashMap<(u32, u32), i32> {
-    let r = KasaneDbRead::new(db.env.read_txn().unwrap(), db);
+    let r = LmdbRead::new(db.env.read_txn().unwrap(), db);
     let mut query = SpatialIdSet::new();
     query.insert(RangeId::new(Z, [F, F], [0, W - 1], [0, H - 1]).unwrap());
     let got = r.data_get(table_id, query).await.unwrap();
@@ -116,7 +116,7 @@ async fn verify(
     assert_eq!(&actual, oracle, "data_get content diverged from the model");
 
     // 2) table_count（ヘッダ集計）== 正解の値件数。一意値なので compaction されず一致する。
-    let r = KasaneDbRead::new(db.env.read_txn().unwrap(), db);
+    let r = LmdbRead::new(db.env.read_txn().unwrap(), db);
     assert_eq!(
         r.table_count(table_id).await.unwrap(),
         oracle.len() as u64,
@@ -137,7 +137,7 @@ async fn randomized_model_matches_oracle() {
 
     // フェーズ A: 全 4356 FlexId を一意値で確定挿入 → 必ず分割（>MAX）。
     {
-        let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
+        let mut w = LmdbWrite::new(db.env.write_txn().unwrap(), &db);
         for x in 0..W {
             for y in 0..H {
                 let mut set = SpatialIdSet::new();
@@ -163,7 +163,7 @@ async fn randomized_model_matches_oracle() {
     ];
     for &(insert_pct, ops) in rounds {
         {
-            let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
+            let mut w = LmdbWrite::new(db.env.write_txn().unwrap(), &db);
             for _ in 0..ops {
                 let x = rng.below(W);
                 let y = rng.below(H);
@@ -187,7 +187,7 @@ async fn randomized_model_matches_oracle() {
 
     // 残りを全削除 → 完全に空（被覆/統合の終端、値インデックスもクリーン）。
     {
-        let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
+        let mut w = LmdbWrite::new(db.env.write_txn().unwrap(), &db);
         for &(x, y) in oracle.keys() {
             let mut set = SpatialIdSet::new();
             set.insert(SingleId::new(Z, F, x, y).unwrap());
@@ -203,7 +203,7 @@ async fn randomized_model_matches_oracle() {
         0,
         "table must be empty"
     );
-    let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
+    let r = LmdbRead::new(db.env.read_txn().unwrap(), &db);
     assert_eq!(r.table_count(table_id).await.unwrap(), 0);
 
     // 全域のシャードキーが消えている（孤児キーが残っていない）。

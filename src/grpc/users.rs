@@ -1,40 +1,24 @@
 use tonic::{Request, Response, Status};
 
 use super::auth::authenticate;
-use super::pb::{
-    CreateUserRequest, DeleteUserRequest, GetUserRequest, GrantPrivilegeRequest, ListUsersRequest,
-    ListUsersResponse, RevokePrivilegeRequest, UpdatePasswordRequest, UserInfo, UserSummary,
-    user_service_server::UserService,
-};
+use super::pb::{self, user_service_server::UserService};
 use crate::Kasane;
 use crate::models::users::User;
-use crate::models::users::{
-    CreateUserRequest as DomainCreateUserRequest, ListUsersQuery,
-    UpdatePasswordRequest as DomainUpdatePasswordRequest,
-};
+use crate::models::users::{CreateUserRequest, ListUsersQuery, UpdatePasswordRequest};
 
 /// 更新系の RPC が返す、更新後の利用者情報。
-async fn user_info(kasane: &Kasane, user: &User, username: &str) -> Result<UserInfo, Status> {
-    let info = crate::services::users::get_user(kasane, user, username).await?;
-    Ok(UserInfo {
-        username: info.username,
-        privileges: info.privileges.into_iter().map(Into::into).collect(),
-    })
-}
-
-fn summary_to_pb(summary: crate::models::users::UserSummary) -> UserSummary {
-    UserSummary {
-        username: summary.username,
-        global_role: summary.global_role.map(Into::into),
-    }
+async fn user_info(kasane: &Kasane, user: &User, username: &str) -> Result<pb::UserInfo, Status> {
+    Ok(crate::services::users::get_user(kasane, user, username)
+        .await?
+        .into())
 }
 
 #[tonic::async_trait]
 impl UserService for Kasane {
     async fn list(
         &self,
-        request: Request<ListUsersRequest>,
-    ) -> Result<Response<ListUsersResponse>, Status> {
+        request: Request<pb::ListUsersRequest>,
+    ) -> Result<Response<pb::ListUsersResponse>, Status> {
         let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
@@ -43,16 +27,16 @@ impl UserService for Kasane {
             limit: req.limit.map(|v| v as usize),
         };
         let result = crate::services::users::list_users(self, &user, &query).await?;
-        Ok(Response::new(ListUsersResponse {
-            users: result.users.into_iter().map(summary_to_pb).collect(),
+        Ok(Response::new(pb::ListUsersResponse {
+            users: result.users.into_iter().map(Into::into).collect(),
             next: result.next,
         }))
     }
 
     async fn create(
         &self,
-        request: Request<CreateUserRequest>,
-    ) -> Result<Response<UserInfo>, Status> {
+        request: Request<pb::CreateUserRequest>,
+    ) -> Result<Response<pb::UserInfo>, Status> {
         let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
@@ -61,7 +45,7 @@ impl UserService for Kasane {
             .into_iter()
             .map(TryInto::try_into)
             .collect::<Result<_, _>>()?;
-        let domain_req = DomainCreateUserRequest {
+        let domain_req = CreateUserRequest {
             username: req.username.clone(),
             password: req.password,
             privileges,
@@ -70,14 +54,20 @@ impl UserService for Kasane {
         Ok(Response::new(user_info(self, &user, &req.username).await?))
     }
 
-    async fn get(&self, request: Request<GetUserRequest>) -> Result<Response<UserInfo>, Status> {
+    async fn get(
+        &self,
+        request: Request<pb::GetUserRequest>,
+    ) -> Result<Response<pb::UserInfo>, Status> {
         let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
         Ok(Response::new(user_info(self, &user, &req.username).await?))
     }
 
-    async fn delete(&self, request: Request<DeleteUserRequest>) -> Result<Response<()>, Status> {
+    async fn delete(
+        &self,
+        request: Request<pb::DeleteUserRequest>,
+    ) -> Result<Response<()>, Status> {
         let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
@@ -87,7 +77,7 @@ impl UserService for Kasane {
 
     async fn update_password(
         &self,
-        request: Request<UpdatePasswordRequest>,
+        request: Request<pb::UpdatePasswordRequest>,
     ) -> Result<Response<()>, Status> {
         let user = authenticate(self, &request).await?;
         let req = request.into_inner();
@@ -96,7 +86,7 @@ impl UserService for Kasane {
             self,
             &user,
             &req.username,
-            DomainUpdatePasswordRequest {
+            UpdatePasswordRequest {
                 password: req.password,
             },
         )
@@ -106,8 +96,8 @@ impl UserService for Kasane {
 
     async fn grant_privilege(
         &self,
-        request: Request<GrantPrivilegeRequest>,
-    ) -> Result<Response<UserInfo>, Status> {
+        request: Request<pb::GrantPrivilegeRequest>,
+    ) -> Result<Response<pb::UserInfo>, Status> {
         let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 
@@ -119,8 +109,8 @@ impl UserService for Kasane {
 
     async fn revoke_privilege(
         &self,
-        request: Request<RevokePrivilegeRequest>,
-    ) -> Result<Response<UserInfo>, Status> {
+        request: Request<pb::RevokePrivilegeRequest>,
+    ) -> Result<Response<pb::UserInfo>, Status> {
         let user = authenticate(self, &request).await?;
         let req = request.into_inner();
 

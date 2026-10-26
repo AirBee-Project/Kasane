@@ -6,7 +6,7 @@ use crate::{
         CreateUserRequest, ListUsersQuery, PrivilegeRule, PrivilegeTarget, UpdatePasswordRequest,
         User, UserDetail, UserPage, UserSummary,
     },
-    repositories::{CatalogRepository, ReadRepository, Storage, WriteRepository},
+    repositories::{CatalogRepository, ReadRepository, Storage, UserRepository},
     services::auth::{check_global_admin, check_self_or_admin, hash_password},
 };
 use uuid::Uuid;

@@ -5,18 +5,18 @@ use tonic::{Request, Response, Status};
 use super::auth::authenticate;
 use super::convert_data::{DEFAULT_CHUNK_SIZE, data_response_to_chunks};
 use super::convert_query::ExecuteQuery;
-use super::pb::{ExecuteQueryRequest, SearchDataResponse, query_service_server::QueryService};
+use super::pb::{self, query_service_server::QueryService};
 use crate::Kasane;
-use crate::models::database::table::data::GetDataQuery;
+use crate::models::data::GetDataQuery;
 
 #[tonic::async_trait]
 impl QueryService for Kasane {
     type ExecuteStream =
-        Pin<Box<dyn Stream<Item = Result<SearchDataResponse, Status>> + Send + 'static>>;
+        Pin<Box<dyn Stream<Item = Result<pb::SearchDataResponse, Status>> + Send + 'static>>;
 
     async fn execute(
         &self,
-        request: Request<ExecuteQueryRequest>,
+        request: Request<pb::ExecuteQueryRequest>,
     ) -> Result<Response<Self::ExecuteStream>, Status> {
         let user = authenticate(self, &request).await?;
         let req = request.into_inner();

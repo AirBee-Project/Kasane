@@ -13,7 +13,7 @@ use std::collections::HashSet;
 use kasane::models::id::TableId;
 use kasane::repositories::encoding::shard_entry::{MAX_FLEX_ID_PER_SHARD, MAX_SHARD_BYTES};
 use kasane::repositories::lmdb::initialize_database;
-use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
+use kasane::repositories::lmdb::{LmdbRead, LmdbWrite};
 use kasane::repositories::{CatalogRepository, ReadRepository, WriteRepository};
 use spatial_id::{RangeId, SingleId, collection::SpatialIdSet};
 
@@ -38,7 +38,7 @@ async fn shard_splits_on_byte_size_even_with_few_entries() {
     };
 
     {
-        let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
+        let mut w = LmdbWrite::new(db.env.write_txn().unwrap(), &db);
         for i in 0..n {
             let mut ids = SpatialIdSet::new();
             ids.insert(SingleId::new(20, 0, i, 0).unwrap());
@@ -70,7 +70,7 @@ async fn shard_splits_on_byte_size_even_with_few_entries() {
     );
 
     // 2. 分割後も全件が読み戻せること。
-    let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
+    let r = LmdbRead::new(db.env.read_txn().unwrap(), &db);
     assert_eq!(r.table_count(table_id).await.unwrap(), n as u64);
 
     let mut query = SpatialIdSet::new();

@@ -21,7 +21,7 @@ use heed::types::*;
 use heed::{Database, Env, WithoutTls};
 
 use crate::error::AppError;
-use crate::models::{database::DatabaseMetadata, database::table::TableMetadata};
+use crate::models::{database::DatabaseMetadata, table::TableMetadata};
 use crate::repositories::Storage;
 
 use keys::{DbIdAndName, TableIdAndFlexId};
@@ -73,23 +73,23 @@ impl From<heed::Error> for AppError {
     }
 }
 
-pub struct KasaneDbRead<'a> {
+pub struct LmdbRead<'a> {
     pub read_txn: heed::RoTxn<'a, heed::WithoutTls>,
     pub db: &'a Lmdb,
 }
 
-impl<'a> KasaneDbRead<'a> {
+impl<'a> LmdbRead<'a> {
     pub fn new(read_txn: heed::RoTxn<'a, heed::WithoutTls>, db: &'a Lmdb) -> Self {
         Self { read_txn, db }
     }
 }
 
-pub struct KasaneDbWrite<'a> {
+pub struct LmdbWrite<'a> {
     pub write_txn: heed::RwTxn<'a>,
     pub db: &'a Lmdb,
 }
 
-impl<'a> KasaneDbWrite<'a> {
+impl<'a> LmdbWrite<'a> {
     pub fn new(write_txn: heed::RwTxn<'a>, db: &'a Lmdb) -> Self {
         Self { write_txn, db }
     }
@@ -108,8 +108,8 @@ impl<'a> KasaneDbWrite<'a> {
 pub type LmdbQuerySnapshot = std::sync::Arc<std::sync::Mutex<heed::RoTxn<'static, WithoutTls>>>;
 
 impl Storage for Lmdb {
-    type Read<'a> = KasaneDbRead<'a>;
-    type Write<'a> = KasaneDbWrite<'a>;
+    type Read<'a> = LmdbRead<'a>;
+    type Write<'a> = LmdbWrite<'a>;
     type QuerySnapshot = LmdbQuerySnapshot;
 
     async fn query_snapshot(&self) -> Result<Self::QuerySnapshot, AppError> {
@@ -129,7 +129,7 @@ impl Storage for Lmdb {
         let span = tracing::Span::current();
         tokio::task::spawn_blocking(move || {
             let _guard = span.enter();
-            let r = KasaneDbRead::new(db.env.read_txn()?, &db);
+            let r = LmdbRead::new(db.env.read_txn()?, &db);
             handle.block_on(f(&r))
         })
         .await
@@ -150,7 +150,7 @@ impl Storage for Lmdb {
         let span = tracing::Span::current();
         tokio::task::spawn_blocking(move || {
             let _guard = span.enter();
-            let mut w = KasaneDbWrite::new(db.env.write_txn()?, &db);
+            let mut w = LmdbWrite::new(db.env.write_txn()?, &db);
             // 単一ライタなので競合でのやり直しは起きない。エラー時は drop で abort される。
             let out = handle.block_on(f(&mut w))?;
             w.commit()?;

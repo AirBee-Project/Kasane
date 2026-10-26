@@ -1,6 +1,6 @@
 use crate::Kasane;
 use crate::error::{AppError, Resource};
-use crate::models::database::table::data::{GetDataQuery, GetDataResponse, ZoomLevelPolicy};
+use crate::models::data::{GetDataQuery, GetDataResponse, ZoomLevelPolicy};
 use crate::models::spatial_id::SpatialId;
 use crate::models::users::{User, UserRole};
 use crate::repositories::{ReadRepository, Storage, WriteRepository};

@@ -4,8 +4,8 @@ use spatial_id::collection::SpatialIdSet;
 
 use crate::error::AppError;
 use crate::models::database::DatabaseDetail;
-use crate::models::database::table::Table;
 use crate::models::id::{DatabaseId, TableId};
+use crate::models::table::Table;
 use crate::models::users::{User, UserRecord};
 
 use super::{CatalogRepository, ValueGroups};

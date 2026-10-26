@@ -6,11 +6,10 @@ use super::convert::{enum_from_i32, required};
 use super::pb;
 use crate::error::AppError;
 use crate::models::users::{
-    DataRole as DomainDataRole, PrivilegeRule as DomainPrivilegeRule,
-    PrivilegeTarget as DomainPrivilegeTarget, UserRole as DomainUserRole,
+    DataRole, PrivilegeRule, PrivilegeTarget, UserDetail, UserRole, UserSummary,
 };
 
-impl TryFrom<pb::UserRole> for DomainUserRole {
+impl TryFrom<pb::UserRole> for UserRole {
     type Error = Status;
 
     fn try_from(value: pb::UserRole) -> Result<Self, Self::Error> {
@@ -27,7 +26,7 @@ impl TryFrom<pb::UserRole> for DomainUserRole {
     }
 }
 
-impl TryFrom<i32> for DomainUserRole {
+impl TryFrom<i32> for UserRole {
     type Error = Status;
 
     fn try_from(value: i32) -> Result<Self, Self::Error> {
@@ -35,24 +34,24 @@ impl TryFrom<i32> for DomainUserRole {
     }
 }
 
-impl From<DomainUserRole> for pb::UserRole {
-    fn from(role: DomainUserRole) -> Self {
+impl From<UserRole> for pb::UserRole {
+    fn from(role: UserRole) -> Self {
         match role {
-            DomainUserRole::Read => Self::Read,
-            DomainUserRole::Write => Self::Write,
-            DomainUserRole::Manage => Self::Manage,
-            DomainUserRole::Admin => Self::Admin,
+            UserRole::Read => Self::Read,
+            UserRole::Write => Self::Write,
+            UserRole::Manage => Self::Manage,
+            UserRole::Admin => Self::Admin,
         }
     }
 }
 
-impl From<DomainUserRole> for i32 {
-    fn from(role: DomainUserRole) -> Self {
+impl From<UserRole> for i32 {
+    fn from(role: UserRole) -> Self {
         pb::UserRole::from(role) as i32
     }
 }
 
-impl TryFrom<pb::DataRole> for DomainDataRole {
+impl TryFrom<pb::DataRole> for DataRole {
     type Error = Status;
 
     fn try_from(value: pb::DataRole) -> Result<Self, Self::Error> {
@@ -68,7 +67,7 @@ impl TryFrom<pb::DataRole> for DomainDataRole {
     }
 }
 
-impl TryFrom<i32> for DomainDataRole {
+impl TryFrom<i32> for DataRole {
     type Error = Status;
 
     fn try_from(value: i32) -> Result<Self, Self::Error> {
@@ -76,23 +75,23 @@ impl TryFrom<i32> for DomainDataRole {
     }
 }
 
-impl From<DomainDataRole> for pb::DataRole {
-    fn from(role: DomainDataRole) -> Self {
+impl From<DataRole> for pb::DataRole {
+    fn from(role: DataRole) -> Self {
         match role {
-            DomainDataRole::Read => Self::Read,
-            DomainDataRole::Write => Self::Write,
-            DomainDataRole::Manage => Self::Manage,
+            DataRole::Read => Self::Read,
+            DataRole::Write => Self::Write,
+            DataRole::Manage => Self::Manage,
         }
     }
 }
 
-impl From<DomainDataRole> for i32 {
-    fn from(role: DomainDataRole) -> Self {
+impl From<DataRole> for i32 {
+    fn from(role: DataRole) -> Self {
         pb::DataRole::from(role) as i32
     }
 }
 
-impl TryFrom<pb::PrivilegeRule> for DomainPrivilegeRule {
+impl TryFrom<pb::PrivilegeRule> for PrivilegeRule {
     type Error = Status;
 
     fn try_from(rule: pb::PrivilegeRule) -> Result<Self, Self::Error> {
@@ -114,19 +113,19 @@ impl TryFrom<pb::PrivilegeRule> for DomainPrivilegeRule {
     }
 }
 
-impl From<DomainPrivilegeRule> for pb::PrivilegeRule {
-    fn from(rule: DomainPrivilegeRule) -> Self {
+impl From<PrivilegeRule> for pb::PrivilegeRule {
+    fn from(rule: PrivilegeRule) -> Self {
         let scope = match rule {
-            DomainPrivilegeRule::Global { role } => {
+            PrivilegeRule::Global { role } => {
                 pb::privilege_rule::Scope::Global(pb::privilege_rule::Global { role: role.into() })
             }
-            DomainPrivilegeRule::Database { db_name, role } => {
+            PrivilegeRule::Database { db_name, role } => {
                 pb::privilege_rule::Scope::Database(pb::privilege_rule::Database {
                     db_name,
                     role: role.into(),
                 })
             }
-            DomainPrivilegeRule::Table {
+            PrivilegeRule::Table {
                 db_name,
                 table_name,
                 role,
@@ -140,7 +139,7 @@ impl From<DomainPrivilegeRule> for pb::PrivilegeRule {
     }
 }
 
-impl TryFrom<pb::PrivilegeTarget> for DomainPrivilegeTarget {
+impl TryFrom<pb::PrivilegeTarget> for PrivilegeTarget {
     type Error = Status;
 
     fn try_from(target: pb::PrivilegeTarget) -> Result<Self, Self::Error> {
@@ -156,16 +155,16 @@ impl TryFrom<pb::PrivilegeTarget> for DomainPrivilegeTarget {
     }
 }
 
-impl From<DomainPrivilegeTarget> for pb::PrivilegeTarget {
-    fn from(target: DomainPrivilegeTarget) -> Self {
+impl From<PrivilegeTarget> for pb::PrivilegeTarget {
+    fn from(target: PrivilegeTarget) -> Self {
         let target = match target {
-            DomainPrivilegeTarget::Global => {
+            PrivilegeTarget::Global => {
                 pb::privilege_target::Target::Global(pb::privilege_target::Global {})
             }
-            DomainPrivilegeTarget::Database { db_name } => {
+            PrivilegeTarget::Database { db_name } => {
                 pb::privilege_target::Target::Database(pb::privilege_target::Database { db_name })
             }
-            DomainPrivilegeTarget::Table {
+            PrivilegeTarget::Table {
                 db_name,
                 table_name,
             } => pb::privilege_target::Target::Table(pb::privilege_target::Table {
@@ -175,6 +174,24 @@ impl From<DomainPrivilegeTarget> for pb::PrivilegeTarget {
         };
         Self {
             target: Some(target),
+        }
+    }
+}
+
+impl From<UserDetail> for pb::UserInfo {
+    fn from(detail: UserDetail) -> Self {
+        Self {
+            username: detail.username,
+            privileges: detail.privileges.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<UserSummary> for pb::UserSummary {
+    fn from(summary: UserSummary) -> Self {
+        Self {
+            username: summary.username,
+            global_role: summary.global_role.map(Into::into),
         }
     }
 }

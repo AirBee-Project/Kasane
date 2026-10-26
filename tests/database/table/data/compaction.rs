@@ -7,7 +7,7 @@
 
 use kasane::models::id::TableId;
 use kasane::repositories::lmdb::initialize_database;
-use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
+use kasane::repositories::lmdb::{LmdbRead, LmdbWrite};
 use kasane::repositories::{CatalogRepository, ReadRepository, WriteRepository};
 use spatial_id::{RangeId, collection::SpatialIdSet};
 
@@ -33,7 +33,7 @@ async fn read_rect(
     y0: u32,
     y1: u32,
 ) -> std::collections::HashMap<(u32, u32), i32> {
-    let r = KasaneDbRead::new(db.env.read_txn().unwrap(), db);
+    let r = LmdbRead::new(db.env.read_txn().unwrap(), db);
     let got = r.data_get(table_id, rect(x0, x1, y0, y1)).await.unwrap();
     let mut out = std::collections::HashMap::new();
     for (value, flex_ids) in got {
@@ -55,7 +55,7 @@ async fn compaction_roundtrip() {
 
     // 16x16 = 256 FlexId を単一値 7 で挿入 → 内部で粗い FlexId へ compaction される。
     {
-        let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
+        let mut w = LmdbWrite::new(db.env.write_txn().unwrap(), &db);
         w.data_insert(table_id, rect(0, 15, 0, 15), &enc(7))
             .await
             .unwrap();
@@ -64,7 +64,7 @@ async fn compaction_roundtrip() {
 
     // 実際に compaction が起きている（保持 FlexId 数 < 256）ことを確認。
     {
-        let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
+        let r = LmdbRead::new(db.env.read_txn().unwrap(), &db);
         let cnt = r.table_count(table_id).await.unwrap();
         assert!(
             cnt < 256,
@@ -80,7 +80,7 @@ async fn compaction_roundtrip() {
 
     // 左半分(x 0..7)を値 9 で上書き → compaction 境界を跨ぐ差分更新。
     {
-        let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
+        let mut w = LmdbWrite::new(db.env.write_txn().unwrap(), &db);
         w.data_insert(table_id, rect(0, 7, 0, 15), &enc(9))
             .await
             .unwrap();
@@ -96,7 +96,7 @@ async fn compaction_roundtrip() {
 
     // 右半分(x 8..15, 値 7)を削除。
     {
-        let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
+        let mut w = LmdbWrite::new(db.env.write_txn().unwrap(), &db);
         w.data_remove(table_id, rect(8, 15, 0, 15)).await.unwrap();
         w.commit().unwrap();
     }
@@ -109,11 +109,11 @@ async fn compaction_roundtrip() {
 
     // 残りも削除 → 完全に空。
     {
-        let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
+        let mut w = LmdbWrite::new(db.env.write_txn().unwrap(), &db);
         w.data_remove(table_id, rect(0, 7, 0, 15)).await.unwrap();
         w.commit().unwrap();
     }
     assert_eq!(read_rect(&db, table_id, 0, 15, 0, 15).await.len(), 0);
-    let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
+    let r = LmdbRead::new(db.env.read_txn().unwrap(), &db);
     assert_eq!(r.table_count(table_id).await.unwrap(), 0);
 }

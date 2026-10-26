@@ -4,12 +4,12 @@ use heed::BytesDecode;
 use uuid::Uuid;
 
 use crate::error::{AppError, Resource, Stored};
-use crate::models::database::table::{Table, TableConstraints, TableDataType, TableMetadata};
 use crate::models::database::{DatabaseDetail, DatabaseMetadata};
 use crate::models::id::{DatabaseId, TableId};
+use crate::models::table::{Table, TableConstraints, TableDataType, TableMetadata};
 
 use super::keys::DbIdAndName;
-use super::{KasaneDbRead, KasaneDbWrite, Lmdb};
+use super::{Lmdb, LmdbRead, LmdbWrite};
 
 /// `RwTxn` は `RoTxn` へ Deref するので、読み書きどちらからも同じ関数を呼べる。
 pub(super) fn database_id(
@@ -131,7 +131,7 @@ pub(super) fn table_names(
 
 #[tracing::instrument(skip_all)]
 pub(super) fn database_info(
-    r: &KasaneDbRead<'_>,
+    r: &LmdbRead<'_>,
     name: &str,
 ) -> Result<Option<(DatabaseId, DatabaseDetail)>, AppError> {
     if name.is_empty() {
@@ -151,7 +151,7 @@ pub(super) fn database_info(
 /// ACL 側から辿った ID で引く。存在しない ID は結果に現れない。
 #[tracing::instrument(skip_all, fields(ids = ids.len()))]
 pub(super) fn databases_by_id(
-    r: &KasaneDbRead<'_>,
+    r: &LmdbRead<'_>,
     ids: &[DatabaseId],
 ) -> Result<Vec<(DatabaseId, DatabaseDetail)>, AppError> {
     let mut out = Vec::with_capacity(ids.len());
@@ -176,7 +176,7 @@ pub(super) fn databases_by_id(
 /// このデータベース配下の、指定した ID のテーブルだけ。配下全件は舐めない。
 #[tracing::instrument(skip_all, fields(ids = ids.len()))]
 pub(super) fn tables_by_id(
-    r: &KasaneDbRead<'_>,
+    r: &LmdbRead<'_>,
     db_id: DatabaseId,
     ids: &[TableId],
 ) -> Result<Vec<Table>, AppError> {
@@ -198,7 +198,7 @@ pub(super) fn tables_by_id(
 /// 呼び出し側が権限の絞り込みに使うので、ID を添えて返す。
 #[tracing::instrument(skip_all)]
 pub(super) fn database_list(
-    r: &KasaneDbRead<'_>,
+    r: &LmdbRead<'_>,
 ) -> Result<Vec<(DatabaseId, DatabaseDetail)>, AppError> {
     let db = r.db.databases;
     let mut list = Vec::new();
@@ -217,7 +217,7 @@ pub(super) fn database_list(
 
 #[tracing::instrument(skip_all)]
 pub(super) fn database_create(
-    w: &mut KasaneDbWrite<'_>,
+    w: &mut LmdbWrite<'_>,
     name: &str,
     description: Option<String>,
 ) -> Result<DatabaseDetail, AppError> {
@@ -242,7 +242,7 @@ pub(super) fn database_create(
 }
 
 #[tracing::instrument(skip_all)]
-pub(super) fn database_remove(w: &mut KasaneDbWrite<'_>, name: &str) -> Result<(), AppError> {
+pub(super) fn database_remove(w: &mut LmdbWrite<'_>, name: &str) -> Result<(), AppError> {
     if name.is_empty() {
         return Err(Resource::Database.not_found(name.to_string()));
     }
@@ -268,7 +268,7 @@ pub(super) fn database_remove(w: &mut KasaneDbWrite<'_>, name: &str) -> Result<(
 
 #[tracing::instrument(skip_all)]
 pub(super) fn database_update(
-    w: &mut KasaneDbWrite<'_>,
+    w: &mut LmdbWrite<'_>,
     name: &str,
     new_name: Option<String>,
     description: Option<Option<String>>,
@@ -315,7 +315,7 @@ pub(super) fn database_update(
 /// すべて mmap 上の点参照なので束ねる意味はなく、入口を揃えるためだけにある。
 #[tracing::instrument(skip_all, fields(refs = refs.len()))]
 pub(super) fn resolve_tables(
-    r: &KasaneDbRead<'_>,
+    r: &LmdbRead<'_>,
     refs: &[(String, String)],
 ) -> Result<Vec<crate::repositories::ResolvedTable>, AppError> {
     refs.iter()
@@ -349,7 +349,7 @@ pub(super) fn resolve_tables(
 /// ID を解決済みの呼び出し側が、名前からの引き直しを避けるために使う。
 #[tracing::instrument(skip_all)]
 pub(super) fn table_list_by_id(
-    r: &KasaneDbRead<'_>,
+    r: &LmdbRead<'_>,
     db_id: crate::models::id::DatabaseId,
 ) -> Result<Vec<Table>, AppError> {
     let db_id_bytes = db_id.into_bytes();
@@ -363,10 +363,8 @@ pub(super) fn table_list_by_id(
         let (k_bytes, v_bytes) = iter?;
         let (_, name) = super::keys::DbIdAndName::bytes_decode(k_bytes).unwrap();
         let m =
-            heed::types::SerdeJson::<crate::models::database::table::TableMetadata>::bytes_decode(
-                v_bytes,
-            )
-            .unwrap();
+            heed::types::SerdeJson::<crate::models::table::TableMetadata>::bytes_decode(v_bytes)
+                .unwrap();
         tables.push(Table {
             id: m.id,
             name: name.to_string(),
@@ -408,7 +406,7 @@ pub(super) fn table_info(
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 #[allow(clippy::too_many_arguments)]
 pub(super) fn table_create(
-    w: &mut KasaneDbWrite<'_>,
+    w: &mut LmdbWrite<'_>,
     db_name: &str,
     table_name: &str,
     data_type: TableDataType,
@@ -485,7 +483,7 @@ pub(super) fn table_create(
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 #[allow(clippy::too_many_arguments)]
 pub(super) fn table_update(
-    w: &mut KasaneDbWrite<'_>,
+    w: &mut LmdbWrite<'_>,
     db_name: &str,
     table_name: &str,
     new_name: Option<&str>,
@@ -571,7 +569,7 @@ pub(super) fn table_update(
 
 #[tracing::instrument(skip_all, fields(table_id = %table_id))]
 fn validate_table_existing_data(
-    w: &KasaneDbWrite<'_>,
+    w: &LmdbWrite<'_>,
     table_id: crate::models::id::TableId,
     data_type: TableDataType,
     constraints: Option<&TableConstraints>,
@@ -607,7 +605,7 @@ fn validate_table_existing_data(
 
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub(super) fn table_remove(
-    w: &mut KasaneDbWrite<'_>,
+    w: &mut LmdbWrite<'_>,
     db_name: &str,
     table_name: &str,
 ) -> Result<(), AppError> {

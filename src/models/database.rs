@@ -13,5 +13,3 @@ pub struct DatabaseDetail {
     pub name: String,
     pub description: Option<String>,
 }
-
-pub mod table;

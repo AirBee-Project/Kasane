@@ -7,12 +7,14 @@ use spatial_id::collection::SpatialIdSet;
 
 use crate::error::AppError;
 use crate::models::database::DatabaseDetail;
-use crate::models::database::table::{Table, TableConstraints, TableDataType};
 use crate::models::id::{DataTarget, DatabaseId, PrincipalId, TableId};
+use crate::models::table::{Table, TableConstraints, TableDataType};
 use crate::models::users::{AclEntry, Grant, Scope, UserRecord};
-use crate::repositories::{CatalogRepository, ReadRepository, ValueGroups, WriteRepository};
+use crate::repositories::{
+    CatalogRepository, ReadRepository, UserRepository, ValueGroups, WriteRepository,
+};
 
-use super::{KasaneDbRead, KasaneDbWrite, catalog, data, users};
+use super::{LmdbRead, LmdbWrite, catalog, data, users};
 
 /// `RwTxn` は `RoTxn` へ Deref するので、読み書きで同じ自由関数を呼べる。
 macro_rules! impl_catalog_repository {
@@ -82,10 +84,10 @@ macro_rules! impl_catalog_repository {
     };
 }
 
-impl_catalog_repository!(KasaneDbRead<'_>, read_txn);
-impl_catalog_repository!(KasaneDbWrite<'_>, write_txn);
+impl_catalog_repository!(LmdbRead<'_>, read_txn);
+impl_catalog_repository!(LmdbWrite<'_>, write_txn);
 
-impl ReadRepository for KasaneDbRead<'_> {
+impl ReadRepository for LmdbRead<'_> {
     async fn database_info(
         &self,
         name: &str,
@@ -140,7 +142,7 @@ impl ReadRepository for KasaneDbRead<'_> {
     }
 }
 
-impl WriteRepository for KasaneDbWrite<'_> {
+impl WriteRepository for LmdbWrite<'_> {
     async fn database_create(
         &mut self,
         name: &str,
@@ -229,7 +231,9 @@ impl WriteRepository for KasaneDbWrite<'_> {
     async fn data_remove(&mut self, table_id: TableId, ids: SpatialIdSet) -> Result<(), AppError> {
         data::data_remove(self, table_id, ids)
     }
+}
 
+impl UserRepository for LmdbWrite<'_> {
     async fn put_user_record(
         &mut self,
         username: &str,

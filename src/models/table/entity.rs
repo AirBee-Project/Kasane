@@ -1,5 +1,5 @@
 use super::TableDataType;
-use crate::models::database::table::data_type::TableConstraints;
+use crate::models::table::data_type::TableConstraints;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, Deserialize)]

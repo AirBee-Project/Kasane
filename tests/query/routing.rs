@@ -1,6 +1,6 @@
 use kasane::models::id::TableId;
 use kasane::repositories::WriteRepository;
-use kasane::repositories::lmdb::KasaneDbWrite;
+use kasane::repositories::lmdb::LmdbWrite;
 use kasane::repositories::lmdb::initialize_database;
 use spatial_id::{RangeId, SingleId, collection::SpatialIdSet, query::CancellationToken};
 
@@ -17,7 +17,7 @@ async fn table_source_read_flex_ids_returns_all_flex_ids() {
 
     for i in 0..4u32 {
         let wtxn = db.env.write_txn().unwrap();
-        let mut w = KasaneDbWrite::new(wtxn, &db);
+        let mut w = LmdbWrite::new(wtxn, &db);
         let mut set = SpatialIdSet::new();
         set.insert(SingleId::new(20, 0, 790000 + i, 500000).unwrap());
         w.data_insert(table_id, set, &(i as i32).to_be_bytes())

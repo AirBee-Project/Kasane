@@ -2,7 +2,7 @@
 
 use kasane::models::id::TableId;
 use kasane::repositories::lmdb::initialize_database;
-use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
+use kasane::repositories::lmdb::{LmdbRead, LmdbWrite};
 use kasane::repositories::{ReadRepository, WriteRepository};
 use spatial_id::{SingleId, collection::SpatialIdSet};
 
@@ -15,7 +15,7 @@ async fn insert_into_empty_region_after_split_is_not_lost() {
 
     // 1. 5000 FlexId （y=0,f=0 の x 線）を挿入 → split。
     {
-        let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
+        let mut w = LmdbWrite::new(db.env.write_txn().unwrap(), &db);
         let mut ids = SpatialIdSet::new();
         for i in 0..5000u32 {
             ids.insert(SingleId::new(20, 0, i * 4, 0).unwrap());
@@ -28,7 +28,7 @@ async fn insert_into_empty_region_after_split_is_not_lost() {
     //    この x-upper 兄弟は split 時に空でスキップされている。
     let target = SingleId::new(20, 0, 600000, 0).unwrap();
     {
-        let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
+        let mut w = LmdbWrite::new(db.env.write_txn().unwrap(), &db);
         let mut ids = SpatialIdSet::new();
         ids.insert(target);
         w.data_insert(table_id, ids, b"w").await.unwrap();
@@ -36,7 +36,7 @@ async fn insert_into_empty_region_after_split_is_not_lost() {
     }
 
     // 3. それが読み戻せるか？
-    let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
+    let r = LmdbRead::new(db.env.read_txn().unwrap(), &db);
     let mut q = SpatialIdSet::new();
     q.insert(target);
     let got = r.data_get(table_id, q).await.unwrap();

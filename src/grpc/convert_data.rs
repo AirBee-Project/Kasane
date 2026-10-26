@@ -5,18 +5,18 @@ use tonic::Status;
 use super::convert::enum_from_i32;
 use super::pb;
 use crate::models::ValueLiteral;
-use crate::models::database::table::data::{
+use crate::models::data::{
     DataGroup, GetDataResponse, GetDataResponseFlex, GetDataResponseRange, GetDataResponseSingle,
-    OutputFormat as DomainOutputFormat, ZoomLevelPolicy as DomainZoomLevelPolicy,
+    OutputFormat, ZoomLevelPolicy,
 };
 use spatial_id::{
     FlexId, RangeId, SingleId, SpatialId as _, ZoomLevel,
     time::{AllowedIntervals, Interval},
 };
 
-use crate::models::spatial_id::SpatialId as DomainSpatialId;
+use crate::models::spatial_id::SpatialId;
 
-impl From<pb::ZoomLevelPolicy> for DomainZoomLevelPolicy {
+impl From<pb::ZoomLevelPolicy> for ZoomLevelPolicy {
     fn from(value: pb::ZoomLevelPolicy) -> Self {
         match value {
             pb::ZoomLevelPolicy::Ignore => Self::Ignore,
@@ -26,13 +26,13 @@ impl From<pb::ZoomLevelPolicy> for DomainZoomLevelPolicy {
     }
 }
 
-impl From<i32> for DomainZoomLevelPolicy {
+impl From<i32> for ZoomLevelPolicy {
     fn from(value: i32) -> Self {
         enum_from_i32(value, pb::ZoomLevelPolicy::Unspecified).into()
     }
 }
 
-impl From<pb::OutputFormat> for DomainOutputFormat {
+impl From<pb::OutputFormat> for OutputFormat {
     fn from(value: pb::OutputFormat) -> Self {
         match value {
             pb::OutputFormat::SingleId => Self::SingleId,
@@ -42,7 +42,7 @@ impl From<pb::OutputFormat> for DomainOutputFormat {
     }
 }
 
-impl From<i32> for DomainOutputFormat {
+impl From<i32> for OutputFormat {
     fn from(value: i32) -> Self {
         enum_from_i32(value, pb::OutputFormat::Unspecified).into()
     }
@@ -255,7 +255,7 @@ impl TryFrom<pb::FlexId> for FlexId {
     }
 }
 
-impl TryFrom<pb::SpatialId> for DomainSpatialId {
+impl TryFrom<pb::SpatialId> for SpatialId {
     type Error = Status;
 
     fn try_from(id: pb::SpatialId) -> Result<Self, Self::Error> {
@@ -263,23 +263,23 @@ impl TryFrom<pb::SpatialId> for DomainSpatialId {
             .kind
             .ok_or_else(|| invalid_spatial_id("spatial_id.kind must be set"))?
         {
-            pb::spatial_id::Kind::SingleId(s) => Ok(DomainSpatialId::SingleId(s.try_into()?)),
-            pb::spatial_id::Kind::RangeId(r) => Ok(DomainSpatialId::RangeId(r.try_into()?)),
-            pb::spatial_id::Kind::FlexId(f) => Ok(DomainSpatialId::FlexId(f.try_into()?)),
+            pb::spatial_id::Kind::SingleId(s) => Ok(SpatialId::SingleId(s.try_into()?)),
+            pb::spatial_id::Kind::RangeId(r) => Ok(SpatialId::RangeId(r.try_into()?)),
+            pb::spatial_id::Kind::FlexId(f) => Ok(SpatialId::FlexId(f.try_into()?)),
         }
     }
 }
 
-impl From<DomainSpatialId> for pb::SpatialId {
-    fn from(id: DomainSpatialId) -> Self {
+impl From<SpatialId> for pb::SpatialId {
+    fn from(id: SpatialId) -> Self {
         match id {
-            DomainSpatialId::SingleId(s) => pb::SpatialId {
+            SpatialId::SingleId(s) => pb::SpatialId {
                 kind: Some(pb::spatial_id::Kind::SingleId(s.into())),
             },
-            DomainSpatialId::RangeId(r) => pb::SpatialId {
+            SpatialId::RangeId(r) => pb::SpatialId {
                 kind: Some(pb::spatial_id::Kind::RangeId(r.into())),
             },
-            DomainSpatialId::FlexId(f) => pb::SpatialId {
+            SpatialId::FlexId(f) => pb::SpatialId {
                 kind: Some(pb::spatial_id::Kind::FlexId(f.into())),
             },
         }

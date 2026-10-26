@@ -122,6 +122,3 @@ fn check_description(description: Option<&str>) -> Result<(), AppError> {
         _ => Ok(()),
     }
 }
-
-pub mod data;
-pub mod table;

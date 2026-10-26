@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use kasane::models::id::TableId;
 use kasane::repositories::lmdb::initialize_database;
 use kasane::repositories::lmdb::shard::{MAX_FLEX_ID_PER_SHARD, MERGE_FLEX_ID_THRESHOLD};
-use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
+use kasane::repositories::lmdb::{LmdbRead, LmdbWrite};
 use kasane::repositories::{CatalogRepository, ReadRepository, WriteRepository};
 use spatial_id::{RangeId, SingleId, collection::SpatialIdSet};
 
@@ -39,7 +39,7 @@ async fn siblings_merge_after_mass_remove() {
     // 1. 分割が必ず起きる数を挿入する（閾値の2倍）。
     let n: u32 = (MAX_FLEX_ID_PER_SHARD * 2) as u32;
     {
-        let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
+        let mut w = LmdbWrite::new(db.env.write_txn().unwrap(), &db);
         let mut ids = SpatialIdSet::new();
         for i in 0..n {
             ids.insert(SingleId::new(20, 0, i * 4, 0).unwrap());
@@ -57,7 +57,7 @@ async fn siblings_merge_after_mass_remove() {
     let remaining_target: u32 = (MERGE_FLEX_ID_THRESHOLD / 2) as u32;
     let keep_from: u32 = n - remaining_target;
     {
-        let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
+        let mut w = LmdbWrite::new(db.env.write_txn().unwrap(), &db);
         let mut ids = SpatialIdSet::new();
         for i in 0..keep_from {
             ids.insert(SingleId::new(20, 0, i * 4, 0).unwrap());
@@ -75,7 +75,7 @@ async fn siblings_merge_after_mass_remove() {
     assert!(!has_pointer, "no pointer node should remain after merge");
 
     // 4. table_count が残数と一致、かつ残りの全 FlexId が読めること。
-    let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
+    let r = LmdbRead::new(db.env.read_txn().unwrap(), &db);
     let remaining = (n - keep_from) as u64;
     assert_eq!(r.table_count(table_id).await.unwrap(), remaining);
 
