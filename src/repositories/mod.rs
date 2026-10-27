@@ -1,6 +1,8 @@
 pub mod encoding;
 pub mod traits;
 
+#[cfg(feature = "server")]
+pub use traits::UserRepository;
 pub use traits::{
     CatalogRepository, ReadRepository, ResolvedTable, Storage, ValueGroups, WriteRepository,
 };
@@ -14,6 +16,7 @@ pub const SCHEMA_VERSION: u32 = 2;
 pub const ROOT_USERNAME: &str = "root";
 
 /// `ROOT_PASSWORD` 未設定時の既定パスワード。
+#[cfg(feature = "server")]
 fn root_password() -> String {
     std::env::var("ROOT_PASSWORD")
         .ok()
@@ -21,4 +24,13 @@ fn root_password() -> String {
         .unwrap_or_else(|| "password".to_string())
 }
 
+#[cfg(feature = "server")]
 pub mod lmdb;
+#[cfg(not(feature = "server"))]
+pub mod memory;
+
+/// 現在の feature 設定で有効なストレージ型。
+#[cfg(feature = "server")]
+pub type Db = lmdb::Lmdb;
+#[cfg(not(feature = "server"))]
+pub type Db = memory::Memory;

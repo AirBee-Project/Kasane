@@ -5,9 +5,9 @@
 //! リクエストのレイテンシに乗る。
 
 use crate::{
-    AppState,
+    Kasane,
     error::{AppError, Resource},
-    models::database::table::Table,
+    models::table::Table,
     models::users::{User, UserRole},
     repositories::{ReadRepository, Storage},
     services::auth::authorize_resolved,
@@ -29,7 +29,7 @@ pub async fn resolve_authorized_table<R: ReadRepository>(
             AppError::Internal("resolve_tables dropped its only request".to_string())
         })?;
 
-    // 「存在しない」より先に判定する。逆にすると、権限の無い利用者へ 404 で
+    // 「存在しない」より先に判定する。逆にすると、権限の無い利用者へ `NotFound` で
     // 名前の存在有無を教えることになる。
     authorize_resolved(
         repo,
@@ -52,7 +52,7 @@ pub async fn resolve_authorized_table<R: ReadRepository>(
 /// 解決・認可・取得がすべて同じ断面で起きるので、判定した対象と操作する対象がずれない。
 #[tracing::instrument(skip_all, fields(db_name = %db_name, table_name = %table_name))]
 pub async fn authorized_table(
-    app_state: &AppState,
+    kasane: &Kasane,
     user: &User,
     db_name: &str,
     table_name: &str,
@@ -62,7 +62,7 @@ pub async fn authorized_table(
     let table_name = table_name.to_string();
     let user = user.clone();
 
-    app_state
+    kasane
         .db
         .read(async move |repo| {
             resolve_authorized_table(repo, &user, &db_name, &table_name, required).await

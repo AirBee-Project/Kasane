@@ -1,19 +1,19 @@
-//! 両バックエンドが同じ ACL の振る舞いをすることの検証。
+//! ACL の行の保存の検証。
 //!
 //! 認可の**規則**（どのロールがどれを含むか、どのスコープがどこまで届くか）は
 //! `User::allows` のユニットテストが持つ。ここで確かめるのは**行の保存**のほう――
-//! スコープごとに正しい行が引けるか、対象を消したときに行が消えるか、といった
-//! バックエンドごとに実装が分かれる部分。
+//! スコープごとに正しい行が引けるか、対象を消したときに行が消えるか。
 //!
-//! `#[path]` 付きの `mod` で各テストバイナリへ取り込む。1 つのクラスタを共有する
-//! バックエンドでも並行に走れるよう、名前はすべて `tag` から作る。
+//! 同じストレージで並行に走れるよう、名前はすべて `tag` から作る。
 
 #![allow(dead_code)]
 
 use kasane::error::AppError;
-use kasane::models::database::table::TableDataType;
+use kasane::models::table::TableDataType;
 use kasane::models::users::{DataRole, Grant, PrivilegeRule, PrivilegeTarget, Scope, UserRole};
-use kasane::repositories::{CatalogRepository, ReadRepository, Storage, WriteRepository};
+use kasane::repositories::{
+    CatalogRepository, ReadRepository, Storage, UserRepository, WriteRepository,
+};
 
 /// このスイートが作る名前。`tag` はテストごとに一意にすること。
 struct Names {
@@ -78,9 +78,9 @@ async fn setup<S: Storage>(db: &S, n: &Names) {
     db.write(async move |w| {
         w.database_create(&d, None).await?;
         w.database_create(&o, None).await?;
-        w.table_create(&d, &t, TableDataType::Int, 20, None, None, false, true)
+        w.table_create(&d, &t, TableDataType::Int, 20, None, None, true)
             .await?;
-        w.table_create(&d, &ot, TableDataType::Int, 20, None, None, false, true)
+        w.table_create(&d, &ot, TableDataType::Int, 20, None, None, true)
             .await?;
         Ok(())
     })

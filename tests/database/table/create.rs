@@ -17,7 +17,6 @@ async fn test_create_table_success() {
             max_zoom_level: 25,
             constraints: None,
             description: None,
-            value_index: false,
             is_temporal: true,
         })
         .await
@@ -57,7 +56,6 @@ async fn test_create_table_conflict() {
             max_zoom_level: 20,
             constraints: None,
             description: None,
-            value_index: false,
             is_temporal: true,
         })
         .await;
@@ -93,7 +91,6 @@ async fn test_create_table_max_zoom_level_too_large() {
             max_zoom_level: 31,
             constraints: None,
             description: None,
-            value_index: false,
             is_temporal: true,
         })
         .await;
@@ -125,7 +122,6 @@ async fn test_create_table_max_zoom_level_boundary_ok() {
             max_zoom_level: 30,
             constraints: None,
             description: None,
-            value_index: false,
             is_temporal: true,
         })
         .await
@@ -155,7 +151,6 @@ async fn test_create_table_enum_choice_length_limits() {
                 )),
             }),
             description: None,
-            value_index: false,
             is_temporal: true,
         })
         .await;
@@ -177,7 +172,6 @@ async fn test_create_table_enum_choice_length_limits() {
                 )),
             }),
             description: None,
-            value_index: false,
             is_temporal: true,
         })
         .await;
@@ -200,7 +194,6 @@ async fn test_create_table_enum_choice_length_limits() {
                 )),
             }),
             description: None,
-            value_index: false,
             is_temporal: true,
         })
         .await
@@ -222,7 +215,6 @@ async fn test_create_table_description() {
             max_zoom_level: 25,
             constraints: None,
             description: Some("This is a test table.".to_string()),
-            value_index: false,
             is_temporal: true,
         })
         .await
@@ -258,7 +250,6 @@ async fn test_create_table_description_too_long() {
             max_zoom_level: 25,
             constraints: None,
             description: Some(long_desc),
-            value_index: false,
             is_temporal: true,
         })
         .await;

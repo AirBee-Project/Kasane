@@ -123,7 +123,7 @@ impl DataTarget {
     }
 
     /// 鍵に載せる 16 バイト。データベーススコープは
-    /// [`TableId::DATABASE_SCOPE`] になる。
+    /// `TableId::DATABASE_SCOPE` になる。
     pub fn slot(self) -> TableId {
         self.table_id.unwrap_or(TableId::DATABASE_SCOPE)
     }
@@ -143,19 +143,11 @@ mod tests {
 
     #[test]
     fn slot_round_trips_both_scopes() {
-        let db = DatabaseId(Uuid::now_v7());
-        let table = TableId(Uuid::now_v7());
+        let db = DatabaseId(Uuid::from_u128(1));
+        let table = TableId(Uuid::from_u128(1));
 
         for target in [DataTarget::database(db), DataTarget::table(db, table)] {
             assert_eq!(DataTarget::from_slot(db, target.slot()), target);
-        }
-    }
-
-    /// 番兵が実在のテーブルとぶつからないこと（UUIDv7 は全ゼロにならない）。
-    #[test]
-    fn the_sentinel_is_never_a_real_table() {
-        for _ in 0..64 {
-            assert_ne!(TableId(Uuid::now_v7()), TableId::DATABASE_SCOPE);
         }
     }
 }

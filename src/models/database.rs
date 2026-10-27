@@ -8,10 +8,8 @@ pub struct DatabaseMetadata {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DatabaseInfoResponse {
+#[derive(Debug, Clone)]
+pub struct DatabaseDetail {
     pub name: String,
     pub description: Option<String>,
 }
-
-pub mod table;

@@ -6,7 +6,7 @@ use spatial_id::{FlexId, collection::SpatialIdSet, time::AllowedIntervals};
 
 use crate::{
     error::AppError,
-    models::database::table::data::{
+    models::data::{
         DataGroup, GetDataResponse, GetDataResponseFlex, GetDataResponseRange,
         GetDataResponseSingle, OutputFormat,
     },

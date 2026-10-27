@@ -3,11 +3,15 @@
 pub mod catalog;
 pub mod read;
 pub mod storage;
+#[cfg(feature = "server")]
+pub mod users;
 pub mod write;
 
 pub use catalog::CatalogRepository;
 pub use read::{ReadRepository, ResolvedTable};
 pub use storage::Storage;
+#[cfg(feature = "server")]
+pub use users::UserRepository;
 pub use write::WriteRepository;
 
 use spatial_id::FlexId;

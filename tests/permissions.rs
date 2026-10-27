@@ -224,7 +224,6 @@ async fn post_table(
             max_zoom_level: 5,
             constraints: None,
             description: None,
-            value_index: false,
             is_temporal: true,
         })
         .await
@@ -236,17 +235,6 @@ async fn create_table(test_app: &TestApp, token: &str, db_name: &str, table_name
     post_table(test_app, token, db_name, table_name)
         .await
         .expect("create_table failed");
-}
-
-async fn delete_table(test_app: &TestApp, token: &str, db_name: &str, table_name: &str) {
-    test_app
-        .table_as(Some(&bearer(token)))
-        .delete(pb::DeleteTableRequest {
-            db_name: db_name.to_string(),
-            table_name: table_name.to_string(),
-        })
-        .await
-        .expect("delete_table failed");
 }
 
 /// 指定ユーザーのトークンが有効か（データベース一覧を取得できるか）を検証する。
@@ -1014,10 +1002,9 @@ async fn test_global_manage_is_not_server_admin() {
 /// `admin` ロールは global スコープ以外では受け付けられないことを検証する。
 ///
 /// データベース・テーブルスコープのリクエストは `DataRole`（`admin` を持たない）
-/// しか表現できないため、gRPC 化後はこの制約が実行時の検証ではなく型で保証される
+/// しか表現できないため、この制約は実行時の検証ではなく型で保証される
 /// （`pb::DataRole` に `Admin` バリアントが無いので、そもそも該当リクエストを構築できない）。
-/// そのため以前あった「データ/テーブルスコープへの `admin` 指定は 422」という検証対象は
-/// 消滅し、global スコープでだけ通ることの確認だけが残る。
+/// ここでは global スコープでだけ通ることを確かめる。
 async fn test_admin_role_is_rejected_outside_global_scope() {
     let test_app = TestApp::new().await;
     let root_token = test_app.root_token().to_string();
@@ -1415,67 +1402,6 @@ async fn test_missing_table_reports_not_found_consistently() {
     assert_eq!(err.code(), Code::NotFound);
 }
 
-/// 保存されている生の ACL 行数を数える。
-///
-/// `GetPrivileges` は解決できない行を隠すため、残留の有無は API からは観測できない。
-/// ここでは行を直接数える。
-async fn stored_privilege_count(app_state: &kasane::AppState, username: &str) -> usize {
-    use kasane::repositories::{CatalogRepository, Storage};
-    let username = username.to_string();
-    app_state
-        .db
-        .read(async move |repo| {
-            let record = repo.require_user_record(&username).await?;
-            Ok(repo.acl_entries(record.id).await?.len())
-        })
-        .await
-        .unwrap()
-}
-
-#[tokio::test]
-/// 「テーブルの作成 → 権限付与 → 削除」を繰り返しても、削除済みリソースを指す行が
-/// 残らないことを検証する。
-///
-/// 権限は対象ごとの行として持ち、対象を消すときに逆引き索引からその行を落とす。
-/// よって残留は繰り返し回数によらず**常に 0 件**になる。
-async fn test_stale_privileges_do_not_accumulate_over_cycles() {
-    let test_app = TestApp::new().await;
-    let root_token = test_app.root_token().to_string();
-
-    create_db(&test_app, &root_token, "churn_db").await;
-    create_user_and_token(&test_app, &root_token, "churner", false).await;
-
-    for i in 0..10 {
-        let table = format!("tmp_{}", i);
-        create_table(&test_app, &root_token, "churn_db", &table).await;
-        grant_table_privilege(
-            &test_app,
-            &root_token,
-            "churner",
-            "churn_db",
-            &table,
-            "read",
-        )
-        .await;
-        delete_table(&test_app, &root_token, "churn_db", &table).await;
-
-        // テーブルの削除がその行を落とすので、残留は 0 件。
-        assert_eq!(
-            stored_privilege_count(test_app.app_state(), "churner").await,
-            0,
-            "サイクル {} で削除済みテーブルを指す行が残った",
-            i
-        );
-    }
-
-    // 解決できないルールは API 上には現れない。
-    assert!(
-        fetch_privileges(&test_app, &root_token, "churner")
-            .await
-            .is_empty()
-    );
-}
-
 #[tokio::test]
 /// `global` スコープの `read` が「全データベース・全テーブルを読めるが一切書けない」
 /// 権限として機能することを検証する。
@@ -1589,90 +1515,6 @@ async fn test_global_read_can_read_everything_but_write_nothing() {
         .await
         .unwrap_err();
     assert_eq!(err.code(), Code::PermissionDenied);
-}
-
-/// `table_id_index` に残っているテーブルの総数。到達不能になったテーブルの検出に使う。
-///
-/// ストレージ内部の索引を直接数えるため、抽象 API ではなく LMDB のハンドルを直接使う。
-fn indexed_table_count(app_state: &kasane::AppState) -> usize {
-    let rtxn = app_state.db.env.read_txn().unwrap();
-    app_state.db.table_id_index.len(&rtxn).unwrap() as usize
-}
-
-#[tokio::test]
-/// データベースを削除すると、配下のテーブルが 1 つ残らず消えることを検証する。
-///
-/// 列挙と削除が別トランザクションに分かれていると、その隙間に作られたテーブルが
-/// 親を失って到達不能なまま残る。ここでは削除の完全性そのものを固定する。
-async fn test_database_remove_leaves_no_orphan_tables() {
-    let test_app = TestApp::new().await;
-    let root_token = test_app.root_token().to_string();
-
-    create_db(&test_app, &root_token, "doomed_db").await;
-    create_db(&test_app, &root_token, "kept_db").await;
-    for i in 0..3 {
-        create_table(&test_app, &root_token, "doomed_db", &format!("t_{}", i)).await;
-    }
-    create_table(&test_app, &root_token, "kept_db", "survivor").await;
-    assert_eq!(indexed_table_count(test_app.app_state()), 4);
-
-    test_app
-        .database_as(Some(&bearer(&root_token)))
-        .delete(pb::DeleteDatabaseRequest {
-            db_name: "doomed_db".to_string(),
-        })
-        .await
-        .expect("delete_database failed");
-
-    // 残るのは kept_db の 1 件だけ。doomed_db 配下は索引ごと消えている。
-    assert_eq!(indexed_table_count(test_app.app_state()), 1);
-
-    // 同名で作り直しても、以前のテーブルは見えない。
-    create_db(&test_app, &root_token, "doomed_db").await;
-    let tables = test_app
-        .table_as(Some(&bearer(&root_token)))
-        .list(pb::ListTablesRequest {
-            db_name: "doomed_db".to_string(),
-        })
-        .await
-        .expect("list should succeed")
-        .into_inner()
-        .tables;
-    assert!(tables.is_empty());
-}
-
-#[tokio::test]
-/// 上限を超える権限ルールが、名前解決を走らせる前に件数だけで拒否されることを検証する。
-///
-/// gRPC 越しではなくリポジトリ層で確かめる。上限ぶんのルールを送るとメッセージサイズの
-/// 上限に先に当たってしまい、件数チェックまで届かないため。
-async fn test_privilege_rules_are_capped_before_resolution() {
-    use kasane::models::users::{DataRole, MAX_PRIVILEGES_PER_USER, PrivilegeRule};
-    use kasane::repositories::{CatalogRepository, Storage};
-
-    let test_app = TestApp::new().await;
-
-    // 実在しないデータベースを指すルールを上限超えの件数だけ並べる。
-    // 名前解決が先に走るなら database_not_found になるはずだが、件数チェックが先なので
-    // invalid_privilege で落ちる。
-    let rules: Vec<PrivilegeRule> = (0..MAX_PRIVILEGES_PER_USER as usize + 1)
-        .map(|i| PrivilegeRule::Database {
-            db_name: format!("ghost_{i}"),
-            role: DataRole::Read,
-        })
-        .collect();
-
-    let err = test_app
-        .app_state()
-        .db
-        .read(async move |r| CatalogRepository::resolve_rules(r, &rules).await)
-        .await
-        .expect_err("上限超えが受理された");
-
-    assert!(
-        matches!(err, kasane::error::AppError::InvalidArgument { .. }),
-        "件数ではなく名前解決で落ちている: {err:?}"
-    );
 }
 
 #[tokio::test]

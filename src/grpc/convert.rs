@@ -4,9 +4,8 @@ use tonic::Status;
 
 use super::pb;
 use crate::error::AppError;
-use crate::models::database::table::{
-    TableConstraints as DomainTableConstraints, TableDataType as DomainTableDataType, TableInfo,
-};
+use crate::models::database::DatabaseDetail;
+use crate::models::table::{TableConstraints, TableDataType, TableInfo};
 
 /// proto の `enumeration` フィールド（生の `i32`）を、範囲外の値なら `unspecified` にフォールバックした上で対応する enum 値へ変換する。
 pub fn enum_from_i32<T: TryFrom<i32> + Copy>(value: i32, unspecified: T) -> T {
@@ -33,7 +32,7 @@ pub fn u8_from_u32(value: u32, field: &str) -> Result<u8, Status> {
     })
 }
 
-impl TryFrom<pb::TableDataType> for DomainTableDataType {
+impl TryFrom<pb::TableDataType> for TableDataType {
     type Error = Status;
 
     fn try_from(value: pb::TableDataType) -> Result<Self, Self::Error> {
@@ -51,7 +50,7 @@ impl TryFrom<pb::TableDataType> for DomainTableDataType {
     }
 }
 
-impl TryFrom<i32> for DomainTableDataType {
+impl TryFrom<i32> for TableDataType {
     type Error = Status;
 
     fn try_from(value: i32) -> Result<Self, Self::Error> {
@@ -59,25 +58,25 @@ impl TryFrom<i32> for DomainTableDataType {
     }
 }
 
-impl From<DomainTableDataType> for pb::TableDataType {
-    fn from(value: DomainTableDataType) -> Self {
+impl From<TableDataType> for pb::TableDataType {
+    fn from(value: TableDataType) -> Self {
         match value {
-            DomainTableDataType::Text => Self::Text,
-            DomainTableDataType::Int => Self::Int,
-            DomainTableDataType::Boolean => Self::Boolean,
-            DomainTableDataType::Enum => Self::Enum,
-            DomainTableDataType::Presence => Self::Presence,
+            TableDataType::Text => Self::Text,
+            TableDataType::Int => Self::Int,
+            TableDataType::Boolean => Self::Boolean,
+            TableDataType::Enum => Self::Enum,
+            TableDataType::Presence => Self::Presence,
         }
     }
 }
 
-impl From<DomainTableDataType> for i32 {
-    fn from(value: DomainTableDataType) -> Self {
+impl From<TableDataType> for i32 {
+    fn from(value: TableDataType) -> Self {
         pb::TableDataType::from(value) as i32
     }
 }
 
-impl TryFrom<pb::TableConstraints> for DomainTableConstraints {
+impl TryFrom<pb::TableConstraints> for TableConstraints {
     type Error = Status;
 
     fn try_from(constraints: pb::TableConstraints) -> Result<Self, Self::Error> {
@@ -100,20 +99,20 @@ impl TryFrom<pb::TableConstraints> for DomainTableConstraints {
     }
 }
 
-impl From<DomainTableConstraints> for pb::TableConstraints {
-    fn from(constraints: DomainTableConstraints) -> Self {
+impl From<TableConstraints> for pb::TableConstraints {
+    fn from(constraints: TableConstraints) -> Self {
         let kind = match constraints {
-            DomainTableConstraints::Text {
+            TableConstraints::Text {
                 min_length,
                 max_length,
             } => pb::table_constraints::Kind::Text(pb::table_constraints::Text {
                 min_length: min_length.map(|v| v as u64),
                 max_length: max_length.map(|v| v as u64),
             }),
-            DomainTableConstraints::Int { min, max } => {
+            TableConstraints::Int { min, max } => {
                 pb::table_constraints::Kind::Int(pb::table_constraints::Int { min, max })
             }
-            DomainTableConstraints::Enum { choices, .. } => {
+            TableConstraints::Enum { choices, .. } => {
                 pb::table_constraints::Kind::EnumConstraint(pb::table_constraints::Enum { choices })
             }
         };
@@ -121,7 +120,7 @@ impl From<DomainTableConstraints> for pb::TableConstraints {
     }
 }
 
-impl TryFrom<pb::update_table_request::ConstraintsUpdate> for Option<DomainTableConstraints> {
+impl TryFrom<pb::update_table_request::ConstraintsUpdate> for Option<TableConstraints> {
     type Error = Status;
 
     fn try_from(update: pb::update_table_request::ConstraintsUpdate) -> Result<Self, Self::Error> {
@@ -164,7 +163,15 @@ impl From<TableInfo> for pb::TableInfo {
             constraints: table.constraints.map(Into::into),
             description: table.description,
             is_temporal: table.is_temporal,
-            value_index: table.value_index,
+        }
+    }
+}
+
+impl From<DatabaseDetail> for pb::DatabaseInfo {
+    fn from(info: DatabaseDetail) -> Self {
+        Self {
+            name: info.name,
+            description: info.description,
         }
     }
 }

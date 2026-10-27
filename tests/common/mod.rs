@@ -35,7 +35,6 @@ impl Interceptor for TokenInterceptor {
 pub struct TestApp {
     channel: Channel,
     root_token: String,
-    app_state: kasane::AppState,
     _temp_dir: tempfile::TempDir,
     shutdown: Option<tokio::sync::oneshot::Sender<()>>,
 }
@@ -71,22 +70,21 @@ macro_rules! client_pair {
 impl TestApp {
     pub async fn new() -> Self {
         let temp_dir = tempfile::TempDir::new().unwrap();
-        let db = kasane::repositories::lmdb::initialize_database(temp_dir.path().to_str().unwrap())
-            .unwrap();
-
-        let app_state = kasane::AppState::new(db);
-        let root_token = kasane::services::auth::generate_jwt(&app_state, "root")
+        let instance = kasane::Kasane::open(temp_dir.path()).unwrap();
+        let root_token = kasane::services::auth::generate_jwt(&instance, "root")
             .await
             .unwrap();
 
-        let bound = kasane::grpc::bind(app_state.clone(), "127.0.0.1:0".parse().unwrap())
+        let incoming = tonic::transport::server::TcpIncoming::bind("127.0.0.1:0".parse().unwrap())
             .expect("failed to bind an ephemeral port for the test gRPC server");
-        let addr = bound.local_addr();
+        let addr = incoming.local_addr().unwrap();
+        let routes = kasane::grpc::routes(instance).await;
 
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
         tokio::spawn(async move {
-            let _ = bound
-                .serve(async {
+            let _ = tonic::transport::Server::builder()
+                .add_routes(routes)
+                .serve_with_incoming_shutdown(incoming, async {
                     let _ = shutdown_rx.await;
                 })
                 .await;
@@ -101,7 +99,6 @@ impl TestApp {
         Self {
             channel,
             root_token,
-            app_state,
             _temp_dir: temp_dir,
             shutdown: Some(shutdown_tx),
         }
@@ -113,10 +110,6 @@ impl TestApp {
 
     pub fn root_token(&self) -> &str {
         &self.root_token
-    }
-
-    pub fn app_state(&self) -> &kasane::AppState {
-        &self.app_state
     }
 
     pub fn auth(&self) -> pb::auth_service_client::AuthServiceClient<Channel> {
@@ -167,7 +160,6 @@ impl TestApp {
                 max_zoom_level: max_zoom_level as u32,
                 constraints: None,
                 description: None,
-                value_index: false,
                 is_temporal: true,
             })
             .await

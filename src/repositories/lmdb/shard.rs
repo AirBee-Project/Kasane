@@ -143,7 +143,6 @@ pub fn find_parent_pointer(
     } else {
         FlexId::UPPER_MAX
     };
-    // ルート自身に親はない。
     if region == &root {
         return Ok(None);
     }
@@ -156,7 +155,6 @@ pub fn find_parent_pointer(
                     if children.iter().any(|c| c == region) {
                         return Ok(Some((cur, children)));
                     }
-                    // region を含む子へ降りる（region ⊆ child）。
                     match children
                         .into_iter()
                         .find(|c| c.intersection(region) == Some(*region))

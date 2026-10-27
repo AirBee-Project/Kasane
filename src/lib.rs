@@ -1,44 +1,43 @@
-use std::sync::Arc;
-use tokio::sync::Semaphore;
-
-pub mod backend;
 pub mod error;
 pub mod grpc;
+#[cfg(feature = "server")]
 pub mod logging;
 pub mod models;
+#[doc(hidden)]
 pub mod repositories;
+#[doc(hidden)]
 pub mod services;
 
-/// リクエスト間で共有する状態。
-#[derive(Clone)]
-pub struct AppState {
-    pub db: backend::Db,
-    pub writes: services::database::table::data::coalesce::WriteCoalescer,
-    /// クエリの同時実行数を絞る
-    pub query_concurrency: Arc<Semaphore>,
+use repositories::Db;
+
+/// Kasane のインスタンス。データベースの操作はメソッドとして持ち、通信路は持たない。
+pub struct Kasane {
+    pub(crate) db: Db,
 }
 
-impl AppState {
-    pub fn new(db: backend::Db) -> Self {
-        let writes = services::database::table::data::coalesce::WriteCoalescer::new(db.clone());
-        let query_concurrency = Arc::new(Semaphore::new(query_concurrency_limit()));
-        Self {
-            db,
-            writes,
-            query_concurrency,
-        }
+#[cfg(feature = "server")]
+impl Kasane {
+    /// `path` の LMDB を開く。無ければ作り、root を用意する。
+    pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self, error::AppError> {
+        Ok(Self {
+            db: repositories::lmdb::initialize_database(path)?,
+        })
     }
 }
 
-/// `KASANE_QUERY_CONCURRENCY` で上書き可能。既定は論理コア数。
-fn query_concurrency_limit() -> usize {
-    std::env::var("KASANE_QUERY_CONCURRENCY")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .filter(|&n| n > 0)
-        .unwrap_or_else(|| {
-            std::thread::available_parallelism()
-                .map(std::num::NonZeroUsize::get)
-                .unwrap_or(4)
-        })
+#[cfg(not(feature = "server"))]
+impl Kasane {
+    /// 空のインメモリのインスタンスを作る。インスタンスごとに独立したデータを持つ。
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+#[cfg(not(feature = "server"))]
+impl Default for Kasane {
+    fn default() -> Self {
+        Self {
+            db: repositories::memory::Memory::new(),
+        }
+    }
 }

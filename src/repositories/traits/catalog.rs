@@ -30,9 +30,6 @@ pub trait CatalogRepository {
     async fn user_record(&self, username: &str) -> Result<Option<UserRecord>, AppError>;
 
     // --- 一括参照 ---
-    //
-    // 名前の解決はバックエンドによっては 1 件ずつがネットワーク往復になる。権限の描画は
-    // 保持数ぶん名前を要求するので、まとめて渡せる形が要る。
 
     async fn database_names(
         &self,

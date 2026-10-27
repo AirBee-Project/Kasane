@@ -9,7 +9,7 @@ use crate::{
     for_value_type,
     models::{
         ValueLiteral,
-        database::table::{TableConstraints, TableDataType},
+        table::{TableConstraints, TableDataType},
     },
     services::query::value::Value,
 };
@@ -30,7 +30,7 @@ pub const MAX_STORED_VALUE_BYTES: usize = 256 * 1024;
 /// 新しく書き込む値」に対する保存エンジン側の安全装置であり、テーブルが宣言する制約とは別物
 /// なので、ここに混ぜると「上限を設ける前から格納されていた値」を持つテーブルで、サイズと
 /// 無関係な制約変更（例えば Int の min/max だけの変更）まで失敗するようになってしまう。
-/// 新規書き込み経路（`services::database::table::data::insert` / `upsert`）は、この関数の
+/// 新規書き込み経路（`services::data::insert` / `upsert`）は、この関数の
 /// 直後に必ず [`enforce_max_stored_size`] を呼ぶこと。
 pub fn interpret_value(
     expected_type: TableDataType,

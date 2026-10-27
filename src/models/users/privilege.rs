@@ -1,5 +1,3 @@
-use serde::{Deserialize, Serialize};
-
 use super::entity::{DataRole, UserRole};
 use crate::models::id::{DataTarget, DatabaseId, TableId};
 
@@ -18,9 +16,8 @@ pub enum Scope {
 /// API 上の権限ルール表現。
 ///
 /// 保存形式（ACL 行）は UUID ベースだが、外部にはデータベース名・テーブル名で見せる。
-/// 付与時に名前 → ID を解決し、存在しない名前は 404 で弾く。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "scope", rename_all = "snake_case")]
+/// 付与時に名前 → ID を解決し、存在しない名前は `NotFound` で弾く。
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PrivilegeRule {
     /// サーバー全体。`role` に `admin` を指定できるのはこのスコープだけ。
     Global { role: UserRole },

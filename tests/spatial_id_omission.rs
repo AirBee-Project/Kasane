@@ -39,7 +39,7 @@ fn omitting_every_axis_covers_everything() {
 }
 
 #[test]
-/// 明示指定した場合の意味は従来どおり変わらない。
+/// 明示指定した場合は、指定どおりの範囲を表す。
 fn explicit_axes_are_unchanged() {
     let explicit =
         to_spatial_id_set(&[range(3, Some([0, 0]), Some([1, 2]), Some([3, 4]))]).unwrap();

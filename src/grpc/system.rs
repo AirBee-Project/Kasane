@@ -1,24 +1,17 @@
 use tonic::{Request, Response, Status};
 
 use super::auth::authenticate;
-use super::pb::{
-    GetSystemInfoRequest, GetSystemInfoResponse, system_service_server::SystemService,
-};
-use crate::AppState;
-
-pub struct SystemServiceImpl {
-    pub app_state: AppState,
-}
+use super::pb::{self, system_service_server::SystemService};
 
 #[tonic::async_trait]
-impl SystemService for SystemServiceImpl {
+impl SystemService for super::Service {
     async fn get_system_info(
         &self,
-        request: Request<GetSystemInfoRequest>,
-    ) -> Result<Response<GetSystemInfoResponse>, Status> {
-        authenticate(&self.app_state, &request).await?;
+        request: Request<pb::GetSystemInfoRequest>,
+    ) -> Result<Response<pb::GetSystemInfoResponse>, Status> {
+        authenticate(&self.0, &request).await?;
 
-        Ok(Response::new(GetSystemInfoResponse {
+        Ok(Response::new(pb::GetSystemInfoResponse {
             status: "ok".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
         }))

@@ -1,27 +1,26 @@
 //! 【バグ実証】split 後に「分割時に空だった領域」へ挿入すると失われないか検証する。
 
-use kasane::models::database::table::TableDataType;
 use kasane::models::id::TableId;
 use kasane::repositories::lmdb::initialize_database;
-use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
+use kasane::repositories::lmdb::{LmdbRead, LmdbWrite};
+use kasane::repositories::{ReadRepository, WriteRepository};
 use spatial_id::{SingleId, collection::SpatialIdSet};
 
 // binary covering trie でこのバグ（split 後の空領域への挿入消失）が解消されることの回帰テスト。
-#[test]
-fn insert_into_empty_region_after_split_is_not_lost() {
+#[tokio::test]
+async fn insert_into_empty_region_after_split_is_not_lost() {
     let tmp = tempfile::TempDir::new().unwrap();
     let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     let table_id = TableId(uuid::Uuid::now_v7());
-    let dt = TableDataType::Text;
 
     // 1. 5000 FlexId （y=0,f=0 の x 線）を挿入 → split。
     {
-        let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
+        let mut w = LmdbWrite::new(db.env.write_txn().unwrap(), &db);
         let mut ids = SpatialIdSet::new();
         for i in 0..5000u32 {
             ids.insert(SingleId::new(20, 0, i * 4, 0).unwrap());
         }
-        w.data_insert_impl(table_id, Some(dt), ids, b"v").unwrap();
+        w.data_insert(table_id, ids, b"v").await.unwrap();
         w.commit().unwrap();
     }
 
@@ -29,18 +28,18 @@ fn insert_into_empty_region_after_split_is_not_lost() {
     //    この x-upper 兄弟は split 時に空でスキップされている。
     let target = SingleId::new(20, 0, 600000, 0).unwrap();
     {
-        let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
+        let mut w = LmdbWrite::new(db.env.write_txn().unwrap(), &db);
         let mut ids = SpatialIdSet::new();
         ids.insert(target);
-        w.data_insert_impl(table_id, Some(dt), ids, b"w").unwrap();
+        w.data_insert(table_id, ids, b"w").await.unwrap();
         w.commit().unwrap();
     }
 
     // 3. それが読み戻せるか？
-    let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
+    let r = LmdbRead::new(db.env.read_txn().unwrap(), &db);
     let mut q = SpatialIdSet::new();
     q.insert(target);
-    let got = r.data_get_impl(table_id, q).unwrap();
+    let got = r.data_get(table_id, q).await.unwrap();
     let total: usize = got.iter().map(|(_, fids)| fids.len()).sum();
     assert_eq!(
         total, 1,

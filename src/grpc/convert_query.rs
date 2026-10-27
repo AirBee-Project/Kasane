@@ -252,7 +252,7 @@ impl TryFrom<pb::QueryNode> for QueryNode {
 
 pub struct ExecuteQuery {
     pub request: ExecuteQueryRequest,
-    pub format: crate::models::database::table::data::OutputFormat,
+    pub format: crate::models::data::OutputFormat,
 }
 
 impl TryFrom<pb::ExecuteQueryRequest> for ExecuteQuery {

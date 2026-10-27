@@ -1,7 +1,7 @@
 //! バイト数トリガによる動的シャード分割のエンドツーエンド検証。
 //!
 //! 件数は `MAX_FLEX_ID_PER_SHARD` を大きく下回るが、1 件あたりの値を大きくして
-//! 合計バイト数が `MAX_SHARD_BYTES` を超えるようにする。件数だけを見ていた旧実装では
+//! 合計バイト数が `MAX_SHARD_BYTES` を超えるようにする。件数だけで分割を判定すると
 //! 分割されず、1 リーフが際限なく肥大化してしまう。
 //!
 //! 各値は互いに異なるバイト列にする: 保存形式は値を辞書へ集約して重複排除するため、
@@ -13,19 +13,15 @@ use std::collections::HashSet;
 use kasane::models::id::TableId;
 use kasane::repositories::encoding::shard_entry::{MAX_FLEX_ID_PER_SHARD, MAX_SHARD_BYTES};
 use kasane::repositories::lmdb::initialize_database;
-use kasane::repositories::lmdb::{KasaneDbRead, KasaneDbWrite};
+use kasane::repositories::lmdb::{LmdbRead, LmdbWrite};
+use kasane::repositories::{CatalogRepository, ReadRepository, WriteRepository};
 use spatial_id::{RangeId, SingleId, collection::SpatialIdSet};
 
-#[test]
-fn shard_splits_on_byte_size_even_with_few_entries() {
+#[tokio::test]
+async fn shard_splits_on_byte_size_even_with_few_entries() {
     let tmp = tempfile::TempDir::new().unwrap();
     let db = initialize_database(tmp.path().to_str().unwrap()).unwrap();
     let table_id = TableId(uuid::Uuid::now_v7());
-
-    // value_index は使わない: Text 系は索引キーへ値をそのまま埋め込むため、この巨大な
-    // テスト値だと LMDB のキー長上限に別の理由で当たってしまい、分割ロジックの検証に
-    // ならなくなる。
-    let index = None;
 
     // 合計が MAX_SHARD_BYTES を超えるだけの件数（それぞれは MAX_STORED_VALUE_BYTES 未満）。
     // 互いに素な隣接 FlexId として、分割前は同一リーフに収まるようにする。
@@ -42,11 +38,12 @@ fn shard_splits_on_byte_size_even_with_few_entries() {
     };
 
     {
-        let mut w = KasaneDbWrite::new(db.env.write_txn().unwrap(), &db);
+        let mut w = LmdbWrite::new(db.env.write_txn().unwrap(), &db);
         for i in 0..n {
             let mut ids = SpatialIdSet::new();
             ids.insert(SingleId::new(20, 0, i, 0).unwrap());
-            w.data_insert_impl(table_id, index, ids, &value_for(i))
+            w.data_insert(table_id, ids, &value_for(i))
+                .await
                 .unwrap_or_else(|e| panic!("insert {i} failed: {e:?}"));
         }
         w.commit().unwrap();
@@ -73,12 +70,12 @@ fn shard_splits_on_byte_size_even_with_few_entries() {
     );
 
     // 2. 分割後も全件が読み戻せること。
-    let r = KasaneDbRead::new(db.env.read_txn().unwrap(), &db);
-    assert_eq!(r.table_count_impl(table_id).unwrap(), n as u64);
+    let r = LmdbRead::new(db.env.read_txn().unwrap(), &db);
+    assert_eq!(r.table_count(table_id).await.unwrap(), n as u64);
 
     let mut query = SpatialIdSet::new();
     query.insert(RangeId::new(20, [0, 0], [0, n - 1], [0, 0]).unwrap());
-    let got = r.data_get_impl(table_id, query).unwrap();
+    let got = r.data_get(table_id, query).await.unwrap();
 
     let mut xs: HashSet<u32> = HashSet::new();
     for (got_value, flex_ids) in got {

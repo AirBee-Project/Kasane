@@ -14,15 +14,8 @@
 .DS_Store
 Thumbs.db
 
+
 /logs
-
 .env
-/default
 .claude
-
 /default_kasane_db
-
-
-# OpenAPI generated files
-openapi.json
-openapi.yaml

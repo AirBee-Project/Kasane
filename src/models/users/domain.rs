@@ -1,9 +1,7 @@
-use serde::{Deserialize, Serialize};
-
 use super::entity::{DataRole, UserRecord, UserRole};
 use crate::models::id::PrincipalId;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct User {
     pub username: String,
     pub id: PrincipalId,

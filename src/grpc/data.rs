@@ -5,27 +5,18 @@ use tonic::{Request, Response, Status};
 use super::auth::authenticate;
 use super::convert::required;
 use super::convert_data::{DEFAULT_CHUNK_SIZE, data_response_to_chunks};
-use super::pb::{
-    RemoveDataRequest, SearchDataRequest, SearchDataResponse, WriteDataRequest,
-    data_service_server::DataService,
-};
-use crate::AppState;
-use crate::models::database::table::data::GetDataQuery;
-
-pub struct DataServiceImpl {
-    pub app_state: AppState,
-}
+use super::pb::{self, data_service_server::DataService};
 
 #[tonic::async_trait]
-impl DataService for DataServiceImpl {
+impl DataService for super::Service {
     type SearchStream =
-        Pin<Box<dyn Stream<Item = Result<SearchDataResponse, Status>> + Send + 'static>>;
+        Pin<Box<dyn Stream<Item = Result<pb::SearchDataResponse, Status>> + Send + 'static>>;
 
     async fn search(
         &self,
-        request: Request<SearchDataRequest>,
+        request: Request<pb::SearchDataRequest>,
     ) -> Result<Response<Self::SearchStream>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+        let user = authenticate(&self.0, &request).await?;
         let req = request.into_inner();
 
         let spatial_ids: Vec<_> = req
@@ -34,27 +25,25 @@ impl DataService for DataServiceImpl {
             .map(TryInto::try_into)
             .collect::<Result<_, _>>()?;
         let zoom_level_policy = req.zoom_level_policy.into();
-        let query = GetDataQuery {
-            format: req.format.into(),
-        };
 
-        let result = crate::services::database::table::data::get::get(
-            &self.app_state,
-            &auth_user,
-            &req.db_name,
-            &req.table_name,
-            &spatial_ids,
-            &zoom_level_policy,
-            &query,
-        )
-        .await?;
+        let result = self
+            .0
+            .search(
+                &user,
+                &req.db_name,
+                &req.table_name,
+                &spatial_ids,
+                zoom_level_policy,
+                req.format.into(),
+            )
+            .await?;
         let chunks = data_response_to_chunks(result, DEFAULT_CHUNK_SIZE);
         let stream = tokio_stream::iter(chunks.into_iter().map(Ok));
         Ok(Response::new(Box::pin(stream)))
     }
 
-    async fn insert(&self, request: Request<WriteDataRequest>) -> Result<Response<()>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+    async fn insert(&self, request: Request<pb::WriteDataRequest>) -> Result<Response<()>, Status> {
+        let user = authenticate(&self.0, &request).await?;
         let req = request.into_inner();
 
         let spatial_ids: Vec<_> = req
@@ -65,21 +54,21 @@ impl DataService for DataServiceImpl {
         let zoom_level_policy = req.zoom_level_policy.into();
         let value = required(req.value, "value")?.into();
 
-        crate::services::database::table::data::insert::insert(
-            &self.app_state,
-            &auth_user,
-            &req.db_name,
-            &req.table_name,
-            &spatial_ids,
-            value,
-            &zoom_level_policy,
-        )
-        .await?;
+        self.0
+            .insert(
+                &user,
+                &req.db_name,
+                &req.table_name,
+                &spatial_ids,
+                value,
+                zoom_level_policy,
+            )
+            .await?;
         Ok(Response::new(()))
     }
 
-    async fn upsert(&self, request: Request<WriteDataRequest>) -> Result<Response<()>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+    async fn upsert(&self, request: Request<pb::WriteDataRequest>) -> Result<Response<()>, Status> {
+        let user = authenticate(&self.0, &request).await?;
         let req = request.into_inner();
 
         let spatial_ids: Vec<_> = req
@@ -90,21 +79,24 @@ impl DataService for DataServiceImpl {
         let zoom_level_policy = req.zoom_level_policy.into();
         let value = required(req.value, "value")?.into();
 
-        crate::services::database::table::data::upsert::upsert(
-            &self.app_state,
-            &auth_user,
-            &req.db_name,
-            &req.table_name,
-            &spatial_ids,
-            value,
-            &zoom_level_policy,
-        )
-        .await?;
+        self.0
+            .upsert(
+                &user,
+                &req.db_name,
+                &req.table_name,
+                &spatial_ids,
+                value,
+                zoom_level_policy,
+            )
+            .await?;
         Ok(Response::new(()))
     }
 
-    async fn remove(&self, request: Request<RemoveDataRequest>) -> Result<Response<()>, Status> {
-        let auth_user = authenticate(&self.app_state, &request).await?;
+    async fn remove(
+        &self,
+        request: Request<pb::RemoveDataRequest>,
+    ) -> Result<Response<()>, Status> {
+        let user = authenticate(&self.0, &request).await?;
         let req = request.into_inner();
 
         let spatial_ids: Vec<_> = req
@@ -114,15 +106,15 @@ impl DataService for DataServiceImpl {
             .collect::<Result<_, _>>()?;
         let zoom_level_policy = req.zoom_level_policy.into();
 
-        crate::services::database::table::data::remove::remove(
-            &self.app_state,
-            &auth_user,
-            &req.db_name,
-            &req.table_name,
-            &spatial_ids,
-            &zoom_level_policy,
-        )
-        .await?;
+        self.0
+            .remove_data(
+                &user,
+                &req.db_name,
+                &req.table_name,
+                &spatial_ids,
+                zoom_level_policy,
+            )
+            .await?;
         Ok(Response::new(()))
     }
 }
