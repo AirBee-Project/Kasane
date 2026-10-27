@@ -28,14 +28,14 @@ flowchart TD
 ### `main.rs` / `lib.rs`
 
 - アプリケーション全体の起点。
-- 公開する入口の型 `Kasane` を定義する。中身はストレージのハンドルだけで、feature によってストレージと使えるメソッドが変わる。
-  - `server`: `Kasane::open` で LMDB を開き、`Kasane::bind` で gRPC サーバーとして待ち受ける。
-  - `default-features = false`: `Kasane::new` でインメモリのインスタンスを作り、`Kasane::handle` でプロセス内から gRPC リクエストを処理する（`embedded.rs`）。
+- `lib.rs` は公開する入口の型 `Kasane` を定義する。中身はストレージのハンドルだけで、通信路は持たない。作成は server では `Kasane::open`（LMDB）、`default-features = false` では `Kasane::new`（インメモリ）で行う。
+- `main.rs` は待ち受け（`TcpIncoming`）と HTTP のレイヤー（grpc-web、CORS、トレース）を用意し、`grpc::routes` を載せてサーバーを起動する。
 - サーバーの起動以外の業務ロジックは持たない。
 
 ### `grpc`
 
-- proto（`proto/*.proto`）から生成された gRPC サービス・メッセージ型（`grpc::pb`）と、各サービストレイトの `Kasane` への実装（`grpc::database`, `grpc::table` 等）を置く。
+- proto（`proto/*.proto`）から生成された gRPC サービス・メッセージ型（`grpc::pb`）と、各サービストレイトの実装（`grpc::database`, `grpc::table` 等）を置く。トレイトは `Kasane` を包む `grpc::Service` に実装し、`Kasane` のメソッドを呼ぶ。
+- 入口は 2 つ。server では `grpc::routes` が全サービスを載せた `Routes` を返し、組み込みでは `grpc::handle` がメソッド名と protobuf のバイト列を受けて 1 リクエストを処理する。
 - `grpc::convert*` が proto のメッセージ型とドメイン型（`models`）の相互変換を担う。
 - proto とドメインには同じ名前の型が多い（`TableDataType`、`UserRole` など）。grpc 層では proto の型を常に `pb::` で修飾し、ドメインの型は修飾せずに使う。
 - 認証は `grpc::auth`（JWT の検証、利用者レコードの読み直し、Login RPC）が集約して担う。
@@ -43,7 +43,7 @@ flowchart TD
 
 ### `services`
 
-- アプリケーションの処理手順を組み立てる。
+- アプリケーションの処理手順を組み立てる。各操作は `Kasane` のメソッド（`create_database`、`search`、`execute_query` など）として実装し、ファイルは対象ごとに分ける。
 - バリデーション、存在確認、作成、削除などのユースケースを表現する。
 - トランザクションの開始と commit の責務を持つ。
 - repository を呼び出して具体的な保存処理を行う。

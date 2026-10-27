@@ -6,11 +6,9 @@ use super::auth::authenticate;
 use super::convert::required;
 use super::convert_data::{DEFAULT_CHUNK_SIZE, data_response_to_chunks};
 use super::pb::{self, data_service_server::DataService};
-use crate::Kasane;
-use crate::models::data::GetDataQuery;
 
 #[tonic::async_trait]
-impl DataService for Kasane {
+impl DataService for super::Service {
     type SearchStream =
         Pin<Box<dyn Stream<Item = Result<pb::SearchDataResponse, Status>> + Send + 'static>>;
 
@@ -18,7 +16,7 @@ impl DataService for Kasane {
         &self,
         request: Request<pb::SearchDataRequest>,
     ) -> Result<Response<Self::SearchStream>, Status> {
-        let user = authenticate(self, &request).await?;
+        let user = authenticate(&self.0, &request).await?;
         let req = request.into_inner();
 
         let spatial_ids: Vec<_> = req
@@ -27,27 +25,25 @@ impl DataService for Kasane {
             .map(TryInto::try_into)
             .collect::<Result<_, _>>()?;
         let zoom_level_policy = req.zoom_level_policy.into();
-        let query = GetDataQuery {
-            format: req.format.into(),
-        };
 
-        let result = crate::services::data::get(
-            self,
-            &user,
-            &req.db_name,
-            &req.table_name,
-            &spatial_ids,
-            &zoom_level_policy,
-            &query,
-        )
-        .await?;
+        let result = self
+            .0
+            .search(
+                &user,
+                &req.db_name,
+                &req.table_name,
+                &spatial_ids,
+                zoom_level_policy,
+                req.format.into(),
+            )
+            .await?;
         let chunks = data_response_to_chunks(result, DEFAULT_CHUNK_SIZE);
         let stream = tokio_stream::iter(chunks.into_iter().map(Ok));
         Ok(Response::new(Box::pin(stream)))
     }
 
     async fn insert(&self, request: Request<pb::WriteDataRequest>) -> Result<Response<()>, Status> {
-        let user = authenticate(self, &request).await?;
+        let user = authenticate(&self.0, &request).await?;
         let req = request.into_inner();
 
         let spatial_ids: Vec<_> = req
@@ -58,21 +54,21 @@ impl DataService for Kasane {
         let zoom_level_policy = req.zoom_level_policy.into();
         let value = required(req.value, "value")?.into();
 
-        crate::services::data::insert(
-            self,
-            &user,
-            &req.db_name,
-            &req.table_name,
-            &spatial_ids,
-            value,
-            &zoom_level_policy,
-        )
-        .await?;
+        self.0
+            .insert(
+                &user,
+                &req.db_name,
+                &req.table_name,
+                &spatial_ids,
+                value,
+                zoom_level_policy,
+            )
+            .await?;
         Ok(Response::new(()))
     }
 
     async fn upsert(&self, request: Request<pb::WriteDataRequest>) -> Result<Response<()>, Status> {
-        let user = authenticate(self, &request).await?;
+        let user = authenticate(&self.0, &request).await?;
         let req = request.into_inner();
 
         let spatial_ids: Vec<_> = req
@@ -83,16 +79,16 @@ impl DataService for Kasane {
         let zoom_level_policy = req.zoom_level_policy.into();
         let value = required(req.value, "value")?.into();
 
-        crate::services::data::upsert(
-            self,
-            &user,
-            &req.db_name,
-            &req.table_name,
-            &spatial_ids,
-            value,
-            &zoom_level_policy,
-        )
-        .await?;
+        self.0
+            .upsert(
+                &user,
+                &req.db_name,
+                &req.table_name,
+                &spatial_ids,
+                value,
+                zoom_level_policy,
+            )
+            .await?;
         Ok(Response::new(()))
     }
 
@@ -100,7 +96,7 @@ impl DataService for Kasane {
         &self,
         request: Request<pb::RemoveDataRequest>,
     ) -> Result<Response<()>, Status> {
-        let user = authenticate(self, &request).await?;
+        let user = authenticate(&self.0, &request).await?;
         let req = request.into_inner();
 
         let spatial_ids: Vec<_> = req
@@ -110,15 +106,15 @@ impl DataService for Kasane {
             .collect::<Result<_, _>>()?;
         let zoom_level_policy = req.zoom_level_policy.into();
 
-        crate::services::data::remove(
-            self,
-            &user,
-            &req.db_name,
-            &req.table_name,
-            &spatial_ids,
-            &zoom_level_policy,
-        )
-        .await?;
+        self.0
+            .remove_data(
+                &user,
+                &req.db_name,
+                &req.table_name,
+                &spatial_ids,
+                zoom_level_policy,
+            )
+            .await?;
         Ok(Response::new(()))
     }
 }

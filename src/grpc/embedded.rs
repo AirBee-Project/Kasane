@@ -1,7 +1,7 @@
-//! プロセス内で Kasane を動かす入口（組み込み・インメモリ向け）。
+//! プロセス内から gRPC のリクエストを処理する入口（組み込み・インメモリ向け）。
 //!
 //! gRPC のメソッド名と protobuf のバイト列を受け取り、サーバーと同じサービス実装を呼ぶ。
-//! ストレージはインメモリ、利用者は root だけなので、AuthService と UserService は持たない。
+//! 利用者は root だけなので、AuthService と UserService は持たない。
 
 use std::future::Future;
 use std::pin::{Pin, pin};
@@ -11,65 +11,44 @@ use prost::Message;
 use tokio_stream::Stream;
 use tonic::{Request, Response, Status};
 
+use super::Service;
+use super::pb::data_service_server::DataService;
+use super::pb::database_service_server::DatabaseService;
+use super::pb::query_service_server::QueryService;
+use super::pb::system_service_server::SystemService;
+use super::pb::table_service_server::TableService;
 use crate::Kasane;
-use crate::grpc::pb::data_service_server::DataService;
-use crate::grpc::pb::database_service_server::DatabaseService;
-use crate::grpc::pb::query_service_server::QueryService;
-use crate::grpc::pb::system_service_server::SystemService;
-use crate::grpc::pb::table_service_server::TableService;
-use crate::repositories::memory::Memory;
 
-/// インスタンスごとに独立したデータを持つ。
-impl Default for Kasane {
-    fn default() -> Self {
-        Self { db: Memory::new() }
-    }
-}
-
-impl Kasane {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// `method` は `/kasane.TableService/Create` の形。応答はメッセージの列で、unary なら 1 件、
-    /// server streaming ならチャンクの数だけ並ぶ。
-    ///
-    /// `&mut self` なのは、処理が 1 回のポーリングで終わる前提（`run`）を守るため。
-    /// 共有参照から並行に呼べると、書き込み同士がロックで待ち合わせて前提が崩れる。
-    pub fn handle(&mut self, method: &str, request: &[u8]) -> Result<Vec<Vec<u8>>, Status> {
-        // サービス間でメソッド名が重なるので、トレイトを明示して呼ぶ。
-        let this: &Self = self;
-        match method {
-            "/kasane.SystemService/GetSystemInfo" => {
-                unary(request, |r| SystemService::get_system_info(this, r))
-            }
-            "/kasane.DatabaseService/Create" => {
-                unary(request, |r| DatabaseService::create(this, r))
-            }
-            "/kasane.DatabaseService/Get" => unary(request, |r| DatabaseService::get(this, r)),
-            "/kasane.DatabaseService/List" => unary(request, |r| DatabaseService::list(this, r)),
-            "/kasane.DatabaseService/Update" => {
-                unary(request, |r| DatabaseService::update(this, r))
-            }
-            "/kasane.DatabaseService/Delete" => {
-                unary(request, |r| DatabaseService::delete(this, r))
-            }
-            "/kasane.TableService/Create" => unary(request, |r| TableService::create(this, r)),
-            "/kasane.TableService/Get" => unary(request, |r| TableService::get(this, r)),
-            "/kasane.TableService/List" => unary(request, |r| TableService::list(this, r)),
-            "/kasane.TableService/Update" => unary(request, |r| TableService::update(this, r)),
-            "/kasane.TableService/Delete" => unary(request, |r| TableService::delete(this, r)),
-            "/kasane.DataService/Search" => streaming(request, |r| DataService::search(this, r)),
-            "/kasane.DataService/Insert" => unary(request, |r| DataService::insert(this, r)),
-            "/kasane.DataService/Upsert" => unary(request, |r| DataService::upsert(this, r)),
-            "/kasane.DataService/Remove" => unary(request, |r| DataService::remove(this, r)),
-            "/kasane.QueryService/Execute" => {
-                streaming(request, |r| QueryService::execute(this, r))
-            }
-            _ => Err(Status::unimplemented(format!(
-                "{method} is not available in the in-memory Kasane"
-            ))),
+/// `method` は `/kasane.TableService/Create` の形。応答はメッセージの列で、unary なら 1 件、
+/// server streaming ならチャンクの数だけ並ぶ。
+///
+/// `&mut Kasane` を受けるのは、処理が 1 回のポーリングで終わる前提（`run`）を守るため。
+/// 共有参照から並行に呼べると、書き込み同士がロックで待ち合わせて前提が崩れる。
+pub fn handle(kasane: &mut Kasane, method: &str, request: &[u8]) -> Result<Vec<Vec<u8>>, Status> {
+    // サービス間でメソッド名が重なるので、トレイトを明示して呼ぶ。
+    let this = Service::from_ref(kasane);
+    match method {
+        "/kasane.SystemService/GetSystemInfo" => {
+            unary(request, |r| SystemService::get_system_info(this, r))
         }
+        "/kasane.DatabaseService/Create" => unary(request, |r| DatabaseService::create(this, r)),
+        "/kasane.DatabaseService/Get" => unary(request, |r| DatabaseService::get(this, r)),
+        "/kasane.DatabaseService/List" => unary(request, |r| DatabaseService::list(this, r)),
+        "/kasane.DatabaseService/Update" => unary(request, |r| DatabaseService::update(this, r)),
+        "/kasane.DatabaseService/Delete" => unary(request, |r| DatabaseService::delete(this, r)),
+        "/kasane.TableService/Create" => unary(request, |r| TableService::create(this, r)),
+        "/kasane.TableService/Get" => unary(request, |r| TableService::get(this, r)),
+        "/kasane.TableService/List" => unary(request, |r| TableService::list(this, r)),
+        "/kasane.TableService/Update" => unary(request, |r| TableService::update(this, r)),
+        "/kasane.TableService/Delete" => unary(request, |r| TableService::delete(this, r)),
+        "/kasane.DataService/Search" => streaming(request, |r| DataService::search(this, r)),
+        "/kasane.DataService/Insert" => unary(request, |r| DataService::insert(this, r)),
+        "/kasane.DataService/Upsert" => unary(request, |r| DataService::upsert(this, r)),
+        "/kasane.DataService/Remove" => unary(request, |r| DataService::remove(this, r)),
+        "/kasane.QueryService/Execute" => streaming(request, |r| QueryService::execute(this, r)),
+        _ => Err(Status::unimplemented(format!(
+            "{method} is not available in the in-memory Kasane"
+        ))),
     }
 }
 
@@ -137,7 +116,7 @@ mod tests {
         method: &str,
         request: &impl Message,
     ) -> Result<Vec<Res>, Status> {
-        db.handle(method, &request.encode_to_vec())?
+        handle(db, method, &request.encode_to_vec())?
             .iter()
             .map(|bytes| Res::decode(bytes.as_slice()).map_err(|e| Status::internal(e.to_string())))
             .collect()
@@ -354,12 +333,10 @@ mod tests {
     #[test]
     fn rejects_unknown_methods_and_malformed_requests() {
         let mut db = Kasane::new();
-        let err = db.handle("/kasane.AuthService/Login", &[]).unwrap_err();
+        let err = handle(&mut db, "/kasane.AuthService/Login", &[]).unwrap_err();
         assert_eq!(err.code(), Code::Unimplemented);
 
-        let err = db
-            .handle("/kasane.DatabaseService/Create", &[0xff, 0xff])
-            .unwrap_err();
+        let err = handle(&mut db, "/kasane.DatabaseService/Create", &[0xff, 0xff]).unwrap_err();
         assert_eq!(err.code(), Code::InvalidArgument);
     }
 }

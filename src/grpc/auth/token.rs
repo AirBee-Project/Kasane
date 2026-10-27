@@ -15,7 +15,7 @@ use crate::repositories::{CatalogRepository, ReadRepository, Storage};
 use crate::services::auth::{dummy_verify_password, generate_jwt, verify_jwt, verify_password};
 
 #[tonic::async_trait]
-impl AuthService for Kasane {
+impl AuthService for crate::grpc::Service {
     async fn login(
         &self,
         request: Request<LoginRequest>,
@@ -24,6 +24,7 @@ impl AuthService for Kasane {
 
         let username = payload.username.clone();
         let stored_hash = self
+            .0
             .db
             .read(async move |repo| repo.user_record(&username).await)
             .await?
@@ -49,7 +50,7 @@ impl AuthService for Kasane {
             return Err(AuthError::InvalidCredentials.into());
         }
 
-        let token = generate_jwt(self, &payload.username).await?;
+        let token = generate_jwt(&self.0, &payload.username).await?;
 
         Ok(Response::new(LoginResponse { token }))
     }

@@ -6,11 +6,6 @@ pub enum OutputFormat {
     FlexId,
 }
 
-#[derive(Debug, Default, Clone, Copy)]
-pub struct GetDataQuery {
-    pub format: OutputFormat,
-}
-
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 /// テーブルの max_zoom_level よりも大きなズームレベル値の空間IDが入力された場合の処理方針
 pub enum ZoomLevelPolicy {

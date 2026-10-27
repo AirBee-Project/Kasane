@@ -35,7 +35,6 @@ impl Interceptor for TokenInterceptor {
 pub struct TestApp {
     channel: Channel,
     root_token: String,
-    instance: kasane::Kasane,
     _temp_dir: tempfile::TempDir,
     shutdown: Option<tokio::sync::oneshot::Sender<()>>,
 }
@@ -76,16 +75,16 @@ impl TestApp {
             .await
             .unwrap();
 
-        let bound = instance
-            .clone()
-            .bind("127.0.0.1:0".parse().unwrap())
+        let incoming = tonic::transport::server::TcpIncoming::bind("127.0.0.1:0".parse().unwrap())
             .expect("failed to bind an ephemeral port for the test gRPC server");
-        let addr = bound.local_addr();
+        let addr = incoming.local_addr().unwrap();
+        let routes = kasane::grpc::routes(instance).await;
 
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
         tokio::spawn(async move {
-            let _ = bound
-                .serve(async {
+            let _ = tonic::transport::Server::builder()
+                .add_routes(routes)
+                .serve_with_incoming_shutdown(incoming, async {
                     let _ = shutdown_rx.await;
                 })
                 .await;
@@ -100,7 +99,6 @@ impl TestApp {
         Self {
             channel,
             root_token,
-            instance,
             _temp_dir: temp_dir,
             shutdown: Some(shutdown_tx),
         }
@@ -112,10 +110,6 @@ impl TestApp {
 
     pub fn root_token(&self) -> &str {
         &self.root_token
-    }
-
-    pub fn instance(&self) -> &kasane::Kasane {
-        &self.instance
     }
 
     pub fn auth(&self) -> pb::auth_service_client::AuthServiceClient<Channel> {

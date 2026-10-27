@@ -123,7 +123,7 @@ impl DataTarget {
     }
 
     /// 鍵に載せる 16 バイト。データベーススコープは
-    /// [`TableId::DATABASE_SCOPE`] になる。
+    /// `TableId::DATABASE_SCOPE` になる。
     pub fn slot(self) -> TableId {
         self.table_id.unwrap_or(TableId::DATABASE_SCOPE)
     }

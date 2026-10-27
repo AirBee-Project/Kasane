@@ -2,19 +2,20 @@ use tonic::{Request, Response, Status};
 
 use super::auth::authenticate;
 use super::pb::{self, database_service_server::DatabaseService};
-use crate::Kasane;
 
 #[tonic::async_trait]
-impl DatabaseService for Kasane {
+impl DatabaseService for super::Service {
     async fn create(
         &self,
         request: Request<pb::CreateDatabaseRequest>,
     ) -> Result<Response<pb::DatabaseInfo>, Status> {
-        let user = authenticate(self, &request).await?;
+        let user = authenticate(&self.0, &request).await?;
         let req = request.into_inner();
 
-        let res =
-            crate::services::database::create(self, &user, &req.name, req.description).await?;
+        let res = self
+            .0
+            .create_database(&user, &req.name, req.description)
+            .await?;
         Ok(Response::new(res.into()))
     }
 
@@ -22,10 +23,10 @@ impl DatabaseService for Kasane {
         &self,
         request: Request<pb::GetDatabaseRequest>,
     ) -> Result<Response<pb::DatabaseInfo>, Status> {
-        let user = authenticate(self, &request).await?;
+        let user = authenticate(&self.0, &request).await?;
         let req = request.into_inner();
 
-        let res = crate::services::database::info(self, &user, &req.db_name).await?;
+        let res = self.0.database(&user, &req.db_name).await?;
         Ok(Response::new(res.into()))
     }
 
@@ -33,9 +34,9 @@ impl DatabaseService for Kasane {
         &self,
         request: Request<pb::ListDatabasesRequest>,
     ) -> Result<Response<pb::ListDatabasesResponse>, Status> {
-        let user = authenticate(self, &request).await?;
+        let user = authenticate(&self.0, &request).await?;
 
-        let res = crate::services::database::list(self, &user).await?;
+        let res = self.0.databases(&user).await?;
         Ok(Response::new(pb::ListDatabasesResponse {
             databases: res.into_iter().map(Into::into).collect(),
         }))
@@ -45,14 +46,15 @@ impl DatabaseService for Kasane {
         &self,
         request: Request<pb::UpdateDatabaseRequest>,
     ) -> Result<Response<pb::DatabaseInfo>, Status> {
-        let user = authenticate(self, &request).await?;
+        let user = authenticate(&self.0, &request).await?;
         let req = request.into_inner();
 
         let description = req.description_update.map(Into::into);
 
-        let res =
-            crate::services::database::update(self, &user, &req.db_name, req.new_name, description)
-                .await?;
+        let res = self
+            .0
+            .update_database(&user, &req.db_name, req.new_name, description)
+            .await?;
         Ok(Response::new(res.into()))
     }
 
@@ -60,10 +62,10 @@ impl DatabaseService for Kasane {
         &self,
         request: Request<pb::DeleteDatabaseRequest>,
     ) -> Result<Response<()>, Status> {
-        let user = authenticate(self, &request).await?;
+        let user = authenticate(&self.0, &request).await?;
         let req = request.into_inner();
 
-        crate::services::database::remove(self, &user, &req.db_name).await?;
+        self.0.remove_database(&user, &req.db_name).await?;
         Ok(Response::new(()))
     }
 }

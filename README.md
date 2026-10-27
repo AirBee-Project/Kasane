@@ -23,14 +23,23 @@ cp .env.example .env
 
 ## 組み込み利用（インメモリ・root 固定）
 
-`default-features = false` でビルドすると、ネットワーク待受や LMDB を使わず、プロセス内でインメモリデータベースとして動かせます。入口の型はどちらのモードでも `Kasane` で、使えるメソッドが変わります。利用者は root 固定となり、`AuthService` と `UserService` は提供されません。
+`default-features = false` でビルドすると、ネットワーク待受や LMDB を使わず、プロセス内でインメモリデータベースとして動かせます。入口の型はどちらのモードでも `Kasane` です。利用者は root 固定となり、`AuthService` と `UserService` は提供されません。
+
+gRPC のリクエストをそのまま処理するには、`grpc::handle` にメソッド名と protobuf のバイト列を渡します。
 
 ```rust
 use kasane::Kasane;
 
 let mut db = Kasane::new();
-// gRPC メソッド名と protobuf リクエストのバイト列を渡して実行
-let responses = db.handle("/kasane.DatabaseService/List", &req_bytes)?;
+let responses = kasane::grpc::handle(&mut db, "/kasane.DatabaseService/List", &req_bytes)?;
+```
+
+gRPC を通さずに、`Kasane` のメソッドを Rust から直接呼ぶこともできます（メソッドは async です）。
+
+```rust
+let db = Kasane::new();
+let root = db.user("root").await?;
+db.create_database(&root, "tokyo", None).await?;
 ```
 
 `wasm32-unknown-unknown` ターゲットにも対応しているため、利用側で `wasm-bindgen` などのバインディングを用意することで WebAssembly 環境（ブラウザや Node.js 等）でも利用できます。

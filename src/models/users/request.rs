@@ -8,11 +8,6 @@ pub struct CreateUserRequest {
     pub privileges: Vec<PrivilegeRule>,
 }
 
-#[derive(Debug)]
-pub struct UpdatePasswordRequest {
-    pub password: String,
-}
-
 /// 1 ページで返す利用者数の既定値と上限。
 pub const DEFAULT_USER_PAGE: usize = 100;
 pub const MAX_USER_PAGE: usize = 1000;

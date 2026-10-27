@@ -2,16 +2,15 @@ use tonic::{Request, Response, Status};
 
 use super::auth::authenticate;
 use super::pb::{self, table_service_server::TableService};
-use crate::Kasane;
 use crate::models::table::CreateTableRequest;
 
 #[tonic::async_trait]
-impl TableService for Kasane {
+impl TableService for super::Service {
     async fn create(
         &self,
         request: Request<pb::CreateTableRequest>,
     ) -> Result<Response<pb::TableInfo>, Status> {
-        let user = authenticate(self, &request).await?;
+        let user = authenticate(&self.0, &request).await?;
         let req = request.into_inner();
 
         let domain_req = CreateTableRequest {
@@ -23,9 +22,7 @@ impl TableService for Kasane {
             is_temporal: req.is_temporal,
         };
 
-        let table =
-            crate::services::table::create(self, &user, &req.db_name, &req.name, domain_req)
-                .await?;
+        let table = self.0.create_table(&user, &req.db_name, domain_req).await?;
         Ok(Response::new(table.into()))
     }
 
@@ -33,10 +30,10 @@ impl TableService for Kasane {
         &self,
         request: Request<pb::GetTableRequest>,
     ) -> Result<Response<pb::TableInfo>, Status> {
-        let user = authenticate(self, &request).await?;
+        let user = authenticate(&self.0, &request).await?;
         let req = request.into_inner();
 
-        let info = crate::services::table::info(self, &user, &req.db_name, &req.table_name).await?;
+        let info = self.0.table(&user, &req.db_name, &req.table_name).await?;
         Ok(Response::new(info.into()))
     }
 
@@ -44,10 +41,10 @@ impl TableService for Kasane {
         &self,
         request: Request<pb::ListTablesRequest>,
     ) -> Result<Response<pb::ListTablesResponse>, Status> {
-        let user = authenticate(self, &request).await?;
+        let user = authenticate(&self.0, &request).await?;
         let req = request.into_inner();
 
-        let tables = crate::services::table::list(self, &user, &req.db_name).await?;
+        let tables = self.0.tables(&user, &req.db_name).await?;
         Ok(Response::new(pb::ListTablesResponse {
             tables: tables.into_iter().map(Into::into).collect(),
         }))
@@ -57,23 +54,24 @@ impl TableService for Kasane {
         &self,
         request: Request<pb::UpdateTableRequest>,
     ) -> Result<Response<pb::TableInfo>, Status> {
-        let user = authenticate(self, &request).await?;
+        let user = authenticate(&self.0, &request).await?;
         let req = request.into_inner();
 
         let constraints = req.constraints_update.map(TryInto::try_into).transpose()?;
         let description = req.description_update.map(Into::into);
 
-        let table = crate::services::table::update(
-            self,
-            &user,
-            &req.db_name,
-            &req.table_name,
-            req.new_name.as_deref(),
-            constraints,
-            description,
-            req.is_temporal,
-        )
-        .await?;
+        let table = self
+            .0
+            .update_table(
+                &user,
+                &req.db_name,
+                &req.table_name,
+                req.new_name.as_deref(),
+                constraints,
+                description,
+                req.is_temporal,
+            )
+            .await?;
         Ok(Response::new(table.into()))
     }
 
@@ -81,10 +79,12 @@ impl TableService for Kasane {
         &self,
         request: Request<pb::DeleteTableRequest>,
     ) -> Result<Response<()>, Status> {
-        let user = authenticate(self, &request).await?;
+        let user = authenticate(&self.0, &request).await?;
         let req = request.into_inner();
 
-        crate::services::table::remove(self, &user, &req.db_name, &req.table_name).await?;
+        self.0
+            .remove_table(&user, &req.db_name, &req.table_name)
+            .await?;
         Ok(Response::new(()))
     }
 }
